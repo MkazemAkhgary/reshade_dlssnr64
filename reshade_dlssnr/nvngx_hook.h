@@ -6,6 +6,8 @@
 
 #include <detours.h>
 
+#include "../../renodx/src/utils/directx.hpp"
+
 #include "dlssnr_pass.h"
 
 namespace reshade_dlssnr {
@@ -23,19 +25,15 @@ struct NvngxHook {
       const NVSDK_NGX_Handle* feature_handle,
       const NVSDK_NGX_Parameter* parameters,
       PFN_NVSDK_NGX_ProgressCallback callback) {
-    command_list = static_cast<ID3D12GraphicsCommandList*>(command_list);
-    auto* native_command_list = command_list;
-    renodx_utils_directx_NativeFromReShadeProxy(&native_command_list);
+    renodx::utils::directx::NativeFromReShadeProxy(&command_list);
 
-    NVSDK_NGX_Result result = real_NVSDK_NGX_D3D12_EvaluateFeature(native_command_list, feature_handle, parameters, callback);
+    NVSDK_NGX_Result result = real_NVSDK_NGX_D3D12_EvaluateFeature(
+        command_list, feature_handle, parameters, callback);
 
     if (result == NVSDK_NGX_Result_Success && feature_handle != nullptr) {
-      // Feature detection is intentionally conservative: the handle id alone
-      // is not enough, so the caller supplies the feature id through the
-      // addon hook bridge.
       DlssNrPass::Get().OnEvaluateAfterUpscale(
-          native_command_list,
-          const_cast<NVSDK_NGX_Parameter*>(parameters),
+          command_list,
+          parameters,
           NVSDK_NGX_Feature_SuperSampling);
     }
 

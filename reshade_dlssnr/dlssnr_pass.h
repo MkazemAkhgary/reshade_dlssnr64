@@ -20,6 +20,10 @@ class DlssNrPass {
 
   void OnEvaluateAfterUpscale(
       ID3D12GraphicsCommandList* command_list,
+      const NVSDK_NGX_Parameter* params,
+      NVSDK_NGX_Feature feature_id,
+      ID3D12CommandQueue* queue = nullptr);
+      ID3D12GraphicsCommandList* command_list,
       NVSDK_NGX_Parameter* params,
       NVSDK_NGX_Feature feature_id,
       ID3D12CommandQueue* queue = nullptr);

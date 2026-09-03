@@ -305,7 +305,7 @@ void DlssNrPass::Barrier(
   command_list->ResourceBarrier(1, &barrier);
 }
 
-ID3D12Resource* DlssNrPass::GetResource(NVSDK_NGX_Parameter* params, const char* name_a, const char* name_b) {
+ID3D12Resource* DlssNrPass::GetResource(const NVSDK_NGX_Parameter* params, const char* name_a, const char* name_b) {
   ID3D12Resource* resource = nullptr;
 
   if (params->Get(name_a, &resource) == NVSDK_NGX_Result_Success && resource != nullptr) {
@@ -337,7 +337,7 @@ void DlssNrPass::RetireResources(ID3D12Device*) {
 
 void DlssNrPass::OnEvaluateAfterUpscale(
     ID3D12GraphicsCommandList* command_list,
-    NVSDK_NGX_Parameter* params,
+    const NVSDK_NGX_Parameter* params,
     NVSDK_NGX_Feature feature_id,
     ID3D12CommandQueue* queue) {
   (void) queue;
