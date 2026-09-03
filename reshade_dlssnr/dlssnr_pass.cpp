@@ -495,7 +495,17 @@ void DlssNrPass::OnEvaluateAfterUpscale(
     color_small_ = CreateScratch(device, desc.Format, work_width_, work_height_);
   }
 
+  const bool feature_was_created_this_frame = (feature_ == nullptr);
+
   if (!EnsureFeature(device, command_list, width_, height_)) {
+    device->Release();
+    return;
+  }
+
+  if (feature_was_created_this_frame) {
+    reshade::log::message(
+        reshade::log::level::info,
+        "DLSSNR feature created; skipping evaluation this frame");
     device->Release();
     return;
   }
