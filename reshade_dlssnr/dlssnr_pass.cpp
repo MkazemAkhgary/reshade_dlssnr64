@@ -100,22 +100,30 @@ bool DlssNrPass::EnsureCapabilityParams(ID3D12Device* device) {
   (void) device;
   if (capability_params_ != nullptr) return true;
 
-  HMODULE nvngx_dlss = GetModuleHandleW(L"nvngx_dlss.dll");
-  if (nvngx_dlss == nullptr) {
-    nvngx_dlss = LoadLibraryW(L"nvngx_dlss.dll");
+  HMODULE ngx_core = GetModuleHandleW(L"_nvngx.dll");
+  if (ngx_core == nullptr) {
+    ngx_core = GetModuleHandleW(L"nvngx.dll");
   }
 
-  if (nvngx_dlss == nullptr) {
-    reason_ = "nvngx_dlss.dll is not loaded";
+  if (ngx_core == nullptr) {
+    ngx_core = LoadLibraryW(L"_nvngx.dll");
+  }
+
+  if (ngx_core == nullptr) {
+    ngx_core = LoadLibraryW(L"nvngx.dll");
+  }
+
+  if (ngx_core == nullptr) {
+    reason_ = "NGX driver core (_nvngx.dll/nvngx.dll) is not loaded";
     return false;
   }
 
   using PFN_GetCapabilityParameters = NVSDK_NGX_Result(NVSDK_CONV*)(NVSDK_NGX_Parameter**);
   auto get_capability_parameters = reinterpret_cast<PFN_GetCapabilityParameters>(
-      GetProcAddress(nvngx_dlss, "NVSDK_NGX_D3D12_GetCapabilityParameters"));
+      GetProcAddress(ngx_core, "NVSDK_NGX_D3D12_GetCapabilityParameters"));
 
   if (get_capability_parameters == nullptr) {
-    reason_ = "NVSDK_NGX_D3D12_GetCapabilityParameters export not found";
+    reason_ = "NVSDK_NGX_D3D12_GetCapabilityParameters export not found in driver core";
     return false;
   }
 
