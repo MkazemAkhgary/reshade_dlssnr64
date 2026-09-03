@@ -37,6 +37,7 @@ PFN_SetComputeRootShaderResourceView g_original_set_compute_root_srv = nullptr;
 PFN_SetComputeRootUnorderedAccessView g_original_set_compute_root_uav = nullptr;
 
 bool g_hooked_command_lists = false;
+bool g_tracking_enabled = true;
 
 thread_local bool g_in_set_descriptor_heaps = false;
 thread_local bool g_in_set_pipeline_state = false;
@@ -50,70 +51,70 @@ thread_local bool g_in_set_compute_root_srv = false;
 thread_local bool g_in_set_compute_root_uav = false;
 
 void STDMETHODCALLTYPE HookedSetDescriptorHeaps(ID3D12GraphicsCommandList* command_list, UINT count, ID3D12DescriptorHeap* const* heaps) {
-  if (!g_in_set_descriptor_heaps && command_list != nullptr) {
+  if (g_tracking_enabled && !g_in_set_descriptor_heaps && command_list != nullptr) {
     D3D12StateTracker::Get().SetDescriptorHeaps(command_list, count, heaps);
   }
   g_original_set_descriptor_heaps(command_list, count, heaps);
 }
 
 void STDMETHODCALLTYPE HookedSetPipelineState(ID3D12GraphicsCommandList* command_list, ID3D12PipelineState* pipeline_state) {
-  if (!g_in_set_pipeline_state && command_list != nullptr) {
+  if (g_tracking_enabled && !g_in_set_pipeline_state && command_list != nullptr) {
     D3D12StateTracker::Get().SetPipelineState(command_list, pipeline_state);
   }
   g_original_set_pipeline_state(command_list, pipeline_state);
 }
 
 void STDMETHODCALLTYPE HookedSetComputeRootSignature(ID3D12GraphicsCommandList* command_list, ID3D12RootSignature* root_signature) {
-  if (!g_in_set_compute_root_signature && command_list != nullptr) {
+  if (g_tracking_enabled && !g_in_set_compute_root_signature && command_list != nullptr) {
     D3D12StateTracker::Get().SetComputeRootSignature(command_list, root_signature);
   }
   g_original_set_compute_root_signature(command_list, root_signature);
 }
 
 void STDMETHODCALLTYPE HookedSetGraphicsRootSignature(ID3D12GraphicsCommandList* command_list, ID3D12RootSignature* root_signature) {
-  if (!g_in_set_graphics_root_signature && command_list != nullptr) {
+  if (g_tracking_enabled && !g_in_set_graphics_root_signature && command_list != nullptr) {
     D3D12StateTracker::Get().SetGraphicsRootSignature(command_list, root_signature);
   }
   g_original_set_graphics_root_signature(command_list, root_signature);
 }
 
 void STDMETHODCALLTYPE HookedSetComputeRootDescriptorTable(ID3D12GraphicsCommandList* command_list, UINT index, D3D12_GPU_DESCRIPTOR_HANDLE base_descriptor) {
-  if (!g_in_set_compute_root_descriptor_table && command_list != nullptr) {
+  if (g_tracking_enabled && !g_in_set_compute_root_descriptor_table && command_list != nullptr) {
     D3D12StateTracker::Get().SetComputeRootDescriptorTable(command_list, index, base_descriptor);
   }
   g_original_set_compute_root_descriptor_table(command_list, index, base_descriptor);
 }
 
 void STDMETHODCALLTYPE HookedSetComputeRoot32BitConstant(ID3D12GraphicsCommandList* command_list, UINT index, UINT value, UINT offset) {
-  if (!g_in_set_compute_root_32bit_constant && command_list != nullptr) {
+  if (g_tracking_enabled && !g_in_set_compute_root_32bit_constant && command_list != nullptr) {
     D3D12StateTracker::Get().SetComputeRoot32BitConstant(command_list, index, value, offset);
   }
   g_original_set_compute_root_32bit_constant(command_list, index, value, offset);
 }
 
 void STDMETHODCALLTYPE HookedSetComputeRoot32BitConstants(ID3D12GraphicsCommandList* command_list, UINT index, UINT count, const void* data, UINT offset) {
-  if (!g_in_set_compute_root_32bit_constants && command_list != nullptr) {
+  if (g_tracking_enabled && !g_in_set_compute_root_32bit_constants && command_list != nullptr) {
     D3D12StateTracker::Get().SetComputeRoot32BitConstants(command_list, index, count, data, offset);
   }
   g_original_set_compute_root_32bit_constants(command_list, index, count, data, offset);
 }
 
 void STDMETHODCALLTYPE HookedSetComputeRootConstantBufferView(ID3D12GraphicsCommandList* command_list, UINT index, D3D12_GPU_VIRTUAL_ADDRESS address) {
-  if (!g_in_set_compute_root_cbv && command_list != nullptr) {
+  if (g_tracking_enabled && !g_in_set_compute_root_cbv && command_list != nullptr) {
     D3D12StateTracker::Get().SetComputeRootConstantBufferView(command_list, index, address);
   }
   g_original_set_compute_root_cbv(command_list, index, address);
 }
 
 void STDMETHODCALLTYPE HookedSetComputeRootShaderResourceView(ID3D12GraphicsCommandList* command_list, UINT index, D3D12_GPU_VIRTUAL_ADDRESS address) {
-  if (!g_in_set_compute_root_srv && command_list != nullptr) {
+  if (g_tracking_enabled && !g_in_set_compute_root_srv && command_list != nullptr) {
     D3D12StateTracker::Get().SetComputeRootShaderResourceView(command_list, index, address);
   }
   g_original_set_compute_root_srv(command_list, index, address);
 }
 
 void STDMETHODCALLTYPE HookedSetComputeRootUnorderedAccessView(ID3D12GraphicsCommandList* command_list, UINT index, D3D12_GPU_VIRTUAL_ADDRESS address) {
-  if (!g_in_set_compute_root_uav && command_list != nullptr) {
+  if (g_tracking_enabled && !g_in_set_compute_root_uav && command_list != nullptr) {
     D3D12StateTracker::Get().SetComputeRootUnorderedAccessView(command_list, index, address);
   }
   g_original_set_compute_root_uav(command_list, index, address);
@@ -124,6 +125,77 @@ void STDMETHODCALLTYPE HookedSetComputeRootUnorderedAccessView(ID3D12GraphicsCom
 D3D12Hooks& D3D12Hooks::Get() {
   static D3D12Hooks hooks;
   return hooks;
+}
+
+bool D3D12Hooks::InstallEarlyHooks(ID3D12Device* device) {
+  if (device == nullptr) return false;
+  if (g_hooked_command_lists) return true;
+
+  ID3D12CommandAllocator* command_allocator = nullptr;
+  ID3D12GraphicsCommandList* command_list = nullptr;
+
+  if (FAILED(device->CreateCommandAllocator(
+          D3D12_COMMAND_LIST_TYPE_DIRECT,
+          IID_PPV_ARGS(&command_allocator)))) {
+    return false;
+  }
+
+  if (FAILED(device->CreateCommandList(
+          0,
+          D3D12_COMMAND_LIST_TYPE_DIRECT,
+          command_allocator,
+          nullptr,
+          IID_PPV_ARGS(&command_list)))) {
+    command_allocator->Release();
+    return false;
+  }
+
+  void** vtable = *reinterpret_cast<void***>(command_list);
+  if (vtable == nullptr) {
+    command_list->Release();
+    command_allocator->Release();
+    return false;
+  }
+
+  g_original_set_pipeline_state = reinterpret_cast<PFN_SetPipelineState>(vtable[25]);
+  g_original_set_descriptor_heaps = reinterpret_cast<PFN_SetDescriptorHeaps>(vtable[28]);
+  g_original_set_compute_root_signature = reinterpret_cast<PFN_SetComputeRootSignature>(vtable[29]);
+  g_original_set_graphics_root_signature = reinterpret_cast<PFN_SetGraphicsRootSignature>(vtable[30]);
+  g_original_set_compute_root_descriptor_table = reinterpret_cast<PFN_SetComputeRootDescriptorTable>(vtable[31]);
+  g_original_set_compute_root_32bit_constant = reinterpret_cast<PFN_SetComputeRoot32BitConstant>(vtable[33]);
+  g_original_set_compute_root_32bit_constants = reinterpret_cast<PFN_SetComputeRoot32BitConstants>(vtable[35]);
+  g_original_set_compute_root_cbv = reinterpret_cast<PFN_SetComputeRootConstantBufferView>(vtable[37]);
+  g_original_set_compute_root_srv = reinterpret_cast<PFN_SetComputeRootShaderResourceView>(vtable[39]);
+  g_original_set_compute_root_uav = reinterpret_cast<PFN_SetComputeRootUnorderedAccessView>(vtable[41]);
+
+  command_list->Close();
+  command_list->Release();
+  command_allocator->Release();
+
+  DetourTransactionBegin();
+  DetourUpdateThread(GetCurrentThread());
+
+  DetourAttach(reinterpret_cast<void**>(&g_original_set_pipeline_state), HookedSetPipelineState);
+  DetourAttach(reinterpret_cast<void**>(&g_original_set_descriptor_heaps), HookedSetDescriptorHeaps);
+  DetourAttach(reinterpret_cast<void**>(&g_original_set_compute_root_signature), HookedSetComputeRootSignature);
+  DetourAttach(reinterpret_cast<void**>(&g_original_set_graphics_root_signature), HookedSetGraphicsRootSignature);
+  DetourAttach(reinterpret_cast<void**>(&g_original_set_compute_root_descriptor_table), HookedSetComputeRootDescriptorTable);
+  DetourAttach(reinterpret_cast<void**>(&g_original_set_compute_root_32bit_constant), HookedSetComputeRoot32BitConstant);
+  DetourAttach(reinterpret_cast<void**>(&g_original_set_compute_root_32bit_constants), HookedSetComputeRoot32BitConstants);
+  DetourAttach(reinterpret_cast<void**>(&g_original_set_compute_root_cbv), HookedSetComputeRootConstantBufferView);
+  DetourAttach(reinterpret_cast<void**>(&g_original_set_compute_root_srv), HookedSetComputeRootShaderResourceView);
+  DetourAttach(reinterpret_cast<void**>(&g_original_set_compute_root_uav), HookedSetComputeRootUnorderedAccessView);
+
+  if (DetourTransactionCommit() == NO_ERROR) {
+    g_hooked_command_lists = true;
+    return true;
+  }
+
+  return false;
+}
+
+void D3D12Hooks::SetTrackingEnabled(bool enabled) {
+  g_tracking_enabled = enabled;
 }
 
 void D3D12Hooks::HookCommandList(ID3D12GraphicsCommandList* command_list) {

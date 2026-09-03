@@ -11,6 +11,8 @@ class D3D12Hooks {
  public:
   static D3D12Hooks& Get();
 
+  bool InstallEarlyHooks(ID3D12Device* device);
+  void SetTrackingEnabled(bool enabled);
   void HookCommandList(ID3D12GraphicsCommandList* command_list);
   void UnhookCommandList(ID3D12GraphicsCommandList* command_list);
   void RestoreCommandList(ID3D12GraphicsCommandList* command_list);
