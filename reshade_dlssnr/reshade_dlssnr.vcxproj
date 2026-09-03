@@ -74,7 +74,6 @@
     <ClInclude Include="codec.h" />
     <ClInclude Include="dlssnr_pass.h" />
     <ClInclude Include="forwarder.h" />
-    <ClInclude Include="nvngx_hook.h" />
     <ClInclude Include="settings.h" />
     <ClInclude Include="shaders\dlssnr_cso.h" />
   </ItemGroup>
