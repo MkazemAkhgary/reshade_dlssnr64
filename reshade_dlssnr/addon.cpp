@@ -1,5 +1,6 @@
 #include <windows.h>
 
+#include <imgui.h>
 #include <reshade.hpp>
 
 #include "d3d12_hooks.h"
@@ -32,6 +33,45 @@ void OnInitDevice(reshade::api::device* device) {
   reshade_dlssnr::D3D12Hooks::Get().InstallEarlyHooks(native_device);
 }
 
+void DrawSettings(reshade::api::effect_runtime*) {
+  auto& settings = reshade_dlssnr::GetSettings();
+  bool changed = false;
+
+  changed |= ImGui::Checkbox("Enable DLSSNR", &settings.enabled);
+  changed |= ImGui::Checkbox("Only run on SuperSampling", &settings.only_super_sampling);
+
+  ImGui::Separator();
+
+  changed |= ImGui::SliderFloat("Intensity", &settings.intensity, 0.0f, 1.0f, "%.2f");
+  changed |= ImGui::SliderFloat("Transfer Strength", &settings.transfer_strength, 0.0f, 1.0f, "%.2f");
+  changed |= ImGui::SliderFloat("Colour Strength", &settings.colour_strength, 0.0f, 1.0f, "%.2f");
+  changed |= ImGui::SliderFloat("Working Scale", &settings.working_scale, 0.25f, 1.0f, "%.2f");
+  changed |= ImGui::SliderFloat("Max Ratio", &settings.max_ratio, 1.0f, 8.0f, "%.2f");
+  changed |= ImGui::SliderFloat("White Point Scale", &settings.white_point_scale, 1.0f, 1000.0f, "%.0f");
+
+  ImGui::Separator();
+
+  changed |= ImGui::SliderInt("Preset", &settings.preset, 0, 6);
+  changed |= ImGui::SliderInt("Style", &settings.style, 0, 3);
+
+  changed |= ImGui::SliderFloat("Local Structure", &settings.local_structure, 0.0f, 1.0f, "%.2f");
+  changed |= ImGui::SliderFloat("Local Tone", &settings.local_tone, 0.0f, 1.0f, "%.2f");
+  changed |= ImGui::SliderFloat("Skin Structure", &settings.skin_structure, -1.0f, 1.0f, "%.2f");
+  changed |= ImGui::Checkbox("Auto Mask", &settings.auto_mask);
+
+  ImGui::Separator();
+
+  changed |= ImGui::SliderInt("Debug View", &settings.debug_view, 0, 3);
+  changed |= ImGui::SliderInt("Compare Mode", &settings.compare_mode, 0, 2);
+  changed |= ImGui::SliderFloat("Compare Split", &settings.compare_split, 0.0f, 1.0f, "%.2f");
+  changed |= ImGui::SliderFloat("Compare Zoom", &settings.compare_zoom, 1.0f, 4.0f, "%.2f");
+  changed |= ImGui::Checkbox("Compare Swap", &settings.compare_swap);
+
+  if (changed) {
+    reshade_dlssnr::SaveSettings();
+  }
+}
+
 void Attach(HMODULE module) {
   if (g_initialized) return;
 
@@ -39,6 +79,7 @@ void Attach(HMODULE module) {
   PinAddonModule();
 
   reshade::register_event<reshade::addon_event::init_device>(OnInitDevice);
+  reshade::register_overlay("ReShade DLSSNR", DrawSettings);
 
   HMODULE nvngx_dlss = GetModuleHandleW(L"nvngx_dlss.dll");
   if (nvngx_dlss == nullptr) {
@@ -61,6 +102,7 @@ void Attach(HMODULE module) {
 void Detach() {
   if (!g_initialized) return;
 
+  reshade::unregister_overlay("ReShade DLSSNR", DrawSettings);
   reshade::unregister_event<reshade::addon_event::init_device>(OnInitDevice);
 
   reshade_dlssnr::DlssNrPass::Get().Shutdown();

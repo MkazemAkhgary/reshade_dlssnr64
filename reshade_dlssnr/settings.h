@@ -17,15 +17,15 @@ struct Settings {
   float mv_scale_x = 1.0f;
   float mv_scale_y = 1.0f;
 
-  unsigned int preset = 2u;
-  unsigned int style = 1u;
+  int preset = 2;
+  int style = 1;
   float local_structure = 0.0f;
   float local_tone = 0.0f;
   float skin_structure = 0.0f;
   bool auto_mask = true;
 
-  unsigned int debug_view = 0u;
-  unsigned int compare_mode = 0u;
+  int debug_view = 0;
+  int compare_mode = 0;
   float compare_split = 0.5f;
   float compare_zoom = 1.0f;
   bool compare_swap = false;
