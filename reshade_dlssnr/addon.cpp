@@ -2,14 +2,14 @@
 
 #include <reshade.hpp>
 
+#include <renodx/src/utils/dlss_hook.hpp>
+
 #include "dlssnr_pass.h"
-#include "nvngx_hook.h"
 #include "settings.h"
 
 namespace {
 
 bool g_initialized = false;
-HMODULE g_nvngx_module = nullptr;
 
 void PinAddonModule() {
   static bool pinned = false;
@@ -26,30 +26,14 @@ void PinAddonModule() {
   }
 }
 
-HMODULE FindNvngxDlss() {
-  HMODULE module = GetModuleHandleW(L"nvngx_dlss.dll");
-  if (module != nullptr) return module;
-  return LoadLibraryW(L"nvngx_dlss.dll");
-}
-
-bool HookNvngxDlss(HMODULE module) {
-  (void) module;
-  reshade::log::message(
-      reshade::log::level::warning,
-      "NVNGX hook disabled for isolation test");
-  return true;
-}
-
 void Attach(HMODULE module) {
   if (g_initialized) return;
 
   reshade_dlssnr::LoadSettings();
   PinAddonModule();
 
-  g_nvngx_module = FindNvngxDlss();
-  if (!HookNvngxDlss(g_nvngx_module)) {
-    reshade::log::message(reshade::log::level::error, "Failed to hook nvngx_dlss.dll");
-  }
+  renodx::utils::dlss_hook::nvngx_dlss_file_path = "nvngx_dlss.dll";
+  renodx::utils::dlss_hook::Use(DLL_PROCESS_ATTACH);
 
   g_initialized = true;
 }
@@ -59,6 +43,7 @@ void Detach() {
 
   reshade_dlssnr::DlssNrPass::Get().Shutdown();
   reshade_dlssnr::SaveSettings();
+  renodx::utils::dlss_hook::Use(DLL_PROCESS_DETACH);
   g_initialized = false;
 }
 
