@@ -24,7 +24,6 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
     const NVSDK_NGX_Handle* feature_handle,
     NVSDK_NGX_Parameter* parameters,
     PFN_NVSDK_NGX_ProgressCallback callback) {
-  renodx::utils::directx::NativeFromReShadeProxy(&command_list);
   return real_NVSDK_NGX_D3D12_EvaluateFeature(
       command_list, feature_handle, parameters, callback);
 }
