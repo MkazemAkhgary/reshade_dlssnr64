@@ -20,6 +20,7 @@ using PFN_SetComputeRoot32BitConstants = void(STDMETHODCALLTYPE*)(ID3D12Graphics
 using PFN_SetComputeRootConstantBufferView = void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, UINT, D3D12_GPU_VIRTUAL_ADDRESS);
 using PFN_SetComputeRootShaderResourceView = void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, UINT, D3D12_GPU_VIRTUAL_ADDRESS);
 using PFN_SetComputeRootUnorderedAccessView = void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, UINT, D3D12_GPU_VIRTUAL_ADDRESS);
+using PFN_CreateRootSignature = HRESULT(STDMETHODCALLTYPE*)(ID3D12Device*, UINT, const void*, SIZE_T, REFIID, void**);
 
 struct RootRestoreHook {
   void* original = nullptr;
@@ -35,8 +36,10 @@ PFN_SetComputeRoot32BitConstants g_original_set_compute_root_32bit_constants = n
 PFN_SetComputeRootConstantBufferView g_original_set_compute_root_cbv = nullptr;
 PFN_SetComputeRootShaderResourceView g_original_set_compute_root_srv = nullptr;
 PFN_SetComputeRootUnorderedAccessView g_original_set_compute_root_uav = nullptr;
+PFN_CreateRootSignature g_original_create_root_signature = nullptr;
 
 bool g_hooked_command_lists = false;
+bool g_hooked_device = false;
 bool g_tracking_enabled = true;
 
 thread_local bool g_in_set_descriptor_heaps = false;
@@ -120,6 +123,55 @@ void STDMETHODCALLTYPE HookedSetComputeRootUnorderedAccessView(ID3D12GraphicsCom
   g_original_set_compute_root_uav(command_list, index, address);
 }
 
+HRESULT STDMETHODCALLTYPE HookedCreateRootSignature(
+    ID3D12Device* device,
+    UINT node_mask,
+    const void* blob_with_root_signature,
+    SIZE_T blob_length_in_bytes,
+    REFIID riid,
+    void** ppv_root_signature) {
+  HRESULT result = g_original_create_root_signature(
+      device, node_mask, blob_with_root_signature, blob_length_in_bytes, riid, ppv_root_signature);
+
+  if (SUCCEEDED(result) && ppv_root_signature != nullptr && *ppv_root_signature != nullptr) {
+    ID3D12VersionedRootSignatureDeserializer* deserializer = nullptr;
+    if (SUCCEEDED(D3D12CreateVersionedRootSignatureDeserializer(
+            blob_with_root_signature,
+            blob_length_in_bytes,
+            IID_PPV_ARGS(&deserializer)))) {
+      const D3D12_VERSIONED_ROOT_SIGNATURE_DESC* desc =
+          deserializer->GetUnconvertedRootSignatureDesc();
+
+      UINT parameter_count = 0;
+      if (desc != nullptr) {
+        switch (desc->Version) {
+          case D3D_ROOT_SIGNATURE_VERSION_1_0:
+            parameter_count = desc->Desc_1_0.NumParameters;
+            break;
+          case D3D_ROOT_SIGNATURE_VERSION_1_1:
+            parameter_count = desc->Desc_1_1.NumParameters;
+            break;
+          case D3D_ROOT_SIGNATURE_VERSION_1_2:
+            parameter_count = desc->Desc_1_2.NumParameters;
+            break;
+          default:
+            break;
+        }
+      }
+
+      if (parameter_count > 0) {
+        D3D12StateTracker::Get().SetRootParameterCount(
+            static_cast<ID3D12RootSignature*>(*ppv_root_signature),
+            parameter_count);
+      }
+
+      deserializer->Release();
+    }
+  }
+
+  return result;
+}
+
 }  // namespace
 
 D3D12Hooks& D3D12Hooks::Get() {
@@ -129,6 +181,27 @@ D3D12Hooks& D3D12Hooks::Get() {
 
 bool D3D12Hooks::InstallEarlyHooks(ID3D12Device* device) {
   if (device == nullptr) return false;
+  if (g_hooked_command_lists && g_hooked_device) return true;
+
+  if (!g_hooked_device) {
+    void** device_vtable = *reinterpret_cast<void***>(device);
+    if (device_vtable != nullptr) {
+      g_original_create_root_signature =
+          reinterpret_cast<PFN_CreateRootSignature>(device_vtable[16]);
+
+      DetourTransactionBegin();
+      DetourUpdateThread(GetCurrentThread());
+      if (DetourAttach(
+              reinterpret_cast<void**>(&g_original_create_root_signature),
+              HookedCreateRootSignature) == NO_ERROR) {
+        DetourTransactionCommit();
+        g_hooked_device = true;
+      } else {
+        DetourTransactionAbort();
+      }
+    }
+  }
+
   if (g_hooked_command_lists) return true;
 
   ID3D12CommandAllocator* command_allocator = nullptr;
