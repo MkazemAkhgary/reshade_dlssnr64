@@ -225,6 +225,12 @@ bool DlssNrPass::EnsureFeature(
     return false;
   }
 
+  std::string created_message = "DLSSNR feature created at ";
+  created_message += std::to_string(work_width_);
+  created_message += "x";
+  created_message += std::to_string(work_height_);
+  reshade::log::message(reshade::log::level::info, created_message.c_str());
+
   reset_ = true;
   built_tuning_dirty_ = false;
   return true;
@@ -534,6 +540,12 @@ void DlssNrPass::OnEvaluateAfterUpscale(
   reset_ = false;
 
   if (result == NVSDK_NGX_Result_Success) {
+    static bool reported_first_success = false;
+    if (!reported_first_success) {
+      reshade::log::message(reshade::log::level::info, "DLSSNR evaluate succeeded");
+      reported_first_success = true;
+    }
+
     DlssNrConstants resolve = {};
     resolve.Mode = DlssNrMode_Resolve;
     resolve.WhitePoint = settings.white_point_scale;
