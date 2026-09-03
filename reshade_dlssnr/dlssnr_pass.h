@@ -23,10 +23,6 @@ class DlssNrPass {
       const NVSDK_NGX_Parameter* params,
       NVSDK_NGX_Feature feature_id,
       ID3D12CommandQueue* queue = nullptr);
-      ID3D12GraphicsCommandList* command_list,
-      NVSDK_NGX_Parameter* params,
-      NVSDK_NGX_Feature feature_id,
-      ID3D12CommandQueue* queue = nullptr);
 
   void Shutdown();
 
@@ -50,7 +46,7 @@ class DlssNrPass {
   ID3D12Resource* ReadableGuide(ID3D12Device* device, ID3D12GraphicsCommandList* command_list, ID3D12Resource* source, ID3D12Resource** clone);
   ID3D12Resource* CreateGuideClone(ID3D12Device* device, ID3D12Resource* source);
   bool FormatCanHoldLinearHdr(DXGI_FORMAT format) const;
-  ID3D12Resource* GetResource(NVSDK_NGX_Parameter* params, const char* name_a, const char* name_b);
+  ID3D12Resource* GetResource(const NVSDK_NGX_Parameter* params, const char* name_a, const char* name_b);
 
   ForwarderApi forwarder_;
   NVSDK_NGX_Parameter* capability_params_ = nullptr;
