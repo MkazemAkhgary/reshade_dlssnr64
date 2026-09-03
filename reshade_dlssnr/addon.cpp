@@ -2,7 +2,7 @@
 
 #include <reshade.hpp>
 
-#include <renodx/src/utils/dlss_hook.hpp>
+#include <src/utils/dlss_hook.hpp>
 
 #include "dlssnr_pass.h"
 #include "settings.h"
