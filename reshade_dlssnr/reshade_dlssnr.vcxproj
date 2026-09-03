@@ -59,7 +59,8 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <AdditionalDependencies>d3d12.lib;dxgi.lib;detours.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(SolutionDir)..\renodx\build\lib;$(SolutionDir)..\optiscaler\external;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(SolutionDir)..\..\renodx\build\lib;$(SolutionDir)..\..\optiscaler\external;$(SolutionDir)..\..\optiscaler\OptiScaler\library\detours;%(AdditionalLibraryDirectories)
+</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
