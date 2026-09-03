@@ -71,6 +71,20 @@ class DlssNrPass {
   unsigned int work_height_ = 0;
   bool reset_ = true;
   bool built_tuning_dirty_ = true;
+
+  unsigned int built_width_ = 0;
+  unsigned int built_height_ = 0;
+  unsigned int built_work_width_ = 0;
+  unsigned int built_work_height_ = 0;
+  DXGI_FORMAT built_format_ = DXGI_FORMAT_UNKNOWN;
+  bool built_passthrough_ = false;
+  int built_preset_ = -1;
+  int built_style_ = -1;
+  float built_intensity_ = -1.0f;
+  float built_local_structure_ = -1.0f;
+  float built_local_tone_ = -1.0f;
+  float built_skin_structure_ = -1.0f;
+  bool built_auto_mask_ = false;
 };
 
 }  // namespace reshade_dlssnr

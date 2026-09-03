@@ -454,6 +454,37 @@ void DlssNrPass::OnEvaluateAfterUpscale(
     }
   }
 
+  const bool feature_must_rebuild =
+      feature_ == nullptr ||
+      built_width_ != width_ ||
+      built_height_ != height_ ||
+      built_work_width_ != work_width_ ||
+      built_work_height_ != work_height_ ||
+      built_format_ != desc.Format ||
+      built_passthrough_ != is_hdr_buffer ||
+      built_preset_ != settings.preset ||
+      built_style_ != settings.style ||
+      built_intensity_ != settings.intensity ||
+      built_local_structure_ != settings.local_structure ||
+      built_local_tone_ != settings.local_tone ||
+      built_skin_structure_ != settings.skin_structure ||
+      built_auto_mask_ != settings.auto_mask;
+
+  if (feature_must_rebuild && feature_ != nullptr) {
+    if (forwarder_.release != nullptr) {
+      forwarder_.release(feature_);
+    }
+    feature_ = nullptr;
+    reset_ = true;
+  }
+
+  if (feature_must_rebuild || color_copy_ == nullptr || output_ == nullptr) {
+    if (color_copy_ != nullptr) { color_copy_->Release(); color_copy_ = nullptr; }
+    if (hdr_copy_ != nullptr) { hdr_copy_->Release(); hdr_copy_ = nullptr; }
+    if (output_ != nullptr) { output_->Release(); output_ = nullptr; }
+    if (color_small_ != nullptr) { color_small_->Release(); color_small_ = nullptr; }
+  }
+
   if (color_copy_ == nullptr) {
     color_copy_ = CreateScratch(device, desc.Format, width_, height_);
     hdr_copy_ = CreateScratch(device, desc.Format, width_, height_);
@@ -468,6 +499,20 @@ void DlssNrPass::OnEvaluateAfterUpscale(
     device->Release();
     return;
   }
+
+  built_width_ = width_;
+  built_height_ = height_;
+  built_work_width_ = work_width_;
+  built_work_height_ = work_height_;
+  built_format_ = desc.Format;
+  built_passthrough_ = is_hdr_buffer;
+  built_preset_ = settings.preset;
+  built_style_ = settings.style;
+  built_intensity_ = settings.intensity;
+  built_local_structure_ = settings.local_structure;
+  built_local_tone_ = settings.local_tone;
+  built_skin_structure_ = settings.skin_structure;
+  built_auto_mask_ = settings.auto_mask;
 
   DlssNrConstants encode = {};
   encode.Mode = DlssNrMode_Encode;
