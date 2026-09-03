@@ -6,8 +6,6 @@
 #include "nvngx_hook.h"
 #include "settings.h"
 
-extern IMAGE_DOS_HEADER __ImageBase;
-
 namespace {
 
 bool g_initialized = false;
@@ -18,9 +16,10 @@ void PinAddonModule() {
   if (pinned) return;
 
   HMODULE module = nullptr;
+  const void* address_in_module = reinterpret_cast<const void*>(&PinAddonModule);
   if (GetModuleHandleExW(
           GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
-          reinterpret_cast<LPCWSTR>(&__ImageBase),
+          static_cast<LPCWSTR>(address_in_module),
           &module) != 0) {
     reshade::log::message(reshade::log::level::info, "Pinned reshade_dlssnr addon module");
     pinned = true;
