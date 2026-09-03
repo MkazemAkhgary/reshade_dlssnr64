@@ -63,12 +63,6 @@ bool DlssNrCodec::Init(ID3D12Device* device) {
   if (device_ != nullptr) return true;
   if (device == nullptr) return false;
 
-  D3D12_ROOT_PARAMETER root_params[2] = {};
-  root_params[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-  root_params[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-  root_params[0].DescriptorTable.NumDescriptorRanges = 3;
-  root_params[0].DescriptorTable.pDescriptorRanges = nullptr;
-
   D3D12_DESCRIPTOR_RANGE ranges[3] = {};
   ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
   ranges[0].NumDescriptors = kDlssNrSrvCount;
@@ -86,13 +80,32 @@ bool DlssNrCodec::Init(ID3D12Device* device) {
   ranges[2].RegisterSpace = 0;
   ranges[2].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-  D3D12_DESCRIPTOR_RANGE* range_ptrs[] = {&ranges[0], &ranges[1], &ranges[2]};
+  D3D12_ROOT_PARAMETER root_params[1] = {};
+  root_params[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+  root_params[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
   root_params[0].DescriptorTable.NumDescriptorRanges = 3;
-  root_params[0].DescriptorTable.pDescriptorRanges = range_ptrs[0];
+  root_params[0].DescriptorTable.pDescriptorRanges = ranges;
+
+  D3D12_STATIC_SAMPLER_DESC static_sampler = {};
+  static_sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+  static_sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+  static_sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+  static_sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+  static_sampler.MipLODBias = 0.0f;
+  static_sampler.MaxAnisotropy = 0;
+  static_sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+  static_sampler.BorderColor = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
+  static_sampler.MinLOD = 0.0f;
+  static_sampler.MaxLOD = D3D12_FLOAT32_MAX;
+  static_sampler.ShaderRegister = 0;
+  static_sampler.RegisterSpace = 0;
+  static_sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 
   D3D12_ROOT_SIGNATURE_DESC root_desc = {};
   root_desc.NumParameters = 1;
   root_desc.pParameters = root_params;
+  root_desc.NumStaticSamplers = 1;
+  root_desc.pStaticSamplers = &static_sampler;
   root_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
 
   ID3DBlob* signature = nullptr;
