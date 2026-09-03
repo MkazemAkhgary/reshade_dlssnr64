@@ -20,6 +20,8 @@ PFN_SetPipelineState g_original_set_pipeline_state = nullptr;
 PFN_SetComputeRootSignature g_original_set_compute_root_signature = nullptr;
 PFN_SetGraphicsRootSignature g_original_set_graphics_root_signature = nullptr;
 
+bool g_hooked_command_lists = false;
+
 void STDMETHODCALLTYPE HookedSetDescriptorHeaps(ID3D12GraphicsCommandList* command_list, UINT count, ID3D12DescriptorHeap* const* heaps) {
   if (command_list != nullptr) {
     D3D12StateTracker::Get().OnSetDescriptorHeaps(command_list, count, heaps);
@@ -63,9 +65,7 @@ void D3D12Hooks::HookCommandList(ID3D12GraphicsCommandList* command_list) {
 
   D3D12StateTracker::Get().TrackCommandList(command_list);
 
-  // Avoid double hooking: if the first relevant vtable slot already points
-  // at our hook, assume it is hooked.
-  if (reinterpret_cast<void*>(vtable[28]) == reinterpret_cast<void*>(&HookedSetDescriptorHeaps)) {
+  if (g_hooked_command_lists) {
     return;
   }
 
@@ -82,7 +82,9 @@ void D3D12Hooks::HookCommandList(ID3D12GraphicsCommandList* command_list) {
   DetourAttach(reinterpret_cast<void**>(&g_original_set_compute_root_signature), HookedSetComputeRootSignature);
   DetourAttach(reinterpret_cast<void**>(&g_original_set_graphics_root_signature), HookedSetGraphicsRootSignature);
 
-  DetourTransactionCommit();
+  if (DetourTransactionCommit() == NO_ERROR) {
+    g_hooked_command_lists = true;
+  }
 }
 
 void D3D12Hooks::UnhookCommandList(ID3D12GraphicsCommandList* command_list) {
