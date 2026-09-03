@@ -2,6 +2,7 @@
 
 #include <reshade.hpp>
 
+#include "d3d12_hooks.h"
 #include "dlssnr_pass.h"
 #include "nvngx_hook_compat.h"
 #include "settings.h"
@@ -25,11 +26,19 @@ void PinAddonModule() {
   }
 }
 
+void OnInitDevice(reshade::api::device* device) {
+  if (device == nullptr) return;
+  auto* native_device = reinterpret_cast<ID3D12Device*>(device->get_native());
+  reshade_dlssnr::D3D12Hooks::Get().InstallEarlyHooks(native_device);
+}
+
 void Attach(HMODULE module) {
   if (g_initialized) return;
 
   reshade_dlssnr::LoadSettings();
   PinAddonModule();
+
+  reshade::register_event<reshade::addon_event::init_device>(OnInitDevice);
 
   HMODULE nvngx_dlss = GetModuleHandleW(L"nvngx_dlss.dll");
   if (nvngx_dlss == nullptr) {
@@ -51,6 +60,8 @@ void Attach(HMODULE module) {
 
 void Detach() {
   if (!g_initialized) return;
+
+  reshade::unregister_event<reshade::addon_event::init_device>(OnInitDevice);
 
   reshade_dlssnr::DlssNrPass::Get().Shutdown();
   reshade_dlssnr::SaveSettings();
