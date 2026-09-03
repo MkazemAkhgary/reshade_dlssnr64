@@ -33,32 +33,10 @@ HMODULE FindNvngxDlss() {
 }
 
 bool HookNvngxDlss(HMODULE module) {
-  if (module == nullptr) return false;
-
-  void* evaluate = GetProcAddress(module, "NVSDK_NGX_D3D12_EvaluateFeature");
-  if (evaluate == nullptr) {
-    reshade::log::message(reshade::log::level::error, "nvngx_dlss.dll missing NVSDK_NGX_D3D12_EvaluateFeature");
-    return false;
-  }
-
-  reshade_dlssnr::NvngxHook::real_NVSDK_NGX_D3D12_EvaluateFeature =
-      reinterpret_cast<decltype(&NVSDK_NGX_D3D12_EvaluateFeature)>(evaluate);
-
-  DetourTransactionBegin();
-  DetourUpdateThread(GetCurrentThread());
-  if (DetourAttach(
-          reinterpret_cast<void**>(&reshade_dlssnr::NvngxHook::real_NVSDK_NGX_D3D12_EvaluateFeature),
-          reshade_dlssnr::NvngxHook::hooked_NVSDK_NGX_D3D12_EvaluateFeature) != NO_ERROR) {
-    DetourTransactionAbort();
-    return false;
-  }
-
-  if (DetourTransactionCommit() != NO_ERROR) {
-    DetourTransactionAbort();
-    return false;
-  }
-
-  reshade::log::message(reshade::log::level::info, "Hooked nvngx_dlss.dll NVSDK_NGX_D3D12_EvaluateFeature");
+  (void) module;
+  reshade::log::message(
+      reshade::log::level::warning,
+      "NVNGX hook disabled for isolation test");
   return true;
 }
 
