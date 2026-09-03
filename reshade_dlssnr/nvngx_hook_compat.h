@@ -15,6 +15,8 @@
 #include "../../renodx/src/utils/log.hpp"
 #include "../../renodx/src/utils/vtable.hpp"
 
+#include "d3d12_hooks.h"
+
 namespace reshade_dlssnr::renodx_compat {
 
 static decltype(&NVSDK_NGX_D3D12_EvaluateFeature) real_NVSDK_NGX_D3D12_EvaluateFeature = nullptr;
@@ -24,8 +26,15 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
     const NVSDK_NGX_Handle* feature_handle,
     NVSDK_NGX_Parameter* parameters,
     PFN_NVSDK_NGX_ProgressCallback callback) {
-  return real_NVSDK_NGX_D3D12_EvaluateFeature(
+  D3D12Hooks::Get().SetTrackingEnabled(false);
+
+  NVSDK_NGX_Result result = real_NVSDK_NGX_D3D12_EvaluateFeature(
       command_list, feature_handle, parameters, callback);
+
+  D3D12Hooks::Get().RestoreCommandList(command_list);
+  D3D12Hooks::Get().SetTrackingEnabled(true);
+
+  return result;
 }
 
 using HookItem = std::tuple<const char*, void**, void*>;
