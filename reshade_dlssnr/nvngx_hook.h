@@ -32,10 +32,8 @@ struct NvngxHook {
         command_list, feature_handle, native_parameters, callback);
 
     if (result == NVSDK_NGX_Result_Success && feature_handle != nullptr) {
-      DlssNrPass::Get().OnEvaluateAfterUpscale(
-          command_list,
-          parameters,
-          NVSDK_NGX_Feature_SuperSampling);
+      // DLSSNR pass intentionally disabled until command-list state tracking
+      // and restoration are implemented.
     }
 
     return result;
