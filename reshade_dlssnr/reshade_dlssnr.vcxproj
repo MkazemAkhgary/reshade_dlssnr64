@@ -73,6 +73,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="codec.h" />
+    <ClInclude Include="nvngx_hook_compat.h" />
     <ClInclude Include="dlssnr_pass.h" />
     <ClInclude Include="forwarder.h" />
     <ClInclude Include="settings.h" />
