@@ -49,7 +49,8 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <ErrorLog>$(IntDir)$(MSBuildProjectName).error.log;%(ErrorLog)</ErrorLog>
-<AdditionalIncludeDirectories>$(SolutionDir)..\..\reshade\include;$(SolutionDir)..\..\renodx;$(SolutionDir)..\..\renodx\src;$(SolutionDir)..\..\optiscaler\external\nvngx_dlss_sdk;$(SolutionDir)..\..\optiscaler\OptiScaler\include;$(SolutionDir)..\..\optiscaler\OptiScaler\include\d3dx;%(AdditionalIncludeDirectories)
+<AdditionalIncludeDirectories>$(SolutionDir)..\..\reshade\include;$(SolutionDir)..\..\renodx;$(SolutionDir)..\..\renodx\src;$(SolutionDir)..\..\optiscaler\external\nvngx_dlss_sdk;$(SolutionDir)..\..\optiscaler\OptiScaler\include;$(SolutionDir)..\..\optiscaler\OptiScaler\include\d3dx;$(SolutionDir)..\..\optiscaler\OptiScaler\include\detours;%(AdditionalIncludeDirectories)
+
 </AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
