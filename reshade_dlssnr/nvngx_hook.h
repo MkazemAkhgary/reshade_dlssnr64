@@ -17,8 +17,8 @@ namespace {
 // RenoDX-style native export hooking for nvngx_dlss.dll. No proxy DLL,
 // no MinHook prologue patching.
 struct NvngxHook {
-  static decltype(&NVSDK_NGX_D3D12_EvaluateFeature) real_NVSDK_NGX_D3D12_EvaluateFeature;
-  static decltype(&NVSDK_NGX_D3D12_CreateFeature) real_NVSDK_NGX_D3D12_CreateFeature;
+  static inline decltype(&NVSDK_NGX_D3D12_EvaluateFeature) real_NVSDK_NGX_D3D12_EvaluateFeature = nullptr;
+  static inline decltype(&NVSDK_NGX_D3D12_CreateFeature) real_NVSDK_NGX_D3D12_CreateFeature = nullptr;
 
   static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
       ID3D12GraphicsCommandList* command_list,
