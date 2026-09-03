@@ -97,9 +97,29 @@ bool DlssNrPass::EnsureForwarder() {
 }
 
 bool DlssNrPass::EnsureCapabilityParams(ID3D12Device* device) {
+  (void) device;
   if (capability_params_ != nullptr) return true;
 
-  NVSDK_NGX_Result result = NVSDK_NGX_D3D12_GetCapabilityParameters(&capability_params_);
+  HMODULE nvngx_dlss = GetModuleHandleW(L"nvngx_dlss.dll");
+  if (nvngx_dlss == nullptr) {
+    nvngx_dlss = LoadLibraryW(L"nvngx_dlss.dll");
+  }
+
+  if (nvngx_dlss == nullptr) {
+    reason_ = "nvngx_dlss.dll is not loaded";
+    return false;
+  }
+
+  using PFN_GetCapabilityParameters = NVSDK_NGX_Result(NVSDK_CONV*)(NVSDK_NGX_Parameter**);
+  auto get_capability_parameters = reinterpret_cast<PFN_GetCapabilityParameters>(
+      GetProcAddress(nvngx_dlss, "NVSDK_NGX_D3D12_GetCapabilityParameters"));
+
+  if (get_capability_parameters == nullptr) {
+    reason_ = "NVSDK_NGX_D3D12_GetCapabilityParameters export not found";
+    return false;
+  }
+
+  NVSDK_NGX_Result result = get_capability_parameters(&capability_params_);
   if (result != NVSDK_NGX_Result_Success || capability_params_ == nullptr) {
     capability_params_ = nullptr;
     reason_ = "NGX capability parameters unavailable";
