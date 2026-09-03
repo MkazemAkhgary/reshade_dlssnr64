@@ -189,11 +189,11 @@ bool DlssNrPass::EnsureFeature(
   work_width_ = static_cast<unsigned int>(width * work_scale + 0.5f);
   work_height_ = static_cast<unsigned int>(height * work_scale + 0.5f);
 
-  const wchar_t* data_path = L"";
+  const std::wstring data_path = GetModuleDirectory().wstring();
 
   feature_ = forwarder_.create(
       model->wstring().c_str(),
-      data_path,
+      data_path.c_str(),
       device,
       command_list,
       capability_params_,

@@ -62,10 +62,6 @@ void DrawSettings(reshade::api::effect_runtime*) {
   ImGui::Separator();
 
   changed |= ImGui::SliderInt("Debug View", &settings.debug_view, 0, 3);
-  changed |= ImGui::SliderInt("Compare Mode", &settings.compare_mode, 0, 2);
-  changed |= ImGui::SliderFloat("Compare Split", &settings.compare_split, 0.0f, 1.0f, "%.2f");
-  changed |= ImGui::SliderFloat("Compare Zoom", &settings.compare_zoom, 1.0f, 4.0f, "%.2f");
-  changed |= ImGui::Checkbox("Compare Swap", &settings.compare_swap);
 
   if (changed) {
     reshade_dlssnr::SaveSettings();
