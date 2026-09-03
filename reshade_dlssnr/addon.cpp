@@ -2,8 +2,6 @@
 
 #include <reshade.hpp>
 
-#include <src/utils/dlss_hook.hpp>
-
 #include "dlssnr_pass.h"
 #include "settings.h"
 
@@ -32,8 +30,11 @@ void Attach(HMODULE module) {
   reshade_dlssnr::LoadSettings();
   PinAddonModule();
 
-  renodx::utils::dlss_hook::nvngx_dlss_file_path = "nvngx_dlss.dll";
-  renodx::utils::dlss_hook::Use(DLL_PROCESS_ATTACH);
+  // NVNGX hook currently disabled until the RenoDX NVSDK header mismatch is
+  // resolved.
+  reshade::log::message(
+      reshade::log::level::warning,
+      "NVNGX hook disabled while SDK header mismatch is fixed");
 
   g_initialized = true;
 }
@@ -43,7 +44,6 @@ void Detach() {
 
   reshade_dlssnr::DlssNrPass::Get().Shutdown();
   reshade_dlssnr::SaveSettings();
-  renodx::utils::dlss_hook::Use(DLL_PROCESS_DETACH);
   g_initialized = false;
 }
 
