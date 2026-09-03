@@ -27,8 +27,9 @@ struct NvngxHook {
       PFN_NVSDK_NGX_ProgressCallback callback) {
     renodx::utils::directx::NativeFromReShadeProxy(&command_list);
 
+    NVSDK_NGX_Parameter* native_parameters = const_cast<NVSDK_NGX_Parameter*>(parameters);
     NVSDK_NGX_Result result = real_NVSDK_NGX_D3D12_EvaluateFeature(
-        command_list, feature_handle, parameters, callback);
+        command_list, feature_handle, native_parameters, callback);
 
     if (result == NVSDK_NGX_Result_Success && feature_handle != nullptr) {
       DlssNrPass::Get().OnEvaluateAfterUpscale(
