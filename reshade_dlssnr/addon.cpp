@@ -6,6 +6,8 @@
 #include "nvngx_hook.h"
 #include "settings.h"
 
+extern IMAGE_DOS_HEADER __ImageBase;
+
 namespace {
 
 bool g_initialized = false;
@@ -16,7 +18,6 @@ void PinAddonModule() {
   if (pinned) return;
 
   HMODULE module = nullptr;
-  extern IMAGE_DOS_HEADER __ImageBase;
   if (GetModuleHandleExW(
           GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
           reinterpret_cast<LPCWSTR>(&__ImageBase),
