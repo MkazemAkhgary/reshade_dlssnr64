@@ -2,6 +2,7 @@
 
 #include <reshade.hpp>
 
+#include "d3d12_hooks.h"
 #include "dlssnr_pass.h"
 #include "nvngx_hook_compat.h"
 #include "settings.h"
@@ -25,11 +26,28 @@ void PinAddonModule() {
   }
 }
 
+void OnInitCommandList(reshade::api::command_list* command_list) {
+  if (command_list == nullptr) return;
+  auto* native_command_list = reinterpret_cast<ID3D12GraphicsCommandList*>(
+      command_list->get_native());
+  reshade_dlssnr::D3D12Hooks::Get().HookCommandList(native_command_list);
+}
+
+void OnDestroyCommandList(reshade::api::command_list* command_list) {
+  if (command_list == nullptr) return;
+  auto* native_command_list = reinterpret_cast<ID3D12GraphicsCommandList*>(
+      command_list->get_native());
+  reshade_dlssnr::D3D12Hooks::Get().UnhookCommandList(native_command_list);
+}
+
 void Attach(HMODULE module) {
   if (g_initialized) return;
 
   reshade_dlssnr::LoadSettings();
   PinAddonModule();
+
+  reshade::register_event<reshade::addon_event::init_command_list>(OnInitCommandList);
+  reshade::register_event<reshade::addon_event::destroy_command_list>(OnDestroyCommandList);
 
   HMODULE nvngx_dlss = GetModuleHandleW(L"nvngx_dlss.dll");
   if (nvngx_dlss == nullptr) {
@@ -51,6 +69,9 @@ void Attach(HMODULE module) {
 
 void Detach() {
   if (!g_initialized) return;
+
+  reshade::unregister_event<reshade::addon_event::destroy_command_list>(OnDestroyCommandList);
+  reshade::unregister_event<reshade::addon_event::init_command_list>(OnInitCommandList);
 
   reshade_dlssnr::DlssNrPass::Get().Shutdown();
   reshade_dlssnr::SaveSettings();
