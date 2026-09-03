@@ -48,10 +48,11 @@ void D3D12StateTracker::SetComputeRootSignature(ID3D12GraphicsCommandList* comma
   if (command_list == nullptr || root_signature == nullptr) return;
 
   {
-    std::unique_lock<std::shared_mutex> lock(root_parameter_count_mutex_);
-    UINT count = root_parameter_count_[root_signature];
     std::unique_lock<std::shared_mutex> root_lock(root_states_mutex_);
-    root_states_[command_list].resize(count);
+    auto& table = root_states_[command_list];
+    if (table.size() < 64) {
+      table.resize(64);
+    }
   }
 
   std::unique_lock<std::shared_mutex> lock(root_signature_mutex_);
