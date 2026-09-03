@@ -5,6 +5,10 @@
 #include <nvsdk_ngx.h>
 #include <windows.h>
 
+#include <cassert>
+#include <tuple>
+#include <vector>
+
 #include <detours.h>
 
 #include "../../renodx/src/utils/directx.hpp"
