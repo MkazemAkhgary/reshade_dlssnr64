@@ -230,24 +230,15 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float3 final = gFinal.SampleLevel(s0, uv, 0).rgb;
 
     float3 diff3 = abs(pre - final);
-    float diff = dot(diff3, float3(0.2126, 0.7152, 0.0722));
+    // Use the maximum channel difference. UI/HUD elements often differ most in
+    // one channel (e.g. white text, green health bars). Luma averaging can
+    // understate thin colored UI and leave it translucent.
+    float diff = max(diff3.r, max(diff3.g, diff3.b));
 
-    // High-pass the difference: global tone/color changes are low-frequency,
-    // UI text and HUD elements are high-frequency. Sample four neighbours and
-    // subtract a cheap local average to keep only local changes.
-    float2 texel = 1.0 / float2(gWidth, gHeight);
-    float n1 = dot(abs(gPreUI.SampleLevel(s0, uv + float2(texel.x, 0.0), 0).rgb -
-                       gFinal.SampleLevel(s0, uv + float2(texel.x, 0.0), 0).rgb), float3(0.2126, 0.7152, 0.0722));
-    float n2 = dot(abs(gPreUI.SampleLevel(s0, uv - float2(texel.x, 0.0), 0).rgb -
-                       gFinal.SampleLevel(s0, uv - float2(texel.x, 0.0), 0).rgb), float3(0.2126, 0.7152, 0.0722));
-    float n3 = dot(abs(gPreUI.SampleLevel(s0, uv + float2(0.0, texel.y), 0).rgb -
-                       gFinal.SampleLevel(s0, uv + float2(0.0, texel.y), 0).rgb), float3(0.2126, 0.7152, 0.0722));
-    float n4 = dot(abs(gPreUI.SampleLevel(s0, uv - float2(0.0, texel.y), 0).rgb -
-                       gFinal.SampleLevel(s0, uv - float2(0.0, texel.y), 0).rgb), float3(0.2126, 0.7152, 0.0722));
-
-    float local_average = (n1 + n2 + n3 + n4) * 0.25;
-    float local_diff = abs(diff - local_average);
-    float mask = saturate(local_diff * 8.0);
+    // Soft binary threshold: near zero inside the clean pass, near one for any
+    // UI/post-processing-only change. The soft edge prevents hard aliasing but
+    // keeps the mask effectively opaque where UI exists.
+    float mask = smoothstep(0.002, 0.02, diff);
     gMask[id.xy] = float4(mask, mask, mask, 1.0);
 }
 )";
