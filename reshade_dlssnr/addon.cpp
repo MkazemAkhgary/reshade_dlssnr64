@@ -48,7 +48,7 @@ void OnPresent(
   }
 
   auto* native_command_queue = reinterpret_cast<ID3D12CommandQueue*>(command_queue->get_native());
-  auto* native_swapchain = reinterpret_cast<IDXGISwapChain3*>(swapchain->get_native());
+  auto* native_swapchain = reinterpret_cast<IDXGISwapChain*>(swapchain->get_native());
 
   reshade_dlssnr::DlssNrDirect::Get().OnPresent(
       native_command_queue,

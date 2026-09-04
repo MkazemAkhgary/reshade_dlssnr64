@@ -47,7 +47,7 @@ class DlssNrDirect {
 
   void OnPresent(
       ID3D12CommandQueue* command_queue,
-      IDXGISwapChain3* swapchain);
+      IDXGISwapChain* swapchain);
 
   void Shutdown();
 

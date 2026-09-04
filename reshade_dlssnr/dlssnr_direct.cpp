@@ -332,12 +332,17 @@ void DlssNrDirect::WaitGpu() {
 
 void DlssNrDirect::OnPresent(
     ID3D12CommandQueue* command_queue,
-    IDXGISwapChain3* swapchain) {
+    IDXGISwapChain* swapchain) {
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
   const Settings& settings = GetSettings();
   if (!settings.enabled) return;
   if (failed_ || command_queue == nullptr || swapchain == nullptr) return;
+
+  IDXGISwapChain3* swapchain3 = nullptr;
+  if (FAILED(swapchain->QueryInterface(IID_PPV_ARGS(&swapchain3))) || swapchain3 == nullptr) {
+    return;
+  }
 
   ID3D12Device* device = nullptr;
   if (FAILED(command_queue->GetDevice(IID_PPV_ARGS(&device))) || device == nullptr) return;
@@ -345,18 +350,20 @@ void DlssNrDirect::OnPresent(
   if (!EnsureModelAndPatch() || !EnsureInitialized(device) || !EnsureCommandInfrastructure(device)) {
     failed_ = true;
     reshade::log::message(reshade::log::level::error, reason_);
+    swapchain3->Release();
     device->Release();
     return;
   }
 
   command_queue_ = command_queue;
 
-  const UINT back_buffer_index = swapchain->GetCurrentBackBufferIndex();
+  const UINT back_buffer_index = swapchain3->GetCurrentBackBufferIndex();
   ID3D12Resource* backbuffer = nullptr;
 
-  if (FAILED(swapchain->GetBuffer(
+  if (FAILED(swapchain3->GetBuffer(
           back_buffer_index,
           IID_PPV_ARGS(&backbuffer))) || backbuffer == nullptr) {
+    swapchain3->Release();
     device->Release();
     return;
   }
@@ -388,6 +395,7 @@ void DlssNrDirect::OnPresent(
       failed_ = true;
       reason_ = "failed to create DLSSNR output texture";
       backbuffer->Release();
+      swapchain3->Release();
       device->Release();
       return;
     }
@@ -404,6 +412,7 @@ void DlssNrDirect::OnPresent(
       failed_ = true;
       command_list_->Close();
       backbuffer->Release();
+      swapchain3->Release();
       device->Release();
       return;
     }
@@ -417,6 +426,7 @@ void DlssNrDirect::OnPresent(
         reshade::log::level::info,
         "Direct DLSSNR feature created; skipping evaluation this frame");
     backbuffer->Release();
+    swapchain3->Release();
     device->Release();
     return;
   }
@@ -465,6 +475,7 @@ void DlssNrDirect::OnPresent(
   }
 
   backbuffer->Release();
+  swapchain3->Release();
   device->Release();
 }
 
