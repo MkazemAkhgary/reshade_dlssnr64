@@ -52,6 +52,8 @@ class DlssNrDirect {
       ID3D12CommandQueue* command_queue,
       IDXGISwapChain* swapchain);
 
+  void SetDebugSelectedResource(uint64_t handle);
+
   void Shutdown();
 
   bool IsReady() const;
@@ -109,6 +111,8 @@ class DlssNrDirect {
   UINT64 fence_value_ = 0;
 
   std::unique_ptr<DlssNrCodec> debug_codec_;
+
+  uint64_t debug_selected_resource_handle_ = 0;
 };
 
 }  // namespace reshade_dlssnr
