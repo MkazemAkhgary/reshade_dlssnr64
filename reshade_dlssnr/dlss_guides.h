@@ -4,6 +4,8 @@
 #include <nvsdk_ngx.h>
 #include <windows.h>
 
+#include <mutex>
+
 namespace reshade_dlssnr {
 
 struct DlssGuideState {
@@ -36,7 +38,7 @@ class DlssGuides {
   DlssGuides(const DlssGuides&) = delete;
   DlssGuides& operator=(const DlssGuides&) = delete;
 
-  mutable CRITICAL_SECTION lock_;
+  mutable std::mutex lock_;
 
   ID3D12Resource* depth_clone_ = nullptr;
   ID3D12Resource* motion_clone_ = nullptr;

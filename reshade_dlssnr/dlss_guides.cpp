@@ -102,11 +102,11 @@ void DlssGuides::Capture(
     ID3D12GraphicsCommandList* command_list,
     const NVSDK_NGX_Parameter* params,
     NVSDK_NGX_Feature feature_id) {
-  EnterCriticalSection(&lock_);
+  lock_.lock();
 
   if (feature_id != NVSDK_NGX_Feature_SuperSampling || command_list == nullptr || params == nullptr) {
     state_.valid = false;
-    LeaveCriticalSection(&lock_);
+    lock_.unlock();
     return;
   }
 
@@ -115,14 +115,14 @@ void DlssGuides::Capture(
 
   if (depth == nullptr || motion == nullptr) {
     state_.valid = false;
-    LeaveCriticalSection(&lock_);
+    lock_.unlock();
     return;
   }
 
   ID3D12Device* device = nullptr;
   if (FAILED(command_list->GetDevice(IID_PPV_ARGS(&device))) || device == nullptr) {
     state_.valid = false;
-    LeaveCriticalSection(&lock_);
+    lock_.unlock();
     return;
   }
 
@@ -178,7 +178,7 @@ void DlssGuides::Capture(
   if (depth_clone_ == nullptr || motion_clone_ == nullptr) {
     state_.valid = false;
     device->Release();
-    LeaveCriticalSection(&lock_);
+    lock_.unlock();
     return;
   }
 
@@ -202,18 +202,16 @@ void DlssGuides::Capture(
   state_.valid = true;
 
   device->Release();
-  LeaveCriticalSection(&lock_);
+  lock_.unlock();
 }
 
 DlssGuideState DlssGuides::Get() const {
-  EnterCriticalSection(&lock_);
-  DlssGuideState result = state_;
-  LeaveCriticalSection(&lock_);
-  return result;
+  std::lock_guard<std::mutex> lock(lock_);
+  return state_;
 }
 
 void DlssGuides::Clear() {
-  EnterCriticalSection(&lock_);
+  std::lock_guard<std::mutex> lock(lock_);
 
   if (depth_clone_ != nullptr) {
     depth_clone_->Release();
@@ -232,8 +230,6 @@ void DlssGuides::Clear() {
   motion_width_ = 0;
   motion_height_ = 0;
   motion_format_ = DXGI_FORMAT_UNKNOWN;
-
-  LeaveCriticalSection(&lock_);
 }
 
 }  // namespace reshade_dlssnr
