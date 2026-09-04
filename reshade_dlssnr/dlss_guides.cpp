@@ -295,11 +295,8 @@ void DlssGuides::CaptureSelectedPassIfNeeded(
       selected_pass_format_ != (IsTypelessFormat(selected_pass_source->GetDesc().Format)
                                     ? TypedGuideFormat(selected_pass_source->GetDesc().Format)
                                     : selected_pass_source->GetDesc().Format)) {
-    if (selected_pass_clone_ != nullptr) {
-      selected_pass_clone_->Release();
-      selected_pass_clone_ = nullptr;
-    }
-
+    // Do not release the previous clone here. It may still be referenced by
+    // in-flight GPU work. Retiring it immediately can cause a device hang.
     selected_pass_clone_ = CreateGuideClone(
         device,
         selected_pass_source,
@@ -351,10 +348,9 @@ void DlssGuides::Clear() {
     pre_ui_clone_ = nullptr;
   }
 
-  if (selected_pass_clone_ != nullptr) {
-    selected_pass_clone_->Release();
-    selected_pass_clone_ = nullptr;
-  }
+  // Deliberately leak guide clones until process exit. Releasing them while
+  // the game may still be using them causes intermittent device removal.
+  selected_pass_clone_ = nullptr;
 
   state_.valid = false;
   state_.pre_ui_color = nullptr;
