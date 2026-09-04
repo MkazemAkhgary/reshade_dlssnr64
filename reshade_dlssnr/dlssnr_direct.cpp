@@ -476,7 +476,7 @@ void DlssNrDirect::OnPresent(
     return;
   }
 
-  if ((settings.debug_view == 2 || settings.debug_view == 3) && guides.valid) {
+  if ((settings.debug_view == 2 || settings.debug_view == 3 || settings.debug_view == 5) && guides.valid) {
     if (debug_codec_ == nullptr) {
       debug_codec_ = std::make_unique<DlssNrCodec>();
     }
@@ -494,7 +494,30 @@ void DlssNrDirect::OnPresent(
     command_allocator_->Reset();
     command_list_->Reset(command_allocator_, nullptr);
 
-    ID3D12Resource* debug_input = settings.debug_view == 2 ? guides.depth : guides.motion;
+    ID3D12Resource* debug_input = nullptr;
+    unsigned int debug_guide_width = width;
+    unsigned int debug_guide_height = height;
+
+    if (settings.debug_view == 2) {
+      debug_input = guides.depth;
+      debug_guide_width = guides.guide_width;
+      debug_guide_height = guides.guide_height;
+    } else if (settings.debug_view == 3) {
+      debug_input = guides.motion;
+      debug_guide_width = guides.guide_width;
+      debug_guide_height = guides.guide_height;
+    } else if (settings.debug_view == 5) {
+      debug_input = guides.pre_ui_color;
+      debug_guide_width = width;
+      debug_guide_height = height;
+    }
+
+    if (debug_input == nullptr) {
+      backbuffer->Release();
+      swapchain3->Release();
+      device->Release();
+      return;
+    }
 
     DlssNrConstants debug_constants = {};
     debug_constants.Mode = DlssNrMode_Resolve;
@@ -503,8 +526,8 @@ void DlssNrDirect::OnPresent(
     debug_constants.WhitePoint = 1.0f;
     debug_constants.Width = width;
     debug_constants.Height = height;
-    debug_constants.GuideWidth = guides.guide_width;
-    debug_constants.GuideHeight = guides.guide_height;
+    debug_constants.GuideWidth = debug_guide_width;
+    debug_constants.GuideHeight = debug_guide_height;
     debug_constants.MvScaleX = 1.0f;
     debug_constants.MvScaleY = 1.0f;
 
