@@ -257,6 +257,7 @@ void DrawSettings(reshade::api::effect_runtime*) {
 
   changed |= ImGui::Checkbox("Enable DLSSNR", &settings.enabled);
   changed |= ImGui::Checkbox("Only run on SuperSampling", &settings.only_super_sampling);
+  changed |= ImGui::Checkbox("Use selected pass as model input", &settings.use_selected_pass_as_input);
 
   ImGui::Separator();
 

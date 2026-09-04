@@ -38,6 +38,7 @@ void LoadSettings() {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "CompareZoom", g_settings.compare_zoom);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "CompareSwap", g_settings.compare_swap);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "PassthroughToneMapped", g_settings.passthrough_tone_mapped);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UseSelectedPassAsInput", g_settings.use_selected_pass_as_input);
 }
 
 void SaveSettings() {
@@ -66,6 +67,7 @@ void SaveSettings() {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "CompareZoom", g_settings.compare_zoom);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "CompareSwap", g_settings.compare_swap);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "PassthroughToneMapped", g_settings.passthrough_tone_mapped);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UseSelectedPassAsInput", g_settings.use_selected_pass_as_input);
 }
 
 }  // namespace reshade_dlssnr

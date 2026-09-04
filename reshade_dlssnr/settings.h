@@ -31,6 +31,7 @@ struct Settings {
   bool compare_swap = false;
 
   bool passthrough_tone_mapped = false;
+  bool use_selected_pass_as_input = false;
 };
 
 Settings& GetSettings();
