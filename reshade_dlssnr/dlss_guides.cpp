@@ -107,7 +107,7 @@ ID3D12Resource* DlssGuides::CreateGuideClone(
           &heap,
           D3D12_HEAP_FLAG_NONE,
           &desc,
-          D3D12_RESOURCE_STATE_COPY_DEST,
+          D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
           nullptr,
           IID_PPV_ARGS(&resource)))) {
     return nullptr;

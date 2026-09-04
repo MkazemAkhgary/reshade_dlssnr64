@@ -593,6 +593,8 @@ void DlssNrDirect::OnPresent(
     return;
   }
 
+  bool ui_mask_generated = false;
+
   if (guides.valid && guides.pre_ui_color != nullptr && ui_mask_ != nullptr) {
     if (!debug_codec_->InitMaskShader(device)) {
       failed_ = true;
@@ -617,6 +619,8 @@ void DlssNrDirect::OnPresent(
         guides.pre_ui_color,
         backbuffer,
         ui_mask_);
+
+    ui_mask_generated = true;
   }
 
   SimpleParams eval_params;
@@ -634,7 +638,7 @@ void DlssNrDirect::OnPresent(
   eval_params.Set("DLSSNR.GlobalToneStrength", 1.0f);
   eval_params.Set("DLSSNR.UseAutoMask", settings.auto_mask ? 1u : 0u);
 
-  if (ui_mask_ != nullptr) {
+  if (ui_mask_generated && ui_mask_ != nullptr) {
     eval_params.Set("DLSSNR.UIAlpha", ui_mask_);
     eval_params.Set("DLSSNR.Backbuffer", backbuffer);
   }
