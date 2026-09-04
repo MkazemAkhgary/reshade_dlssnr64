@@ -400,6 +400,7 @@ void DrawSettings(reshade::api::effect_runtime*) {
       g_selected_pass_target_handle = pass.target_handle;
       g_has_selected_pass_target = true;
       reshade_dlssnr::DlssNrDirect::Get().SetDebugSelectedResource(g_selected_pass_target_handle);
+      reshade_dlssnr::DlssGuides::Get().SetSelectedPassHandle(g_selected_pass_target_handle);
     }
   }
 

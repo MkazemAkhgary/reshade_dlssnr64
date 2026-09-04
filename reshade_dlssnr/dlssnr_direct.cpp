@@ -444,6 +444,41 @@ void DlssNrDirect::OnPresent(
     ui_mask_format_ = desc.Format;
   }
 
+  if (composite_output_ == nullptr ||
+      composite_output_width_ != width ||
+      composite_output_height_ != height ||
+      composite_output_format_ != desc.Format) {
+    if (composite_output_ != nullptr) {
+      composite_output_->Release();
+      composite_output_ = nullptr;
+    }
+
+    D3D12_HEAP_PROPERTIES composite_heap = {};
+    composite_heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+    D3D12_RESOURCE_DESC composite_desc = desc;
+    composite_desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+    if (FAILED(device->CreateCommittedResource(
+            &composite_heap,
+            D3D12_HEAP_FLAG_NONE,
+            &composite_desc,
+            D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+            nullptr,
+            IID_PPV_ARGS(&composite_output_)))) {
+      failed_ = true;
+      reason_ = "failed to create DLSSNR composite output texture";
+      backbuffer->Release();
+      swapchain3->Release();
+      device->Release();
+      return;
+    }
+
+    composite_output_width_ = width;
+    composite_output_height_ = height;
+    composite_output_format_ = desc.Format;
+  }
+
   command_allocator_->Reset();
   command_list_->Reset(command_allocator_, nullptr);
 
@@ -626,9 +661,18 @@ void DlssNrDirect::OnPresent(
     return;
   }
 
+  ID3D12Resource* model_input = backbuffer;
+  ID3D12Resource* pre_ui_source = guides.pre_ui_color;
+
+  if (settings.use_selected_pass_as_input &&
+      guides.selected_pass_color != nullptr) {
+    model_input = guides.selected_pass_color;
+    pre_ui_source = guides.selected_pass_color;
+  }
+
   bool ui_mask_generated = false;
 
-  if (guides.valid && guides.pre_ui_color != nullptr && ui_mask_ != nullptr) {
+  if (guides.valid && pre_ui_source != nullptr && ui_mask_ != nullptr) {
     if (!debug_codec_->InitMaskShader(device)) {
       failed_ = true;
       reason_ = "failed to initialize UI mask shader";
@@ -649,7 +693,7 @@ void DlssNrDirect::OnPresent(
     debug_codec_->DispatchMask(
         command_list_,
         mask_constants,
-        guides.pre_ui_color,
+        pre_ui_source,
         backbuffer,
         ui_mask_);
 
@@ -657,7 +701,7 @@ void DlssNrDirect::OnPresent(
   }
 
   SimpleParams eval_params;
-  eval_params.Set("DLSSNR.Color", backbuffer);
+  eval_params.Set("DLSSNR.Color", model_input);
   eval_params.Set("DLSSNR.Output", output_);
   eval_params.Set("DLSSNR.Enabled", 1u);
   eval_params.Set("DLSSNR.Width", width);
@@ -715,11 +759,50 @@ void DlssNrDirect::OnPresent(
     Barrier(command_list_, ui_mask_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   }
 
-  Barrier(command_list_, output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
-  Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
-  command_list_->CopyResource(backbuffer, output_);
-  Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
-  Barrier(command_list_, output_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  if (ui_mask_generated && ui_mask_ != nullptr && composite_output_ != nullptr) {
+    if (!debug_codec_->InitCompositeShader(device)) {
+      failed_ = true;
+      reason_ = "failed to initialize UI composite shader";
+      reshade::log::message(reshade::log::level::error, reason_);
+      backbuffer->Release();
+      swapchain3->Release();
+      device->Release();
+      return;
+    }
+
+    DlssNrConstants composite_constants = {};
+    composite_constants.Mode = DlssNrMode_Encode;
+    composite_constants.WhitePoint = 1.0f;
+    composite_constants.Width = width;
+    composite_constants.Height = height;
+    composite_constants.Passthrough = 1u;
+
+    Barrier(command_list_, output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    Barrier(command_list_, ui_mask_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+    debug_codec_->DispatchComposite(
+        command_list_,
+        composite_constants,
+        output_,
+        backbuffer,
+        ui_mask_,
+        composite_output_);
+
+    Barrier(command_list_, composite_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
+    command_list_->CopyResource(backbuffer, composite_output_);
+    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
+    Barrier(command_list_, composite_output_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    Barrier(command_list_, ui_mask_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    Barrier(command_list_, output_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  } else {
+    Barrier(command_list_, output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
+    command_list_->CopyResource(backbuffer, output_);
+    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
+    Barrier(command_list_, output_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  }
 
   command_list_->Close();
   ID3D12CommandList* const lists[] = {command_list_};
@@ -765,9 +848,17 @@ void DlssNrDirect::Shutdown() {
     ui_mask_ = nullptr;
   }
 
+  if (composite_output_ != nullptr) {
+    composite_output_->Release();
+    composite_output_ = nullptr;
+  }
+
   ui_mask_width_ = 0;
   ui_mask_height_ = 0;
   ui_mask_format_ = DXGI_FORMAT_UNKNOWN;
+  composite_output_width_ = 0;
+  composite_output_height_ = 0;
+  composite_output_format_ = DXGI_FORMAT_UNKNOWN;
 
   if (fence_event_ != INVALID_HANDLE_VALUE) {
     CloseHandle(fence_event_);
