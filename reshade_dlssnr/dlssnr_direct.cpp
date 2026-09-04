@@ -149,6 +149,10 @@ DlssNrDirect& DlssNrDirect::Get() {
   return direct;
 }
 
+void DlssNrDirect::SetDebugSelectedResource(uint64_t handle) {
+  debug_selected_resource_handle_ = handle;
+}
+
 bool DlssNrDirect::IsReady() const {
   return feature_handle_ != nullptr && !failed_;
 }
@@ -476,7 +480,9 @@ void DlssNrDirect::OnPresent(
     return;
   }
 
-  if ((settings.debug_view == 2 || settings.debug_view == 3 || settings.debug_view == 5) && guides.valid) {
+  if ((settings.debug_view == 2 || settings.debug_view == 3 ||
+       settings.debug_view == 5 || settings.debug_view == 6) &&
+      (guides.valid || settings.debug_view == 6)) {
     if (debug_codec_ == nullptr) {
       debug_codec_ = std::make_unique<DlssNrCodec>();
     }
@@ -508,6 +514,10 @@ void DlssNrDirect::OnPresent(
       debug_guide_height = guides.guide_height;
     } else if (settings.debug_view == 5) {
       debug_input = guides.pre_ui_color;
+      debug_guide_width = width;
+      debug_guide_height = height;
+    } else if (settings.debug_view == 6) {
+      debug_input = reinterpret_cast<ID3D12Resource*>(debug_selected_resource_handle_);
       debug_guide_width = width;
       debug_guide_height = height;
     }

@@ -294,6 +294,7 @@ void DrawSettings(reshade::api::effect_runtime*) {
         "Motion (guide)",
         "UI Mask",
         "DLSS Stage (pre-UI)",
+        "Selected Pass Resource",
     };
     changed |= ImGui::Combo("Debug View", &settings.debug_view, debug_names, IM_ARRAYSIZE(debug_names));
   }
@@ -372,6 +373,7 @@ void DrawSettings(reshade::api::effect_runtime*) {
     if (ImGui::Selectable(label.c_str(), is_selected)) {
       g_selected_pass_target_handle = pass.target_handle;
       g_has_selected_pass_target = true;
+      reshade_dlssnr::DlssNrDirect::Get().SetDebugSelectedResource(g_selected_pass_target_handle);
     }
   }
 
