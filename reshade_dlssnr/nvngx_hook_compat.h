@@ -18,7 +18,7 @@
 #include "../../renodx/src/utils/vtable.hpp"
 
 #include "d3d12_hooks.h"
-#include "dlssnr_pass.h"
+#include "dlssnr_direct.h"
 
 namespace reshade_dlssnr::renodx_compat {
 
@@ -66,7 +66,7 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
     }
 
     if (feature_id == NVSDK_NGX_Feature_SuperSampling) {
-      DlssNrPass::Get().OnEvaluateAfterUpscale(
+      DlssNrDirect::Get().OnEvaluateAfterUpscale(
           command_list,
           parameters,
           feature_id);
