@@ -1,6 +1,7 @@
 #pragma once
 
 #include <d3d12.h>
+#include <dxgi1_4.h>
 #include <nvsdk_ngx.h>
 #include <windows.h>
 
