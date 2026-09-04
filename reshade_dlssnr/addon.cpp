@@ -50,9 +50,12 @@ void OnFinishEffects(
   const auto target_resource = device->get_resource_from_view(rtv);
   auto* native_target = reinterpret_cast<ID3D12Resource*>(target_resource.handle);
 
+  reshade_dlssnr::D3D12Hooks::Get().SetTrackingEnabled(false);
   reshade_dlssnr::DlssNrDirect::Get().OnFinishEffects(
       native_command_list,
       native_target);
+  reshade_dlssnr::D3D12Hooks::Get().RestoreCommandList(native_command_list);
+  reshade_dlssnr::D3D12Hooks::Get().SetTrackingEnabled(true);
 }
 
 void DrawSettings(reshade::api::effect_runtime*) {
