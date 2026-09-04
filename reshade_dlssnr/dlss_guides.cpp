@@ -264,6 +264,70 @@ void DlssGuides::Capture(
   lock_.unlock();
 }
 
+void DlssGuides::SetSelectedPassHandle(uint64_t handle) {
+  std::lock_guard<std::mutex> lock(lock_);
+  selected_pass_handle_ = handle;
+  has_selected_pass_handle_ = handle != 0;
+}
+
+void DlssGuides::CaptureSelectedPassIfNeeded(
+    ID3D12GraphicsCommandList* command_list,
+    ID3D12Resource* selected_pass_source) {
+  if (command_list == nullptr || selected_pass_source == nullptr) return;
+
+  lock_.lock();
+
+  if (!has_selected_pass_handle_ ||
+      reinterpret_cast<uint64_t>(selected_pass_source) != selected_pass_handle_) {
+    lock_.unlock();
+    return;
+  }
+
+  ID3D12Device* device = nullptr;
+  if (FAILED(command_list->GetDevice(IID_PPV_ARGS(&device))) || device == nullptr) {
+    lock_.unlock();
+    return;
+  }
+
+  if (selected_pass_clone_ == nullptr ||
+      selected_pass_width_ != static_cast<unsigned int>(selected_pass_source->GetDesc().Width) ||
+      selected_pass_height_ != static_cast<unsigned int>(selected_pass_source->GetDesc().Height) ||
+      selected_pass_format_ != (IsTypelessFormat(selected_pass_source->GetDesc().Format)
+                                    ? TypedGuideFormat(selected_pass_source->GetDesc().Format)
+                                    : selected_pass_source->GetDesc().Format)) {
+    if (selected_pass_clone_ != nullptr) {
+      selected_pass_clone_->Release();
+      selected_pass_clone_ = nullptr;
+    }
+
+    selected_pass_clone_ = CreateGuideClone(
+        device,
+        selected_pass_source,
+        &selected_pass_width_,
+        &selected_pass_height_,
+        &selected_pass_format_);
+  }
+
+  if (selected_pass_clone_ == nullptr) {
+    device->Release();
+    lock_.unlock();
+    return;
+  }
+
+  Barrier(command_list, selected_pass_source, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
+  Barrier(command_list, selected_pass_clone_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
+  command_list->CopyResource(selected_pass_clone_, selected_pass_source);
+  Barrier(command_list, selected_pass_source, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+  Barrier(command_list, selected_pass_clone_, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+  state_.selected_pass_color = selected_pass_clone_;
+  state_.selected_width = selected_pass_width_;
+  state_.selected_height = selected_pass_height_;
+
+  device->Release();
+  lock_.unlock();
+}
+
 DlssGuideState DlssGuides::GetState() const {
   std::lock_guard<std::mutex> lock(lock_);
   return state_;
@@ -287,8 +351,14 @@ void DlssGuides::Clear() {
     pre_ui_clone_ = nullptr;
   }
 
+  if (selected_pass_clone_ != nullptr) {
+    selected_pass_clone_->Release();
+    selected_pass_clone_ = nullptr;
+  }
+
   state_.valid = false;
   state_.pre_ui_color = nullptr;
+  state_.selected_pass_color = nullptr;
   depth_width_ = 0;
   depth_height_ = 0;
   depth_format_ = DXGI_FORMAT_UNKNOWN;
@@ -298,6 +368,11 @@ void DlssGuides::Clear() {
   pre_ui_width_ = 0;
   pre_ui_height_ = 0;
   pre_ui_format_ = DXGI_FORMAT_UNKNOWN;
+  selected_pass_width_ = 0;
+  selected_pass_height_ = 0;
+  selected_pass_format_ = DXGI_FORMAT_UNKNOWN;
+  has_selected_pass_handle_ = false;
+  selected_pass_handle_ = 0;
 }
 
 }  // namespace reshade_dlssnr
