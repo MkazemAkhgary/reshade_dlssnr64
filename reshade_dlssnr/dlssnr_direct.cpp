@@ -219,6 +219,7 @@ bool DlssNrDirect::EnsureFeature(
   if (feature_handle_ != nullptr && release_feature_ != nullptr) {
     release_feature_(feature_handle_);
     feature_handle_ = nullptr;
+    first_evaluate_ = true;
   }
 
   const Settings& settings = GetSettings();
