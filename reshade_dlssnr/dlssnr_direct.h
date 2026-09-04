@@ -44,10 +44,9 @@ class DlssNrDirect {
  public:
   static DlssNrDirect& Get();
 
-  void OnEvaluateAfterUpscale(
-      ID3D12GraphicsCommandList* command_list,
-      const NVSDK_NGX_Parameter* params,
-      NVSDK_NGX_Feature feature_id);
+  void OnPresent(
+      ID3D12CommandQueue* command_queue,
+      ID3D12Resource* backbuffer);
 
   void Shutdown();
 
@@ -63,8 +62,9 @@ class DlssNrDirect {
 
   bool EnsureModelAndPatch();
   bool EnsureInitialized(ID3D12Device* device);
-  bool EnsureFeature(ID3D12Device* device, ID3D12GraphicsCommandList* command_list, unsigned int width, unsigned int height);
-  ID3D12Resource* GetResource(const NVSDK_NGX_Parameter* params, const char* a, const char* b);
+  bool EnsureFeature(ID3D12Device* device, unsigned int width, unsigned int height);
+  bool EnsureCommandInfrastructure(ID3D12Device* device);
+  void WaitGpu();
   void Barrier(ID3D12GraphicsCommandList* command_list, ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after);
 
   HMODULE model_module_ = nullptr;
@@ -90,6 +90,13 @@ class DlssNrDirect {
   ID3D12Resource* output_ = nullptr;
   unsigned int output_width_ = 0;
   unsigned int output_height_ = 0;
+
+  ID3D12CommandQueue* command_queue_ = nullptr;
+  ID3D12CommandAllocator* command_allocator_ = nullptr;
+  ID3D12GraphicsCommandList* command_list_ = nullptr;
+  ID3D12Fence* fence_ = nullptr;
+  HANDLE fence_event_ = INVALID_HANDLE_VALUE;
+  UINT64 fence_value_ = 0;
 };
 
 }  // namespace reshade_dlssnr
