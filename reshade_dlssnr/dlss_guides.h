@@ -28,7 +28,7 @@ class DlssGuides {
       const NVSDK_NGX_Parameter* params,
       NVSDK_NGX_Feature feature_id);
 
-  DlssGuideState Get() const;
+  DlssGuideState GetState() const;
   void Clear();
 
  private:

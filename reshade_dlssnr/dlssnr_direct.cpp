@@ -433,7 +433,7 @@ void DlssNrDirect::OnPresent(
     return;
   }
 
-  const DlssGuideState guides = DlssGuides::Get().Get();
+  const DlssGuideState guides = DlssGuides::Get().GetState();
 
   SimpleParams eval_params;
   eval_params.Set("DLSSNR.Color", backbuffer);

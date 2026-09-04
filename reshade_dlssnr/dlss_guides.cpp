@@ -207,7 +207,7 @@ void DlssGuides::Capture(
   lock_.unlock();
 }
 
-DlssGuideState DlssGuides::Get() const {
+DlssGuideState DlssGuides::GetState() const {
   std::lock_guard<std::mutex> lock(lock_);
   return state_;
 }
