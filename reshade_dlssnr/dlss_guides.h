@@ -61,6 +61,7 @@ class DlssGuides {
       DXGI_FORMAT* out_format);
 
   DXGI_FORMAT TypedGuideFormat(DXGI_FORMAT format) const;
+  bool IsTypelessFormat(DXGI_FORMAT format) const;
   void Barrier(
       ID3D12GraphicsCommandList* command_list,
       ID3D12Resource* resource,
