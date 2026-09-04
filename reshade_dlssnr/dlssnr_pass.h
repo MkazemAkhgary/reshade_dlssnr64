@@ -34,6 +34,7 @@ class DlssNrPass {
   DlssNrPass& operator=(const DlssNrPass&) = delete;
 
   bool EnsureForwarder();
+  bool EnsureNvngxCore(ID3D12Device* device);
   bool EnsureCapabilityParams(ID3D12Device* device);
   bool EnsureFeature(ID3D12Device* device, ID3D12GraphicsCommandList* command_list, unsigned int width, unsigned int height);
   void DiscoverFloatSlot(NVSDK_NGX_Parameter* params);
@@ -51,6 +52,7 @@ class DlssNrPass {
   ForwarderApi forwarder_;
   NVSDK_NGX_Parameter* capability_params_ = nullptr;
   void* feature_ = nullptr;
+  bool ngx_core_initialized_ = false;
   bool float_slot_known_ = false;
   int float_slot_ = 1;
   bool failed_ = false;

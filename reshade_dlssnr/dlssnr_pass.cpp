@@ -96,9 +96,92 @@ bool DlssNrPass::EnsureForwarder() {
   return true;
 }
 
+bool DlssNrPass::EnsureNvngxCore(ID3D12Device* device) {
+  if (ngx_core_initialized_) return true;
+
+  HMODULE ngx_core = GetModuleHandleW(L"_nvngx.dll");
+  if (ngx_core == nullptr) {
+    ngx_core = GetModuleHandleW(L"nvngx.dll");
+  }
+
+  if (ngx_core == nullptr) {
+    ngx_core = LoadLibraryW(L"_nvngx.dll");
+  }
+
+  if (ngx_core == nullptr) {
+    ngx_core = LoadLibraryW(L"nvngx.dll");
+  }
+
+  if (ngx_core == nullptr) {
+    reason_ = "NGX driver core (_nvngx.dll/nvngx.dll) is not loaded";
+    return false;
+  }
+
+  const std::wstring data_path = GetModuleDirectory().wstring();
+  const wchar_t* path_ptr = data_path.c_str();
+
+  NVSDK_NGX_FeatureCommonInfo feature_info = {};
+  feature_info.PathListInfo.Path = &path_ptr;
+  feature_info.PathListInfo.Length = 1;
+  feature_info.InternalData = nullptr;
+
+  using PFN_Init_Ext = NVSDK_NGX_Result(NVSDK_CONV*)(unsigned long long, const wchar_t*, ID3D12Device*, NVSDK_NGX_Version, const NVSDK_NGX_FeatureCommonInfo*);
+  auto init_ext = reinterpret_cast<PFN_Init_Ext>(
+      GetProcAddress(ngx_core, "NVSDK_NGX_D3D12_Init_Ext"));
+
+  if (init_ext != nullptr) {
+    const NVSDK_NGX_Result result = init_ext(
+        0x24480451ull,
+        path_ptr,
+        device,
+        NVSDK_NGX_Version_API,
+        &feature_info);
+
+    if (result == NVSDK_NGX_Result_Success) {
+      ngx_core_initialized_ = true;
+      reshade::log::message(reshade::log::level::info, "NGX core initialized via Init_Ext");
+      return true;
+    }
+
+    reshade::log::message(
+        reshade::log::level::warning,
+        "NGX core Init_Ext returned non-success; continuing with existing core state");
+  } else {
+    using PFN_Init = NVSDK_NGX_Result(NVSDK_CONV*)(unsigned long long, const wchar_t*, ID3D12Device*, const NVSDK_NGX_FeatureCommonInfo*, NVSDK_NGX_Version);
+    auto init = reinterpret_cast<PFN_Init>(
+        GetProcAddress(ngx_core, "NVSDK_NGX_D3D12_Init"));
+
+    if (init != nullptr) {
+      const NVSDK_NGX_Result result = init(
+          0x24480451ull,
+          path_ptr,
+          device,
+          &feature_info,
+          NVSDK_NGX_Version_API);
+
+      if (result == NVSDK_NGX_Result_Success) {
+        ngx_core_initialized_ = true;
+        reshade::log::message(reshade::log::level::info, "NGX core initialized via Init");
+        return true;
+      }
+
+      reshade::log::message(
+          reshade::log::level::warning,
+          "NGX core Init returned non-success; continuing with existing core state");
+    }
+  }
+
+  // Mark attempted regardless of result to avoid repeated calls.
+  ngx_core_initialized_ = true;
+  return true;
+}
+
 bool DlssNrPass::EnsureCapabilityParams(ID3D12Device* device) {
-  (void) device;
   if (capability_params_ != nullptr) return true;
+
+  if (!EnsureNvngxCore(device)) {
+    return false;
+  }
 
   HMODULE ngx_core = GetModuleHandleW(L"_nvngx.dll");
   if (ngx_core == nullptr) {
