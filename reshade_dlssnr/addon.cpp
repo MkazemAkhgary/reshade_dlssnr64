@@ -109,11 +109,11 @@ void OnPresent(
       native_swapchain);
 
   // Capture backbuffer description and reset render-pass tracking for next frame.
-  reshade::api::device* const device = command_queue->get_device();
-  if (device != nullptr && device->get_api() == reshade::api::device_api::d3d12) {
+  reshade::api::device* const present_device = command_queue->get_device();
+  if (present_device != nullptr && present_device->get_api() == reshade::api::device_api::d3d12) {
     const auto backbuffer_handle = swapchain->get_current_back_buffer();
     if (backbuffer_handle != 0) {
-      g_backbuffer_desc = device->get_resource_desc(backbuffer_handle);
+      g_backbuffer_desc = present_device->get_resource_desc(backbuffer_handle);
       g_has_backbuffer_desc = true;
     }
   }
