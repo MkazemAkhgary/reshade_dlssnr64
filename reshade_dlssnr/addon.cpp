@@ -97,6 +97,7 @@ void DrawSettings(reshade::api::effect_runtime*) {
         "Color (model input)",
         "Depth (guide)",
         "Motion (guide)",
+        "UI Mask",
     };
     changed |= ImGui::Combo("Debug View", &settings.debug_view, debug_names, IM_ARRAYSIZE(debug_names));
   }

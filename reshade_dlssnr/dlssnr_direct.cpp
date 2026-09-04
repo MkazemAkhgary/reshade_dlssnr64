@@ -407,6 +407,39 @@ void DlssNrDirect::OnPresent(
     output_height_ = height;
   }
 
+  if (ui_mask_ == nullptr || ui_mask_width_ != width || ui_mask_height_ != height ||
+      ui_mask_format_ != desc.Format) {
+    if (ui_mask_ != nullptr) {
+      ui_mask_->Release();
+      ui_mask_ = nullptr;
+    }
+
+    D3D12_HEAP_PROPERTIES mask_heap = {};
+    mask_heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+    D3D12_RESOURCE_DESC mask_desc = desc;
+    mask_desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+    if (FAILED(device->CreateCommittedResource(
+            &mask_heap,
+            D3D12_HEAP_FLAG_NONE,
+            &mask_desc,
+            D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+            nullptr,
+            IID_PPV_ARGS(&ui_mask_)))) {
+      failed_ = true;
+      reason_ = "failed to create DLSSNR UI mask texture";
+      backbuffer->Release();
+      swapchain3->Release();
+      device->Release();
+      return;
+    }
+
+    ui_mask_width_ = width;
+    ui_mask_height_ = height;
+    ui_mask_format_ = desc.Format;
+  }
+
   command_allocator_->Reset();
   command_list_->Reset(command_allocator_, nullptr);
 
@@ -503,6 +536,32 @@ void DlssNrDirect::OnPresent(
     return;
   }
 
+  if (guides.valid && guides.pre_ui_color != nullptr && ui_mask_ != nullptr) {
+    if (!debug_codec_->InitMaskShader(device)) {
+      failed_ = true;
+      reason_ = "failed to initialize UI mask shader";
+      reshade::log::message(reshade::log::level::error, reason_);
+      backbuffer->Release();
+      swapchain3->Release();
+      device->Release();
+      return;
+    }
+
+    DlssNrConstants mask_constants = {};
+    mask_constants.Mode = DlssNrMode_Encode;
+    mask_constants.WhitePoint = 1.0f;
+    mask_constants.Width = width;
+    mask_constants.Height = height;
+    mask_constants.Passthrough = 1u;
+
+    debug_codec_->DispatchMask(
+        command_list_,
+        mask_constants,
+        guides.pre_ui_color,
+        backbuffer,
+        ui_mask_);
+  }
+
   SimpleParams eval_params;
   eval_params.Set("DLSSNR.Color", backbuffer);
   eval_params.Set("DLSSNR.Output", output_);
@@ -517,6 +576,11 @@ void DlssNrDirect::OnPresent(
   eval_params.Set("DLSSNR.SkinStructureStrength", settings.skin_structure);
   eval_params.Set("DLSSNR.GlobalToneStrength", 1.0f);
   eval_params.Set("DLSSNR.UseAutoMask", settings.auto_mask ? 1u : 0u);
+
+  if (ui_mask_ != nullptr) {
+    eval_params.Set("DLSSNR.UIAlpha", ui_mask_);
+    eval_params.Set("DLSSNR.Backbuffer", backbuffer);
+  }
 
   if (guides.valid) {
     eval_params.Set("DLSSNR.Depth", guides.depth);
@@ -592,6 +656,15 @@ void DlssNrDirect::Shutdown() {
     output_->Release();
     output_ = nullptr;
   }
+
+  if (ui_mask_ != nullptr) {
+    ui_mask_->Release();
+    ui_mask_ = nullptr;
+  }
+
+  ui_mask_width_ = 0;
+  ui_mask_height_ = 0;
+  ui_mask_format_ = DXGI_FORMAT_UNKNOWN;
 
   if (fence_event_ != INVALID_HANDLE_VALUE) {
     CloseHandle(fence_event_);
