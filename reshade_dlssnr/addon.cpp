@@ -5,6 +5,7 @@
 
 #include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "d3d12_hooks.h"
@@ -22,12 +23,16 @@ struct RenderPassInfo {
   uint32_t width = 0;
   uint32_t height = 0;
   uint32_t format = 0;
+  uint32_t draw_count = 0;
+  float viewport_width = 0.0f;
+  float viewport_height = 0.0f;
   bool is_backbuffer_size = false;
 };
 
 std::mutex g_pass_mutex;
 std::vector<RenderPassInfo> g_render_passes;
 std::vector<RenderPassInfo> g_display_passes;
+std::unordered_map<reshade::api::command_list*, size_t> g_current_pass_for_command_list;
 uint32_t g_current_pass_index = 0;
 
 reshade::api::resource_desc g_backbuffer_desc = {};
@@ -84,8 +89,12 @@ bool OnBeginRenderPass(
         info.height == g_backbuffer_desc.texture.height;
   }
 
-  std::lock_guard<std::mutex> lock(g_pass_mutex);
-  g_render_passes.push_back(info);
+  {
+    std::lock_guard<std::mutex> lock(g_pass_mutex);
+    const size_t pass_index = g_render_passes.size();
+    g_render_passes.push_back(info);
+    g_current_pass_for_command_list[command_list] = pass_index;
+  }
   return false;
 }
 
@@ -118,8 +127,68 @@ void OnBindRenderTargets(
         info.height == g_backbuffer_desc.texture.height;
   }
 
+  {
+    std::lock_guard<std::mutex> lock(g_pass_mutex);
+    const size_t pass_index = g_render_passes.size();
+    g_render_passes.push_back(info);
+    g_current_pass_for_command_list[command_list] = pass_index;
+  }
+}
+
+void OnBindViewports(
+    reshade::api::command_list* command_list,
+    uint32_t first,
+    uint32_t count,
+    const reshade::api::viewport* viewports) {
+  if (command_list == nullptr || count == 0 || viewports == nullptr) return;
+
   std::lock_guard<std::mutex> lock(g_pass_mutex);
-  g_render_passes.push_back(info);
+
+  auto it = g_current_pass_for_command_list.find(command_list);
+  if (it == g_current_pass_for_command_list.end()) return;
+
+  if (it->second >= g_render_passes.size()) return;
+
+  RenderPassInfo& pass = g_render_passes[it->second];
+  pass.viewport_width = viewports[first].width;
+  pass.viewport_height = viewports[first].height;
+}
+
+bool OnDraw(
+    reshade::api::command_list* command_list,
+    uint32_t,
+    uint32_t,
+    uint32_t,
+    uint32_t) {
+  if (command_list == nullptr) return false;
+
+  std::lock_guard<std::mutex> lock(g_pass_mutex);
+
+  auto it = g_current_pass_for_command_list.find(command_list);
+  if (it == g_current_pass_for_command_list.end()) return false;
+  if (it->second >= g_render_passes.size()) return false;
+
+  g_render_passes[it->second].draw_count++;
+  return false;
+}
+
+bool OnDrawIndexed(
+    reshade::api::command_list* command_list,
+    uint32_t,
+    uint32_t,
+    uint32_t,
+    int32_t,
+    uint32_t) {
+  if (command_list == nullptr) return false;
+
+  std::lock_guard<std::mutex> lock(g_pass_mutex);
+
+  auto it = g_current_pass_for_command_list.find(command_list);
+  if (it == g_current_pass_for_command_list.end()) return false;
+  if (it->second >= g_render_passes.size()) return false;
+
+  g_render_passes[it->second].draw_count++;
+  return false;
 }
 
 void OnPresent(
@@ -157,6 +226,7 @@ void OnPresent(
     std::lock_guard<std::mutex> lock(g_pass_mutex);
     g_display_passes.swap(g_render_passes);
     g_render_passes.clear();
+    g_current_pass_for_command_list.clear();
     g_current_pass_index = 0;
   }
 }
@@ -225,11 +295,14 @@ void DrawSettings(reshade::api::effect_runtime*) {
   for (size_t i = 0; i < g_display_passes.size(); ++i) {
     const RenderPassInfo& pass = g_display_passes[i];
     ImGui::Text(
-        "%02llu: %ux%u fmt=%u%s",
+        "%02llu: %ux%u fmt=%u draws=%u vp=%.0fx%.0f%s",
         static_cast<unsigned long long>(pass.index),
         pass.width,
         pass.height,
         pass.format,
+        pass.draw_count,
+        pass.viewport_width,
+        pass.viewport_height,
         pass.is_backbuffer_size ? " [bb-size]" : "");
   }
 
@@ -247,6 +320,9 @@ void Attach(HMODULE module) {
   reshade::register_event<reshade::addon_event::init_device>(OnInitDevice);
   reshade::register_event<reshade::addon_event::begin_render_pass>(OnBeginRenderPass);
   reshade::register_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(OnBindRenderTargets);
+  reshade::register_event<reshade::addon_event::bind_viewports>(OnBindViewports);
+  reshade::register_event<reshade::addon_event::draw>(OnDraw);
+  reshade::register_event<reshade::addon_event::draw_indexed>(OnDrawIndexed);
   reshade::register_event<reshade::addon_event::present>(OnPresent);
   reshade::register_overlay("ReShade DLSSNR", DrawSettings);
 
@@ -273,6 +349,9 @@ void Detach() {
 
   reshade::unregister_overlay("ReShade DLSSNR", DrawSettings);
   reshade::unregister_event<reshade::addon_event::present>(OnPresent);
+  reshade::unregister_event<reshade::addon_event::draw>(OnDraw);
+  reshade::unregister_event<reshade::addon_event::draw_indexed>(OnDrawIndexed);
+  reshade::unregister_event<reshade::addon_event::bind_viewports>(OnBindViewports);
   reshade::unregister_event<reshade::addon_event::begin_render_pass>(OnBeginRenderPass);
   reshade::unregister_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(OnBindRenderTargets);
   reshade::unregister_event<reshade::addon_event::init_device>(OnInitDevice);
