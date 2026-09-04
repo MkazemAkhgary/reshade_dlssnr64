@@ -502,14 +502,6 @@ void DlssNrPass::OnEvaluateAfterUpscale(
     return;
   }
 
-  if (feature_was_created_this_frame) {
-    reshade::log::message(
-        reshade::log::level::info,
-        "DLSSNR feature created; skipping evaluation this frame");
-    device->Release();
-    return;
-  }
-
   built_width_ = width_;
   built_height_ = height_;
   built_work_width_ = work_width_;
@@ -523,6 +515,14 @@ void DlssNrPass::OnEvaluateAfterUpscale(
   built_local_tone_ = settings.local_tone;
   built_skin_structure_ = settings.skin_structure;
   built_auto_mask_ = settings.auto_mask;
+
+  if (feature_was_created_this_frame) {
+    reshade::log::message(
+        reshade::log::level::info,
+        "DLSSNR feature created; skipping evaluation this frame");
+    device->Release();
+    return;
+  }
 
   DlssNrConstants encode = {};
   encode.Mode = DlssNrMode_Encode;
