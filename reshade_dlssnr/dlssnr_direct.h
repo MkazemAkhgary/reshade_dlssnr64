@@ -103,6 +103,11 @@ class DlssNrDirect {
   unsigned int ui_mask_height_ = 0;
   DXGI_FORMAT ui_mask_format_ = DXGI_FORMAT_UNKNOWN;
 
+  ID3D12Resource* composite_output_ = nullptr;
+  unsigned int composite_output_width_ = 0;
+  unsigned int composite_output_height_ = 0;
+  DXGI_FORMAT composite_output_format_ = DXGI_FORMAT_UNKNOWN;
+
   ID3D12CommandQueue* command_queue_ = nullptr;
   ID3D12CommandAllocator* command_allocator_ = nullptr;
   ID3D12GraphicsCommandList* command_list_ = nullptr;
