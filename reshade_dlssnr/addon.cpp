@@ -17,6 +17,7 @@
 namespace {
 
 bool g_initialized = false;
+bool g_freeze_render_pass_list = false;
 
 struct RenderPassInfo {
   uint32_t index = 0;
@@ -241,7 +242,7 @@ void OnPresent(
     }
   }
 
-  {
+  if (!g_freeze_render_pass_list) {
     std::lock_guard<std::mutex> lock(g_pass_mutex);
     g_display_passes.swap(g_render_passes);
     g_render_passes.clear();
@@ -300,6 +301,7 @@ void DrawSettings(reshade::api::effect_runtime*) {
   ImGui::Separator();
 
   ImGui::TextUnformatted("Render Passes");
+  ImGui::Checkbox("Freeze render pass list", &g_freeze_render_pass_list);
 
   std::lock_guard<std::mutex> pass_lock(g_pass_mutex);
 
