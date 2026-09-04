@@ -508,30 +508,33 @@ void DlssNrDirect::OnPresent(
 
   const DlssGuideState guides = DlssGuides::Get().GetState();
 
-  if (settings.debug_view == 1) {
+  ID3D12Resource* model_input = backbuffer;
+  ID3D12Resource* pre_ui_source = guides.pre_ui_color;
+
+  if (settings.use_selected_pass_as_input &&
+      guides.selected_pass_color != nullptr) {
+    model_input = guides.selected_pass_color;
+    pre_ui_source = guides.selected_pass_color;
+  }
+
+  if (debug_codec_ == nullptr) {
+    debug_codec_ = std::make_unique<DlssNrCodec>();
+  }
+
+  if (!debug_codec_->IsInit() && !debug_codec_->Init(device)) {
+    failed_ = true;
+    reason_ = "failed to initialize debug codec";
+    reshade::log::message(reshade::log::level::error, reason_);
     backbuffer->Release();
     swapchain3->Release();
     device->Release();
     return;
   }
 
-  if ((settings.debug_view == 2 || settings.debug_view == 3 ||
-       settings.debug_view == 5 || settings.debug_view == 6) &&
-      (guides.valid || settings.debug_view == 6)) {
-    if (debug_codec_ == nullptr) {
-      debug_codec_ = std::make_unique<DlssNrCodec>();
-    }
-
-    if (!debug_codec_->IsInit() && !debug_codec_->Init(device)) {
-      failed_ = true;
-      reason_ = "failed to initialize debug codec";
-      reshade::log::message(reshade::log::level::error, reason_);
-      backbuffer->Release();
-      swapchain3->Release();
-      device->Release();
-      return;
-    }
-
+  if (settings.debug_view == 1 ||
+      ((settings.debug_view == 2 || settings.debug_view == 3 ||
+        settings.debug_view == 5 || settings.debug_view == 6) &&
+       (guides.valid || settings.debug_view == 6))) {
     command_allocator_->Reset();
     command_list_->Reset(command_allocator_, nullptr);
 
@@ -539,7 +542,11 @@ void DlssNrDirect::OnPresent(
     unsigned int debug_guide_width = width;
     unsigned int debug_guide_height = height;
 
-    if (settings.debug_view == 2) {
+    if (settings.debug_view == 1) {
+      debug_input = model_input;
+      debug_guide_width = width;
+      debug_guide_height = height;
+    } else if (settings.debug_view == 2) {
       debug_input = guides.depth;
       debug_guide_width = guides.guide_width;
       debug_guide_height = guides.guide_height;
@@ -604,22 +611,8 @@ void DlssNrDirect::OnPresent(
     return;
   }
 
-  if (debug_codec_ == nullptr) {
-    debug_codec_ = std::make_unique<DlssNrCodec>();
-  }
-
-  if (!debug_codec_->IsInit() && !debug_codec_->Init(device)) {
-    failed_ = true;
-    reason_ = "failed to initialize debug codec";
-    reshade::log::message(reshade::log::level::error, reason_);
-    backbuffer->Release();
-    swapchain3->Release();
-    device->Release();
-    return;
-  }
-
   if (settings.debug_view == 4 && guides.valid &&
-      guides.pre_ui_color != nullptr && ui_mask_ != nullptr) {
+      pre_ui_source != nullptr && ui_mask_ != nullptr) {
     if (!debug_codec_->InitMaskShader(device)) {
       failed_ = true;
       reason_ = "failed to initialize UI mask shader";
@@ -640,7 +633,7 @@ void DlssNrDirect::OnPresent(
     debug_codec_->DispatchMask(
         command_list_,
         mask_constants,
-        guides.pre_ui_color,
+        pre_ui_source,
         backbuffer,
         ui_mask_);
 
@@ -659,15 +652,6 @@ void DlssNrDirect::OnPresent(
     swapchain3->Release();
     device->Release();
     return;
-  }
-
-  ID3D12Resource* model_input = backbuffer;
-  ID3D12Resource* pre_ui_source = guides.pre_ui_color;
-
-  if (settings.use_selected_pass_as_input &&
-      guides.selected_pass_color != nullptr) {
-    model_input = guides.selected_pass_color;
-    pre_ui_source = guides.selected_pass_color;
   }
 
   bool ui_mask_generated = false;
