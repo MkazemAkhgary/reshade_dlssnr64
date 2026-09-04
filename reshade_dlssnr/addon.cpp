@@ -98,6 +98,7 @@ void DrawSettings(reshade::api::effect_runtime*) {
         "Depth (guide)",
         "Motion (guide)",
         "UI Mask",
+        "DLSS Stage (pre-UI)",
     };
     changed |= ImGui::Combo("Debug View", &settings.debug_view, debug_names, IM_ARRAYSIZE(debug_names));
   }
