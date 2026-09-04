@@ -5,6 +5,7 @@
 #include <windows.h>
 
 #include <mutex>
+#include <vector>
 
 namespace reshade_dlssnr {
 
@@ -40,6 +41,7 @@ class DlssGuides {
       ID3D12Resource* selected_pass_source);
 
   DlssGuideState GetState() const;
+  void ReleaseRetiredResources();
   void Clear();
 
  private:
@@ -75,7 +77,11 @@ class DlssGuides {
   uint64_t selected_pass_handle_ = 0;
   bool has_selected_pass_handle_ = false;
 
+  std::vector<ID3D12Resource*> retired_resources_;
+
   DlssGuideState state_;
+
+  void RetireResource(ID3D12Resource*& resource);
 
   ID3D12Resource* CreateGuideClone(
       ID3D12Device* device,

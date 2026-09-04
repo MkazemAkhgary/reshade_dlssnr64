@@ -180,11 +180,7 @@ void DlssGuides::Capture(
       depth_format_ != (IsTypelessFormat(depth->GetDesc().Format)
                             ? TypedGuideFormat(depth->GetDesc().Format)
                             : depth->GetDesc().Format)) {
-    if (depth_clone_ != nullptr) {
-      depth_clone_->Release();
-      depth_clone_ = nullptr;
-    }
-
+    RetireResource(depth_clone_);
     depth_clone_ = CreateGuideClone(device, depth, &depth_width_, &depth_height_, &depth_format_);
   }
 
@@ -194,11 +190,7 @@ void DlssGuides::Capture(
       motion_format_ != (IsTypelessFormat(motion->GetDesc().Format)
                              ? TypedGuideFormat(motion->GetDesc().Format)
                              : motion->GetDesc().Format)) {
-    if (motion_clone_ != nullptr) {
-      motion_clone_->Release();
-      motion_clone_ = nullptr;
-    }
-
+    RetireResource(motion_clone_);
     motion_clone_ = CreateGuideClone(device, motion, &motion_width_, &motion_height_, &motion_format_);
   }
 
@@ -231,11 +223,7 @@ void DlssGuides::Capture(
         pre_ui_format_ != (IsTypelessFormat(target->GetDesc().Format)
                                ? TypedGuideFormat(target->GetDesc().Format)
                                : target->GetDesc().Format)) {
-      if (pre_ui_clone_ != nullptr) {
-        pre_ui_clone_->Release();
-        pre_ui_clone_ = nullptr;
-      }
-
+      RetireResource(pre_ui_clone_);
       pre_ui_clone_ = CreateGuideClone(device, target, &pre_ui_width_, &pre_ui_height_, &pre_ui_format_);
     }
 
@@ -262,6 +250,12 @@ void DlssGuides::Capture(
 
   device->Release();
   lock_.unlock();
+}
+
+void DlssGuides::RetireResource(ID3D12Resource*& resource) {
+  if (resource == nullptr) return;
+  retired_resources_.push_back(resource);
+  resource = nullptr;
 }
 
 void DlssGuides::SetSelectedPassHandle(uint64_t handle) {
@@ -295,8 +289,7 @@ void DlssGuides::CaptureSelectedPassIfNeeded(
       selected_pass_format_ != (IsTypelessFormat(selected_pass_source->GetDesc().Format)
                                     ? TypedGuideFormat(selected_pass_source->GetDesc().Format)
                                     : selected_pass_source->GetDesc().Format)) {
-    // Do not release the previous clone here. It may still be referenced by
-    // in-flight GPU work. Retiring it immediately can cause a device hang.
+    RetireResource(selected_pass_clone_);
     selected_pass_clone_ = CreateGuideClone(
         device,
         selected_pass_source,
@@ -330,6 +323,18 @@ DlssGuideState DlssGuides::GetState() const {
   return state_;
 }
 
+void DlssGuides::ReleaseRetiredResources() {
+  std::lock_guard<std::mutex> lock(lock_);
+
+  for (ID3D12Resource* resource : retired_resources_) {
+    if (resource != nullptr) {
+      resource->Release();
+    }
+  }
+
+  retired_resources_.clear();
+}
+
 void DlssGuides::Clear() {
   std::lock_guard<std::mutex> lock(lock_);
 
@@ -343,13 +348,11 @@ void DlssGuides::Clear() {
     motion_clone_ = nullptr;
   }
 
-  if (pre_ui_clone_ != nullptr) {
-    pre_ui_clone_->Release();
-    pre_ui_clone_ = nullptr;
-  }
+  RetireResource(pre_ui_clone_);
+  RetireResource(selected_pass_clone_);
 
-  // Deliberately leak guide clones until process exit. Releasing them while
-  // the game may still be using them causes intermittent device removal.
+  ReleaseRetiredResources();
+
   selected_pass_clone_ = nullptr;
 
   state_.valid = false;
