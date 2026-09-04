@@ -475,7 +475,6 @@ void DlssNrDirect::OnPresent(
     debug_constants.MvScaleX = 1.0f;
     debug_constants.MvScaleY = 1.0f;
 
-    Barrier(command_list_, output_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     debug_codec_->Dispatch(
         command_list_,
         debug_constants,
