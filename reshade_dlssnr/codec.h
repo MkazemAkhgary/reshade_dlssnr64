@@ -75,6 +75,16 @@ class DlssNrCodec {
       ID3D12Resource* backbuffer,
       ID3D12Resource* out_mask);
 
+  bool InitCompositeShader(ID3D12Device* device);
+
+  bool DispatchComposite(
+      ID3D12GraphicsCommandList* command_list,
+      const DlssNrConstants& constants,
+      ID3D12Resource* enhanced,
+      ID3D12Resource* original,
+      ID3D12Resource* mask,
+      ID3D12Resource* out_target);
+
   void Destroy();
 
   bool IsInit() const { return device_ != nullptr; }
@@ -84,6 +94,7 @@ class DlssNrCodec {
   ID3D12RootSignature* root_signature_ = nullptr;
   ID3D12PipelineState* pipeline_state_ = nullptr;
   ID3D12PipelineState* mask_pipeline_state_ = nullptr;
+  ID3D12PipelineState* composite_pipeline_state_ = nullptr;
 
   ID3D12DescriptorHeap* descriptor_heap_ = nullptr;
   uint32_t descriptor_size_ = 0;
