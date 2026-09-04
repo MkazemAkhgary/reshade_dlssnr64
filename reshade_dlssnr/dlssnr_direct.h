@@ -5,8 +5,11 @@
 #include <nvsdk_ngx.h>
 #include <windows.h>
 
+#include <memory>
 #include <string>
 #include <unordered_map>
+
+class DlssNrCodec;
 
 namespace reshade_dlssnr {
 
@@ -99,6 +102,8 @@ class DlssNrDirect {
   ID3D12Fence* fence_ = nullptr;
   HANDLE fence_event_ = INVALID_HANDLE_VALUE;
   UINT64 fence_value_ = 0;
+
+  std::unique_ptr<DlssNrCodec> debug_codec_;
 };
 
 }  // namespace reshade_dlssnr

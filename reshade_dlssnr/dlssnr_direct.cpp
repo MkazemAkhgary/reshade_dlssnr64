@@ -5,6 +5,7 @@
 
 #include <reshade.hpp>
 
+#include "codec.h"
 #include "dlss_guides.h"
 #include "settings.h"
 
@@ -434,6 +435,74 @@ void DlssNrDirect::OnPresent(
   }
 
   const DlssGuideState guides = DlssGuides::Get().GetState();
+
+  if (settings.debug_view == 1) {
+    backbuffer->Release();
+    swapchain3->Release();
+    device->Release();
+    return;
+  }
+
+  if ((settings.debug_view == 2 || settings.debug_view == 3) && guides.valid) {
+    if (debug_codec_ == nullptr) {
+      debug_codec_ = std::make_unique<DlssNrCodec>();
+    }
+
+    if (!debug_codec_->IsInit() && !debug_codec_->Init(device)) {
+      failed_ = true;
+      reason_ = "failed to initialize debug codec";
+      reshade::log::message(reshade::log::level::error, reason_);
+      backbuffer->Release();
+      swapchain3->Release();
+      device->Release();
+      return;
+    }
+
+    command_allocator_->Reset();
+    command_list_->Reset(command_allocator_, nullptr);
+
+    ID3D12Resource* debug_input = settings.debug_view == 2 ? guides.depth : guides.motion;
+
+    DlssNrConstants debug_constants = {};
+    debug_constants.Mode = DlssNrMode_Resolve;
+    debug_constants.DebugView = 1;
+    debug_constants.Passthrough = 1;
+    debug_constants.WhitePoint = 1.0f;
+    debug_constants.Width = width;
+    debug_constants.Height = height;
+    debug_constants.GuideWidth = guides.guide_width;
+    debug_constants.GuideHeight = guides.guide_height;
+    debug_constants.MvScaleX = 1.0f;
+    debug_constants.MvScaleY = 1.0f;
+
+    Barrier(command_list_, output_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    debug_codec_->Dispatch(
+        command_list_,
+        debug_constants,
+        debug_input,
+        debug_input,
+        debug_input,
+        nullptr,
+        nullptr,
+        output_,
+        nullptr);
+
+    Barrier(command_list_, output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST);
+    command_list_->CopyResource(backbuffer, output_);
+    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
+    Barrier(command_list_, output_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+    command_list_->Close();
+    ID3D12CommandList* const lists[] = {command_list_};
+    command_queue_->ExecuteCommandLists(1, lists);
+    WaitGpu();
+
+    backbuffer->Release();
+    swapchain3->Release();
+    device->Release();
+    return;
+  }
 
   SimpleParams eval_params;
   eval_params.Set("DLSSNR.Color", backbuffer);

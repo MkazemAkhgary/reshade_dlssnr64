@@ -94,9 +94,9 @@ void DrawSettings(reshade::api::effect_runtime*) {
   {
     static const char* debug_names[] = {
         "Off",
-        "Proxy (what the model sees)",
-        "Model output (raw)",
-        "Difference (amplified)",
+        "Color (model input)",
+        "Depth (guide)",
+        "Motion (guide)",
     };
     changed |= ImGui::Combo("Debug View", &settings.debug_view, debug_names, IM_ARRAYSIZE(debug_names));
   }
