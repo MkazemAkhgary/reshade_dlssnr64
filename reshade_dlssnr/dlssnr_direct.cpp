@@ -536,6 +536,63 @@ void DlssNrDirect::OnPresent(
     return;
   }
 
+  if (debug_codec_ == nullptr) {
+    debug_codec_ = std::make_unique<DlssNrCodec>();
+  }
+
+  if (!debug_codec_->IsInit() && !debug_codec_->Init(device)) {
+    failed_ = true;
+    reason_ = "failed to initialize debug codec";
+    reshade::log::message(reshade::log::level::error, reason_);
+    backbuffer->Release();
+    swapchain3->Release();
+    device->Release();
+    return;
+  }
+
+  if (settings.debug_view == 4 && guides.valid &&
+      guides.pre_ui_color != nullptr && ui_mask_ != nullptr) {
+    if (!debug_codec_->InitMaskShader(device)) {
+      failed_ = true;
+      reason_ = "failed to initialize UI mask shader";
+      reshade::log::message(reshade::log::level::error, reason_);
+      backbuffer->Release();
+      swapchain3->Release();
+      device->Release();
+      return;
+    }
+
+    DlssNrConstants mask_constants = {};
+    mask_constants.Mode = DlssNrMode_Encode;
+    mask_constants.WhitePoint = 1.0f;
+    mask_constants.Width = width;
+    mask_constants.Height = height;
+    mask_constants.Passthrough = 1u;
+
+    debug_codec_->DispatchMask(
+        command_list_,
+        mask_constants,
+        guides.pre_ui_color,
+        backbuffer,
+        ui_mask_);
+
+    Barrier(command_list_, ui_mask_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST);
+    command_list_->CopyResource(backbuffer, ui_mask_);
+    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
+    Barrier(command_list_, ui_mask_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+    command_list_->Close();
+    ID3D12CommandList* const lists[] = {command_list_};
+    command_queue_->ExecuteCommandLists(1, lists);
+    WaitGpu();
+
+    backbuffer->Release();
+    swapchain3->Release();
+    device->Release();
+    return;
+  }
+
   if (guides.valid && guides.pre_ui_color != nullptr && ui_mask_ != nullptr) {
     if (!debug_codec_->InitMaskShader(device)) {
       failed_ = true;
