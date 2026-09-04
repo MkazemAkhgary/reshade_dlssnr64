@@ -11,8 +11,11 @@ namespace reshade_dlssnr {
 struct DlssGuideState {
   ID3D12Resource* depth = nullptr;
   ID3D12Resource* motion = nullptr;
+  ID3D12Resource* pre_ui_color = nullptr;
   unsigned int guide_width = 0;
   unsigned int guide_height = 0;
+  unsigned int color_width = 0;
+  unsigned int color_height = 0;
   float mv_scale_x = 1.0f;
   float mv_scale_y = 1.0f;
   bool depth_inverted = false;
@@ -42,6 +45,7 @@ class DlssGuides {
 
   ID3D12Resource* depth_clone_ = nullptr;
   ID3D12Resource* motion_clone_ = nullptr;
+  ID3D12Resource* pre_ui_clone_ = nullptr;
 
   unsigned int depth_width_ = 0;
   unsigned int depth_height_ = 0;
@@ -50,6 +54,10 @@ class DlssGuides {
   unsigned int motion_width_ = 0;
   unsigned int motion_height_ = 0;
   DXGI_FORMAT motion_format_ = DXGI_FORMAT_UNKNOWN;
+
+  unsigned int pre_ui_width_ = 0;
+  unsigned int pre_ui_height_ = 0;
+  DXGI_FORMAT pre_ui_format_ = DXGI_FORMAT_UNKNOWN;
 
   DlssGuideState state_;
 
