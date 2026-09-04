@@ -2,7 +2,9 @@
 
 #include <d3d12.h>
 #include <d3dx12.h>
+#include <d3dcompiler.h>
 #include <cstdint>
+#include <string>
 
 #include "shaders/dlssnr_cso.h"
 
@@ -53,6 +55,8 @@ class DlssNrCodec {
  public:
   bool Init(ID3D12Device* device);
 
+  bool InitMaskShader(ID3D12Device* device);
+
   bool Dispatch(
       ID3D12GraphicsCommandList* command_list,
       const DlssNrConstants& constants,
@@ -64,6 +68,13 @@ class DlssNrCodec {
       ID3D12Resource* out_target,
       ID3D12Resource* out_keep);
 
+  bool DispatchMask(
+      ID3D12GraphicsCommandList* command_list,
+      const DlssNrConstants& constants,
+      ID3D12Resource* pre_ui,
+      ID3D12Resource* backbuffer,
+      ID3D12Resource* out_mask);
+
   void Destroy();
 
   bool IsInit() const { return device_ != nullptr; }
@@ -72,6 +83,7 @@ class DlssNrCodec {
   ID3D12Device* device_ = nullptr;
   ID3D12RootSignature* root_signature_ = nullptr;
   ID3D12PipelineState* pipeline_state_ = nullptr;
+  ID3D12PipelineState* mask_pipeline_state_ = nullptr;
 
   ID3D12DescriptorHeap* descriptor_heap_ = nullptr;
   uint32_t descriptor_size_ = 0;
