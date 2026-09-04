@@ -5,6 +5,7 @@
 
 #include <reshade.hpp>
 
+#include "dlss_guides.h"
 #include "settings.h"
 
 namespace reshade_dlssnr {
@@ -431,10 +432,14 @@ void DlssNrDirect::OnPresent(
     return;
   }
 
+  const DlssGuideState guides = DlssGuides::Get().Get();
+
   SimpleParams eval_params;
   eval_params.Set("DLSSNR.Color", backbuffer);
   eval_params.Set("DLSSNR.Output", output_);
   eval_params.Set("DLSSNR.Enabled", 1u);
+  eval_params.Set("DLSSNR.Width", width);
+  eval_params.Set("DLSSNR.Height", height);
   eval_params.Set("DLSSNR.Hint.Render.Preset", settings.preset);
   eval_params.Set("DLSSNR.Intensity", settings.intensity);
   eval_params.Set("DLSSNR.Style", settings.style);
@@ -443,7 +448,34 @@ void DlssNrDirect::OnPresent(
   eval_params.Set("DLSSNR.SkinStructureStrength", settings.skin_structure);
   eval_params.Set("DLSSNR.GlobalToneStrength", 1.0f);
   eval_params.Set("DLSSNR.UseAutoMask", settings.auto_mask ? 1u : 0u);
-  eval_params.Set("DLSSNR.Reset", 1u);
+
+  if (guides.valid) {
+    eval_params.Set("DLSSNR.Depth", guides.depth);
+    eval_params.Set("DLSSNR.MVec", guides.motion);
+    eval_params.Set("DLSSNR.DepthInverted", guides.depth_inverted ? 1u : 0u);
+    eval_params.Set("DLSSNR.MVecScaleX", guides.mv_scale_x);
+    eval_params.Set("DLSSNR.MVecScaleY", guides.mv_scale_y);
+
+    eval_params.Set("DLSSNR.ColorSubrectBaseX", 0u);
+    eval_params.Set("DLSSNR.ColorSubrectBaseY", 0u);
+    eval_params.Set("DLSSNR.ColorSubrectWidth", width);
+    eval_params.Set("DLSSNR.ColorSubrectHeight", height);
+    eval_params.Set("DLSSNR.OutputSubrectBaseX", 0u);
+    eval_params.Set("DLSSNR.OutputSubrectBaseY", 0u);
+    eval_params.Set("DLSSNR.OutputSubrectWidth", width);
+    eval_params.Set("DLSSNR.OutputSubrectHeight", height);
+    eval_params.Set("DLSSNR.DepthSubrectBaseX", 0u);
+    eval_params.Set("DLSSNR.DepthSubrectBaseY", 0u);
+    eval_params.Set("DLSSNR.DepthSubrectWidth", guides.guide_width);
+    eval_params.Set("DLSSNR.DepthSubrectHeight", guides.guide_height);
+    eval_params.Set("DLSSNR.MVecSubrectBaseX", 0u);
+    eval_params.Set("DLSSNR.MVecSubrectBaseY", 0u);
+    eval_params.Set("DLSSNR.MVecSubrectWidth", guides.guide_width);
+    eval_params.Set("DLSSNR.MVecSubrectHeight", guides.guide_height);
+  }
+
+  eval_params.Set("DLSSNR.Reset", first_evaluate_ ? 1u : 0u);
+  first_evaluate_ = false;
 
   Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   const NVSDK_NGX_Result result = evaluate_feature_(command_list_, feature_handle_, &eval_params, nullptr);
@@ -518,6 +550,7 @@ void DlssNrDirect::Shutdown() {
   built_height_ = 0;
   output_width_ = 0;
   output_height_ = 0;
+  first_evaluate_ = true;
   failed_ = false;
   reason_ = "";
 }
