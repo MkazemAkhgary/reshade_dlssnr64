@@ -4,6 +4,7 @@
 #include <reshade.hpp>
 
 #include "d3d12_hooks.h"
+#include "dlss_guides.h"
 #include "dlssnr_direct.h"
 #include "nvngx_hook_compat.h"
 #include "settings.h"
@@ -126,6 +127,7 @@ void Detach() {
   reshade::unregister_event<reshade::addon_event::init_device>(OnInitDevice);
 
   reshade_dlssnr::DlssNrDirect::Get().Shutdown();
+  reshade_dlssnr::DlssGuides::Get().Clear();
   reshade_dlssnr::SaveSettings();
   g_initialized = false;
 }
