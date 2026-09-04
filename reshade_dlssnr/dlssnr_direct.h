@@ -9,7 +9,7 @@
 #include <string>
 #include <unordered_map>
 
-class DlssNrCodec;
+#include "codec.h"
 
 namespace reshade_dlssnr {
 
