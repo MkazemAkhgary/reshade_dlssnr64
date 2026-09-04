@@ -221,10 +221,40 @@ void DlssGuides::Capture(
   Barrier(command_list, motion, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   Barrier(command_list, motion_clone_, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
+  // Capture the DLSS output color before UI/post-processing for the UI mask.
+  ID3D12Resource* target = GetResource(params, NVSDK_NGX_Parameter_Output, "DLSSD.Output");
+
+  if (target != nullptr) {
+    if (pre_ui_clone_ == nullptr ||
+        pre_ui_width_ != static_cast<unsigned int>(target->GetDesc().Width) ||
+        pre_ui_height_ != static_cast<unsigned int>(target->GetDesc().Height) ||
+        pre_ui_format_ != (IsTypelessFormat(target->GetDesc().Format)
+                               ? TypedGuideFormat(target->GetDesc().Format)
+                               : target->GetDesc().Format)) {
+      if (pre_ui_clone_ != nullptr) {
+        pre_ui_clone_->Release();
+        pre_ui_clone_ = nullptr;
+      }
+
+      pre_ui_clone_ = CreateGuideClone(device, target, &pre_ui_width_, &pre_ui_height_, &pre_ui_format_);
+    }
+
+    if (pre_ui_clone_ != nullptr) {
+      Barrier(command_list, target, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+      Barrier(command_list, pre_ui_clone_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
+      command_list->CopyResource(pre_ui_clone_, target);
+      Barrier(command_list, target, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+      Barrier(command_list, pre_ui_clone_, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    }
+  }
+
   state_.depth = depth_clone_;
   state_.motion = motion_clone_;
+  state_.pre_ui_color = pre_ui_clone_;
   state_.guide_width = guide_width;
   state_.guide_height = guide_height;
+  state_.color_width = pre_ui_width_;
+  state_.color_height = pre_ui_height_;
   state_.mv_scale_x = mv_scale_x;
   state_.mv_scale_y = mv_scale_y;
   state_.depth_inverted = (create_flags & NVSDK_NGX_DLSS_Feature_Flags_DepthInverted) != 0;
@@ -252,13 +282,22 @@ void DlssGuides::Clear() {
     motion_clone_ = nullptr;
   }
 
+  if (pre_ui_clone_ != nullptr) {
+    pre_ui_clone_->Release();
+    pre_ui_clone_ = nullptr;
+  }
+
   state_.valid = false;
+  state_.pre_ui_color = nullptr;
   depth_width_ = 0;
   depth_height_ = 0;
   depth_format_ = DXGI_FORMAT_UNKNOWN;
   motion_width_ = 0;
   motion_height_ = 0;
   motion_format_ = DXGI_FORMAT_UNKNOWN;
+  pre_ui_width_ = 0;
+  pre_ui_height_ = 0;
+  pre_ui_format_ = DXGI_FORMAT_UNKNOWN;
 }
 
 }  // namespace reshade_dlssnr
