@@ -213,7 +213,6 @@ bool DlssNrDirect::EnsureInitialized(ID3D12Device* device) {
 
 bool DlssNrDirect::EnsureFeature(
     ID3D12Device* device,
-    ID3D12GraphicsCommandList* command_list,
     unsigned int width,
     unsigned int height) {
   if (feature_handle_ != nullptr && built_width_ == width && built_height_ == height) {
@@ -225,17 +224,27 @@ bool DlssNrDirect::EnsureFeature(
     feature_handle_ = nullptr;
   }
 
+  const Settings& settings = GetSettings();
+
   SimpleParams create_params;
   create_params.Set("DLSSNR.Width", width);
   create_params.Set("DLSSNR.Height", height);
   create_params.Set("DLSSNR.ScalingRatio", 1.0f);
-  create_params.Set("DLSSNR.Hint.Render.Preset", 0);
+  create_params.Set("DLSSNR.Hint.Render.Preset", settings.preset);
   create_params.Set(NVSDK_NGX_Parameter_PerfQualityValue, 2);
+  create_params.Set("DLSSNR.Intensity", settings.intensity);
+  create_params.Set("DLSSNR.Style", settings.style);
+  create_params.Set("DLSSNR.LocalStructureStrength", settings.local_structure);
+  create_params.Set("DLSSNR.LocalToneStrength", settings.local_tone);
+  create_params.Set("DLSSNR.SkinStructureStrength", settings.skin_structure);
+  create_params.Set("DLSSNR.GlobalToneStrength", 1.0f);
+  create_params.Set("DLSSNR.UseAutoMask", settings.auto_mask ? 1u : 0u);
+  create_params.Set("DLSSNR.UICorrection", 1u);
   create_params.Set("CreationNodeMask", 1u);
   create_params.Set("VisibilityNodeMask", 1u);
 
   const NVSDK_NGX_Result result = create_feature_(
-      command_list,
+      command_list_,
       static_cast<NVSDK_NGX_Feature>(18),
       &create_params,
       &feature_handle_);
@@ -255,6 +264,58 @@ bool DlssNrDirect::EnsureFeature(
   reshade::log::message(reshade::log::level::info, msg.c_str());
 
   return true;
+}
+
+bool DlssNrDirect::EnsureCommandInfrastructure(ID3D12Device* device) {
+  if (command_allocator_ != nullptr) return true;
+  if (device == nullptr) return false;
+
+  if (FAILED(device->CreateCommandAllocator(
+          D3D12_COMMAND_LIST_TYPE_DIRECT,
+          IID_PPV_ARGS(&command_allocator_)))) {
+    reason_ = "failed to create DLSSNR command allocator";
+    return false;
+  }
+
+  if (FAILED(device->CreateCommandList(
+          0,
+          D3D12_COMMAND_LIST_TYPE_DIRECT,
+          command_allocator_,
+          nullptr,
+          IID_PPV_ARGS(&command_list_)))) {
+    reason_ = "failed to create DLSSNR command list";
+    return false;
+  }
+
+  command_list_->Close();
+
+  if (FAILED(device->CreateFence(
+          0,
+          D3D12_FENCE_FLAG_NONE,
+          IID_PPV_ARGS(&fence_)))) {
+    reason_ = "failed to create DLSSNR fence";
+    return false;
+  }
+
+  fence_event_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+  if (fence_event_ == nullptr) {
+    reason_ = "failed to create DLSSNR fence event";
+    return false;
+  }
+
+  return true;
+}
+
+void DlssNrDirect::WaitGpu() {
+  if (command_queue_ == nullptr || fence_ == nullptr) return;
+
+  const UINT64 value = ++fence_value_;
+  command_queue_->Signal(fence_, value);
+
+  if (fence_->GetCompletedValue() < value) {
+    fence_->SetEventOnCompletion(value, fence_event_);
+    WaitForSingleObject(fence_event_, INFINITE);
+  }
 }
 
 ID3D12Resource* DlssNrDirect::GetResource(const NVSDK_NGX_Parameter* params, const char* a, const char* b) {
@@ -290,35 +351,31 @@ void DlssNrDirect::Barrier(
   command_list->ResourceBarrier(1, &barrier);
 }
 
-void DlssNrDirect::OnEvaluateAfterUpscale(
-    ID3D12GraphicsCommandList* command_list,
-    const NVSDK_NGX_Parameter* params,
-    NVSDK_NGX_Feature feature_id) {
+void DlssNrDirect::OnPresent(
+    ID3D12CommandQueue* command_queue,
+    ID3D12Resource* backbuffer) {
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
   const Settings& settings = GetSettings();
   if (!settings.enabled) return;
-  if (settings.only_super_sampling && feature_id != NVSDK_NGX_Feature_SuperSampling) return;
-  if (failed_ || command_list == nullptr || params == nullptr) return;
-
-  ID3D12Resource* target = GetResource(params, NVSDK_NGX_Parameter_Output, "DLSSD.Output");
-  if (target == nullptr) return;
+  if (failed_ || command_queue == nullptr || backbuffer == nullptr) return;
 
   ID3D12Device* device = nullptr;
-  if (FAILED(target->GetDevice(IID_PPV_ARGS(&device))) || device == nullptr) return;
+  if (FAILED(command_queue->GetDevice(IID_PPV_ARGS(&device))) || device == nullptr) return;
 
-  if (!EnsureModelAndPatch() || !EnsureInitialized(device)) {
+  if (!EnsureModelAndPatch() || !EnsureInitialized(device) || !EnsureCommandInfrastructure(device)) {
     failed_ = true;
     reshade::log::message(reshade::log::level::error, reason_);
     device->Release();
     return;
   }
 
-  const D3D12_RESOURCE_DESC desc = target->GetDesc();
+  const D3D12_RESOURCE_DESC desc = backbuffer->GetDesc();
   const unsigned int width = static_cast<unsigned int>(desc.Width);
   const unsigned int height = static_cast<unsigned int>(desc.Height);
 
-  if (output_ == nullptr || output_width_ != width || output_height_ != height) {
+  if (output_ == nullptr || output_width_ != width || output_height_ != height ||
+      output_->GetDesc().Format != desc.Format) {
     if (output_ != nullptr) {
       output_->Release();
       output_ = nullptr;
@@ -347,14 +404,23 @@ void DlssNrDirect::OnEvaluateAfterUpscale(
     output_height_ = height;
   }
 
+  command_queue_ = command_queue;
+
   if (feature_handle_ == nullptr) {
-    if (!EnsureFeature(device, command_list, width, height)) {
+    command_allocator_->Reset();
+    command_list_->Reset(command_allocator_, nullptr);
+
+    if (!EnsureFeature(device, width, height)) {
       failed_ = true;
       device->Release();
       return;
     }
 
-    // Same command list/frame creation is unsafe; evaluate next frame.
+    command_list_->Close();
+    ID3D12CommandList* const lists[] = {command_list_};
+    command_queue_->ExecuteCommandLists(1, lists);
+    WaitGpu();
+
     reshade::log::message(
         reshade::log::level::info,
         "Direct DLSSNR feature created; skipping evaluation this frame");
@@ -362,21 +428,35 @@ void DlssNrDirect::OnEvaluateAfterUpscale(
     return;
   }
 
+  command_allocator_->Reset();
+  command_list_->Reset(command_allocator_, nullptr);
+
   SimpleParams eval_params;
-  eval_params.Set("DLSSNR.Color", target);
+  eval_params.Set("DLSSNR.Color", backbuffer);
   eval_params.Set("DLSSNR.Output", output_);
   eval_params.Set("DLSSNR.Enabled", 1u);
-  eval_params.Set("DLSSNR.Style", settings.style);
+  eval_params.Set("DLSSNR.Hint.Render.Preset", settings.preset);
   eval_params.Set("DLSSNR.Intensity", settings.intensity);
+  eval_params.Set("DLSSNR.Style", settings.style);
+  eval_params.Set("DLSSNR.LocalStructureStrength", settings.local_structure);
+  eval_params.Set("DLSSNR.LocalToneStrength", settings.local_tone);
+  eval_params.Set("DLSSNR.SkinStructureStrength", settings.skin_structure);
+  eval_params.Set("DLSSNR.GlobalToneStrength", 1.0f);
+  eval_params.Set("DLSSNR.UseAutoMask", settings.auto_mask ? 1u : 0u);
   eval_params.Set("DLSSNR.Reset", 1u);
 
-  Barrier(command_list, target, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  const NVSDK_NGX_Result result = evaluate_feature_(command_list, feature_handle_, &eval_params, nullptr);
-  Barrier(command_list, output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
-  Barrier(command_list, target, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
-  command_list->CopyResource(target, output_);
-  Barrier(command_list, target, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  Barrier(command_list, output_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  const NVSDK_NGX_Result result = evaluate_feature_(command_list_, feature_handle_, &eval_params, nullptr);
+  Barrier(command_list_, output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+  Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
+  command_list_->CopyResource(backbuffer, output_);
+  Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
+  Barrier(command_list_, output_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+  command_list_->Close();
+  ID3D12CommandList* const lists[] = {command_list_};
+  command_queue_->ExecuteCommandLists(1, lists);
+  WaitGpu();
 
   if (result != NVSDK_NGX_Result_Success) {
     failed_ = true;
@@ -400,6 +480,27 @@ void DlssNrDirect::Shutdown() {
     output_ = nullptr;
   }
 
+  if (fence_event_ != INVALID_HANDLE_VALUE) {
+    CloseHandle(fence_event_);
+    fence_event_ = INVALID_HANDLE_VALUE;
+  }
+
+  if (fence_ != nullptr) {
+    fence_->Release();
+    fence_ = nullptr;
+  }
+
+  if (command_list_ != nullptr) {
+    command_list_->Release();
+    command_list_ = nullptr;
+  }
+
+  if (command_allocator_ != nullptr) {
+    command_allocator_->Release();
+    command_allocator_ = nullptr;
+  }
+
+  command_queue_ = nullptr;
   built_width_ = 0;
   built_height_ = 0;
   output_width_ = 0;
