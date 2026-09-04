@@ -53,21 +53,21 @@ void OnInitDevice(reshade::api::device* device) {
   reshade_dlssnr::D3D12Hooks::Get().InstallEarlyHooks(native_device);
 }
 
-void OnBeginRenderPass(
+bool OnBeginRenderPass(
     reshade::api::command_list* command_list,
     uint32_t count,
     const reshade::api::render_pass_render_target_desc* render_targets,
     const reshade::api::render_pass_depth_stencil_desc*,
     reshade::api::render_pass_flags) {
-  if (command_list == nullptr || count == 0 || render_targets == nullptr) return;
+  if (command_list == nullptr || count == 0 || render_targets == nullptr) return false;
 
   reshade::api::device* const device = command_list->get_device();
-  if (device == nullptr || device->get_api() != reshade::api::device_api::d3d12) return;
+  if (device == nullptr || device->get_api() != reshade::api::device_api::d3d12) return false;
 
   const reshade::api::resource target_resource =
       device->get_resource_from_view(render_targets[0].view);
 
-  if (target_resource == 0) return;
+  if (target_resource == 0) return false;
 
   const reshade::api::resource_desc desc = device->get_resource_desc(target_resource);
 
@@ -85,6 +85,7 @@ void OnBeginRenderPass(
 
   std::lock_guard<std::mutex> lock(g_pass_mutex);
   g_render_passes.push_back(info);
+  return false;
 }
 
 void OnPresent(
