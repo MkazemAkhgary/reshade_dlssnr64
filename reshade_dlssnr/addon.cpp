@@ -27,6 +27,7 @@ struct RenderPassInfo {
 
 std::mutex g_pass_mutex;
 std::vector<RenderPassInfo> g_render_passes;
+std::vector<RenderPassInfo> g_display_passes;
 uint32_t g_current_pass_index = 0;
 
 reshade::api::resource_desc g_backbuffer_desc = {};
@@ -154,8 +155,9 @@ void OnPresent(
 
   {
     std::lock_guard<std::mutex> lock(g_pass_mutex);
-    g_current_pass_index = 0;
+    g_display_passes.swap(g_render_passes);
     g_render_passes.clear();
+    g_current_pass_index = 0;
   }
 }
 
@@ -220,8 +222,8 @@ void DrawSettings(reshade::api::effect_runtime*) {
         static_cast<uint32_t>(g_backbuffer_desc.texture.format));
   }
 
-  for (size_t i = 0; i < g_render_passes.size(); ++i) {
-    const RenderPassInfo& pass = g_render_passes[i];
+  for (size_t i = 0; i < g_display_passes.size(); ++i) {
+    const RenderPassInfo& pass = g_display_passes[i];
     ImGui::Text(
         "%02llu: %ux%u fmt=%u%s",
         static_cast<unsigned long long>(pass.index),
