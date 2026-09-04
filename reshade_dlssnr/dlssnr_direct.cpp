@@ -481,6 +481,28 @@ void DlssNrDirect::Shutdown() {
     output_ = nullptr;
   }
 
+  if (fence_event_ != INVALID_HANDLE_VALUE) {
+    CloseHandle(fence_event_);
+    fence_event_ = INVALID_HANDLE_VALUE;
+  }
+
+  if (fence_ != nullptr) {
+    fence_->Release();
+    fence_ = nullptr;
+  }
+
+  if (command_list_ != nullptr) {
+    command_list_->Release();
+    command_list_ = nullptr;
+  }
+
+  if (command_allocator_ != nullptr) {
+    command_allocator_->Release();
+    command_allocator_ = nullptr;
+  }
+
+  command_queue_ = nullptr;
+  fence_value_ = 0;
   built_width_ = 0;
   built_height_ = 0;
   output_width_ = 0;
