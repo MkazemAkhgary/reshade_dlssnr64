@@ -65,26 +65,41 @@ void DrawSettings(reshade::api::effect_runtime*) {
 
   ImGui::Separator();
 
-  changed |= ImGui::SliderFloat("Intensity", &settings.intensity, 0.0f, 1.0f, "%.2f");
-  changed |= ImGui::SliderFloat("Transfer Strength", &settings.transfer_strength, 0.0f, 1.0f, "%.2f");
+  changed |= ImGui::SliderFloat("Intensity", &settings.intensity, 0.0f, 2.0f, "%.2f");
+  changed |= ImGui::SliderFloat("Transfer Strength", &settings.transfer_strength, 0.0f, 2.0f, "%.2f");
   changed |= ImGui::SliderFloat("Colour Strength", &settings.colour_strength, 0.0f, 1.0f, "%.2f");
   changed |= ImGui::SliderFloat("Working Scale", &settings.working_scale, 0.25f, 1.0f, "%.2f");
   changed |= ImGui::SliderFloat("Max Ratio", &settings.max_ratio, 1.0f, 8.0f, "%.2f");
-  changed |= ImGui::SliderFloat("White Point Scale", &settings.white_point_scale, 1.0f, 1000.0f, "%.0f");
+  changed |= ImGui::SliderFloat("White Point Scale", &settings.white_point_scale, 0.25f, 4.0f, "%.2f");
 
   ImGui::Separator();
 
-  changed |= ImGui::SliderInt("Preset", &settings.preset, 0, 6);
-  changed |= ImGui::SliderInt("Style", &settings.style, 0, 3);
+  {
+    static const char* preset_names[] = {"Default", "Model A", "Model B", "Model C"};
+    changed |= ImGui::Combo("Preset", &settings.preset, preset_names, IM_ARRAYSIZE(preset_names));
+  }
 
-  changed |= ImGui::SliderFloat("Local Structure", &settings.local_structure, 0.0f, 1.0f, "%.2f");
-  changed |= ImGui::SliderFloat("Local Tone", &settings.local_tone, 0.0f, 1.0f, "%.2f");
-  changed |= ImGui::SliderFloat("Skin Structure", &settings.skin_structure, -1.0f, 1.0f, "%.2f");
+  {
+    static const char* style_names[] = {"Default (standard)", "Natural", "Cinematic"};
+    changed |= ImGui::Combo("Style", &settings.style, style_names, IM_ARRAYSIZE(style_names));
+  }
+
+  changed |= ImGui::SliderFloat("Local Structure", &settings.local_structure, 0.0f, 2.0f, "%.2f");
+  changed |= ImGui::SliderFloat("Local Tone", &settings.local_tone, 0.0f, 2.0f, "%.2f");
+  changed |= ImGui::SliderFloat("Skin Structure", &settings.skin_structure, -1.0f, 2.0f, "%.2f");
   changed |= ImGui::Checkbox("Auto Mask", &settings.auto_mask);
 
   ImGui::Separator();
 
-  changed |= ImGui::SliderInt("Debug View", &settings.debug_view, 0, 3);
+  {
+    static const char* debug_names[] = {
+        "Off",
+        "Proxy (what the model sees)",
+        "Model output (raw)",
+        "Difference (amplified)",
+    };
+    changed |= ImGui::Combo("Debug View", &settings.debug_view, debug_names, IM_ARRAYSIZE(debug_names));
+  }
 
   if (changed) {
     reshade_dlssnr::SaveSettings();
