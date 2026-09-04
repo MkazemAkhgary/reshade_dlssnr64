@@ -90,7 +90,13 @@ ID3D12Resource* DlssGuides::CreateGuideClone(
     unsigned int* out_height,
     DXGI_FORMAT* out_format) {
   D3D12_RESOURCE_DESC desc = source->GetDesc();
-  desc.Format = TypedGuideFormat(desc.Format);
+
+  // Preserve the original format so CopyResource is valid. Typeless formats
+  // are converted to their typed counterpart so they can be used as SRVs.
+  if (IsTypelessFormat(desc.Format)) {
+    desc.Format = TypedGuideFormat(desc.Format);
+  }
+
   desc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
   D3D12_HEAP_PROPERTIES heap = {};
@@ -165,72 +171,58 @@ void DlssGuides::Capture(
     mv_scale_y = 1.0f;
   }
 
-  const bool depth_typeless = IsTypelessFormat(depth->GetDesc().Format);
-  const bool motion_typeless = IsTypelessFormat(motion->GetDesc().Format);
-
-  // Clone only truly typeless guides. For typed depth/motion, NGX can read
-  // the originals directly, matching OptiScaler.
-  ID3D12Resource* depth_for_model = depth;
-  ID3D12Resource* motion_for_model = motion;
-
-  if (depth_typeless) {
-    if (depth_clone_ == nullptr ||
-        depth_width_ != static_cast<unsigned int>(depth->GetDesc().Width) ||
-        depth_height_ != static_cast<unsigned int>(depth->GetDesc().Height) ||
-        depth_format_ != TypedGuideFormat(depth->GetDesc().Format)) {
-      if (depth_clone_ != nullptr) {
-        depth_clone_->Release();
-        depth_clone_ = nullptr;
-      }
-
-      depth_clone_ = CreateGuideClone(device, depth, &depth_width_, &depth_height_, &depth_format_);
+  // Always clone guides into owned resources. The game may release or reuse
+  // the originals before the present event, and we must not hold raw pointers
+  // across that boundary.
+  if (depth_clone_ == nullptr ||
+      depth_width_ != static_cast<unsigned int>(depth->GetDesc().Width) ||
+      depth_height_ != static_cast<unsigned int>(depth->GetDesc().Height) ||
+      depth_format_ != (IsTypelessFormat(depth->GetDesc().Format)
+                            ? TypedGuideFormat(depth->GetDesc().Format)
+                            : depth->GetDesc().Format)) {
+    if (depth_clone_ != nullptr) {
+      depth_clone_->Release();
+      depth_clone_ = nullptr;
     }
 
-    if (depth_clone_ == nullptr) {
-      state_.valid = false;
-      device->Release();
-      lock_.unlock();
-      return;
-    }
-
-    Barrier(command_list, depth, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    Barrier(command_list, depth_clone_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
-    command_list->CopyResource(depth_clone_, depth);
-    Barrier(command_list, depth, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    Barrier(command_list, depth_clone_, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    depth_for_model = depth_clone_;
+    depth_clone_ = CreateGuideClone(device, depth, &depth_width_, &depth_height_, &depth_format_);
   }
 
-  if (motion_typeless) {
-    if (motion_clone_ == nullptr ||
-        motion_width_ != static_cast<unsigned int>(motion->GetDesc().Width) ||
-        motion_height_ != static_cast<unsigned int>(motion->GetDesc().Height) ||
-        motion_format_ != TypedGuideFormat(motion->GetDesc().Format)) {
-      if (motion_clone_ != nullptr) {
-        motion_clone_->Release();
-        motion_clone_ = nullptr;
-      }
-
-      motion_clone_ = CreateGuideClone(device, motion, &motion_width_, &motion_height_, &motion_format_);
+  if (motion_clone_ == nullptr ||
+      motion_width_ != static_cast<unsigned int>(motion->GetDesc().Width) ||
+      motion_height_ != static_cast<unsigned int>(motion->GetDesc().Height) ||
+      motion_format_ != (IsTypelessFormat(motion->GetDesc().Format)
+                             ? TypedGuideFormat(motion->GetDesc().Format)
+                             : motion->GetDesc().Format)) {
+    if (motion_clone_ != nullptr) {
+      motion_clone_->Release();
+      motion_clone_ = nullptr;
     }
 
-    if (motion_clone_ == nullptr) {
-      state_.valid = false;
-      device->Release();
-      lock_.unlock();
-      return;
-    }
-
-    Barrier(command_list, motion, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    Barrier(command_list, motion_clone_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
-    command_list->CopyResource(motion_clone_, motion);
-    Barrier(command_list, motion, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    Barrier(command_list, motion_clone_, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    motion_for_model = motion_clone_;
+    motion_clone_ = CreateGuideClone(device, motion, &motion_width_, &motion_height_, &motion_format_);
   }
 
-  state_.depth = depth_for_model;
-  state_.motion = motion_for_model;
+  if (depth_clone_ == nullptr || motion_clone_ == nullptr) {
+    state_.valid = false;
+    device->Release();
+    lock_.unlock();
+    return;
+  }
+
+  Barrier(command_list, depth, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE);
+  Barrier(command_list, depth_clone_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
+  command_list->CopyResource(depth_clone_, depth);
+  Barrier(command_list, depth, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  Barrier(command_list, depth_clone_, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+  Barrier(command_list, motion, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE);
+  Barrier(command_list, motion_clone_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
+  command_list->CopyResource(motion_clone_, motion);
+  Barrier(command_list, motion, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  Barrier(command_list, motion_clone_, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+  state_.depth = depth_clone_;
+  state_.motion = motion_clone_;
   state_.guide_width = guide_width;
   state_.guide_height = guide_height;
   state_.mv_scale_x = mv_scale_x;
