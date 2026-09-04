@@ -26,7 +26,9 @@ struct RenderPassInfo {
   uint32_t draw_count = 0;
   float viewport_width = 0.0f;
   float viewport_height = 0.0f;
+  uint64_t target_handle = 0;
   bool is_backbuffer_size = false;
+  bool is_backbuffer_resource = false;
 };
 
 std::mutex g_pass_mutex;
@@ -37,6 +39,11 @@ uint32_t g_current_pass_index = 0;
 
 reshade::api::resource_desc g_backbuffer_desc = {};
 bool g_has_backbuffer_desc = false;
+uint64_t g_backbuffer_native_handle = 0;
+bool g_has_backbuffer_native_handle = false;
+
+uint64_t g_selected_pass_target_handle = 0;
+bool g_has_selected_pass_target = false;
 
 void PinAddonModule() {
   static bool pinned = false;
@@ -82,12 +89,17 @@ bool OnBeginRenderPass(
   info.width = desc.texture.width;
   info.height = desc.texture.height;
   info.format = static_cast<uint32_t>(desc.texture.format);
+  info.target_handle = target_resource.handle;
 
   if (g_has_backbuffer_desc) {
     info.is_backbuffer_size =
         info.width == g_backbuffer_desc.texture.width &&
         info.height == g_backbuffer_desc.texture.height;
   }
+
+  info.is_backbuffer_resource =
+      g_has_backbuffer_native_handle &&
+      info.target_handle == g_backbuffer_native_handle;
 
   {
     std::lock_guard<std::mutex> lock(g_pass_mutex);
@@ -120,12 +132,17 @@ void OnBindRenderTargets(
   info.width = desc.texture.width;
   info.height = desc.texture.height;
   info.format = static_cast<uint32_t>(desc.texture.format);
+  info.target_handle = target_resource.handle;
 
   if (g_has_backbuffer_desc) {
     info.is_backbuffer_size =
         info.width == g_backbuffer_desc.texture.width &&
         info.height == g_backbuffer_desc.texture.height;
   }
+
+  info.is_backbuffer_resource =
+      g_has_backbuffer_native_handle &&
+      info.target_handle == g_backbuffer_native_handle;
 
   {
     std::lock_guard<std::mutex> lock(g_pass_mutex);
@@ -219,6 +236,8 @@ void OnPresent(
     if (backbuffer_handle != 0) {
       g_backbuffer_desc = present_device->get_resource_desc(backbuffer_handle);
       g_has_backbuffer_desc = true;
+      g_backbuffer_native_handle = backbuffer_handle.handle;
+      g_has_backbuffer_native_handle = true;
     }
   }
 
@@ -286,24 +305,79 @@ void DrawSettings(reshade::api::effect_runtime*) {
 
   if (g_has_backbuffer_desc) {
     ImGui::Text(
-        "Backbuffer: %ux%u format=%u",
+        "Backbuffer: %ux%u format=%u native=0x%llx",
         g_backbuffer_desc.texture.width,
         g_backbuffer_desc.texture.height,
-        static_cast<uint32_t>(g_backbuffer_desc.texture.format));
+        static_cast<uint32_t>(g_backbuffer_desc.texture.format),
+        static_cast<unsigned long long>(g_backbuffer_native_handle));
   }
+
+  static bool filter_backbuffer_resource = false;
+  static bool filter_full_viewport = false;
+  static int max_draw_count = 999;
+
+  ImGui::Checkbox("Only actual backbuffer resource", &filter_backbuffer_resource);
+  ImGui::Checkbox("Only full viewport", &filter_full_viewport);
+  ImGui::SliderInt("Max draw count", &max_draw_count, 0, 500);
+
+  ImGui::Separator();
 
   for (size_t i = 0; i < g_display_passes.size(); ++i) {
     const RenderPassInfo& pass = g_display_passes[i];
+
+    if (filter_backbuffer_resource && !pass.is_backbuffer_resource) continue;
+
+    if (filter_full_viewport &&
+        !(pass.viewport_width >= static_cast<float>(pass.width) - 1.0f &&
+          pass.viewport_height >= static_cast<float>(pass.height) - 1.0f)) {
+      continue;
+    }
+
+    if (pass.draw_count > static_cast<uint32_t>(max_draw_count)) continue;
+
+    std::string label;
+    label += std::to_string(static_cast<unsigned long long>(pass.index));
+    label += ": ";
+    label += std::to_string(pass.width);
+    label += "x";
+    label += std::to_string(pass.height);
+    label += " fmt=";
+    label += std::to_string(pass.format);
+    label += " draws=";
+    label += std::to_string(pass.draw_count);
+    label += " vp=";
+    label += std::to_string(static_cast<int>(pass.viewport_width));
+    label += "x";
+    label += std::to_string(static_cast<int>(pass.viewport_height));
+    label += " id=0x";
+
+    char id_buffer[32] = {};
+    sprintf_s(id_buffer, "%llx", static_cast<unsigned long long>(pass.target_handle));
+    label += id_buffer;
+
+    if (pass.is_backbuffer_resource) {
+      label += " [BB]";
+    }
+
+    if (g_has_selected_pass_target && pass.target_handle == g_selected_pass_target_handle) {
+      label += " <selected>";
+    }
+
+    const bool is_selected =
+        g_has_selected_pass_target &&
+        pass.target_handle == g_selected_pass_target_handle;
+
+    if (ImGui::Selectable(label.c_str(), is_selected)) {
+      g_selected_pass_target_handle = pass.target_handle;
+      g_has_selected_pass_target = true;
+    }
+  }
+
+  if (g_has_selected_pass_target) {
+    ImGui::Separator();
     ImGui::Text(
-        "%02llu: %ux%u fmt=%u draws=%u vp=%.0fx%.0f%s",
-        static_cast<unsigned long long>(pass.index),
-        pass.width,
-        pass.height,
-        pass.format,
-        pass.draw_count,
-        pass.viewport_width,
-        pass.viewport_height,
-        pass.is_backbuffer_size ? " [bb-size]" : "");
+        "Selected pass target: 0x%llx",
+        static_cast<unsigned long long>(g_selected_pass_target_handle));
   }
 
   if (changed) {
