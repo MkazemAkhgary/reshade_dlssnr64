@@ -229,8 +229,25 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float3 pre = gPreUI.SampleLevel(s0, uv, 0).rgb;
     float3 final = gFinal.SampleLevel(s0, uv, 0).rgb;
 
-    float diff = dot(abs(pre - final), float3(0.2126, 0.7152, 0.0722));
-    float mask = saturate(diff * 4.0);
+    float3 diff3 = abs(pre - final);
+    float diff = dot(diff3, float3(0.2126, 0.7152, 0.0722));
+
+    // High-pass the difference: global tone/color changes are low-frequency,
+    // UI text and HUD elements are high-frequency. Sample four neighbours and
+    // subtract a cheap local average to keep only local changes.
+    float2 texel = 1.0 / float2(gWidth, gHeight);
+    float n1 = dot(abs(gPreUI.SampleLevel(s0, uv + float2(texel.x, 0.0), 0).rgb -
+                       gFinal.SampleLevel(s0, uv + float2(texel.x, 0.0), 0).rgb), float3(0.2126, 0.7152, 0.0722));
+    float n2 = dot(abs(gPreUI.SampleLevel(s0, uv - float2(texel.x, 0.0), 0).rgb -
+                       gFinal.SampleLevel(s0, uv - float2(texel.x, 0.0), 0).rgb), float3(0.2126, 0.7152, 0.0722));
+    float n3 = dot(abs(gPreUI.SampleLevel(s0, uv + float2(0.0, texel.y), 0).rgb -
+                       gFinal.SampleLevel(s0, uv + float2(0.0, texel.y), 0).rgb), float3(0.2126, 0.7152, 0.0722));
+    float n4 = dot(abs(gPreUI.SampleLevel(s0, uv - float2(0.0, texel.y), 0).rgb -
+                       gFinal.SampleLevel(s0, uv - float2(0.0, texel.y), 0).rgb), float3(0.2126, 0.7152, 0.0722));
+
+    float local_average = (n1 + n2 + n3 + n4) * 0.25;
+    float local_diff = abs(diff - local_average);
+    float mask = saturate(local_diff * 8.0);
     gMask[id.xy] = float4(mask, mask, mask, 1.0);
 }
 )";
