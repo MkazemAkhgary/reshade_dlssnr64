@@ -318,23 +318,6 @@ void DlssNrDirect::WaitGpu() {
   }
 }
 
-ID3D12Resource* DlssNrDirect::GetResource(const NVSDK_NGX_Parameter* params, const char* a, const char* b) {
-  ID3D12Resource* resource = nullptr;
-  if (params->Get(a, &resource) == NVSDK_NGX_Result_Success && resource != nullptr) return resource;
-  resource = nullptr;
-  if (params->Get(b, &resource) == NVSDK_NGX_Result_Success && resource != nullptr) return resource;
-
-  void* untyped = nullptr;
-  if (params->Get(a, &untyped) == NVSDK_NGX_Result_Success && untyped != nullptr) {
-    return static_cast<ID3D12Resource*>(untyped);
-  }
-  untyped = nullptr;
-  if (params->Get(b, &untyped) == NVSDK_NGX_Result_Success && untyped != nullptr) {
-    return static_cast<ID3D12Resource*>(untyped);
-  }
-  return nullptr;
-}
-
 void DlssNrDirect::Barrier(
     ID3D12GraphicsCommandList* command_list,
     ID3D12Resource* resource,
