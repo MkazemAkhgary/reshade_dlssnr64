@@ -552,9 +552,9 @@ void DlssNrDirect::OnPresent(
       debug_guide_width = width;
       debug_guide_height = height;
     } else if (settings.debug_view == 6) {
-      debug_input = reinterpret_cast<ID3D12Resource*>(debug_selected_resource_handle_);
-      debug_guide_width = width;
-      debug_guide_height = height;
+      debug_input = guides.selected_pass_color;
+      debug_guide_width = guides.selected_width != 0 ? guides.selected_width : width;
+      debug_guide_height = guides.selected_height != 0 ? guides.selected_height : height;
     }
 
     if (debug_input == nullptr) {
