@@ -3,6 +3,10 @@
 #include <imgui.h>
 #include <reshade.hpp>
 
+#include <mutex>
+#include <string>
+#include <vector>
+
 #include "d3d12_hooks.h"
 #include "dlss_guides.h"
 #include "dlssnr_direct.h"
@@ -12,6 +16,21 @@
 namespace {
 
 bool g_initialized = false;
+
+struct RenderPassInfo {
+  uint32_t index = 0;
+  uint32_t width = 0;
+  uint32_t height = 0;
+  uint32_t format = 0;
+  bool is_backbuffer_size = false;
+};
+
+std::mutex g_pass_mutex;
+std::vector<RenderPassInfo> g_render_passes;
+uint32_t g_current_pass_index = 0;
+
+reshade::api::resource_desc g_backbuffer_desc = {};
+bool g_has_backbuffer_desc = false;
 
 void PinAddonModule() {
   static bool pinned = false;
@@ -34,6 +53,40 @@ void OnInitDevice(reshade::api::device* device) {
   reshade_dlssnr::D3D12Hooks::Get().InstallEarlyHooks(native_device);
 }
 
+void OnBeginRenderPass(
+    reshade::api::command_list* command_list,
+    uint32_t count,
+    const reshade::api::render_pass_render_target_desc* render_targets,
+    const reshade::api::render_pass_depth_stencil_desc*,
+    reshade::api::render_pass_flags) {
+  if (command_list == nullptr || count == 0 || render_targets == nullptr) return;
+
+  reshade::api::device* const device = command_list->get_device();
+  if (device == nullptr || device->get_api() != reshade::api::device_api::d3d12) return;
+
+  const reshade::api::resource target_resource =
+      device->get_resource_from_view(render_targets[0].view);
+
+  if (target_resource == 0) return;
+
+  const reshade::api::resource_desc desc = device->get_resource_desc(target_resource);
+
+  RenderPassInfo info;
+  info.index = g_current_pass_index++;
+  info.width = desc.texture.width;
+  info.height = desc.texture.height;
+  info.format = static_cast<uint32_t>(desc.texture.format);
+
+  if (g_has_backbuffer_desc) {
+    info.is_backbuffer_size =
+        info.width == g_backbuffer_desc.texture.width &&
+        info.height == g_backbuffer_desc.texture.height;
+  }
+
+  std::lock_guard<std::mutex> lock(g_pass_mutex);
+  g_render_passes.push_back(info);
+}
+
 void OnPresent(
     reshade::api::command_queue* command_queue,
     reshade::api::swapchain* swapchain,
@@ -54,6 +107,22 @@ void OnPresent(
   reshade_dlssnr::DlssNrDirect::Get().OnPresent(
       native_command_queue,
       native_swapchain);
+
+  // Capture backbuffer description and reset render-pass tracking for next frame.
+  reshade::api::device* const device = command_queue->get_device();
+  if (device != nullptr && device->get_api() == reshade::api::device_api::d3d12) {
+    const auto backbuffer_handle = swapchain->get_current_back_buffer();
+    if (backbuffer_handle != 0) {
+      g_backbuffer_desc = device->get_resource_desc(backbuffer_handle);
+      g_has_backbuffer_desc = true;
+    }
+  }
+
+  {
+    std::lock_guard<std::mutex> lock(g_pass_mutex);
+    g_current_pass_index = 0;
+    g_render_passes.clear();
+  }
 }
 
 void DrawSettings(reshade::api::effect_runtime*) {
@@ -103,6 +172,31 @@ void DrawSettings(reshade::api::effect_runtime*) {
     changed |= ImGui::Combo("Debug View", &settings.debug_view, debug_names, IM_ARRAYSIZE(debug_names));
   }
 
+  ImGui::Separator();
+
+  ImGui::TextUnformatted("Render Passes");
+
+  std::lock_guard<std::mutex> pass_lock(g_pass_mutex);
+
+  if (g_has_backbuffer_desc) {
+    ImGui::Text(
+        "Backbuffer: %ux%u format=%u",
+        g_backbuffer_desc.texture.width,
+        g_backbuffer_desc.texture.height,
+        static_cast<uint32_t>(g_backbuffer_desc.texture.format));
+  }
+
+  for (size_t i = 0; i < g_render_passes.size(); ++i) {
+    const RenderPassInfo& pass = g_render_passes[i];
+    ImGui::Text(
+        "%02llu: %ux%u fmt=%u%s",
+        static_cast<unsigned long long>(pass.index),
+        pass.width,
+        pass.height,
+        pass.format,
+        pass.is_backbuffer_size ? " [bb-size]" : "");
+  }
+
   if (changed) {
     reshade_dlssnr::SaveSettings();
   }
@@ -115,6 +209,7 @@ void Attach(HMODULE module) {
   PinAddonModule();
 
   reshade::register_event<reshade::addon_event::init_device>(OnInitDevice);
+  reshade::register_event<reshade::addon_event::begin_render_pass>(OnBeginRenderPass);
   reshade::register_event<reshade::addon_event::present>(OnPresent);
   reshade::register_overlay("ReShade DLSSNR", DrawSettings);
 
@@ -141,6 +236,7 @@ void Detach() {
 
   reshade::unregister_overlay("ReShade DLSSNR", DrawSettings);
   reshade::unregister_event<reshade::addon_event::present>(OnPresent);
+  reshade::unregister_event<reshade::addon_event::begin_render_pass>(OnBeginRenderPass);
   reshade::unregister_event<reshade::addon_event::init_device>(OnInitDevice);
 
   reshade_dlssnr::DlssNrDirect::Get().Shutdown();
