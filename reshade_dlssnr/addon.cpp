@@ -108,6 +108,19 @@ bool OnBeginRenderPass(
     g_render_passes.push_back(info);
     g_current_pass_for_command_list[command_list] = pass_index;
   }
+
+  if (g_has_selected_pass_target &&
+      info.target_handle == g_selected_pass_target_handle) {
+    auto* native_command_list = reinterpret_cast<ID3D12GraphicsCommandList*>(command_list->get_native());
+    auto* native_target = reinterpret_cast<ID3D12Resource*>(target_resource.handle);
+
+    if (native_command_list != nullptr && native_target != nullptr) {
+      reshade_dlssnr::DlssGuides::Get().CaptureSelectedPassIfNeeded(
+          native_command_list,
+          native_target);
+    }
+  }
+
   return false;
 }
 
@@ -150,6 +163,18 @@ void OnBindRenderTargets(
     const size_t pass_index = g_render_passes.size();
     g_render_passes.push_back(info);
     g_current_pass_for_command_list[command_list] = pass_index;
+  }
+
+  if (g_has_selected_pass_target &&
+      info.target_handle == g_selected_pass_target_handle) {
+    auto* native_command_list = reinterpret_cast<ID3D12GraphicsCommandList*>(command_list->get_native());
+    auto* native_target = reinterpret_cast<ID3D12Resource*>(target_resource.handle);
+
+    if (native_command_list != nullptr && native_target != nullptr) {
+      reshade_dlssnr::DlssGuides::Get().CaptureSelectedPassIfNeeded(
+          native_command_list,
+          native_target);
+    }
   }
 }
 
