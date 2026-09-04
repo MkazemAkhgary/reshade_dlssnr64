@@ -441,6 +441,16 @@ void DlssNrDirect::OnPresent(
   command_queue_->ExecuteCommandLists(1, lists);
   WaitGpu();
 
+  static bool reported_first_evaluate = false;
+  if (!reported_first_evaluate) {
+    reported_first_evaluate = true;
+    std::string message = "Direct DLSSNR evaluate result: 0x";
+    char buffer[16] = {};
+    sprintf_s(buffer, "%X", static_cast<unsigned int>(result));
+    message += buffer;
+    reshade::log::message(reshade::log::level::info, message.c_str());
+  }
+
   if (result != NVSDK_NGX_Result_Success) {
     failed_ = true;
     reason_ = "DLSSNR EvaluateFeature failed";
