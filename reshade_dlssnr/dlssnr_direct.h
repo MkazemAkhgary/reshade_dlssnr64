@@ -82,6 +82,7 @@ class DlssNrDirect {
 
   bool initialized_ = false;
   bool failed_ = false;
+  bool first_evaluate_ = true;
   const char* reason_ = "";
 
   NVSDK_NGX_Handle* feature_handle_ = nullptr;
