@@ -18,7 +18,6 @@
 #include "../../renodx/src/utils/vtable.hpp"
 
 #include "d3d12_hooks.h"
-#include "dlssnr_direct.h"
 
 namespace reshade_dlssnr::renodx_compat {
 
@@ -54,24 +53,8 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
   NVSDK_NGX_Result result = real_NVSDK_NGX_D3D12_EvaluateFeature(
       command_list, feature_handle, parameters, callback);
 
-  if (result == NVSDK_NGX_Result_Success && feature_handle != nullptr) {
-    NVSDK_NGX_Feature feature_id = NVSDK_NGX_Feature_Reserved0;
-
-    {
-      std::lock_guard<std::mutex> lock(g_handle_to_feature_mutex);
-      auto it = g_handle_to_feature.find(feature_handle->Id);
-      if (it != g_handle_to_feature.end()) {
-        feature_id = it->second;
-      }
-    }
-
-    if (feature_id == NVSDK_NGX_Feature_SuperSampling) {
-      DlssNrDirect::Get().OnEvaluateAfterUpscale(
-          command_list,
-          parameters,
-          feature_id);
-    }
-  }
+  (void)feature_handle;
+  (void)parameters;
 
   D3D12Hooks::Get().RestoreCommandList(command_list);
   D3D12Hooks::Get().SetTrackingEnabled(true);
