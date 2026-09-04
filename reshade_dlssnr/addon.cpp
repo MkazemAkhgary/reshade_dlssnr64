@@ -33,26 +33,26 @@ void OnInitDevice(reshade::api::device* device) {
   reshade_dlssnr::D3D12Hooks::Get().InstallEarlyHooks(native_device);
 }
 
-void OnPresent(
-    reshade::api::command_queue* command_queue,
-    reshade::api::swapchain* swapchain,
-    const reshade::api::rect*,
-    const reshade::api::rect*,
-    uint32_t,
-    const reshade::api::rect*) {
-  if (command_queue == nullptr || swapchain == nullptr) return;
+void OnFinishEffects(
+    reshade::api::effect_runtime*,
+    reshade::api::command_list* command_list,
+    reshade::api::resource_view rtv,
+    reshade::api::resource_view) {
+  if (command_list == nullptr || rtv == 0) return;
 
-  if (command_queue->get_device()->get_api() != reshade::api::device_api::d3d12) {
+  reshade::api::device* const device = command_list->get_device();
+  if (device == nullptr || device->get_api() != reshade::api::device_api::d3d12) {
     return;
   }
 
-  auto* native_command_queue = reinterpret_cast<ID3D12CommandQueue*>(command_queue->get_native());
-  auto backbuffer_handle = swapchain->get_current_back_buffer();
-  auto* native_backbuffer = reinterpret_cast<ID3D12Resource*>(backbuffer_handle.handle);
+  auto* native_command_list = reinterpret_cast<ID3D12GraphicsCommandList*>(command_list->get_native());
 
-  reshade_dlssnr::DlssNrDirect::Get().OnPresent(
-      native_command_queue,
-      native_backbuffer);
+  const auto target_resource = device->get_resource_from_view(rtv);
+  auto* native_target = reinterpret_cast<ID3D12Resource*>(target_resource.handle);
+
+  reshade_dlssnr::DlssNrDirect::Get().OnFinishEffects(
+      native_command_list,
+      native_target);
 }
 
 void DrawSettings(reshade::api::effect_runtime*) {
@@ -97,7 +97,7 @@ void Attach(HMODULE module) {
   PinAddonModule();
 
   reshade::register_event<reshade::addon_event::init_device>(OnInitDevice);
-  reshade::register_event<reshade::addon_event::present>(OnPresent);
+  reshade::register_event<reshade::addon_event::reshade_finish_effects>(OnFinishEffects);
   reshade::register_overlay("ReShade DLSSNR", DrawSettings);
 
   HMODULE nvngx_dlss = GetModuleHandleW(L"nvngx_dlss.dll");
@@ -122,7 +122,7 @@ void Detach() {
   if (!g_initialized) return;
 
   reshade::unregister_overlay("ReShade DLSSNR", DrawSettings);
-  reshade::unregister_event<reshade::addon_event::present>(OnPresent);
+  reshade::unregister_event<reshade::addon_event::reshade_finish_effects>(OnFinishEffects);
   reshade::unregister_event<reshade::addon_event::init_device>(OnInitDevice);
 
   reshade_dlssnr::DlssNrDirect::Get().Shutdown();
