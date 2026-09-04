@@ -88,6 +88,39 @@ bool OnBeginRenderPass(
   return false;
 }
 
+void OnBindRenderTargets(
+    reshade::api::command_list* command_list,
+    uint32_t count,
+    const reshade::api::resource_view* render_targets,
+    reshade::api::resource_view) {
+  if (command_list == nullptr || count == 0 || render_targets == nullptr) return;
+
+  reshade::api::device* const device = command_list->get_device();
+  if (device == nullptr || device->get_api() != reshade::api::device_api::d3d12) return;
+
+  const reshade::api::resource target_resource =
+      device->get_resource_from_view(render_targets[0]);
+
+  if (target_resource == 0) return;
+
+  const reshade::api::resource_desc desc = device->get_resource_desc(target_resource);
+
+  RenderPassInfo info;
+  info.index = g_current_pass_index++;
+  info.width = desc.texture.width;
+  info.height = desc.texture.height;
+  info.format = static_cast<uint32_t>(desc.texture.format);
+
+  if (g_has_backbuffer_desc) {
+    info.is_backbuffer_size =
+        info.width == g_backbuffer_desc.texture.width &&
+        info.height == g_backbuffer_desc.texture.height;
+  }
+
+  std::lock_guard<std::mutex> lock(g_pass_mutex);
+  g_render_passes.push_back(info);
+}
+
 void OnPresent(
     reshade::api::command_queue* command_queue,
     reshade::api::swapchain* swapchain,
@@ -211,6 +244,7 @@ void Attach(HMODULE module) {
 
   reshade::register_event<reshade::addon_event::init_device>(OnInitDevice);
   reshade::register_event<reshade::addon_event::begin_render_pass>(OnBeginRenderPass);
+  reshade::register_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(OnBindRenderTargets);
   reshade::register_event<reshade::addon_event::present>(OnPresent);
   reshade::register_overlay("ReShade DLSSNR", DrawSettings);
 
@@ -238,6 +272,7 @@ void Detach() {
   reshade::unregister_overlay("ReShade DLSSNR", DrawSettings);
   reshade::unregister_event<reshade::addon_event::present>(OnPresent);
   reshade::unregister_event<reshade::addon_event::begin_render_pass>(OnBeginRenderPass);
+  reshade::unregister_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(OnBindRenderTargets);
   reshade::unregister_event<reshade::addon_event::init_device>(OnInitDevice);
 
   reshade_dlssnr::DlssNrDirect::Get().Shutdown();
