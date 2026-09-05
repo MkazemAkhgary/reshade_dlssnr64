@@ -335,6 +335,24 @@ void DlssGuides::ReleaseRetiredResources() {
   retired_resources_.clear();
 }
 
+void DlssGuides::RetireGameResource(ID3D12Resource* resource) {
+  if (resource == nullptr) return;
+  std::lock_guard<std::mutex> lock(lock_);
+  retired_game_resources_.push_back(resource);
+}
+
+void DlssGuides::ReleaseRetiredGameResources() {
+  std::lock_guard<std::mutex> lock(lock_);
+
+  for (ID3D12Resource* resource : retired_game_resources_) {
+    if (resource != nullptr) {
+      resource->Release();
+    }
+  }
+
+  retired_game_resources_.clear();
+}
+
 void DlssGuides::Clear() {
   std::lock_guard<std::mutex> lock(lock_);
 

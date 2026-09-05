@@ -42,6 +42,8 @@ class DlssGuides {
 
   DlssGuideState GetState() const;
   void ReleaseRetiredResources();
+  void RetireGameResource(ID3D12Resource* resource);
+  void ReleaseRetiredGameResources();
   void Clear();
 
  private:
@@ -78,6 +80,7 @@ class DlssGuides {
   bool has_selected_pass_handle_ = false;
 
   std::vector<ID3D12Resource*> retired_resources_;
+  std::vector<ID3D12Resource*> retired_game_resources_;
 
   DlssGuideState state_;
 
