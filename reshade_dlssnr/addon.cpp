@@ -46,7 +46,7 @@ bool g_has_backbuffer_native_handle = false;
 uint64_t g_selected_pass_target_handle = 0;
 bool g_has_selected_pass_target = false;
 
-std::unordered_map<reshade::api::command_list*, ID3D12Resource*> g_pending_selected_resource;
+std::unordered_map<reshade::api::command_list*, uint64_t> g_pending_selected_target;
 
 void PinAddonModule() {
   static bool pinned = false;
@@ -132,24 +132,10 @@ void OnBindRenderTargets(
   if (target_resource == 0) return;
 
   // The selected pass from the previous bind has now been rendered by the
-  // time the game records a new bind on this command list. Capture it here.
-  if (g_has_selected_pass_target) {
-    auto pending_it = g_pending_selected_resource.find(command_list);
-    if (pending_it != g_pending_selected_resource.end() && pending_it->second != nullptr) {
-      ID3D12Resource* pending_resource = pending_it->second;
-      auto* native_command_list = reinterpret_cast<ID3D12GraphicsCommandList*>(command_list->get_native());
-
-      if (native_command_list != nullptr) {
-        reshade_dlssnr::DlssGuides::Get().CaptureSelectedPassIfNeeded(
-            native_command_list,
-            pending_resource);
-      }
-
-      reshade_dlssnr::DlssGuides::Get().RetireGameResource(pending_resource);
-    }
-
-    g_pending_selected_resource.erase(command_list);
-  }
+  // time the game records a new bind on this command list. However, we now
+  // capture at close_command_list to ensure the pass is fully recorded and
+  // the resource is still in the same valid command-list scope.
+  // No action is needed here.
 
   const reshade::api::resource_desc desc = device->get_resource_desc(target_resource);
 
@@ -179,12 +165,7 @@ void OnBindRenderTargets(
 
   if (g_has_selected_pass_target &&
       info.target_handle == g_selected_pass_target_handle) {
-    auto* native_target = reinterpret_cast<ID3D12Resource*>(target_resource.handle);
-
-    if (native_target != nullptr) {
-      native_target->AddRef();
-      g_pending_selected_resource[command_list] = native_target;
-    }
+    g_pending_selected_target[command_list] = target_resource.handle;
   }
 }
 
@@ -194,25 +175,25 @@ void OnCloseCommandList(reshade::api::command_list* command_list) {
   reshade::api::device* const device = command_list->get_device();
   if (device == nullptr || device->get_api() != reshade::api::device_api::d3d12) return;
 
-  auto pending_it = g_pending_selected_resource.find(command_list);
-  if (pending_it == g_pending_selected_resource.end()) return;
+  auto pending_it = g_pending_selected_target.find(command_list);
+  if (pending_it == g_pending_selected_target.end()) return;
 
-  ID3D12Resource* pending_resource = pending_it->second;
-  if (pending_resource == nullptr) {
-    g_pending_selected_resource.erase(pending_it);
+  const uint64_t pending_handle = pending_it->second;
+  if (pending_handle == 0) {
+    g_pending_selected_target.erase(pending_it);
     return;
   }
 
   auto* native_command_list = reinterpret_cast<ID3D12GraphicsCommandList*>(command_list->get_native());
+  auto* pending_resource = reinterpret_cast<ID3D12Resource*>(pending_handle);
 
-  if (native_command_list != nullptr) {
+  if (native_command_list != nullptr && pending_resource != nullptr) {
     reshade_dlssnr::DlssGuides::Get().CaptureSelectedPassIfNeeded(
         native_command_list,
         pending_resource);
   }
 
-  reshade_dlssnr::DlssGuides::Get().RetireGameResource(pending_resource);
-  g_pending_selected_resource.erase(pending_it);
+  g_pending_selected_target.erase(pending_it);
 }
 
 void OnBindViewports(
@@ -312,17 +293,9 @@ void OnPresent(
     g_current_pass_index = 0;
   }
 
-  // Retire any pending selected-resource references that weren't captured.
-  // Our DLSSNR present path has already called WaitGpu(), so releasing retired
-  // resources from previous frames is safe now.
-  for (auto& [cmd, resource] : g_pending_selected_resource) {
-    if (resource != nullptr) {
-      reshade_dlssnr::DlssGuides::Get().RetireGameResource(resource);
-    }
-  }
-
-  g_pending_selected_resource.clear();
-  reshade_dlssnr::DlssGuides::Get().ReleaseRetiredGameResources();
+  // Clear pending selected target map for next frame. No resource references
+  // are owned here, so this is safe and avoids stale entries.
+  g_pending_selected_target.clear();
 }
 
 void DrawSettings(reshade::api::effect_runtime*) {
