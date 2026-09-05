@@ -508,14 +508,17 @@ void DlssNrDirect::OnPresent(
 
   const DlssGuideState guides = DlssGuides::Get().GetState();
 
-  ID3D12Resource* model_input = backbuffer;
-  ID3D12Resource* pre_ui_source = guides.pre_ui_color;
+  const bool use_selected_input =
+      settings.use_selected_pass_as_input &&
+      guides.selected_pass_color != nullptr;
 
-  if (settings.use_selected_pass_as_input &&
-      guides.selected_pass_color != nullptr) {
-    model_input = guides.selected_pass_color;
-    pre_ui_source = guides.selected_pass_color;
-  }
+  ID3D12Resource* model_input = use_selected_input
+                                    ? guides.selected_pass_color
+                                    : backbuffer;
+
+  ID3D12Resource* pre_ui_source = use_selected_input
+                                      ? guides.selected_pass_color
+                                      : guides.pre_ui_color;
 
   if (debug_codec_ == nullptr) {
     debug_codec_ = std::make_unique<DlssNrCodec>();
@@ -656,7 +659,8 @@ void DlssNrDirect::OnPresent(
 
   bool ui_mask_generated = false;
 
-  if (guides.valid && pre_ui_source != nullptr && ui_mask_ != nullptr) {
+  if (use_selected_input && guides.valid &&
+      pre_ui_source != nullptr && ui_mask_ != nullptr) {
     if (!debug_codec_->InitMaskShader(device)) {
       failed_ = true;
       reason_ = "failed to initialize UI mask shader";
