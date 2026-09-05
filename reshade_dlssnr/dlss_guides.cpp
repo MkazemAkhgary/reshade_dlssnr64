@@ -375,7 +375,8 @@ void DlssGuides::Clear() {
   RetireResource(pre_ui_clone_);
   RetireResource(selected_pass_clone_);
 
-  ReleaseRetiredResources();
+  ReleaseRetiredResourcesLocked();
+  ReleaseRetiredGameResourcesLocked();
 
   selected_pass_clone_ = nullptr;
 
