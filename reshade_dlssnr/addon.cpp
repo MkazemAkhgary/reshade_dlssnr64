@@ -130,12 +130,6 @@ void OnBindRenderTargets(
 
   if (target_resource == 0) return;
 
-  // The selected pass from the previous bind has now been rendered by the
-  // time the game records a new bind on this command list. However, we now
-  // capture at close_command_list to ensure the pass is fully recorded and
-  // the resource is still in the same valid command-list scope.
-  // No action is needed here.
-
   const reshade::api::resource_desc desc = device->get_resource_desc(target_resource);
 
   RenderPassInfo info;
@@ -164,12 +158,6 @@ void OnBindRenderTargets(
 
   if (g_has_selected_pass_target &&
       info.target_handle == g_selected_pass_target_handle) {
-    g_pending_selected_target[command_list] = target_resource.handle;
-  }
-}
-
-  if (g_has_selected_pass_target &&
-      info.target_handle == g_selected_pass_target_handle) {
     auto* native_target = reinterpret_cast<ID3D12Resource*>(target_resource.handle);
 
     if (native_target != nullptr) {
@@ -177,6 +165,7 @@ void OnBindRenderTargets(
       reshade_dlssnr::DlssNrDirect::Get().SetPendingSelectedPass(native_target);
     }
   }
+}
 
 void OnBindViewports(
     reshade::api::command_list* command_list,
