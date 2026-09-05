@@ -53,6 +53,7 @@ class DlssNrDirect {
       IDXGISwapChain* swapchain);
 
   void SetDebugSelectedResource(uint64_t handle);
+  void SetPendingSelectedPass(ID3D12Resource* resource);
 
   void Shutdown();
 
@@ -118,6 +119,7 @@ class DlssNrDirect {
   std::unique_ptr<DlssNrCodec> debug_codec_;
 
   uint64_t debug_selected_resource_handle_ = 0;
+  ID3D12Resource* pending_selected_pass_ = nullptr;
 };
 
 }  // namespace reshade_dlssnr

@@ -153,6 +153,10 @@ void DlssNrDirect::SetDebugSelectedResource(uint64_t handle) {
   debug_selected_resource_handle_ = handle;
 }
 
+void DlssNrDirect::SetPendingSelectedPass(ID3D12Resource* resource) {
+  pending_selected_pass_ = resource;
+}
+
 bool DlssNrDirect::IsReady() const {
   return feature_handle_ != nullptr && !failed_;
 }
@@ -335,6 +339,8 @@ void DlssNrDirect::WaitGpu() {
     fence_->SetEventOnCompletion(value, fence_event_);
     WaitForSingleObject(fence_event_, INFINITE);
   }
+
+  DlssGuides::Get().ReleaseRetiredGameResources();
 }
 
 void DlssNrDirect::OnPresent(
@@ -481,6 +487,15 @@ void DlssNrDirect::OnPresent(
 
   command_allocator_->Reset();
   command_list_->Reset(command_allocator_, nullptr);
+
+  if (pending_selected_pass_ != nullptr) {
+    DlssGuides::Get().CaptureSelectedPassIfNeeded(
+        command_list_,
+        pending_selected_pass_);
+
+    DlssGuides::Get().RetireGameResource(pending_selected_pass_);
+    pending_selected_pass_ = nullptr;
+  }
 
   if (feature_handle_ == nullptr) {
     if (!EnsureFeature(command_list_, width, height)) {
@@ -877,6 +892,7 @@ void DlssNrDirect::Shutdown() {
   output_width_ = 0;
   output_height_ = 0;
   first_evaluate_ = true;
+  pending_selected_pass_ = nullptr;
   failed_ = false;
   reason_ = "";
 }
