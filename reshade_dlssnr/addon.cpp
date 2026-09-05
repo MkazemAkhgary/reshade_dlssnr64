@@ -46,7 +46,6 @@ bool g_has_backbuffer_native_handle = false;
 uint64_t g_selected_pass_target_handle = 0;
 bool g_has_selected_pass_target = false;
 
-std::unordered_map<reshade::api::command_list*, uint64_t> g_pending_selected_target;
 
 void PinAddonModule() {
   static bool pinned = false;
@@ -169,32 +168,15 @@ void OnBindRenderTargets(
   }
 }
 
-void OnCloseCommandList(reshade::api::command_list* command_list) {
-  if (command_list == nullptr) return;
+  if (g_has_selected_pass_target &&
+      info.target_handle == g_selected_pass_target_handle) {
+    auto* native_target = reinterpret_cast<ID3D12Resource*>(target_resource.handle);
 
-  reshade::api::device* const device = command_list->get_device();
-  if (device == nullptr || device->get_api() != reshade::api::device_api::d3d12) return;
-
-  auto pending_it = g_pending_selected_target.find(command_list);
-  if (pending_it == g_pending_selected_target.end()) return;
-
-  const uint64_t pending_handle = pending_it->second;
-  if (pending_handle == 0) {
-    g_pending_selected_target.erase(pending_it);
-    return;
+    if (native_target != nullptr) {
+      native_target->AddRef();
+      reshade_dlssnr::DlssNrDirect::Get().SetPendingSelectedPass(native_target);
+    }
   }
-
-  auto* native_command_list = reinterpret_cast<ID3D12GraphicsCommandList*>(command_list->get_native());
-  auto* pending_resource = reinterpret_cast<ID3D12Resource*>(pending_handle);
-
-  if (native_command_list != nullptr && pending_resource != nullptr) {
-    reshade_dlssnr::DlssGuides::Get().CaptureSelectedPassIfNeeded(
-        native_command_list,
-        pending_resource);
-  }
-
-  g_pending_selected_target.erase(pending_it);
-}
 
 void OnBindViewports(
     reshade::api::command_list* command_list,
@@ -293,9 +275,6 @@ void OnPresent(
     g_current_pass_index = 0;
   }
 
-  // Clear pending selected target map for next frame. No resource references
-  // are owned here, so this is safe and avoids stale entries.
-  g_pending_selected_target.clear();
 }
 
 void DrawSettings(reshade::api::effect_runtime*) {
@@ -459,7 +438,6 @@ void Attach(HMODULE module) {
   reshade::register_event<reshade::addon_event::bind_viewports>(OnBindViewports);
   reshade::register_event<reshade::addon_event::draw>(OnDraw);
   reshade::register_event<reshade::addon_event::draw_indexed>(OnDrawIndexed);
-  reshade::register_event<reshade::addon_event::close_command_list>(OnCloseCommandList);
   reshade::register_event<reshade::addon_event::present>(OnPresent);
   reshade::register_overlay("ReShade DLSSNR", DrawSettings);
 
@@ -488,7 +466,6 @@ void Detach() {
   reshade::unregister_event<reshade::addon_event::present>(OnPresent);
   reshade::unregister_event<reshade::addon_event::draw>(OnDraw);
   reshade::unregister_event<reshade::addon_event::draw_indexed>(OnDrawIndexed);
-  reshade::unregister_event<reshade::addon_event::close_command_list>(OnCloseCommandList);
   reshade::unregister_event<reshade::addon_event::bind_viewports>(OnBindViewports);
   reshade::unregister_event<reshade::addon_event::begin_render_pass>(OnBeginRenderPass);
   reshade::unregister_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(OnBindRenderTargets);

@@ -154,6 +154,12 @@ void DlssNrDirect::SetDebugSelectedResource(uint64_t handle) {
 }
 
 void DlssNrDirect::SetPendingSelectedPass(ID3D12Resource* resource) {
+  std::lock_guard<std::mutex> lock(g_direct_mutex);
+
+  if (pending_selected_pass_ != nullptr) {
+    DlssGuides::Get().RetireGameResource(pending_selected_pass_);
+  }
+
   pending_selected_pass_ = resource;
 }
 
@@ -892,7 +898,12 @@ void DlssNrDirect::Shutdown() {
   output_width_ = 0;
   output_height_ = 0;
   first_evaluate_ = true;
-  pending_selected_pass_ = nullptr;
+
+  if (pending_selected_pass_ != nullptr) {
+    DlssGuides::Get().RetireGameResource(pending_selected_pass_);
+    pending_selected_pass_ = nullptr;
+  }
+
   failed_ = false;
   reason_ = "";
 }
