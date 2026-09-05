@@ -47,6 +47,10 @@ class DlssGuides {
   void Clear();
 
  private:
+  void ReleaseRetiredResourcesLocked();
+  void ReleaseRetiredGameResourcesLocked();
+
+ private:
   DlssGuides() = default;
   ~DlssGuides() = default;
 
