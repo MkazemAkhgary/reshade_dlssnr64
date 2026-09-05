@@ -94,6 +94,13 @@ class DlssNrDirect {
   NVSDK_NGX_Handle* feature_handle_ = nullptr;
   unsigned int built_width_ = 0;
   unsigned int built_height_ = 0;
+  unsigned int built_preset_ = 0xFFFFFFFFu;
+  unsigned int built_style_ = 0xFFFFFFFFu;
+  float built_intensity_ = -1.0f;
+  float built_local_structure_ = -1.0f;
+  float built_local_tone_ = -1.0f;
+  float built_skin_structure_ = -1.0f;
+  bool built_auto_mask_ = false;
 
   ID3D12Resource* output_ = nullptr;
   unsigned int output_width_ = 0;

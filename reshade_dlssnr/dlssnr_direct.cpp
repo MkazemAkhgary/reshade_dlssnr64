@@ -227,7 +227,21 @@ bool DlssNrDirect::EnsureFeature(
     ID3D12GraphicsCommandList* command_list,
     unsigned int width,
     unsigned int height) {
-  if (feature_handle_ != nullptr && built_width_ == width && built_height_ == height) {
+  const Settings& settings = GetSettings();
+
+  const unsigned int preset_value = static_cast<unsigned int>(settings.preset);
+  const unsigned int style_value = static_cast<unsigned int>(settings.style);
+  const bool tuning_changed =
+      built_preset_ != preset_value ||
+      built_style_ != style_value ||
+      built_intensity_ != settings.intensity ||
+      built_local_structure_ != settings.local_structure ||
+      built_local_tone_ != settings.local_tone ||
+      built_skin_structure_ != settings.skin_structure ||
+      built_auto_mask_ != settings.auto_mask;
+
+  if (feature_handle_ != nullptr && built_width_ == width && built_height_ == height &&
+      !tuning_changed) {
     return true;
   }
 
@@ -237,16 +251,14 @@ bool DlssNrDirect::EnsureFeature(
     first_evaluate_ = true;
   }
 
-  const Settings& settings = GetSettings();
-
   SimpleParams create_params;
   create_params.Set("DLSSNR.Width", width);
   create_params.Set("DLSSNR.Height", height);
   create_params.Set("DLSSNR.ScalingRatio", 1.0f);
-  create_params.Set("DLSSNR.Hint.Render.Preset", settings.preset);
-  create_params.Set(NVSDK_NGX_Parameter_PerfQualityValue, 2);
+  create_params.Set("DLSSNR.Hint.Render.Preset", preset_value);
+  create_params.Set(NVSDK_NGX_Parameter_PerfQualityValue, 2u);
   create_params.Set("DLSSNR.Intensity", settings.intensity);
-  create_params.Set("DLSSNR.Style", settings.style);
+  create_params.Set("DLSSNR.Style", style_value);
   create_params.Set("DLSSNR.LocalStructureStrength", settings.local_structure);
   create_params.Set("DLSSNR.LocalToneStrength", settings.local_tone);
   create_params.Set("DLSSNR.SkinStructureStrength", settings.skin_structure);
@@ -271,6 +283,13 @@ bool DlssNrDirect::EnsureFeature(
 
   built_width_ = width;
   built_height_ = height;
+  built_preset_ = preset_value;
+  built_style_ = style_value;
+  built_intensity_ = settings.intensity;
+  built_local_structure_ = settings.local_structure;
+  built_local_tone_ = settings.local_tone;
+  built_skin_structure_ = settings.skin_structure;
+  built_auto_mask_ = settings.auto_mask;
 
   std::string msg = "Direct DLSSNR feature created at ";
   msg += std::to_string(width) + "x" + std::to_string(height);
@@ -716,9 +735,9 @@ void DlssNrDirect::OnPresent(
   eval_params.Set("DLSSNR.Enabled", 1u);
   eval_params.Set("DLSSNR.Width", width);
   eval_params.Set("DLSSNR.Height", height);
-  eval_params.Set("DLSSNR.Hint.Render.Preset", settings.preset);
+  eval_params.Set("DLSSNR.Hint.Render.Preset", static_cast<unsigned int>(settings.preset));
   eval_params.Set("DLSSNR.Intensity", settings.intensity);
-  eval_params.Set("DLSSNR.Style", settings.style);
+  eval_params.Set("DLSSNR.Style", static_cast<unsigned int>(settings.style));
   eval_params.Set("DLSSNR.LocalStructureStrength", settings.local_structure);
   eval_params.Set("DLSSNR.LocalToneStrength", settings.local_tone);
   eval_params.Set("DLSSNR.SkinStructureStrength", settings.skin_structure);
