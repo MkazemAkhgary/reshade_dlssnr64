@@ -32,6 +32,7 @@ struct Settings {
 
   bool passthrough_tone_mapped = false;
   bool use_selected_pass_as_input = false;
+  float ui_mask_threshold = 0.02f;
 };
 
 Settings& GetSettings();

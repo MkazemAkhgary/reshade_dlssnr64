@@ -235,11 +235,13 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     // understate thin colored UI and leave it translucent.
     float diff = max(diff3.r, max(diff3.g, diff3.b));
 
-    // Soft binary threshold. The lower bound is raised enough to ignore
-    // sub-perceptual differences between the clean pass and the final
-    // backbuffer (temporal noise, tiny bit-depth differences) while still
-    // keeping high-contrast UI/HUD pixels fully opaque.
-    float mask = smoothstep(0.02, 0.08, diff);
+    // Soft binary threshold controlled by gMaxRatio.
+    // Lower bound = gMaxRatio, upper bound = gMaxRatio + 0.06.
+    // This allows the user to tune out temporal/bit-depth noise while keeping
+    // high-contrast UI/HUD pixels opaque.
+    float lower = gMaxRatio;
+    float upper = lower + 0.06;
+    float mask = smoothstep(lower, upper, diff);
     gMask[id.xy] = float4(mask, mask, mask, 1.0);
 }
 )";

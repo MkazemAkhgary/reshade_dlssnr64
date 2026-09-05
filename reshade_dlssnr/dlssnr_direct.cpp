@@ -632,6 +632,7 @@ void DlssNrDirect::OnPresent(
     mask_constants.Width = width;
     mask_constants.Height = height;
     mask_constants.Passthrough = 1u;
+    mask_constants.MaxRatio = settings.ui_mask_threshold;
 
     debug_codec_->DispatchMask(
         command_list_,
@@ -676,6 +677,7 @@ void DlssNrDirect::OnPresent(
     mask_constants.Width = width;
     mask_constants.Height = height;
     mask_constants.Passthrough = 1u;
+    mask_constants.MaxRatio = settings.ui_mask_threshold;
 
     debug_codec_->DispatchMask(
         command_list_,
