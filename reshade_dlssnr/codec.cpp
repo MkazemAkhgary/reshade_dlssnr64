@@ -235,10 +235,11 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     // understate thin colored UI and leave it translucent.
     float diff = max(diff3.r, max(diff3.g, diff3.b));
 
-    // Soft binary threshold: near zero inside the clean pass, near one for any
-    // UI/post-processing-only change. The soft edge prevents hard aliasing but
-    // keeps the mask effectively opaque where UI exists.
-    float mask = smoothstep(0.002, 0.02, diff);
+    // Soft binary threshold. The lower bound is raised enough to ignore
+    // sub-perceptual differences between the clean pass and the final
+    // backbuffer (temporal noise, tiny bit-depth differences) while still
+    // keeping high-contrast UI/HUD pixels fully opaque.
+    float mask = smoothstep(0.02, 0.08, diff);
     gMask[id.xy] = float4(mask, mask, mask, 1.0);
 }
 )";
