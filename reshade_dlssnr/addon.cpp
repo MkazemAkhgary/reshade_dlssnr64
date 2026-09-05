@@ -287,13 +287,8 @@ void DrawSettings(reshade::api::effect_runtime*) {
   ImGui::Separator();
 
   {
-    static const char* preset_names[] = {"Default", "Model A", "Model B", "Model C"};
-    changed |= ImGui::Combo("Preset", &settings.preset, preset_names, IM_ARRAYSIZE(preset_names));
-  }
-
-  {
-    static const char* style_names[] = {"Default (standard)", "Natural", "Cinematic"};
-    changed |= ImGui::Combo("Style", &settings.style, style_names, IM_ARRAYSIZE(style_names));
+    static const char* model_names[] = {"Model A", "Model B", "Model C"};
+    changed |= ImGui::Combo("Model", &settings.preset, model_names, IM_ARRAYSIZE(model_names));
   }
 
   changed |= ImGui::SliderFloat("Local Structure", &settings.local_structure, 0.0f, 2.0f, "%.2f");

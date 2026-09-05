@@ -17,7 +17,7 @@ struct Settings {
   float mv_scale_x = 1.0f;
   float mv_scale_y = 1.0f;
 
-  int preset = 2;
+  int preset = 1;
   int style = 1;
   float local_structure = 0.0f;
   float local_tone = 0.0f;
