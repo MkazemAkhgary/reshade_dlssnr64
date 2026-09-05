@@ -188,6 +188,33 @@ void OnBindRenderTargets(
   }
 }
 
+void OnCloseCommandList(reshade::api::command_list* command_list) {
+  if (command_list == nullptr) return;
+
+  reshade::api::device* const device = command_list->get_device();
+  if (device == nullptr || device->get_api() != reshade::api::device_api::d3d12) return;
+
+  auto pending_it = g_pending_selected_resource.find(command_list);
+  if (pending_it == g_pending_selected_resource.end()) return;
+
+  ID3D12Resource* pending_resource = pending_it->second;
+  if (pending_resource == nullptr) {
+    g_pending_selected_resource.erase(pending_it);
+    return;
+  }
+
+  auto* native_command_list = reinterpret_cast<ID3D12GraphicsCommandList*>(command_list->get_native());
+
+  if (native_command_list != nullptr) {
+    reshade_dlssnr::DlssGuides::Get().CaptureSelectedPassIfNeeded(
+        native_command_list,
+        pending_resource);
+  }
+
+  reshade_dlssnr::DlssGuides::Get().RetireGameResource(pending_resource);
+  g_pending_selected_resource.erase(pending_it);
+}
+
 void OnBindViewports(
     reshade::api::command_list* command_list,
     uint32_t first,
@@ -459,6 +486,7 @@ void Attach(HMODULE module) {
   reshade::register_event<reshade::addon_event::bind_viewports>(OnBindViewports);
   reshade::register_event<reshade::addon_event::draw>(OnDraw);
   reshade::register_event<reshade::addon_event::draw_indexed>(OnDrawIndexed);
+  reshade::register_event<reshade::addon_event::close_command_list>(OnCloseCommandList);
   reshade::register_event<reshade::addon_event::present>(OnPresent);
   reshade::register_overlay("ReShade DLSSNR", DrawSettings);
 
@@ -487,6 +515,7 @@ void Detach() {
   reshade::unregister_event<reshade::addon_event::present>(OnPresent);
   reshade::unregister_event<reshade::addon_event::draw>(OnDraw);
   reshade::unregister_event<reshade::addon_event::draw_indexed>(OnDrawIndexed);
+  reshade::unregister_event<reshade::addon_event::close_command_list>(OnCloseCommandList);
   reshade::unregister_event<reshade::addon_event::bind_viewports>(OnBindViewports);
   reshade::unregister_event<reshade::addon_event::begin_render_pass>(OnBeginRenderPass);
   reshade::unregister_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(OnBindRenderTargets);
