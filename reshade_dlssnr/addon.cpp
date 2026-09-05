@@ -323,6 +323,14 @@ void DrawSettings(reshade::api::effect_runtime*) {
         "Selected Pass Resource",
     };
     changed |= ImGui::Combo("Debug View", &settings.debug_view, debug_names, IM_ARRAYSIZE(debug_names));
+
+    if (settings.debug_view == 4) {
+      if (settings.use_selected_pass_as_input) {
+        ImGui::TextUnformatted("UI Mask: composited manually after model.");
+      } else {
+        ImGui::TextUnformatted("UI Mask: passed to model.");
+      }
+    }
   }
 
   ImGui::Separator();

@@ -516,9 +516,9 @@ void DlssNrDirect::OnPresent(
                                     ? guides.selected_pass_color
                                     : backbuffer;
 
-  ID3D12Resource* pre_ui_source = use_selected_input
-                                      ? guides.selected_pass_color
-                                      : guides.pre_ui_color;
+  // The UI mask is always generated from the selected clean pass when one is
+  // available. Without a selected pass, no UI mask is used at all.
+  ID3D12Resource* pre_ui_source = guides.selected_pass_color;
 
   if (debug_codec_ == nullptr) {
     debug_codec_ = std::make_unique<DlssNrCodec>();
@@ -659,8 +659,7 @@ void DlssNrDirect::OnPresent(
 
   bool ui_mask_generated = false;
 
-  if (use_selected_input && guides.valid &&
-      pre_ui_source != nullptr && ui_mask_ != nullptr) {
+  if (guides.valid && pre_ui_source != nullptr && ui_mask_ != nullptr) {
     if (!debug_codec_->InitMaskShader(device)) {
       failed_ = true;
       reason_ = "failed to initialize UI mask shader";
@@ -703,7 +702,7 @@ void DlssNrDirect::OnPresent(
   eval_params.Set("DLSSNR.GlobalToneStrength", 1.0f);
   eval_params.Set("DLSSNR.UseAutoMask", settings.auto_mask ? 1u : 0u);
 
-  if (ui_mask_generated && ui_mask_ != nullptr) {
+  if (ui_mask_generated && !use_selected_input && ui_mask_ != nullptr) {
     eval_params.Set("DLSSNR.UIAlpha", ui_mask_);
     eval_params.Set("DLSSNR.Backbuffer", backbuffer);
   }
@@ -747,7 +746,8 @@ void DlssNrDirect::OnPresent(
     Barrier(command_list_, ui_mask_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   }
 
-  if (ui_mask_generated && ui_mask_ != nullptr && composite_output_ != nullptr) {
+  if (use_selected_input && ui_mask_generated &&
+      ui_mask_ != nullptr && composite_output_ != nullptr) {
     if (!debug_codec_->InitCompositeShader(device)) {
       failed_ = true;
       reason_ = "failed to initialize UI composite shader";
