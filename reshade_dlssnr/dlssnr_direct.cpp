@@ -1203,12 +1203,25 @@ void DlssNrDirect::Shutdown() {
     composite_output_ = nullptr;
   }
 
+  if (working_input_ != nullptr) {
+    working_input_->Release();
+    working_input_ = nullptr;
+  }
+
+  if (working_output_ != nullptr) {
+    working_output_->Release();
+    working_output_ = nullptr;
+  }
+
   ui_mask_width_ = 0;
   ui_mask_height_ = 0;
   ui_mask_format_ = DXGI_FORMAT_UNKNOWN;
   composite_output_width_ = 0;
   composite_output_height_ = 0;
   composite_output_format_ = DXGI_FORMAT_UNKNOWN;
+  working_resource_width_ = 0;
+  working_resource_height_ = 0;
+  working_resource_format_ = DXGI_FORMAT_UNKNOWN;
 
   if (fence_event_ != INVALID_HANDLE_VALUE) {
     CloseHandle(fence_event_);
@@ -1234,6 +1247,7 @@ void DlssNrDirect::Shutdown() {
   fence_value_ = 0;
   built_width_ = 0;
   built_height_ = 0;
+  built_working_scale_ = -1.0f;
   built_preset_ = 0xFFFFFFFFu;
   built_intensity_ = -1.0f;
   built_local_structure_ = -1.0f;
