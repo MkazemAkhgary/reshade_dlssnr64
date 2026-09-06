@@ -1059,8 +1059,8 @@ void DlssNrDirect::OnPresent(
 
       DlssNrConstants residual_constants = {};
       residual_constants.Mode = DlssNrMode_Resolve;
-      residual_constants.Width = work_width;
-      residual_constants.Height = work_height;
+      residual_constants.Width = width;
+      residual_constants.Height = height;
       residual_constants.LumaStrength = 1.0f;
       residual_constants.ChromaStrength = 1.0f;
 
