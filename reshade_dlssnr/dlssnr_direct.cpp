@@ -501,6 +501,14 @@ void DlssNrDirect::OnPresent(
   const unsigned int width = static_cast<unsigned int>(desc.Width);
   const unsigned int height = static_cast<unsigned int>(desc.Height);
 
+  const float working_scale = std::clamp(settings.working_scale, 0.25f, 1.0f);
+  const unsigned int work_width =
+      std::max(1u, static_cast<unsigned int>(width * working_scale + 0.5f));
+  const unsigned int work_height =
+      std::max(1u, static_cast<unsigned int>(height * working_scale + 0.5f));
+  const bool use_working_scale =
+      work_width != width || work_height != height;
+
   if (output_ == nullptr || output_width_ != width || output_height_ != height ||
       output_->GetDesc().Format != desc.Format) {
     if (output_ != nullptr) {
@@ -599,6 +607,74 @@ void DlssNrDirect::OnPresent(
     composite_output_width_ = width;
     composite_output_height_ = height;
     composite_output_format_ = desc.Format;
+  }
+
+  if (use_working_scale &&
+      (working_input_ == nullptr ||
+       working_resource_width_ != work_width ||
+       working_resource_height_ != work_height ||
+       working_resource_format_ != desc.Format)) {
+    if (working_input_ != nullptr) {
+      working_input_->Release();
+      working_input_ = nullptr;
+    }
+    if (working_output_ != nullptr) {
+      working_output_->Release();
+      working_output_ = nullptr;
+    }
+
+    D3D12_HEAP_PROPERTIES working_heap = {};
+    working_heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+    D3D12_RESOURCE_DESC working_desc = desc;
+    working_desc.Width = work_width;
+    working_desc.Height = work_height;
+    working_desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+    if (FAILED(device->CreateCommittedResource(
+            &working_heap,
+            D3D12_HEAP_FLAG_NONE,
+            &working_desc,
+            D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+            nullptr,
+            IID_PPV_ARGS(&working_input_)))) {
+      failed_ = true;
+      reason_ = "failed to create DLSSNR working input texture";
+      backbuffer->Release();
+      swapchain3->Release();
+      device->Release();
+      return;
+    }
+
+    if (FAILED(device->CreateCommittedResource(
+            &working_heap,
+            D3D12_HEAP_FLAG_NONE,
+            &working_desc,
+            D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+            nullptr,
+            IID_PPV_ARGS(&working_output_)))) {
+      failed_ = true;
+      reason_ = "failed to create DLSSNR working output texture";
+      working_input_->Release();
+      working_input_ = nullptr;
+      backbuffer->Release();
+      swapchain3->Release();
+      device->Release();
+      return;
+    }
+
+    working_resource_width_ = work_width;
+    working_resource_height_ = work_height;
+    working_resource_format_ = desc.Format;
+  }
+
+  if (feature_handle_ != nullptr &&
+      (built_width_ != work_width ||
+       built_height_ != work_height ||
+       built_working_scale_ != working_scale)) {
+    release_feature_(feature_handle_);
+    feature_handle_ = nullptr;
+    first_evaluate_ = true;
   }
 
   command_allocator_->Reset();
