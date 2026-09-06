@@ -421,10 +421,10 @@ void DrawSettings(reshade::api::effect_runtime*) {
   changed |= ImGui::SliderFloat("##Luma Strength", &settings.luma_strength, 0.0f, 1.0f, "%.2f");
 
   ImGui::AlignTextToFramePadding();
-  ImGui::TextUnformatted("Color Strength");
+  ImGui::TextUnformatted("Chroma Strength");
   ImGui::SameLine(kControlLabelWidth);
   ImGui::SetNextItemWidth(-1.0f);
-  changed |= ImGui::SliderFloat("##Color Strength", &settings.color_strength, 0.0f, 1.0f, "%.2f");
+  changed |= ImGui::SliderFloat("##Chroma Strength", &settings.chroma_strength, 0.0f, 1.0f, "%.2f");
 
   ImGui::Separator();
 

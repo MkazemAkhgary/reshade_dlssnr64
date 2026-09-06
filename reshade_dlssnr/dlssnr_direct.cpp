@@ -913,7 +913,7 @@ void DlssNrDirect::OnPresent(
     composite_constants.Height = height;
     composite_constants.Passthrough = 1u;
     composite_constants.LumaStrength = settings.luma_strength;
-    composite_constants.ColorStrength = settings.color_strength;
+    composite_constants.ChromaStrength = settings.chroma_strength;
 
     Barrier(command_list_, output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -934,7 +934,7 @@ void DlssNrDirect::OnPresent(
     Barrier(command_list_, composite_output_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     Barrier(command_list_, ui_mask_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     Barrier(command_list_, output_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  } else if ((settings.luma_strength != 1.0f || settings.color_strength != 1.0f) &&
+  } else if ((settings.luma_strength != 1.0f || settings.chroma_strength != 1.0f) &&
              composite_output_ != nullptr) {
     if (!debug_codec_->InitLumaColorShader(device)) {
       failed_ = true;
@@ -953,7 +953,7 @@ void DlssNrDirect::OnPresent(
     luma_color_constants.Height = height;
     luma_color_constants.Passthrough = 1u;
     luma_color_constants.LumaStrength = settings.luma_strength;
-    luma_color_constants.ColorStrength = settings.color_strength;
+    luma_color_constants.ChromaStrength = settings.chroma_strength;
 
     Barrier(command_list_, output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
