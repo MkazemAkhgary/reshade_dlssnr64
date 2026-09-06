@@ -404,10 +404,17 @@ void DrawSettings(reshade::api::effect_runtime*) {
         pass.target_handle == g_selected_pass_target_handle;
 
     if (ImGui::Selectable(label.c_str(), is_selected)) {
-      g_selected_pass_target_handle = pass.target_handle;
-      g_has_selected_pass_target = true;
-      reshade_dlssnr::DlssNrDirect::Get().SetDebugSelectedResource(g_selected_pass_target_handle);
-      reshade_dlssnr::DlssGuides::Get().SetSelectedPassHandle(g_selected_pass_target_handle);
+      if (is_selected) {
+        g_selected_pass_target_handle = 0;
+        g_has_selected_pass_target = false;
+        reshade_dlssnr::DlssNrDirect::Get().SetDebugSelectedResource(0);
+        reshade_dlssnr::DlssGuides::Get().SetSelectedPassHandle(0);
+      } else {
+        g_selected_pass_target_handle = pass.target_handle;
+        g_has_selected_pass_target = true;
+        reshade_dlssnr::DlssNrDirect::Get().SetDebugSelectedResource(g_selected_pass_target_handle);
+        reshade_dlssnr::DlssGuides::Get().SetSelectedPassHandle(g_selected_pass_target_handle);
+      }
     }
   }
 
@@ -416,6 +423,13 @@ void DrawSettings(reshade::api::effect_runtime*) {
     ImGui::Text(
         "Selected pass target: 0x%llx",
         static_cast<unsigned long long>(g_selected_pass_target_handle));
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Deselect")) {
+      g_selected_pass_target_handle = 0;
+      g_has_selected_pass_target = false;
+      reshade_dlssnr::DlssNrDirect::Get().SetDebugSelectedResource(0);
+      reshade_dlssnr::DlssGuides::Get().SetSelectedPassHandle(0);
+    }
   }
   }
 
