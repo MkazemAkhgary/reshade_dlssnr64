@@ -691,7 +691,9 @@ void DlssNrDirect::OnPresent(
   }
 
   if (feature_handle_ == nullptr) {
-    if (!EnsureFeature(command_list_, width, height)) {
+    const unsigned int create_width = use_working_scale ? work_width : width;
+    const unsigned int create_height = use_working_scale ? work_height : height;
+    if (!EnsureFeature(command_list_, create_width, create_height)) {
       failed_ = true;
       command_list_->Close();
       backbuffer->Release();
@@ -899,6 +901,47 @@ void DlssNrDirect::OnPresent(
     ui_mask_generated = true;
   }
 
+  ID3D12Resource* model_color = model_input;
+  ID3D12Resource* model_output = output_;
+  unsigned int eval_width = width;
+  unsigned int eval_height = height;
+
+  if (use_working_scale) {
+    if (!debug_codec_->InitDownsampleShader(device)) {
+      failed_ = true;
+      reason_ = "failed to initialize downsample shader";
+      reshade::log::message(reshade::log::level::error, reason_);
+      backbuffer->Release();
+      swapchain3->Release();
+      device->Release();
+      return;
+    }
+
+    DlssNrConstants downsample_constants = {};
+    downsample_constants.Mode = DlssNrMode_Downsample;
+    downsample_constants.Width = work_width;
+    downsample_constants.Height = work_height;
+
+    if (model_input == backbuffer) {
+      Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_PRESENT,
+              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    }
+
+    debug_codec_->DispatchDownsample(
+        command_list_,
+        downsample_constants,
+        model_input,
+        working_input_);
+
+    Barrier(command_list_, working_input_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+    model_color = working_input_;
+    model_output = working_output_;
+    eval_width = work_width;
+    eval_height = work_height;
+  }
+
   auto* params = parameter_block_.Get();
   if (params == nullptr) {
     reason_ = "DLSSNR parameter block unavailable";
@@ -907,15 +950,15 @@ void DlssNrDirect::OnPresent(
 
   params->Reset();
 
-  parameter_block_.SetResource("DLSSNR.Color", model_input);
-  parameter_block_.SetResource("DLSSNR.Output", output_);
+  parameter_block_.SetResource("DLSSNR.Color", model_color);
+  parameter_block_.SetResource("DLSSNR.Output", model_output);
   parameter_block_.SetUInt("DLSSNR.Enabled", 1u);
-  parameter_block_.SetUInt("DLSSNR.Width", width);
-  parameter_block_.SetUInt("DLSSNR.Height", height);
+  parameter_block_.SetUInt("DLSSNR.Width", eval_width);
+  parameter_block_.SetUInt("DLSSNR.Height", eval_height);
   parameter_block_.SetUInt("DLSSNR.InputWidth", width);
   parameter_block_.SetUInt("DLSSNR.InputHeight", height);
-  parameter_block_.SetUInt("DLSSNR.OutputWidth", width);
-  parameter_block_.SetUInt("DLSSNR.OutputHeight", height);
+  parameter_block_.SetUInt("DLSSNR.OutputWidth", eval_width);
+  parameter_block_.SetUInt("DLSSNR.OutputHeight", eval_height);
   parameter_block_.SetUInt("DLSSNR.Upscaling", 1u);
   parameter_block_.SetFloat("DLSSNR.ScalingRatio", 1.0f);
   parameter_block_.SetFloat("DLSSNR.Scale", 1.0f);
@@ -952,12 +995,12 @@ void DlssNrDirect::OnPresent(
 
     parameter_block_.SetUInt("DLSSNR.ColorSubrectBaseX", 0u);
     parameter_block_.SetUInt("DLSSNR.ColorSubrectBaseY", 0u);
-    parameter_block_.SetUInt("DLSSNR.ColorSubrectWidth", width);
-    parameter_block_.SetUInt("DLSSNR.ColorSubrectHeight", height);
+    parameter_block_.SetUInt("DLSSNR.ColorSubrectWidth", eval_width);
+    parameter_block_.SetUInt("DLSSNR.ColorSubrectHeight", eval_height);
     parameter_block_.SetUInt("DLSSNR.OutputSubrectBaseX", 0u);
     parameter_block_.SetUInt("DLSSNR.OutputSubrectBaseY", 0u);
-    parameter_block_.SetUInt("DLSSNR.OutputSubrectWidth", width);
-    parameter_block_.SetUInt("DLSSNR.OutputSubrectHeight", height);
+    parameter_block_.SetUInt("DLSSNR.OutputSubrectWidth", eval_width);
+    parameter_block_.SetUInt("DLSSNR.OutputSubrectHeight", eval_height);
     parameter_block_.SetUInt("DLSSNR.DepthSubrectBaseX", 0u);
     parameter_block_.SetUInt("DLSSNR.DepthSubrectBaseY", 0u);
     parameter_block_.SetUInt("DLSSNR.DepthSubrectWidth", guides.guide_width);
