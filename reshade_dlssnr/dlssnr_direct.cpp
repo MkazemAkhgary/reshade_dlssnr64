@@ -469,7 +469,9 @@ void DlssNrDirect::OnPresent(
   if (!settings.enabled) return;
   if (failed_ || command_queue == nullptr || swapchain == nullptr) return;
 
-  const PassSettings& pass = settings.pass1;
+  current_pass_ = settings.second_pass_enabled ? &settings.pass2
+                                               : &settings.pass1;
+  const PassSettings& pass = *current_pass_;
 
   IDXGISwapChain3* swapchain3 = nullptr;
   if (FAILED(swapchain->QueryInterface(IID_PPV_ARGS(&swapchain3))) || swapchain3 == nullptr) {
