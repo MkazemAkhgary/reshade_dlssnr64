@@ -537,28 +537,8 @@ void DrawSettings(reshade::api::effect_runtime*) {
         static_cast<unsigned long long>(g_backbuffer_native_handle));
   }
 
-  static bool filter_backbuffer_resource = false;
-  static bool filter_full_viewport = false;
-  static int max_draw_count = 999;
-
-  ImGui::Checkbox("Only actual backbuffer resource", &filter_backbuffer_resource);
-  ImGui::Checkbox("Only full viewport", &filter_full_viewport);
-  ImGui::SliderInt("Max draw count", &max_draw_count, 0, 500);
-
-  ImGui::Separator();
-
   for (size_t i = 0; i < g_display_passes.size(); ++i) {
     const RenderPassInfo& pass = g_display_passes[i];
-
-    if (filter_backbuffer_resource && !pass.is_backbuffer_resource) continue;
-
-    if (filter_full_viewport &&
-        !(pass.viewport_width >= static_cast<float>(pass.width) - 1.0f &&
-          pass.viewport_height >= static_cast<float>(pass.height) - 1.0f)) {
-      continue;
-    }
-
-    if (pass.draw_count > static_cast<uint32_t>(max_draw_count)) continue;
 
     std::string label;
     label += std::to_string(static_cast<unsigned long long>(pass.index));
