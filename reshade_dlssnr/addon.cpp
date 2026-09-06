@@ -549,6 +549,9 @@ void DrawSettings(reshade::api::effect_runtime*) {
         "UI Mask",
         "DLSS Stage (pre-UI)",
         "Selected Pass Resource",
+        "Working Input",
+        "Working Output",
+        "Working Residual",
     };
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Debug View");
