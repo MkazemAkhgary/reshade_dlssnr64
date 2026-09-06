@@ -13,35 +13,27 @@
 
 namespace reshade_dlssnr {
 
-class SimpleParams : public NVSDK_NGX_Parameter {
+class NgxParameterBlock {
  public:
-  void Set(const char* name, unsigned long long value) override { ull_[name] = value; }
-  void Set(const char* name, float value) override { f_[name] = value; }
-  void Set(const char* name, double value) override { d_[name] = value; }
-  void Set(const char* name, unsigned int value) override { ui_[name] = value; }
-  void Set(const char* name, int value) override { i_[name] = value; }
-  void Set(const char* name, ID3D11Resource* value) override { ptr_[name] = value; }
-  void Set(const char* name, ID3D12Resource* value) override { ptr_[name] = value; }
-  void Set(const char* name, void* value) override { ptr_[name] = value; }
+  bool Initialize();
+  void Shutdown();
 
-  NVSDK_NGX_Result Get(const char* name, unsigned long long* value) const override;
-  NVSDK_NGX_Result Get(const char* name, float* value) const override;
-  NVSDK_NGX_Result Get(const char* name, double* value) const override;
-  NVSDK_NGX_Result Get(const char* name, unsigned int* value) const override;
-  NVSDK_NGX_Result Get(const char* name, int* value) const override;
-  NVSDK_NGX_Result Get(const char* name, ID3D11Resource** value) const override;
-  NVSDK_NGX_Result Get(const char* name, ID3D12Resource** value) const override;
-  NVSDK_NGX_Result Get(const char* name, void** value) const override;
+  bool IsReady() const { return params_ != nullptr; }
+  NVSDK_NGX_Parameter* Get() const { return params_; }
 
-  void Reset() override;
+  void SetUInt(const char* name, unsigned int value);
+  void SetInt(const char* name, int value);
+  void SetFloat(const char* name, float value);
+  void SetResource(const char* name, ID3D12Resource* value);
+  void SetPointer(const char* name, void* value);
 
  private:
-  std::unordered_map<std::string, unsigned long long> ull_;
-  std::unordered_map<std::string, float> f_;
-  std::unordered_map<std::string, double> d_;
-  std::unordered_map<std::string, unsigned int> ui_;
-  std::unordered_map<std::string, int> i_;
-  std::unordered_map<std::string, void*> ptr_;
+  void ProbeFloatSlot();
+
+  HMODULE core_module_ = nullptr;
+  NVSDK_NGX_Parameter* params_ = nullptr;
+  int float_slot_ = 1;
+  bool float_slot_known_ = false;
 };
 
 class DlssNrDirect {
@@ -69,12 +61,14 @@ class DlssNrDirect {
 
   bool EnsureModelAndPatch();
   bool EnsureInitialized(ID3D12Device* device);
+  bool EnsureParameterBlock();
   bool EnsureFeature(ID3D12GraphicsCommandList* command_list, unsigned int width, unsigned int height);
   bool EnsureCommandInfrastructure(ID3D12Device* device);
   void WaitGpu();
   void Barrier(ID3D12GraphicsCommandList* command_list, ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after);
 
   HMODULE model_module_ = nullptr;
+  NgxParameterBlock parameter_block_;
 
   using PFN_InitExt = NVSDK_NGX_Result(NVSDK_CONV*)(unsigned long long, const wchar_t*, ID3D12Device*, NVSDK_NGX_Version, const NVSDK_NGX_Parameter*);
   using PFN_CreateFeature = NVSDK_NGX_Result(NVSDK_CONV*)(ID3D12GraphicsCommandList*, NVSDK_NGX_Feature, NVSDK_NGX_Parameter*, NVSDK_NGX_Handle**);
@@ -100,6 +94,7 @@ class DlssNrDirect {
   float built_local_tone_ = -1.0f;
   float built_skin_structure_ = -1.0f;
   bool built_auto_mask_ = false;
+  bool built_ui_correction_ = false;
 
   ID3D12Resource* output_ = nullptr;
   unsigned int output_width_ = 0;
