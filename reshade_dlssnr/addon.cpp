@@ -277,21 +277,56 @@ void DrawSettings(reshade::api::effect_runtime*) {
 
   {
     static const char* model_names[] = {"Model A", "Model B", "Model C"};
-    changed |= ImGui::Combo("Model", &settings.preset, model_names, IM_ARRAYSIZE(model_names));
+    const float button_width = ImGui::GetContentRegionAvail().x / 3.0f -
+                               ImGui::GetStyle().ItemSpacing.x;
+    for (int i = 0; i < 3; ++i) {
+      if (i > 0) ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
+
+      const bool selected = settings.preset == i;
+      ImGui::PushStyleColor(
+          ImGuiCol_Button,
+          selected ? ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive)
+                   : ImGui::GetStyleColorVec4(ImGuiCol_Button));
+
+      if (ImGui::Button(model_names[i], ImVec2(button_width, 0.0f)) &&
+          settings.preset != i) {
+        settings.preset = i;
+        changed = true;
+      }
+
+      ImGui::PopStyleColor();
+    }
   }
 
   changed |= ImGui::SliderFloat("Local Tone", &settings.local_tone, 0.0f, 2.0f, "%.2f");
-  changed |= ImGui::Checkbox("UI Correction", &settings.ui_correction);
+
+  {
+    const bool ui_correction_changed =
+        ImGui::Button(settings.ui_correction ? "[ UI Correction: ON ]"
+                                             : "[ UI Correction: OFF ]",
+                      ImVec2(-1.0f, 0.0f));
+    changed |= ui_correction_changed;
+    if (ui_correction_changed) {
+      settings.ui_correction = !settings.ui_correction;
+    }
+  }
 
   ImGui::Separator();
 
   changed |= ImGui::SliderFloat("Local Structure", &settings.local_structure, 0.0f, 2.0f, "%.2f");
-  const bool character_mask_changed =
-      ImGui::Checkbox("Character Mask", &settings.auto_mask);
 
-  changed |= character_mask_changed;
-  if (character_mask_changed && !settings.auto_mask) {
-    settings.skin_structure = -1.0f;
+  {
+    const bool character_mask_changed =
+        ImGui::Button(settings.auto_mask ? "[ Character Mask: ON ]"
+                                         : "[ Character Mask: OFF ]",
+                      ImVec2(-1.0f, 0.0f));
+    changed |= character_mask_changed;
+    if (character_mask_changed) {
+      settings.auto_mask = !settings.auto_mask;
+      if (!settings.auto_mask) {
+        settings.skin_structure = -1.0f;
+      }
+    }
   }
 
   if (!settings.auto_mask) {
@@ -316,7 +351,18 @@ void DrawSettings(reshade::api::effect_runtime*) {
 
   ImGui::Separator();
 
-  changed |= ImGui::Checkbox("Use selected pass as model input", &settings.use_selected_pass_as_input);
+  {
+    const bool selected_pass_changed =
+        ImGui::Button(settings.use_selected_pass_as_input
+                          ? "[ Selected Pass Input: ON ]"
+                          : "[ Selected Pass Input: OFF ]",
+                      ImVec2(-1.0f, 0.0f));
+    changed |= selected_pass_changed;
+    if (selected_pass_changed) {
+      settings.use_selected_pass_as_input = !settings.use_selected_pass_as_input;
+    }
+  }
+
   changed |= ImGui::SliderFloat("UI Mask Threshold", &settings.ui_mask_threshold, 0.0f, 0.2f, "%.3f");
 
   {
