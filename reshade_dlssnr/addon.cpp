@@ -309,8 +309,13 @@ void DrawSettings(reshade::api::effect_runtime*) {
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("Local Tone");
   ImGui::SameLine(kControlLabelWidth);
-  ImGui::SetNextItemWidth(-1.0f);
+  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
   changed |= ImGui::SliderFloat("##Local Tone", &settings.local_tone, 0.0f, 2.0f, "%.2f");
+  ImGui::SameLine();
+  if (ImGui::Button("R##Local Tone", ImVec2(24.0f, 0.0f))) {
+    settings.local_tone = 0.0f;
+    changed = true;
+  }
 
   {
     const float input_button_width =
@@ -354,8 +359,13 @@ void DrawSettings(reshade::api::effect_runtime*) {
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("Local Structure");
   ImGui::SameLine(kControlLabelWidth);
-  ImGui::SetNextItemWidth(-1.0f);
+  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
   changed |= ImGui::SliderFloat("##Local Structure", &settings.local_structure, 0.0f, 2.0f, "%.2f");
+  ImGui::SameLine();
+  if (ImGui::Button("R##Local Structure", ImVec2(24.0f, 0.0f))) {
+    settings.local_structure = 0.0f;
+    changed = true;
+  }
 
   {
     const float input_button_width =
@@ -400,8 +410,13 @@ void DrawSettings(reshade::api::effect_runtime*) {
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("Skin Structure");
   ImGui::SameLine(kControlLabelWidth);
-  ImGui::SetNextItemWidth(-1.0f);
+  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
   changed |= ImGui::SliderFloat("##Skin Structure", &settings.skin_structure, 0.0f, 1.0f, "%.2f");
+  ImGui::SameLine();
+  if (ImGui::Button("R##Skin Structure", ImVec2(24.0f, 0.0f))) {
+    settings.skin_structure = 0.0f;
+    changed = true;
+  }
   if (!settings.auto_mask) {
     ImGui::EndDisabled();
   }
@@ -411,40 +426,70 @@ void DrawSettings(reshade::api::effect_runtime*) {
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("Intensity");
   ImGui::SameLine(kControlLabelWidth);
-  ImGui::SetNextItemWidth(-1.0f);
+  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
   changed |= ImGui::SliderFloat("##Intensity", &settings.intensity, 0.0f, 2.0f, "%.2f");
+  ImGui::SameLine();
+  if (ImGui::Button("R##Intensity", ImVec2(24.0f, 0.0f))) {
+    settings.intensity = 0.50f;
+    changed = true;
+  }
 
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("Luma Strength");
   ImGui::SameLine(kControlLabelWidth);
-  ImGui::SetNextItemWidth(-1.0f);
+  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
   changed |= ImGui::SliderFloat("##Luma Strength", &settings.luma_strength, 0.0f, 1.0f, "%.2f");
+  ImGui::SameLine();
+  if (ImGui::Button("R##Luma Strength", ImVec2(24.0f, 0.0f))) {
+    settings.luma_strength = 1.0f;
+    changed = true;
+  }
 
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("Chroma Strength");
   ImGui::SameLine(kControlLabelWidth);
-  ImGui::SetNextItemWidth(-1.0f);
+  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
   changed |= ImGui::SliderFloat("##Chroma Strength", &settings.chroma_strength, 0.0f, 1.0f, "%.2f");
+  ImGui::SameLine();
+  if (ImGui::Button("R##Chroma Strength", ImVec2(24.0f, 0.0f))) {
+    settings.chroma_strength = 1.0f;
+    changed = true;
+  }
 
   ImGui::Separator();
 
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("Working Scale");
   ImGui::SameLine(kControlLabelWidth);
-  ImGui::SetNextItemWidth(-1.0f);
+  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
   changed |= ImGui::SliderFloat("##Working Scale", &settings.working_scale, 0.25f, 1.0f, "%.2f");
+  ImGui::SameLine();
+  if (ImGui::Button("R##Working Scale", ImVec2(24.0f, 0.0f))) {
+    settings.working_scale = 1.0f;
+    changed = true;
+  }
 
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("Max Ratio");
   ImGui::SameLine(kControlLabelWidth);
-  ImGui::SetNextItemWidth(-1.0f);
+  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
   changed |= ImGui::SliderFloat("##Max Ratio", &settings.max_ratio, 1.0f, 8.0f, "%.2f");
+  ImGui::SameLine();
+  if (ImGui::Button("R##Max Ratio", ImVec2(24.0f, 0.0f))) {
+    settings.max_ratio = 4.0f;
+    changed = true;
+  }
 
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("White Point Scale");
   ImGui::SameLine(kControlLabelWidth);
-  ImGui::SetNextItemWidth(-1.0f);
+  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
   changed |= ImGui::SliderFloat("##White Point Scale", &settings.white_point_scale, 0.25f, 4.0f, "%.2f");
+  ImGui::SameLine();
+  if (ImGui::Button("R##White Point Scale", ImVec2(24.0f, 0.0f))) {
+    settings.white_point_scale = 100.0f;
+    changed = true;
+  }
 
   ImGui::Separator();
 
@@ -487,8 +532,13 @@ void DrawSettings(reshade::api::effect_runtime*) {
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("UI Mask Threshold");
   ImGui::SameLine(kControlLabelWidth);
-  ImGui::SetNextItemWidth(-1.0f);
+  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
   changed |= ImGui::SliderFloat("##UI Mask Threshold", &settings.ui_mask_threshold, 0.0f, 0.2f, "%.3f");
+  ImGui::SameLine();
+  if (ImGui::Button("R##UI Mask Threshold", ImVec2(24.0f, 0.0f))) {
+    settings.ui_mask_threshold = 0.02f;
+    changed = true;
+  }
 
   {
     static const char* debug_names[] = {
