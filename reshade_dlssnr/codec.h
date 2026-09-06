@@ -86,6 +86,8 @@ class DlssNrCodec {
       ID3D12Resource* mask,
       ID3D12Resource* out_target);
 
+  bool InitLumaColorShader(ID3D12Device* device);
+
   bool DispatchLumaColor(
       ID3D12GraphicsCommandList* command_list,
       const DlssNrConstants& constants,
