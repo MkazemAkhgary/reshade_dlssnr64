@@ -293,8 +293,8 @@ void DrawSettings(reshade::api::effect_runtime*) {
 
   changed |= ImGui::SliderFloat("Local Structure", &settings.local_structure, 0.0f, 2.0f, "%.2f");
   changed |= ImGui::SliderFloat("Local Tone", &settings.local_tone, 0.0f, 2.0f, "%.2f");
-  changed |= ImGui::SliderFloat("Skin Structure", &settings.skin_structure, -1.0f, 2.0f, "%.2f");
-  changed |= ImGui::Checkbox("Auto Mask", &settings.auto_mask);
+  changed |= ImGui::SliderFloat("Skin / Character Structure", &settings.skin_structure, -1.0f, 1.0f, "%.2f");
+  changed |= ImGui::Checkbox("Character Mask", &settings.auto_mask);
   changed |= ImGui::Checkbox("UI Correction", &settings.ui_correction);
 
   ImGui::Separator();
