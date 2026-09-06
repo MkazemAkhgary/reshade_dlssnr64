@@ -917,15 +917,15 @@ void DlssNrDirect::OnPresent(
       return;
     }
 
-    DlssNrConstants downsample_constants = {};
-    downsample_constants.Mode = DlssNrMode_Downsample;
-    downsample_constants.Width = work_width;
-    downsample_constants.Height = work_height;
-
     if (model_input == backbuffer) {
       Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_PRESENT,
               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     }
+
+    DlssNrConstants downsample_constants = {};
+    downsample_constants.Mode = DlssNrMode_Downsample;
+    downsample_constants.Width = work_width;
+    downsample_constants.Height = work_height;
 
     debug_codec_->DispatchDownsample(
         command_list_,
@@ -1018,7 +1018,9 @@ void DlssNrDirect::OnPresent(
     Barrier(command_list_, ui_mask_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   }
 
-  Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  if (!use_working_scale) {
+    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
   const NVSDK_NGX_Result result = evaluate_feature_(command_list_, feature_handle_, params, nullptr);
 
   if (ui_mask_ != nullptr) {
@@ -1046,8 +1048,6 @@ void DlssNrDirect::OnPresent(
     Barrier(command_list_, working_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     Barrier(command_list_, working_input_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_PRESENT,
             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
     debug_codec_->DispatchUpsampleResidual(
