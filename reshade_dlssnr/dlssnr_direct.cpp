@@ -1025,7 +1025,51 @@ void DlssNrDirect::OnPresent(
     Barrier(command_list_, ui_mask_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   }
 
-  if (use_selected_input && ui_mask_generated &&
+  if (use_working_scale) {
+    if (!debug_codec_->InitUpsampleResidualShader(device)) {
+      failed_ = true;
+      reason_ = "failed to initialize upsample residual shader";
+      reshade::log::message(reshade::log::level::error, reason_);
+      backbuffer->Release();
+      swapchain3->Release();
+      device->Release();
+      return;
+    }
+
+    DlssNrConstants upsample_constants = {};
+    upsample_constants.Mode = DlssNrMode_Resolve;
+    upsample_constants.Width = width;
+    upsample_constants.Height = height;
+    upsample_constants.LumaStrength = settings.luma_strength;
+    upsample_constants.ChromaStrength = settings.chroma_strength;
+
+    Barrier(command_list_, working_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    Barrier(command_list_, working_input_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_PRESENT,
+            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+    debug_codec_->DispatchUpsampleResidual(
+        command_list_,
+        upsample_constants,
+        backbuffer,
+        working_input_,
+        working_output_,
+        composite_output_);
+
+    Barrier(command_list_, composite_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+            D3D12_RESOURCE_STATE_COPY_SOURCE);
+    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+            D3D12_RESOURCE_STATE_COPY_DEST);
+    command_list_->CopyResource(backbuffer, composite_output_);
+    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_COPY_DEST,
+            D3D12_RESOURCE_STATE_PRESENT);
+    Barrier(command_list_, composite_output_, D3D12_RESOURCE_STATE_COPY_SOURCE,
+            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    Barrier(command_list_, working_output_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  } else if (use_selected_input && ui_mask_generated &&
       ui_mask_ != nullptr && composite_output_ != nullptr) {
     if (!debug_codec_->InitCompositeShader(device)) {
       failed_ = true;
