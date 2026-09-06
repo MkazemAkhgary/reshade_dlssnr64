@@ -40,6 +40,7 @@ void LoadSettings() {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "PassthroughToneMapped", g_settings.passthrough_tone_mapped);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UseSelectedPassAsInput", g_settings.use_selected_pass_as_input);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UIMaskThreshold", g_settings.ui_mask_threshold);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UIMaskSoftness", g_settings.ui_mask_softness);
 }
 
 void SaveSettings() {
@@ -70,6 +71,7 @@ void SaveSettings() {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "PassthroughToneMapped", g_settings.passthrough_tone_mapped);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UseSelectedPassAsInput", g_settings.use_selected_pass_as_input);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UIMaskThreshold", g_settings.ui_mask_threshold);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UIMaskSoftness", g_settings.ui_mask_softness);
 }
 
 }  // namespace reshade_dlssnr
