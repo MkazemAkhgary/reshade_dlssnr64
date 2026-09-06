@@ -80,69 +80,122 @@ bool PatchImport(HMODULE module, const char* dll_name, const char* function_name
 
 }  // namespace
 
-NVSDK_NGX_Result SimpleParams::Get(const char* name, unsigned long long* value) const {
-  auto it = ull_.find(name);
-  if (it == ull_.end()) return NVSDK_NGX_Result_FAIL_InvalidParameter;
-  *value = it->second;
-  return NVSDK_NGX_Result_Success;
+namespace {
+using PFN_SetUInt = void(__thiscall*)(void*, const char*, unsigned int);
+using PFN_SetInt = void(__thiscall*)(void*, const char*, int);
+using PFN_SetFloat = void(__thiscall*)(void*, const char*, float);
+using PFN_SetULL = void(__thiscall*)(void*, const char*, unsigned long long);
+
+constexpr int kNgxSetUllSlot = 0;
+constexpr int kNgxSetUIntSlot = 3;
+
+void CallSetUInt(void* params, const char* name, unsigned int value) {
+  void** vtable = *reinterpret_cast<void***>(params);
+  reinterpret_cast<PFN_SetUInt>(vtable[kNgxSetUIntSlot])(params, name, value);
 }
 
-NVSDK_NGX_Result SimpleParams::Get(const char* name, float* value) const {
-  auto it = f_.find(name);
-  if (it == f_.end()) return NVSDK_NGX_Result_FAIL_InvalidParameter;
-  *value = it->second;
-  return NVSDK_NGX_Result_Success;
+void CallSetInt(void* params, const char* name, int value) {
+  void** vtable = *reinterpret_cast<void***>(params);
+  reinterpret_cast<PFN_SetInt>(vtable[kNgxSetUIntSlot])(params, name, value);
 }
 
-NVSDK_NGX_Result SimpleParams::Get(const char* name, double* value) const {
-  auto it = d_.find(name);
-  if (it == d_.end()) return NVSDK_NGX_Result_FAIL_InvalidParameter;
-  *value = it->second;
-  return NVSDK_NGX_Result_Success;
+void CallSetFloat(void* params, const char* name, float value, int slot) {
+  void** vtable = *reinterpret_cast<void***>(params);
+  reinterpret_cast<PFN_SetFloat>(vtable[slot])(params, name, value);
 }
 
-NVSDK_NGX_Result SimpleParams::Get(const char* name, unsigned int* value) const {
-  auto it = ui_.find(name);
-  if (it == ui_.end()) return NVSDK_NGX_Result_FAIL_InvalidParameter;
-  *value = it->second;
-  return NVSDK_NGX_Result_Success;
+void CallSetResource(void* params, const char* name, ID3D12Resource* value) {
+  void** vtable = *reinterpret_cast<void***>(params);
+  reinterpret_cast<PFN_SetULL>(vtable[kNgxSetUllSlot])(
+      params, name, static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(value)));
 }
 
-NVSDK_NGX_Result SimpleParams::Get(const char* name, int* value) const {
-  auto it = i_.find(name);
-  if (it == i_.end()) return NVSDK_NGX_Result_FAIL_InvalidParameter;
-  *value = it->second;
-  return NVSDK_NGX_Result_Success;
+void CallSetPointer(void* params, const char* name, void* value) {
+  void** vtable = *reinterpret_cast<void***>(params);
+  reinterpret_cast<PFN_SetULL>(vtable[kNgxSetUllSlot])(
+      params, name, static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(value)));
+}
+}  // namespace
+
+bool NgxParameterBlock::Initialize() {
+  if (params_ != nullptr) return true;
+
+  core_module_ = GetModuleHandleW(L"_nvngx.dll");
+  if (core_module_ == nullptr) {
+    core_module_ = LoadLibraryW(L"_nvngx.dll");
+  }
+
+  if (core_module_ == nullptr) {
+    return false;
+  }
+
+  using PFN_GetCapabilityParameters =
+      NVSDK_NGX_Result(NVSDK_CONV*)(NVSDK_NGX_Parameter**);
+  auto* get_capability_parameters =
+      reinterpret_cast<PFN_GetCapabilityParameters>(
+          GetProcAddress(core_module_, "NVSDK_NGX_D3D12_GetCapabilityParameters"));
+
+  if (get_capability_parameters == nullptr) {
+    return false;
+  }
+
+  NVSDK_NGX_Parameter* params = nullptr;
+  const NVSDK_NGX_Result result = get_capability_parameters(&params);
+
+  if (result != NVSDK_NGX_Result_Success || params == nullptr) {
+    return false;
+  }
+
+  params_ = params;
+  ProbeFloatSlot();
+  return true;
 }
 
-NVSDK_NGX_Result SimpleParams::Get(const char* name, ID3D11Resource** value) const {
-  auto it = ptr_.find(name);
-  if (it == ptr_.end()) return NVSDK_NGX_Result_FAIL_InvalidParameter;
-  *value = static_cast<ID3D11Resource*>(it->second);
-  return NVSDK_NGX_Result_Success;
+void NgxParameterBlock::ProbeFloatSlot() {
+  if (params_ == nullptr || float_slot_known_) return;
+
+  float_slot_known_ = true;
+
+  static constexpr const char* kProbeKey = "DLSSNR.ReshadeFloatProbe";
+  static constexpr float kProbeValue = 0.375f;
+  static const int kCandidates[] = {1, 2, 5, 6, 7, 4, 3, 0};
+
+  for (int slot : kCandidates) {
+    float read_back = 0.0f;
+    CallSetFloat(params_, kProbeKey, kProbeValue, slot);
+
+    if (params_->Get(kProbeKey, &read_back) == NVSDK_NGX_Result_Success &&
+        read_back == kProbeValue) {
+      float_slot_ = slot;
+      return;
+    }
+  }
+
+  float_slot_ = 1;
 }
 
-NVSDK_NGX_Result SimpleParams::Get(const char* name, ID3D12Resource** value) const {
-  auto it = ptr_.find(name);
-  if (it == ptr_.end()) return NVSDK_NGX_Result_FAIL_InvalidParameter;
-  *value = static_cast<ID3D12Resource*>(it->second);
-  return NVSDK_NGX_Result_Success;
+void NgxParameterBlock::Shutdown() {
+  params_ = nullptr;
 }
 
-NVSDK_NGX_Result SimpleParams::Get(const char* name, void** value) const {
-  auto it = ptr_.find(name);
-  if (it == ptr_.end()) return NVSDK_NGX_Result_FAIL_InvalidParameter;
-  *value = it->second;
-  return NVSDK_NGX_Result_Success;
+void NgxParameterBlock::SetUInt(const char* name, unsigned int value) {
+  if (params_ != nullptr) CallSetUInt(params_, name, value);
 }
 
-void SimpleParams::Reset() {
-  ull_.clear();
-  f_.clear();
-  d_.clear();
-  ui_.clear();
-  i_.clear();
-  ptr_.clear();
+void NgxParameterBlock::SetInt(const char* name, int value) {
+  if (params_ != nullptr) CallSetInt(params_, name, value);
+}
+
+void NgxParameterBlock::SetFloat(const char* name, float value) {
+  if (params_ != nullptr) CallSetFloat(params_, name, value, float_slot_);
+}
+
+void NgxParameterBlock::SetResource(const char* name, ID3D12Resource* value) {
+  if (params_ != nullptr) CallSetResource(params_, name, value);
+}
+
+void NgxParameterBlock::SetPointer(const char* name, void* value) {
+  if (params_ != nullptr) CallSetPointer(params_, name, value);
 }
 
 DlssNrDirect& DlssNrDirect::Get() {
@@ -221,6 +274,15 @@ bool DlssNrDirect::EnsureInitialized(ID3D12Device* device) {
 
   initialized_ = true;
   reshade::log::message(reshade::log::level::info, "nvngx_dlssnr.dll initialized directly");
+  return true;
+}
+
+bool DlssNrDirect::EnsureParameterBlock() {
+  if (parameter_block_.IsReady()) return true;
+  if (!parameter_block_.Initialize()) {
+    reason_ = "driver NGX capability parameter block unavailable";
+    return false;
+  }
   return true;
 }
 
@@ -390,7 +452,8 @@ void DlssNrDirect::OnPresent(
   ID3D12Device* device = nullptr;
   if (FAILED(command_queue->GetDevice(IID_PPV_ARGS(&device))) || device == nullptr) return;
 
-  if (!EnsureModelAndPatch() || !EnsureInitialized(device) || !EnsureCommandInfrastructure(device)) {
+  if (!EnsureModelAndPatch() || !EnsureInitialized(device) ||
+      !EnsureParameterBlock() || !EnsureCommandInfrastructure(device)) {
     failed_ = true;
     reshade::log::message(reshade::log::level::error, reason_);
     swapchain3->Release();
