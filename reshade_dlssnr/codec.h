@@ -28,7 +28,6 @@ struct alignas(256) DlssNrConstants {
   float ChromaStrength = 1.0f;
 
   uint32_t DebugView = 0;
-  float MaxRatio = 4.0f;
 
   uint32_t Passthrough = 0;
 

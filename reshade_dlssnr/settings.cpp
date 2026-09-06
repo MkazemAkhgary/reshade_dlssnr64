@@ -20,7 +20,6 @@ void LoadSettings() {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "ChromaStrength", g_settings.chroma_strength);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "LumaStrength", g_settings.luma_strength);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "WhitePointScale", g_settings.white_point_scale);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "MaxRatio", g_settings.max_ratio);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "WorkingScale", g_settings.working_scale);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "MVScaleX", g_settings.mv_scale_x);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "MVScaleY", g_settings.mv_scale_y);
@@ -51,7 +50,6 @@ void SaveSettings() {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "ChromaStrength", g_settings.chroma_strength);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "LumaStrength", g_settings.luma_strength);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "WhitePointScale", g_settings.white_point_scale);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "MaxRatio", g_settings.max_ratio);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "WorkingScale", g_settings.working_scale);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "MVScaleX", g_settings.mv_scale_x);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "MVScaleY", g_settings.mv_scale_y);

@@ -470,17 +470,6 @@ void DrawSettings(reshade::api::effect_runtime*) {
   }
 
   ImGui::AlignTextToFramePadding();
-  ImGui::TextUnformatted("Max Ratio");
-  ImGui::SameLine(kControlLabelWidth);
-  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
-  changed |= ImGui::SliderFloat("##Max Ratio", &settings.max_ratio, 1.0f, 8.0f, "%.2f");
-  ImGui::SameLine();
-  if (ImGui::Button("R##Max Ratio", ImVec2(24.0f, 0.0f))) {
-    settings.max_ratio = 4.0f;
-    changed = true;
-  }
-
-  ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("White Point Scale");
   ImGui::SameLine(kControlLabelWidth);
   ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
