@@ -8,10 +8,10 @@ struct PassSettings {
   int preset = 1;
   int style = 1;
 
-  float local_tone = 0.0f;
+  float local_tone = 1.0f;
   bool ui_correction = true;
 
-  float local_structure = 0.0f;
+  float local_structure = 1.0f;
   bool auto_mask = true;
   float skin_structure = 0.0f;
 
