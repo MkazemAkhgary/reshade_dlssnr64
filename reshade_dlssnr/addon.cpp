@@ -328,8 +328,14 @@ void DrawSettings(reshade::api::effect_runtime*) {
 
   ImGui::Separator();
 
-  ImGui::TextUnformatted("Render Passes");
-  ImGui::Checkbox("Freeze render pass list", &g_freeze_render_pass_list);
+  static bool first_pass_frame = true;
+  if (first_pass_frame) {
+    ImGui::SetNextItemOpen(false, ImGuiCond_Once);
+    first_pass_frame = false;
+  }
+
+  if (ImGui::CollapsingHeader("Render Passes")) {
+    ImGui::Checkbox("Freeze render pass list", &g_freeze_render_pass_list);
 
   std::lock_guard<std::mutex> pass_lock(g_pass_mutex);
 
@@ -410,6 +416,7 @@ void DrawSettings(reshade::api::effect_runtime*) {
     ImGui::Text(
         "Selected pass target: 0x%llx",
         static_cast<unsigned long long>(g_selected_pass_target_handle));
+  }
   }
 
   if (changed) {
