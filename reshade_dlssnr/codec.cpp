@@ -465,10 +465,15 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float original_luma = dot(original.rgb, float3(0.2126, 0.7152, 0.0722));
     float enhanced_luma = dot(enhanced.rgb, float3(0.2126, 0.7152, 0.0722));
 
-    float luma_gain = lerp(1.0, enhanced_luma / max(original_luma, 1e-6), gLumaStrength);
+    // Luma strength moves the final luminance between original and enhanced.
+    float final_luma = lerp(original_luma, enhanced_luma, gLumaStrength);
 
-    float3 color_result = original.rgb * luma_gain;
-    color_result = lerp(color_result, enhanced.rgb, gColorStrength);
+    // Color strength blends the chroma ratios independently of luminance.
+    float3 original_chroma = original.rgb / max(original_luma, 1e-6);
+    float3 enhanced_chroma = enhanced.rgb / max(enhanced_luma, 1e-6);
+    float3 final_chroma = lerp(original_chroma, enhanced_chroma, gColorStrength);
+
+    float3 color_result = final_luma * final_chroma;
 
     gOutput[id.xy] = float4(color_result, original.a);
 }
