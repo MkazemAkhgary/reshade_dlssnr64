@@ -469,6 +469,8 @@ void DlssNrDirect::OnPresent(
   if (!settings.enabled) return;
   if (failed_ || command_queue == nullptr || swapchain == nullptr) return;
 
+  const PassSettings& pass = settings.pass1;
+
   IDXGISwapChain3* swapchain3 = nullptr;
   if (FAILED(swapchain->QueryInterface(IID_PPV_ARGS(&swapchain3))) || swapchain3 == nullptr) {
     return;
@@ -503,7 +505,7 @@ void DlssNrDirect::OnPresent(
   const unsigned int width = static_cast<unsigned int>(desc.Width);
   const unsigned int height = static_cast<unsigned int>(desc.Height);
 
-  const float working_scale = std::clamp(settings.working_scale, 0.25f, 1.0f);
+  const float working_scale = std::clamp(pass.working_scale, 0.25f, 1.0f);
   const unsigned int work_width =
       std::max(1u, static_cast<unsigned int>(width * working_scale + 0.5f));
   const unsigned int work_height =
@@ -965,21 +967,21 @@ void DlssNrDirect::OnPresent(
   parameter_block_.SetFloat("DLSSNR.Scale", 1.0f);
   parameter_block_.SetUInt(
       "DLSSNR.Hint.Render.Preset",
-      static_cast<unsigned int>(std::clamp(settings.preset, 0, 2)) + 1u);
-  parameter_block_.SetFloat("DLSSNR.Intensity", settings.intensity);
+      static_cast<unsigned int>(std::clamp(pass.preset, 0, 2)) + 1u);
+  parameter_block_.SetFloat("DLSSNR.Intensity", pass.intensity);
   parameter_block_.SetUInt(
       "DLSSNR.Style",
-      static_cast<unsigned int>(std::clamp(settings.preset, 0, 2)));
+      static_cast<unsigned int>(std::clamp(pass.preset, 0, 2)));
   parameter_block_.SetFloat(
-      "DLSSNR.LocalStructureStrength", settings.local_structure);
-  parameter_block_.SetFloat("DLSSNR.LocalToneStrength", settings.local_tone);
+      "DLSSNR.LocalStructureStrength", pass.local_structure);
+  parameter_block_.SetFloat("DLSSNR.LocalToneStrength", pass.local_tone);
   parameter_block_.SetFloat(
       "DLSSNR.SkinStructureStrength",
-      settings.auto_mask ? settings.skin_structure : -1.0f);
+      pass.auto_mask ? pass.skin_structure : -1.0f);
   parameter_block_.SetUInt(
-      "DLSSNR.UseAutoMask", settings.auto_mask ? 1u : 0u);
+      "DLSSNR.UseAutoMask", pass.auto_mask ? 1u : 0u);
   parameter_block_.SetUInt(
-      "DLSSNR.UICorrection", settings.ui_correction ? 1u : 0u);
+      "DLSSNR.UICorrection", pass.ui_correction ? 1u : 0u);
 
   if (ui_mask_generated && !use_selected_input && ui_mask_ != nullptr) {
     parameter_block_.SetResource("DLSSNR.UIAlpha", ui_mask_);
@@ -1064,8 +1066,8 @@ void DlssNrDirect::OnPresent(
       residual_constants.Height = height;
       residual_constants.LumaStrength = 1.0f;
       residual_constants.ChromaStrength = 1.0f;
-      residual_constants.ResidualSuppression = settings.residual_suppression;
-      residual_constants.ResidualThreshold = settings.residual_threshold;
+      residual_constants.ResidualSuppression = pass.residual_suppression;
+      residual_constants.ResidualThreshold = pass.residual_threshold;
 
       Barrier(command_list_, working_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -1121,10 +1123,10 @@ void DlssNrDirect::OnPresent(
     upsample_constants.Mode = DlssNrMode_Resolve;
     upsample_constants.Width = width;
     upsample_constants.Height = height;
-    upsample_constants.LumaStrength = settings.luma_strength;
-    upsample_constants.ChromaStrength = settings.chroma_strength;
-    upsample_constants.ResidualSuppression = settings.residual_suppression;
-    upsample_constants.ResidualThreshold = settings.residual_threshold;
+    upsample_constants.LumaStrength = pass.luma_strength;
+    upsample_constants.ChromaStrength = pass.chroma_strength;
+    upsample_constants.ResidualSuppression = pass.residual_suppression;
+    upsample_constants.ResidualThreshold = pass.residual_threshold;
 
     Barrier(command_list_, working_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -1168,8 +1170,8 @@ void DlssNrDirect::OnPresent(
     composite_constants.Width = width;
     composite_constants.Height = height;
     composite_constants.Passthrough = 1u;
-    composite_constants.LumaStrength = settings.luma_strength;
-    composite_constants.ChromaStrength = settings.chroma_strength;
+    composite_constants.LumaStrength = pass.luma_strength;
+    composite_constants.ChromaStrength = pass.chroma_strength;
 
     Barrier(command_list_, output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -1190,7 +1192,7 @@ void DlssNrDirect::OnPresent(
     Barrier(command_list_, composite_output_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     Barrier(command_list_, ui_mask_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     Barrier(command_list_, output_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  } else if ((settings.luma_strength != 1.0f || settings.chroma_strength != 1.0f) &&
+  } else if ((pass.luma_strength != 1.0f || pass.chroma_strength != 1.0f) &&
              composite_output_ != nullptr) {
     if (!debug_codec_->InitLumaColorShader(device)) {
       failed_ = true;
@@ -1208,8 +1210,8 @@ void DlssNrDirect::OnPresent(
     luma_color_constants.Width = width;
     luma_color_constants.Height = height;
     luma_color_constants.Passthrough = 1u;
-    luma_color_constants.LumaStrength = settings.luma_strength;
-    luma_color_constants.ChromaStrength = settings.chroma_strength;
+    luma_color_constants.LumaStrength = pass.luma_strength;
+    luma_color_constants.ChromaStrength = pass.chroma_strength;
 
     Barrier(command_list_, output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
