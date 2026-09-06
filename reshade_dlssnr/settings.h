@@ -23,6 +23,7 @@ struct Settings {
   float local_tone = 0.0f;
   float skin_structure = 0.0f;
   bool auto_mask = true;
+  bool ui_correction = true;
 
   int debug_view = 0;
   int compare_mode = 0;

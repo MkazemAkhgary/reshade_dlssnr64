@@ -252,9 +252,16 @@ bool DlssNrDirect::EnsureFeature(
   }
 
   SimpleParams create_params;
+  create_params.Set("DLSSNR.Enabled", 1u);
   create_params.Set("DLSSNR.Width", width);
   create_params.Set("DLSSNR.Height", height);
+  create_params.Set("DLSSNR.InputWidth", width);
+  create_params.Set("DLSSNR.InputHeight", height);
+  create_params.Set("DLSSNR.OutputWidth", width);
+  create_params.Set("DLSSNR.OutputHeight", height);
+  create_params.Set("DLSSNR.Upscaling", 1u);
   create_params.Set("DLSSNR.ScalingRatio", 1.0f);
+  create_params.Set("DLSSNR.Scale", 1.0f);
   create_params.Set("DLSSNR.Hint.Render.Preset", model_value + 1u);
   create_params.Set(NVSDK_NGX_Parameter_PerfQualityValue, 2u);
   create_params.Set("DLSSNR.Intensity", settings.intensity);
@@ -262,9 +269,8 @@ bool DlssNrDirect::EnsureFeature(
   create_params.Set("DLSSNR.LocalStructureStrength", settings.local_structure);
   create_params.Set("DLSSNR.LocalToneStrength", settings.local_tone);
   create_params.Set("DLSSNR.SkinStructureStrength", settings.skin_structure);
-  create_params.Set("DLSSNR.GlobalToneStrength", 1.0f);
   create_params.Set("DLSSNR.UseAutoMask", settings.auto_mask ? 1u : 0u);
-  create_params.Set("DLSSNR.UICorrection", 1u);
+  create_params.Set("DLSSNR.UICorrection", settings.ui_correction ? 1u : 0u);
   create_params.Set("CreationNodeMask", 1u);
   create_params.Set("VisibilityNodeMask", 1u);
 
@@ -734,6 +740,13 @@ void DlssNrDirect::OnPresent(
   eval_params.Set("DLSSNR.Enabled", 1u);
   eval_params.Set("DLSSNR.Width", width);
   eval_params.Set("DLSSNR.Height", height);
+  eval_params.Set("DLSSNR.InputWidth", width);
+  eval_params.Set("DLSSNR.InputHeight", height);
+  eval_params.Set("DLSSNR.OutputWidth", width);
+  eval_params.Set("DLSSNR.OutputHeight", height);
+  eval_params.Set("DLSSNR.Upscaling", 1u);
+  eval_params.Set("DLSSNR.ScalingRatio", 1.0f);
+  eval_params.Set("DLSSNR.Scale", 1.0f);
   eval_params.Set(
       "DLSSNR.Hint.Render.Preset",
       static_cast<unsigned int>(std::clamp(settings.preset, 0, 2)) + 1u);
@@ -744,8 +757,8 @@ void DlssNrDirect::OnPresent(
   eval_params.Set("DLSSNR.LocalStructureStrength", settings.local_structure);
   eval_params.Set("DLSSNR.LocalToneStrength", settings.local_tone);
   eval_params.Set("DLSSNR.SkinStructureStrength", settings.skin_structure);
-  eval_params.Set("DLSSNR.GlobalToneStrength", 1.0f);
   eval_params.Set("DLSSNR.UseAutoMask", settings.auto_mask ? 1u : 0u);
+  eval_params.Set("DLSSNR.UICorrection", settings.ui_correction ? 1u : 0u);
 
   if (ui_mask_generated && !use_selected_input && ui_mask_ != nullptr) {
     eval_params.Set("DLSSNR.UIAlpha", ui_mask_);

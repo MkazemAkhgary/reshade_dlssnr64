@@ -31,6 +31,7 @@ void LoadSettings() {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "LocalTone", g_settings.local_tone);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "SkinStructure", g_settings.skin_structure);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "AutoMask", g_settings.auto_mask);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UICorrection", g_settings.ui_correction);
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "DebugView", g_settings.debug_view);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "CompareMode", g_settings.compare_mode);
@@ -61,6 +62,7 @@ void SaveSettings() {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "LocalTone", g_settings.local_tone);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "SkinStructure", g_settings.skin_structure);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "AutoMask", g_settings.auto_mask);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UICorrection", g_settings.ui_correction);
 
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "DebugView", g_settings.debug_view);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "CompareMode", g_settings.compare_mode);
