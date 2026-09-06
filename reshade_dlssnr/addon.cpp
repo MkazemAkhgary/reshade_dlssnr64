@@ -290,6 +290,8 @@ void DrawSettings(reshade::api::effect_runtime*) {
   auto draw_pass_settings = [&](const char* tab_label, PassSettings& pass,
                                 bool show_ui_options) {
     if (ImGui::BeginTabItem(tab_label)) {
+      ImGui::PushID(tab_label);
+
       const float button_width =
           (ImGui::GetContentRegionAvail().x - kControlLabelWidth) / 3.0f -
           ImGui::GetStyle().ItemSpacing.x;
@@ -510,6 +512,7 @@ void DrawSettings(reshade::api::effect_runtime*) {
         changed = true;
       }
 
+      ImGui::PopID();
       ImGui::EndTabItem();
     }
   };
