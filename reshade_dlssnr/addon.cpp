@@ -287,7 +287,8 @@ void DrawSettings(reshade::api::effect_runtime*) {
 
   ImGui::Separator();
 
-  auto draw_pass_settings = [&](const char* tab_label, PassSettings& pass,
+  auto draw_pass_settings = [&](const char* tab_label,
+                                reshade_dlssnr::PassSettings& pass,
                                 bool show_ui_options) {
     if (ImGui::BeginTabItem(tab_label)) {
       ImGui::PushID(tab_label);
