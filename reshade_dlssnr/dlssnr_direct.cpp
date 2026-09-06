@@ -200,6 +200,13 @@ void NgxParameterBlock::SetPointer(const char* name, void* value) {
 
 DlssNrDirect& DlssNrDirect::Get() {
   static DlssNrDirect direct;
+  direct.pass_index_ = 0;
+  return direct;
+}
+
+DlssNrDirect& DlssNrDirect::GetPass2() {
+  static DlssNrDirect direct;
+  direct.pass_index_ = 1;
   return direct;
 }
 
@@ -299,7 +306,8 @@ bool DlssNrDirect::EnsureFeature(
     ID3D12GraphicsCommandList* command_list,
     unsigned int width,
     unsigned int height) {
-  const PassSettings& pass = GetSettings().pass1;
+  const PassSettings& pass = pass_index_ == 1 ? GetSettings().pass2
+                                              : GetSettings().pass1;
 
   const unsigned int model_value =
       static_cast<unsigned int>(std::clamp(pass.preset, 0, 2));
@@ -468,7 +476,8 @@ void DlssNrDirect::OnPresent(
   if (!settings.enabled) return;
   if (failed_ || command_queue == nullptr || swapchain == nullptr) return;
 
-  const PassSettings& pass = settings.pass1;
+  const PassSettings& pass = pass_index_ == 1 ? settings.pass2
+                                              : settings.pass1;
 
   IDXGISwapChain3* swapchain3 = nullptr;
   if (FAILED(swapchain->QueryInterface(IID_PPV_ARGS(&swapchain3))) || swapchain3 == nullptr) {

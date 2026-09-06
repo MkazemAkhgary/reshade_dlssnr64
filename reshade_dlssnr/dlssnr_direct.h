@@ -39,6 +39,7 @@ class NgxParameterBlock {
 class DlssNrDirect {
  public:
   static DlssNrDirect& Get();
+  static DlssNrDirect& GetPass2();
 
   void OnPresent(
       ID3D12CommandQueue* command_queue,
@@ -85,6 +86,7 @@ class DlssNrDirect {
   bool failed_ = false;
   bool first_evaluate_ = true;
   const char* reason_ = "";
+  int pass_index_ = 0;
 
   NVSDK_NGX_Handle* feature_handle_ = nullptr;
   unsigned int built_width_ = 0;
