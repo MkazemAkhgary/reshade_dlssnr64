@@ -321,15 +321,13 @@ void DrawSettings(reshade::api::effect_runtime*) {
     ImGui::TextUnformatted("UI Correction");
     ImGui::SameLine(kControlLabelWidth);
 
-    ImGui::PushID("UI Correction");
-
     const bool ui_correction_on = settings.ui_correction;
     const bool ui_correction_off = !settings.ui_correction;
 
     if (ui_correction_off) {
       ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
     }
-    if (ImGui::Button("OFF", ImVec2(input_button_width, 0.0f))) {
+    if (ImGui::Button("OFF##UI Correction", ImVec2(input_button_width, 0.0f))) {
       settings.ui_correction = false;
       changed = true;
     }
@@ -342,15 +340,13 @@ void DrawSettings(reshade::api::effect_runtime*) {
     if (ui_correction_on) {
       ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
     }
-    if (ImGui::Button("ON", ImVec2(input_button_width, 0.0f))) {
+    if (ImGui::Button("ON##UI Correction", ImVec2(input_button_width, 0.0f))) {
       settings.ui_correction = true;
       changed = true;
     }
     if (ui_correction_on) {
       ImGui::PopStyleColor();
     }
-
-    ImGui::PopID();
   }
 
   ImGui::Separator();
@@ -370,15 +366,13 @@ void DrawSettings(reshade::api::effect_runtime*) {
     ImGui::TextUnformatted("Character Mask");
     ImGui::SameLine(kControlLabelWidth);
 
-    ImGui::PushID("Character Mask");
-
     const bool character_mask_on = settings.auto_mask;
     const bool character_mask_off = !settings.auto_mask;
 
     if (character_mask_off) {
       ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
     }
-    if (ImGui::Button("OFF", ImVec2(input_button_width, 0.0f))) {
+    if (ImGui::Button("OFF##Character Mask", ImVec2(input_button_width, 0.0f))) {
       settings.auto_mask = false;
       changed = true;
     }
@@ -391,15 +385,13 @@ void DrawSettings(reshade::api::effect_runtime*) {
     if (character_mask_on) {
       ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
     }
-    if (ImGui::Button("ON", ImVec2(input_button_width, 0.0f))) {
+    if (ImGui::Button("ON##Character Mask", ImVec2(input_button_width, 0.0f))) {
       settings.auto_mask = true;
       changed = true;
     }
     if (character_mask_on) {
       ImGui::PopStyleColor();
     }
-
-    ImGui::PopID();
   }
 
   if (!settings.auto_mask) {
