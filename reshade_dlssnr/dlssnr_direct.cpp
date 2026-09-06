@@ -207,6 +207,15 @@ void DlssNrDirect::SetDebugSelectedResource(uint64_t handle) {
   debug_selected_resource_handle_ = handle;
 }
 
+void DlssNrDirect::ClearSelectedPass() {
+  debug_selected_resource_handle_ = 0;
+
+  if (pending_selected_pass_ != nullptr) {
+    DlssGuides::Get().RetireGameResource(pending_selected_pass_);
+    pending_selected_pass_ = nullptr;
+  }
+}
+
 void DlssNrDirect::SetPendingSelectedPass(ID3D12Resource* resource) {
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 

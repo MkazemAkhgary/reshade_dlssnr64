@@ -628,7 +628,7 @@ void DrawSettings(reshade::api::effect_runtime*) {
       if (is_selected) {
         g_selected_pass_target_handle = 0;
         g_has_selected_pass_target = false;
-        reshade_dlssnr::DlssNrDirect::Get().SetDebugSelectedResource(0);
+        reshade_dlssnr::DlssNrDirect::Get().ClearSelectedPass();
         reshade_dlssnr::DlssGuides::Get().SetSelectedPassHandle(0);
       } else {
         g_selected_pass_target_handle = pass.target_handle;
@@ -648,7 +648,7 @@ void DrawSettings(reshade::api::effect_runtime*) {
     if (ImGui::SmallButton("Deselect")) {
       g_selected_pass_target_handle = 0;
       g_has_selected_pass_target = false;
-      reshade_dlssnr::DlssNrDirect::Get().SetDebugSelectedResource(0);
+      reshade_dlssnr::DlssNrDirect::Get().ClearSelectedPass();
       reshade_dlssnr::DlssGuides::Get().SetSelectedPassHandle(0);
     }
   }
