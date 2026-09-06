@@ -276,25 +276,32 @@ void DrawSettings(reshade::api::effect_runtime*) {
   ImGui::Separator();
 
   {
-    static const char* model_names[] = {"Model A", "Model B", "Model C"};
-    const float button_width = ImGui::GetContentRegionAvail().x / 3.0f -
+    const float label_width = 220.0f;
+    const float button_width = (ImGui::GetContentRegionAvail().x - label_width) / 3.0f -
                                ImGui::GetStyle().ItemSpacing.x;
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Model");
+    ImGui::SameLine(label_width);
+
+    static const char* model_short_names[] = {"A", "B", "C"};
     for (int i = 0; i < 3; ++i) {
       if (i > 0) ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
 
       const bool selected = settings.preset == i;
-      ImGui::PushStyleColor(
-          ImGuiCol_Button,
-          selected ? ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive)
-                   : ImGui::GetStyleColorVec4(ImGuiCol_Button));
+      if (selected) {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+      }
 
-      if (ImGui::Button(model_names[i], ImVec2(button_width, 0.0f)) &&
+      if (ImGui::Button(model_short_names[i], ImVec2(button_width, 0.0f)) &&
           settings.preset != i) {
         settings.preset = i;
         changed = true;
       }
 
-      ImGui::PopStyleColor();
+      if (selected) {
+        ImGui::PopStyleColor();
+      }
     }
   }
 
@@ -302,9 +309,7 @@ void DrawSettings(reshade::api::effect_runtime*) {
 
   {
     const bool ui_correction_changed =
-        ImGui::Button(settings.ui_correction ? "[ UI Correction: ON ]"
-                                             : "[ UI Correction: OFF ]",
-                      ImVec2(-1.0f, 0.0f));
+        ImGui::Button(settings.ui_correction ? "ON" : "OFF", ImVec2(-1.0f, 0.0f));
     changed |= ui_correction_changed;
     if (ui_correction_changed) {
       settings.ui_correction = !settings.ui_correction;
@@ -317,15 +322,10 @@ void DrawSettings(reshade::api::effect_runtime*) {
 
   {
     const bool character_mask_changed =
-        ImGui::Button(settings.auto_mask ? "[ Character Mask: ON ]"
-                                         : "[ Character Mask: OFF ]",
-                      ImVec2(-1.0f, 0.0f));
+        ImGui::Button(settings.auto_mask ? "ON" : "OFF", ImVec2(-1.0f, 0.0f));
     changed |= character_mask_changed;
     if (character_mask_changed) {
       settings.auto_mask = !settings.auto_mask;
-      if (!settings.auto_mask) {
-        settings.skin_structure = -1.0f;
-      }
     }
   }
 
@@ -352,14 +352,39 @@ void DrawSettings(reshade::api::effect_runtime*) {
   ImGui::Separator();
 
   {
-    const bool selected_pass_changed =
-        ImGui::Button(settings.use_selected_pass_as_input
-                          ? "[ Selected Pass Input: ON ]"
-                          : "[ Selected Pass Input: OFF ]",
-                      ImVec2(-1.0f, 0.0f));
-    changed |= selected_pass_changed;
-    if (selected_pass_changed) {
-      settings.use_selected_pass_as_input = !settings.use_selected_pass_as_input;
+    const float label_width = 220.0f;
+    const float input_button_width = (ImGui::GetContentRegionAvail().x - label_width) / 2.0f -
+                                     ImGui::GetStyle().ItemSpacing.x;
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Model Input");
+    ImGui::SameLine(label_width);
+
+    const bool selected_pass_active = settings.use_selected_pass_as_input;
+    const bool backbuffer_active = !settings.use_selected_pass_as_input;
+
+    if (selected_pass_active) {
+      ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+    }
+    if (ImGui::Button("Selected Pass", ImVec2(input_button_width, 0.0f))) {
+      settings.use_selected_pass_as_input = true;
+      changed = true;
+    }
+    if (selected_pass_active) {
+      ImGui::PopStyleColor();
+    }
+
+    ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
+
+    if (backbuffer_active) {
+      ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+    }
+    if (ImGui::Button("Backbuffer", ImVec2(input_button_width, 0.0f))) {
+      settings.use_selected_pass_as_input = false;
+      changed = true;
+    }
+    if (backbuffer_active) {
+      ImGui::PopStyleColor();
     }
   }
 
