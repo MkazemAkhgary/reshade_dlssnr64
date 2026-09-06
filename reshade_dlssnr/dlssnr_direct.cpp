@@ -1027,6 +1027,78 @@ void DlssNrDirect::OnPresent(
     Barrier(command_list_, ui_mask_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   }
 
+  if (use_working_scale &&
+      (settings.debug_view == 7 || settings.debug_view == 8 ||
+       settings.debug_view == 9)) {
+    const bool debug_residual = settings.debug_view == 9;
+
+    if (!debug_residual) {
+      ID3D12Resource* debug_source =
+          settings.debug_view == 7 ? working_input_ : working_output_;
+
+      if (debug_source != nullptr) {
+        Barrier(command_list_, debug_source, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                D3D12_RESOURCE_STATE_COPY_SOURCE);
+        Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                D3D12_RESOURCE_STATE_COPY_DEST);
+        command_list_->CopyResource(backbuffer, debug_source);
+        Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_COPY_DEST,
+                D3D12_RESOURCE_STATE_PRESENT);
+        Barrier(command_list_, debug_source, D3D12_RESOURCE_STATE_COPY_SOURCE,
+                D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+      }
+    } else {
+      if (!debug_codec_->InitUpsampleResidualShader(device)) {
+        failed_ = true;
+        reason_ = "failed to initialize residual debug shader";
+        backbuffer->Release();
+        swapchain3->Release();
+        device->Release();
+        return;
+      }
+
+      DlssNrConstants residual_constants = {};
+      residual_constants.Mode = DlssNrMode_Resolve;
+      residual_constants.Width = work_width;
+      residual_constants.Height = work_height;
+      residual_constants.LumaStrength = 1.0f;
+      residual_constants.ChromaStrength = 1.0f;
+
+      Barrier(command_list_, working_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+      Barrier(command_list_, working_input_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+      debug_codec_->DispatchUpsampleResidual(
+          command_list_,
+          residual_constants,
+          working_input_,
+          working_input_,
+          working_output_,
+          working_output_);
+
+      Barrier(command_list_, working_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+              D3D12_RESOURCE_STATE_COPY_SOURCE);
+      Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+              D3D12_RESOURCE_STATE_COPY_DEST);
+      command_list_->CopyResource(backbuffer, working_output_);
+      Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_COPY_DEST,
+              D3D12_RESOURCE_STATE_PRESENT);
+      Barrier(command_list_, working_output_, D3D12_RESOURCE_STATE_COPY_SOURCE,
+              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    }
+
+    command_list_->Close();
+    ID3D12CommandList* const lists[] = {command_list_};
+    command_queue_->ExecuteCommandLists(1, lists);
+    WaitGpu();
+
+    backbuffer->Release();
+    swapchain3->Release();
+    device->Release();
+    return;
+  }
+
   if (use_working_scale) {
     if (!debug_codec_->InitUpsampleResidualShader(device)) {
       failed_ = true;
