@@ -275,6 +275,247 @@ void DrawSettings(reshade::api::effect_runtime*) {
   changed |= ImGui::Checkbox("Enable DLSSNR", &settings.enabled);
   changed |= ImGui::Checkbox("Only run on SuperSampling", &settings.only_super_sampling);
 
+  if (settings.enabled) {
+    changed |= ImGui::Checkbox("Enable Second Pass", &settings.second_pass_enabled);
+  }
+
+  ImGui::Separator();
+
+  auto draw_pass_settings = [&](const char* tab_label, PassSettings& pass,
+                                bool show_ui_options) {
+    if (ImGui::BeginTabItem(tab_label)) {
+      const float button_width =
+          (ImGui::GetContentRegionAvail().x - kControlLabelWidth) / 3.0f -
+          ImGui::GetStyle().ItemSpacing.x;
+
+      ImGui::AlignTextToFramePadding();
+      ImGui::TextUnformatted("Model");
+      ImGui::SameLine(kControlLabelWidth);
+
+      static const char* model_short_names[] = {"A", "B", "C"};
+      for (int i = 0; i < 3; ++i) {
+        if (i > 0) ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
+
+        const bool selected = pass.preset == i;
+        if (selected) {
+          ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+        }
+        if (ImGui::Button(model_short_names[i], ImVec2(button_width, 0.0f)) &&
+            pass.preset != i) {
+          pass.preset = i;
+          changed = true;
+        }
+        if (selected) {
+          ImGui::PopStyleColor();
+        }
+      }
+
+      ImGui::AlignTextToFramePadding();
+      ImGui::TextUnformatted("Local Tone");
+      ImGui::SameLine(kControlLabelWidth);
+      ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
+      changed |= ImGui::SliderFloat("##Local Tone", &pass.local_tone, 0.0f, 2.0f, "%.2f");
+      ImGui::SameLine();
+      if (ImGui::Button("R##Local Tone", ImVec2(24.0f, 0.0f))) {
+        pass.local_tone = 0.0f;
+        changed = true;
+      }
+
+      {
+        const float input_button_width =
+            (ImGui::GetContentRegionAvail().x - kControlLabelWidth) / 2.0f -
+            ImGui::GetStyle().ItemSpacing.x;
+
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("UI Correction");
+        ImGui::SameLine(kControlLabelWidth);
+
+        const bool on = pass.ui_correction;
+        const bool off = !pass.ui_correction;
+
+        if (off) {
+          ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+        }
+        if (ImGui::Button("OFF##UI Correction", ImVec2(input_button_width, 0.0f))) {
+          pass.ui_correction = false;
+          changed = true;
+        }
+        if (off) {
+          ImGui::PopStyleColor();
+        }
+
+        ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
+        if (on) {
+          ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+        }
+        if (ImGui::Button("ON##UI Correction", ImVec2(input_button_width, 0.0f))) {
+          pass.ui_correction = true;
+          changed = true;
+        }
+        if (on) {
+          ImGui::PopStyleColor();
+        }
+      }
+
+      ImGui::Separator();
+
+      ImGui::AlignTextToFramePadding();
+      ImGui::TextUnformatted("Local Structure");
+      ImGui::SameLine(kControlLabelWidth);
+      ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
+      changed |= ImGui::SliderFloat("##Local Structure", &pass.local_structure, 0.0f, 2.0f, "%.2f");
+      ImGui::SameLine();
+      if (ImGui::Button("R##Local Structure", ImVec2(24.0f, 0.0f))) {
+        pass.local_structure = 0.0f;
+        changed = true;
+      }
+
+      {
+        const float input_button_width =
+            (ImGui::GetContentRegionAvail().x - kControlLabelWidth) / 2.0f -
+            ImGui::GetStyle().ItemSpacing.x;
+
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Character Mask");
+        ImGui::SameLine(kControlLabelWidth);
+
+        const bool on = pass.auto_mask;
+        const bool off = !pass.auto_mask;
+
+        if (off) {
+          ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+        }
+        if (ImGui::Button("OFF##Character Mask", ImVec2(input_button_width, 0.0f))) {
+          pass.auto_mask = false;
+          changed = true;
+        }
+        if (off) {
+          ImGui::PopStyleColor();
+        }
+
+        ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
+        if (on) {
+          ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+        }
+        if (ImGui::Button("ON##Character Mask", ImVec2(input_button_width, 0.0f))) {
+          pass.auto_mask = true;
+          changed = true;
+        }
+        if (on) {
+          ImGui::PopStyleColor();
+        }
+      }
+
+      if (!pass.auto_mask) {
+        ImGui::BeginDisabled();
+      }
+      ImGui::AlignTextToFramePadding();
+      ImGui::TextUnformatted("Skin Structure");
+      ImGui::SameLine(kControlLabelWidth);
+      ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
+      changed |= ImGui::SliderFloat("##Skin Structure", &pass.skin_structure, 0.0f, 1.0f, "%.2f");
+      ImGui::SameLine();
+      if (ImGui::Button("R##Skin Structure", ImVec2(24.0f, 0.0f))) {
+        pass.skin_structure = 0.0f;
+        changed = true;
+      }
+      if (!pass.auto_mask) {
+        ImGui::EndDisabled();
+      }
+
+      ImGui::Separator();
+
+      ImGui::AlignTextToFramePadding();
+      ImGui::TextUnformatted("Intensity");
+      ImGui::SameLine(kControlLabelWidth);
+      ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
+      changed |= ImGui::SliderFloat("##Intensity", &pass.intensity, 0.0f, 2.0f, "%.2f");
+      ImGui::SameLine();
+      if (ImGui::Button("R##Intensity", ImVec2(24.0f, 0.0f))) {
+        pass.intensity = 0.50f;
+        changed = true;
+      }
+
+      ImGui::AlignTextToFramePadding();
+      ImGui::TextUnformatted("Luma Strength");
+      ImGui::SameLine(kControlLabelWidth);
+      ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
+      changed |= ImGui::SliderFloat("##Luma Strength", &pass.luma_strength, 0.0f, 1.0f, "%.2f");
+      ImGui::SameLine();
+      if (ImGui::Button("R##Luma Strength", ImVec2(24.0f, 0.0f))) {
+        pass.luma_strength = 1.0f;
+        changed = true;
+      }
+
+      ImGui::AlignTextToFramePadding();
+      ImGui::TextUnformatted("Chroma Strength");
+      ImGui::SameLine(kControlLabelWidth);
+      ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
+      changed |= ImGui::SliderFloat("##Chroma Strength", &pass.chroma_strength, 0.0f, 1.0f, "%.2f");
+      ImGui::SameLine();
+      if (ImGui::Button("R##Chroma Strength", ImVec2(24.0f, 0.0f))) {
+        pass.chroma_strength = 1.0f;
+        changed = true;
+      }
+
+      ImGui::Separator();
+
+      ImGui::AlignTextToFramePadding();
+      ImGui::TextUnformatted("Working Scale");
+      ImGui::SameLine(kControlLabelWidth);
+      ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
+      changed |= ImGui::SliderFloat("##Working Scale", &pass.working_scale, 0.25f, 1.0f, "%.2f");
+      ImGui::SameLine();
+      if (ImGui::Button("R##Working Scale", ImVec2(24.0f, 0.0f))) {
+        pass.working_scale = 1.0f;
+        changed = true;
+      }
+
+      ImGui::AlignTextToFramePadding();
+      ImGui::TextUnformatted("Residual Suppression");
+      ImGui::SameLine(kControlLabelWidth);
+      ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
+      changed |= ImGui::SliderFloat("##Residual Suppression", &pass.residual_suppression, 0.0f, 1.0f, "%.2f");
+      ImGui::SameLine();
+      if (ImGui::Button("R##Residual Suppression", ImVec2(24.0f, 0.0f))) {
+        pass.residual_suppression = 0.85f;
+        changed = true;
+      }
+
+      ImGui::AlignTextToFramePadding();
+      ImGui::TextUnformatted("Residual Threshold");
+      ImGui::SameLine(kControlLabelWidth);
+      ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
+      changed |= ImGui::SliderFloat("##Residual Threshold", &pass.residual_threshold, 0.0f, 0.2f, "%.3f");
+      ImGui::SameLine();
+      if (ImGui::Button("R##Residual Threshold", ImVec2(24.0f, 0.0f))) {
+        pass.residual_threshold = 0.02f;
+        changed = true;
+      }
+
+      ImGui::AlignTextToFramePadding();
+      ImGui::TextUnformatted("White Point Scale");
+      ImGui::SameLine(kControlLabelWidth);
+      ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
+      changed |= ImGui::SliderFloat("##White Point Scale", &pass.white_point_scale, 0.25f, 4.0f, "%.2f");
+      ImGui::SameLine();
+      if (ImGui::Button("R##White Point Scale", ImVec2(24.0f, 0.0f))) {
+        pass.white_point_scale = 100.0f;
+        changed = true;
+      }
+
+      ImGui::EndTabItem();
+    }
+  };
+
+  if (ImGui::BeginTabBar("PassTabs")) {
+    draw_pass_settings("Pass 1", settings.pass1, true);
+    if (settings.second_pass_enabled) {
+      draw_pass_settings("Pass 2", settings.pass2, false);
+    }
+    ImGui::EndTabBar();
+  }
+
   ImGui::Separator();
 
   {
