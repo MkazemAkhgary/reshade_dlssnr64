@@ -17,7 +17,6 @@ void LoadSettings() {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "OnlySuperSampling", g_settings.only_super_sampling);
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Intensity", g_settings.intensity);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "TransferStrength", g_settings.transfer_strength);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "ColourStrength", g_settings.colour_strength);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "WhitePointScale", g_settings.white_point_scale);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "MaxRatio", g_settings.max_ratio);
@@ -48,7 +47,6 @@ void SaveSettings() {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "OnlySuperSampling", g_settings.only_super_sampling);
 
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Intensity", g_settings.intensity);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "TransferStrength", g_settings.transfer_strength);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "ColourStrength", g_settings.colour_strength);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "WhitePointScale", g_settings.white_point_scale);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "MaxRatio", g_settings.max_ratio);

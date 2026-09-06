@@ -278,7 +278,6 @@ void DrawSettings(reshade::api::effect_runtime*) {
   ImGui::Separator();
 
   changed |= ImGui::SliderFloat("Intensity", &settings.intensity, 0.0f, 2.0f, "%.2f");
-  changed |= ImGui::SliderFloat("Transfer Strength", &settings.transfer_strength, 0.0f, 2.0f, "%.2f");
   changed |= ImGui::SliderFloat("Colour Strength", &settings.colour_strength, 0.0f, 1.0f, "%.2f");
   changed |= ImGui::SliderFloat("Working Scale", &settings.working_scale, 0.25f, 1.0f, "%.2f");
   changed |= ImGui::SliderFloat("Max Ratio", &settings.max_ratio, 1.0f, 8.0f, "%.2f");
