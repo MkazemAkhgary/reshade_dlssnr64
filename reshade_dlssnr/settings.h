@@ -13,6 +13,8 @@ struct Settings {
   float luma_strength = 1.0f;
   float white_point_scale = 100.0f;
   float working_scale = 1.0f;
+  float residual_suppression = 0.85f;
+  float residual_threshold = 0.02f;
   float mv_scale_x = 1.0f;
   float mv_scale_y = 1.0f;
 

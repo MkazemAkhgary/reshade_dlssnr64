@@ -21,6 +21,8 @@ void LoadSettings() {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "LumaStrength", g_settings.luma_strength);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "WhitePointScale", g_settings.white_point_scale);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "WorkingScale", g_settings.working_scale);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "ResidualSuppression", g_settings.residual_suppression);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "ResidualThreshold", g_settings.residual_threshold);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "MVScaleX", g_settings.mv_scale_x);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "MVScaleY", g_settings.mv_scale_y);
 
@@ -52,6 +54,8 @@ void SaveSettings() {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "LumaStrength", g_settings.luma_strength);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "WhitePointScale", g_settings.white_point_scale);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "WorkingScale", g_settings.working_scale);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "ResidualSuppression", g_settings.residual_suppression);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "ResidualThreshold", g_settings.residual_threshold);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "MVScaleX", g_settings.mv_scale_x);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "MVScaleY", g_settings.mv_scale_y);
 
