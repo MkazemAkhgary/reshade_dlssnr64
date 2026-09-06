@@ -207,7 +207,6 @@ cbuffer Params : register(b0)
     float gLumaStrength;
     float gChromaStrength;
     uint  gDebugView;
-    float gMaxRatio;
     uint  gPassthrough;
     float gMvScaleX;
     float gMvScaleY;
@@ -236,11 +235,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     // understate thin colored UI and leave it translucent.
     float diff = max(diff3.r, max(diff3.g, diff3.b));
 
-    // Soft binary threshold controlled by gMaxRatio.
-    // Lower bound = gMaxRatio, upper bound = gMaxRatio + 0.06.
-    // This allows the user to tune out temporal/bit-depth noise while keeping
-    // high-contrast UI/HUD pixels opaque.
-    float lower = gMaxRatio;
+    float lower = 0.02;
     float upper = lower + 0.06;
     float mask = smoothstep(lower, upper, diff);
     gMask[id.xy] = float4(mask, mask, mask, 1.0);
@@ -358,7 +353,6 @@ cbuffer Params : register(b0)
     float gLumaStrength;
     float gChromaStrength;
     uint  gDebugView;
-    float gMaxRatio;
     uint  gPassthrough;
     float gMvScaleX;
     float gMvScaleY;
@@ -439,7 +433,6 @@ cbuffer Params : register(b0)
     float gLumaStrength;
     float gChromaStrength;
     uint  gDebugView;
-    float gMaxRatio;
     uint  gPassthrough;
     float gMvScaleX;
     float gMvScaleY;
