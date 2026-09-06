@@ -33,6 +33,12 @@ struct alignas(256) DlssNrConstants {
 
   uint32_t Passthrough = 0;
 
+  float ResidualSuppression = 0.85f;
+  float ResidualThreshold = 0.02f;
+
+  float MvScaleX = 1.0f;
+  float MvScaleY = 1.0f;
+
   float MvScaleX = 1.0f;
   float MvScaleY = 1.0f;
 
