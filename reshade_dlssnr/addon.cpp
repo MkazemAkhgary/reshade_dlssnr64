@@ -244,6 +244,12 @@ void OnPresent(
       native_command_queue,
       native_swapchain);
 
+  if (reshade_dlssnr::GetSettings().second_pass_enabled) {
+    reshade_dlssnr::DlssNrDirect::GetPass2().OnPresent(
+        native_command_queue,
+        native_swapchain);
+  }
+
   // Capture backbuffer description and reset render-pass tracking for next frame.
   reshade::api::device* const present_device = command_queue->get_device();
   if (present_device != nullptr && present_device->get_api() == reshade::api::device_api::d3d12) {
@@ -746,6 +752,7 @@ void Detach() {
   reshade::unregister_event<reshade::addon_event::init_device>(OnInitDevice);
 
   reshade_dlssnr::DlssNrDirect::Get().Shutdown();
+  reshade_dlssnr::DlssNrDirect::GetPass2().Shutdown();
   reshade_dlssnr::DlssGuides::Get().Clear();
   reshade_dlssnr::SaveSettings();
   g_initialized = false;
