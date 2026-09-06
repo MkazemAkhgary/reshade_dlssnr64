@@ -89,6 +89,7 @@ class DlssNrDirect {
   NVSDK_NGX_Handle* feature_handle_ = nullptr;
   unsigned int built_width_ = 0;
   unsigned int built_height_ = 0;
+  float built_working_scale_ = -1.0f;
   unsigned int built_preset_ = 0xFFFFFFFFu;
   float built_intensity_ = -1.0f;
   float built_local_structure_ = -1.0f;
