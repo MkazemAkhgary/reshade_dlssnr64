@@ -272,17 +272,6 @@ void DrawSettings(reshade::api::effect_runtime*) {
 
   changed |= ImGui::Checkbox("Enable DLSSNR", &settings.enabled);
   changed |= ImGui::Checkbox("Only run on SuperSampling", &settings.only_super_sampling);
-  changed |= ImGui::Checkbox("Use selected pass as model input", &settings.use_selected_pass_as_input);
-  changed |= ImGui::SliderFloat("UI Mask Threshold", &settings.ui_mask_threshold, 0.0f, 0.2f, "%.3f");
-
-  ImGui::Separator();
-
-  changed |= ImGui::SliderFloat("Intensity", &settings.intensity, 0.0f, 2.0f, "%.2f");
-  changed |= ImGui::SliderFloat("Luma Strength", &settings.luma_strength, 0.0f, 1.0f, "%.2f");
-  changed |= ImGui::SliderFloat("Color Strength", &settings.color_strength, 0.0f, 1.0f, "%.2f");
-  changed |= ImGui::SliderFloat("Working Scale", &settings.working_scale, 0.25f, 1.0f, "%.2f");
-  changed |= ImGui::SliderFloat("Max Ratio", &settings.max_ratio, 1.0f, 8.0f, "%.2f");
-  changed |= ImGui::SliderFloat("White Point Scale", &settings.white_point_scale, 0.25f, 4.0f, "%.2f");
 
   ImGui::Separator();
 
@@ -291,9 +280,12 @@ void DrawSettings(reshade::api::effect_runtime*) {
     changed |= ImGui::Combo("Model", &settings.preset, model_names, IM_ARRAYSIZE(model_names));
   }
 
-  changed |= ImGui::SliderFloat("Local Structure", &settings.local_structure, 0.0f, 2.0f, "%.2f");
   changed |= ImGui::SliderFloat("Local Tone", &settings.local_tone, 0.0f, 2.0f, "%.2f");
-  changed |= ImGui::SliderFloat("Skin / Character Structure", &settings.skin_structure, 0.0f, 1.0f, "%.2f");
+  changed |= ImGui::Checkbox("UI Correction", &settings.ui_correction);
+
+  ImGui::Separator();
+
+  changed |= ImGui::SliderFloat("Local Structure", &settings.local_structure, 0.0f, 2.0f, "%.2f");
   const bool character_mask_changed =
       ImGui::Checkbox("Character Mask", &settings.auto_mask);
 
@@ -301,9 +293,27 @@ void DrawSettings(reshade::api::effect_runtime*) {
   if (character_mask_changed && !settings.auto_mask) {
     settings.skin_structure = -1.0f;
   }
-  changed |= ImGui::Checkbox("UI Correction", &settings.ui_correction);
+
+  if (settings.auto_mask) {
+    changed |= ImGui::SliderFloat("Skin Structure", &settings.skin_structure, 0.0f, 1.0f, "%.2f");
+  }
 
   ImGui::Separator();
+
+  changed |= ImGui::SliderFloat("Intensity", &settings.intensity, 0.0f, 2.0f, "%.2f");
+  changed |= ImGui::SliderFloat("Luma Strength", &settings.luma_strength, 0.0f, 1.0f, "%.2f");
+  changed |= ImGui::SliderFloat("Color Strength", &settings.color_strength, 0.0f, 1.0f, "%.2f");
+
+  ImGui::Separator();
+
+  changed |= ImGui::SliderFloat("Working Scale", &settings.working_scale, 0.25f, 1.0f, "%.2f");
+  changed |= ImGui::SliderFloat("Max Ratio", &settings.max_ratio, 1.0f, 8.0f, "%.2f");
+  changed |= ImGui::SliderFloat("White Point Scale", &settings.white_point_scale, 0.25f, 4.0f, "%.2f");
+
+  ImGui::Separator();
+
+  changed |= ImGui::Checkbox("Use selected pass as model input", &settings.use_selected_pass_as_input);
+  changed |= ImGui::SliderFloat("UI Mask Threshold", &settings.ui_mask_threshold, 0.0f, 0.2f, "%.3f");
 
   {
     static const char* debug_names[] = {
