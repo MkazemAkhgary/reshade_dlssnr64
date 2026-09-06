@@ -68,8 +68,6 @@
     <ClCompile Include="dlss_guides.cpp" />
     <ClCompile Include="d3d12_state.cpp" />
     <ClCompile Include="dlssnr_direct.cpp" />
-    <ClCompile Include="dlssnr_pass.cpp" />
-    <ClCompile Include="forwarder.cpp" />
     <ClCompile Include="settings.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -79,8 +77,6 @@
     <ClInclude Include="d3d12_state.h" />
     <ClInclude Include="nvngx_hook_compat.h" />
     <ClInclude Include="dlssnr_direct.h" />
-    <ClInclude Include="dlssnr_pass.h" />
-    <ClInclude Include="forwarder.h" />
     <ClInclude Include="settings.h" />
     <ClInclude Include="shaders\dlssnr_cso.h" />
   </ItemGroup>
