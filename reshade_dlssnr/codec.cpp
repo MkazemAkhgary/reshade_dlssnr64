@@ -736,7 +736,14 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float low_enhanced_luma = dot(low_enhanced.rgb, float3(0.2126, 0.7152, 0.0722));
 
     float final_luma = lerp(low_input_luma, low_enhanced_luma, gLumaStrength);
-    float luma_gain = final_luma / max(low_input_luma, 1e-6);
+    float luma_gain = final_luma / max(low_input_luma, 1e-4);
+
+    luma_gain = clamp(luma_gain, 0.25, 4.0);
+
+    // Chroma residual is dampened strongly in dark areas to avoid amplifying
+    // low-resolution model noise into saturated pixel artifacts.
+    float noise_dampen = saturate(low_input_luma * 4.0);
+    float chroma_amount = gChromaStrength * noise_dampen;
 
     float3 low_input_chroma = low_input.rgb / max(low_input_luma, 1e-3);
     float3 low_enhanced_chroma = low_enhanced.rgb / max(low_enhanced_luma, 1e-3);
@@ -744,7 +751,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float3 chroma_ratio = lerp(
         float3(1.0, 1.0, 1.0),
         low_enhanced_chroma / max(low_input_chroma, 1e-3),
-        gChromaStrength);
+        chroma_amount);
 
     float3 result = original.rgb * luma_gain * chroma_ratio;
 
