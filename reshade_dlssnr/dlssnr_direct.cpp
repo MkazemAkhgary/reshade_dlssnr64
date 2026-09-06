@@ -670,8 +670,9 @@ void DlssNrDirect::OnPresent(
   }
 
   if (feature_handle_ != nullptr &&
-      (built_width_ != width ||
-       built_height_ != height)) {
+      (built_width_ != work_width ||
+       built_height_ != work_height ||
+       built_working_scale_ != working_scale)) {
     release_feature_(feature_handle_);
     feature_handle_ = nullptr;
     first_evaluate_ = true;
@@ -690,7 +691,9 @@ void DlssNrDirect::OnPresent(
   }
 
   if (feature_handle_ == nullptr) {
-    if (!EnsureFeature(command_list_, width, height)) {
+    const unsigned int create_width = use_working_scale ? work_width : width;
+    const unsigned int create_height = use_working_scale ? work_height : height;
+    if (!EnsureFeature(command_list_, create_width, create_height)) {
       failed_ = true;
       command_list_->Close();
       backbuffer->Release();
