@@ -204,7 +204,8 @@ cbuffer Params : register(b0)
     uint  gWidth;
     uint  gHeight;
     float gTransferStrength;
-    float gColourStrength;
+    float gLumaStrength;
+    float gColorStrength;
     uint  gDebugView;
     float gMaxRatio;
     uint  gPassthrough;
@@ -354,7 +355,8 @@ cbuffer Params : register(b0)
     uint  gWidth;
     uint  gHeight;
     float gTransferStrength;
-    float gColourStrength;
+    float gLumaStrength;
+    float gColorStrength;
     uint  gDebugView;
     float gMaxRatio;
     uint  gPassthrough;
