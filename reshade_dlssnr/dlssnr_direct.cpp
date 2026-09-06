@@ -299,8 +299,8 @@ bool DlssNrDirect::EnsureFeature(
     ID3D12GraphicsCommandList* command_list,
     unsigned int width,
     unsigned int height) {
-  const Settings& settings = GetSettings();
-  const PassSettings& pass = settings.pass1;
+  const PassSettings& pass = current_pass_ != nullptr ? *current_pass_
+                                                       : GetSettings().pass1;
 
   const unsigned int model_value =
       static_cast<unsigned int>(std::clamp(pass.preset, 0, 2));
