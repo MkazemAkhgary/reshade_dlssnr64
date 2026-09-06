@@ -205,7 +205,7 @@ cbuffer Params : register(b0)
     uint  gHeight;
     float gTransferStrength;
     float gLumaStrength;
-    float gColorStrength;
+    float gChromaStrength;
     uint  gDebugView;
     float gMaxRatio;
     uint  gPassthrough;
@@ -356,7 +356,7 @@ cbuffer Params : register(b0)
     uint  gHeight;
     float gTransferStrength;
     float gLumaStrength;
-    float gColorStrength;
+    float gChromaStrength;
     uint  gDebugView;
     float gMaxRatio;
     uint  gPassthrough;
@@ -437,7 +437,7 @@ cbuffer Params : register(b0)
     uint  gHeight;
     float gTransferStrength;
     float gLumaStrength;
-    float gColorStrength;
+    float gChromaStrength;
     uint  gDebugView;
     float gMaxRatio;
     uint  gPassthrough;
@@ -471,7 +471,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     // Color strength blends the chroma ratios independently of luminance.
     float3 original_chroma = original.rgb / max(original_luma, 1e-6);
     float3 enhanced_chroma = enhanced.rgb / max(enhanced_luma, 1e-6);
-    float3 final_chroma = lerp(original_chroma, enhanced_chroma, gColorStrength);
+    float3 final_chroma = lerp(original_chroma, enhanced_chroma, gChromaStrength);
 
     float3 color_result = final_luma * final_chroma;
 
