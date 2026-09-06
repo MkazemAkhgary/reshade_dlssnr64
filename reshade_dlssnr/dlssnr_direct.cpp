@@ -910,6 +910,8 @@ void DlssNrDirect::OnPresent(
     composite_constants.Width = width;
     composite_constants.Height = height;
     composite_constants.Passthrough = 1u;
+    composite_constants.LumaStrength = settings.luma_strength;
+    composite_constants.ColorStrength = settings.color_strength;
 
     Barrier(command_list_, output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -929,6 +931,43 @@ void DlssNrDirect::OnPresent(
     Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
     Barrier(command_list_, composite_output_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     Barrier(command_list_, ui_mask_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    Barrier(command_list_, output_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  } else if ((settings.luma_strength != 1.0f || settings.color_strength != 1.0f) &&
+             composite_output_ != nullptr) {
+    if (!debug_codec_->InitLumaColorShader(device)) {
+      failed_ = true;
+      reason_ = "failed to initialize luma color composite shader";
+      reshade::log::message(reshade::log::level::error, reason_);
+      backbuffer->Release();
+      swapchain3->Release();
+      device->Release();
+      return;
+    }
+
+    DlssNrConstants luma_color_constants = {};
+    luma_color_constants.Mode = DlssNrMode_Encode;
+    luma_color_constants.WhitePoint = 1.0f;
+    luma_color_constants.Width = width;
+    luma_color_constants.Height = height;
+    luma_color_constants.Passthrough = 1u;
+    luma_color_constants.LumaStrength = settings.luma_strength;
+    luma_color_constants.ColorStrength = settings.color_strength;
+
+    Barrier(command_list_, output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+    debug_codec_->DispatchLumaColor(
+        command_list_,
+        luma_color_constants,
+        output_,
+        backbuffer,
+        composite_output_);
+
+    Barrier(command_list_, composite_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
+    command_list_->CopyResource(backbuffer, composite_output_);
+    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
+    Barrier(command_list_, composite_output_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     Barrier(command_list_, output_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   } else {
     Barrier(command_list_, output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
