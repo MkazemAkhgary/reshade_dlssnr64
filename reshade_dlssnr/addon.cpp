@@ -470,6 +470,28 @@ void DrawSettings(reshade::api::effect_runtime*) {
   }
 
   ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted("Residual Suppression");
+  ImGui::SameLine(kControlLabelWidth);
+  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
+  changed |= ImGui::SliderFloat("##Residual Suppression", &settings.residual_suppression, 0.0f, 1.0f, "%.2f");
+  ImGui::SameLine();
+  if (ImGui::Button("R##Residual Suppression", ImVec2(24.0f, 0.0f))) {
+    settings.residual_suppression = 0.85f;
+    changed = true;
+  }
+
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted("Residual Threshold");
+  ImGui::SameLine(kControlLabelWidth);
+  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
+  changed |= ImGui::SliderFloat("##Residual Threshold", &settings.residual_threshold, 0.0f, 0.2f, "%.3f");
+  ImGui::SameLine();
+  if (ImGui::Button("R##Residual Threshold", ImVec2(24.0f, 0.0f))) {
+    settings.residual_threshold = 0.02f;
+    changed = true;
+  }
+
+  ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("White Point Scale");
   ImGui::SameLine(kControlLabelWidth);
   ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
