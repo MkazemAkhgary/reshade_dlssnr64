@@ -373,6 +373,7 @@ bool DlssNrDirect::EnsureFeature(
 
   built_width_ = width;
   built_height_ = height;
+  built_working_scale_ = GetSettings().working_scale;
   built_preset_ = model_value;
   built_intensity_ = settings.intensity;
   built_local_structure_ = settings.local_structure;
