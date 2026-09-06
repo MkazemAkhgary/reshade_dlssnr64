@@ -629,7 +629,7 @@ void DrawSettings(reshade::api::effect_runtime*) {
         g_selected_pass_target_handle = 0;
         g_has_selected_pass_target = false;
         reshade_dlssnr::DlssNrDirect::Get().ClearSelectedPass();
-        reshade_dlssnr::DlssGuides::Get().SetSelectedPassHandle(0);
+        reshade_dlssnr::DlssGuides::Get().ClearSelectedPass();
       } else {
         g_selected_pass_target_handle = pass.target_handle;
         g_has_selected_pass_target = true;
@@ -649,7 +649,7 @@ void DrawSettings(reshade::api::effect_runtime*) {
       g_selected_pass_target_handle = 0;
       g_has_selected_pass_target = false;
       reshade_dlssnr::DlssNrDirect::Get().ClearSelectedPass();
-      reshade_dlssnr::DlssGuides::Get().SetSelectedPassHandle(0);
+      reshade_dlssnr::DlssGuides::Get().ClearSelectedPass();
     }
   }
 

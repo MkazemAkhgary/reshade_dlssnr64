@@ -264,6 +264,19 @@ void DlssGuides::SetSelectedPassHandle(uint64_t handle) {
   has_selected_pass_handle_ = handle != 0;
 }
 
+void DlssGuides::ClearSelectedPass() {
+  std::lock_guard<std::mutex> lock(lock_);
+
+  has_selected_pass_handle_ = false;
+  selected_pass_handle_ = 0;
+
+  RetireResource(selected_pass_clone_);
+
+  state_.selected_pass_color = nullptr;
+  state_.selected_width = 0;
+  state_.selected_height = 0;
+}
+
 void DlssGuides::CaptureSelectedPassIfNeeded(
     ID3D12GraphicsCommandList* command_list,
     ID3D12Resource* selected_pass_source) {

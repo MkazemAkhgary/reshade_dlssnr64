@@ -36,6 +36,7 @@ class DlssGuides {
       NVSDK_NGX_Feature feature_id);
 
   void SetSelectedPassHandle(uint64_t handle);
+  void ClearSelectedPass();
   void CaptureSelectedPassIfNeeded(
       ID3D12GraphicsCommandList* command_list,
       ID3D12Resource* selected_pass_source);
