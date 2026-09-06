@@ -340,7 +340,8 @@ bool DlssNrDirect::EnsureFeature(
       "DLSSNR.LocalStructureStrength", settings.local_structure);
   parameter_block_.SetFloat("DLSSNR.LocalToneStrength", settings.local_tone);
   parameter_block_.SetFloat(
-      "DLSSNR.SkinStructureStrength", settings.skin_structure);
+      "DLSSNR.SkinStructureStrength",
+      settings.auto_mask ? settings.skin_structure : -1.0f);
   parameter_block_.SetUInt(
       "DLSSNR.UseAutoMask", settings.auto_mask ? 1u : 0u);
   parameter_block_.SetUInt(
@@ -841,7 +842,8 @@ void DlssNrDirect::OnPresent(
       "DLSSNR.LocalStructureStrength", settings.local_structure);
   parameter_block_.SetFloat("DLSSNR.LocalToneStrength", settings.local_tone);
   parameter_block_.SetFloat(
-      "DLSSNR.SkinStructureStrength", settings.skin_structure);
+      "DLSSNR.SkinStructureStrength",
+      settings.auto_mask ? settings.skin_structure : -1.0f);
   parameter_block_.SetUInt(
       "DLSSNR.UseAutoMask", settings.auto_mask ? 1u : 0u);
   parameter_block_.SetUInt(
