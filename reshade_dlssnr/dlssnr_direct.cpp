@@ -1060,6 +1060,8 @@ void DlssNrDirect::OnPresent(
       residual_constants.Height = height;
       residual_constants.LumaStrength = 1.0f;
       residual_constants.ChromaStrength = 1.0f;
+      residual_constants.ResidualSuppression = settings.residual_suppression;
+      residual_constants.ResidualThreshold = settings.residual_threshold;
 
       Barrier(command_list_, working_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -1117,6 +1119,8 @@ void DlssNrDirect::OnPresent(
     upsample_constants.Height = height;
     upsample_constants.LumaStrength = settings.luma_strength;
     upsample_constants.ChromaStrength = settings.chroma_strength;
+    upsample_constants.ResidualSuppression = settings.residual_suppression;
+    upsample_constants.ResidualThreshold = settings.residual_threshold;
 
     Barrier(command_list_, working_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
