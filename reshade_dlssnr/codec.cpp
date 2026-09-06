@@ -436,6 +436,7 @@ cbuffer Params : register(b0)
     uint  gWidth;
     uint  gHeight;
     float gTransferStrength;
+    float gLumaStrength;
     float gColorStrength;
     uint  gDebugView;
     float gMaxRatio;
@@ -444,9 +445,6 @@ cbuffer Params : register(b0)
     float gMvScaleY;
     uint  gGuideWidth;
     uint  gGuideHeight;
-    float gLumaStrength;
-    float gPad0;
-    uint  gPad1[2];
 };
 
 Texture2D<float4> gEnhanced : register(t0);
