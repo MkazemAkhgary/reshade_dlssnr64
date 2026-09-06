@@ -313,14 +313,39 @@ void DrawSettings(reshade::api::effect_runtime*) {
   changed |= ImGui::SliderFloat("##Local Tone", &settings.local_tone, 0.0f, 2.0f, "%.2f");
 
   {
+    const float input_button_width =
+        (ImGui::GetContentRegionAvail().x - kControlLabelWidth) / 2.0f -
+        ImGui::GetStyle().ItemSpacing.x;
+
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("UI Correction");
     ImGui::SameLine(kControlLabelWidth);
-    const bool ui_correction_changed =
-        ImGui::Button(settings.ui_correction ? "ON" : "OFF", ImVec2(-1.0f, 0.0f));
-    changed |= ui_correction_changed;
-    if (ui_correction_changed) {
-      settings.ui_correction = !settings.ui_correction;
+
+    const bool ui_correction_on = settings.ui_correction;
+    const bool ui_correction_off = !settings.ui_correction;
+
+    if (ui_correction_off) {
+      ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+    }
+    if (ImGui::Button("OFF", ImVec2(input_button_width, 0.0f))) {
+      settings.ui_correction = false;
+      changed = true;
+    }
+    if (ui_correction_off) {
+      ImGui::PopStyleColor();
+    }
+
+    ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
+
+    if (ui_correction_on) {
+      ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+    }
+    if (ImGui::Button("ON", ImVec2(input_button_width, 0.0f))) {
+      settings.ui_correction = true;
+      changed = true;
+    }
+    if (ui_correction_on) {
+      ImGui::PopStyleColor();
     }
   }
 
@@ -333,14 +358,39 @@ void DrawSettings(reshade::api::effect_runtime*) {
   changed |= ImGui::SliderFloat("##Local Structure", &settings.local_structure, 0.0f, 2.0f, "%.2f");
 
   {
+    const float input_button_width =
+        (ImGui::GetContentRegionAvail().x - kControlLabelWidth) / 2.0f -
+        ImGui::GetStyle().ItemSpacing.x;
+
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Character Mask");
     ImGui::SameLine(kControlLabelWidth);
-    const bool character_mask_changed =
-        ImGui::Button(settings.auto_mask ? "ON" : "OFF", ImVec2(-1.0f, 0.0f));
-    changed |= character_mask_changed;
-    if (character_mask_changed) {
-      settings.auto_mask = !settings.auto_mask;
+
+    const bool character_mask_on = settings.auto_mask;
+    const bool character_mask_off = !settings.auto_mask;
+
+    if (character_mask_off) {
+      ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+    }
+    if (ImGui::Button("OFF", ImVec2(input_button_width, 0.0f))) {
+      settings.auto_mask = false;
+      changed = true;
+    }
+    if (character_mask_off) {
+      ImGui::PopStyleColor();
+    }
+
+    ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
+
+    if (character_mask_on) {
+      ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+    }
+    if (ImGui::Button("ON", ImVec2(input_button_width, 0.0f))) {
+      settings.auto_mask = true;
+      changed = true;
+    }
+    if (character_mask_on) {
+      ImGui::PopStyleColor();
     }
   }
 
