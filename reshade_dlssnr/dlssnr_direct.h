@@ -10,6 +10,7 @@
 #include <unordered_map>
 
 #include "codec.h"
+#include "settings.h"
 
 namespace reshade_dlssnr {
 
