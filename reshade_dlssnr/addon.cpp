@@ -306,7 +306,11 @@ void DrawSettings(reshade::api::effect_runtime*) {
     }
   }
 
-  changed |= ImGui::SliderFloat("Local Tone", &settings.local_tone, 0.0f, 2.0f, "%.2f");
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted("Local Tone");
+  ImGui::SameLine(kControlLabelWidth);
+  ImGui::SetNextItemWidth(-1.0f);
+  changed |= ImGui::SliderFloat("##Local Tone", &settings.local_tone, 0.0f, 2.0f, "%.2f");
 
   {
     ImGui::AlignTextToFramePadding();
@@ -322,7 +326,11 @@ void DrawSettings(reshade::api::effect_runtime*) {
 
   ImGui::Separator();
 
-  changed |= ImGui::SliderFloat("Local Structure", &settings.local_structure, 0.0f, 2.0f, "%.2f");
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted("Local Structure");
+  ImGui::SameLine(kControlLabelWidth);
+  ImGui::SetNextItemWidth(-1.0f);
+  changed |= ImGui::SliderFloat("##Local Structure", &settings.local_structure, 0.0f, 2.0f, "%.2f");
 
   {
     ImGui::AlignTextToFramePadding();
@@ -339,22 +347,54 @@ void DrawSettings(reshade::api::effect_runtime*) {
   if (!settings.auto_mask) {
     ImGui::BeginDisabled();
   }
-  changed |= ImGui::SliderFloat("Skin Structure", &settings.skin_structure, 0.0f, 1.0f, "%.2f");
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted("Skin Structure");
+  ImGui::SameLine(kControlLabelWidth);
+  ImGui::SetNextItemWidth(-1.0f);
+  changed |= ImGui::SliderFloat("##Skin Structure", &settings.skin_structure, 0.0f, 1.0f, "%.2f");
   if (!settings.auto_mask) {
     ImGui::EndDisabled();
   }
 
   ImGui::Separator();
 
-  changed |= ImGui::SliderFloat("Intensity", &settings.intensity, 0.0f, 2.0f, "%.2f");
-  changed |= ImGui::SliderFloat("Luma Strength", &settings.luma_strength, 0.0f, 1.0f, "%.2f");
-  changed |= ImGui::SliderFloat("Color Strength", &settings.color_strength, 0.0f, 1.0f, "%.2f");
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted("Intensity");
+  ImGui::SameLine(kControlLabelWidth);
+  ImGui::SetNextItemWidth(-1.0f);
+  changed |= ImGui::SliderFloat("##Intensity", &settings.intensity, 0.0f, 2.0f, "%.2f");
+
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted("Luma Strength");
+  ImGui::SameLine(kControlLabelWidth);
+  ImGui::SetNextItemWidth(-1.0f);
+  changed |= ImGui::SliderFloat("##Luma Strength", &settings.luma_strength, 0.0f, 1.0f, "%.2f");
+
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted("Color Strength");
+  ImGui::SameLine(kControlLabelWidth);
+  ImGui::SetNextItemWidth(-1.0f);
+  changed |= ImGui::SliderFloat("##Color Strength", &settings.color_strength, 0.0f, 1.0f, "%.2f");
 
   ImGui::Separator();
 
-  changed |= ImGui::SliderFloat("Working Scale", &settings.working_scale, 0.25f, 1.0f, "%.2f");
-  changed |= ImGui::SliderFloat("Max Ratio", &settings.max_ratio, 1.0f, 8.0f, "%.2f");
-  changed |= ImGui::SliderFloat("White Point Scale", &settings.white_point_scale, 0.25f, 4.0f, "%.2f");
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted("Working Scale");
+  ImGui::SameLine(kControlLabelWidth);
+  ImGui::SetNextItemWidth(-1.0f);
+  changed |= ImGui::SliderFloat("##Working Scale", &settings.working_scale, 0.25f, 1.0f, "%.2f");
+
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted("Max Ratio");
+  ImGui::SameLine(kControlLabelWidth);
+  ImGui::SetNextItemWidth(-1.0f);
+  changed |= ImGui::SliderFloat("##Max Ratio", &settings.max_ratio, 1.0f, 8.0f, "%.2f");
+
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted("White Point Scale");
+  ImGui::SameLine(kControlLabelWidth);
+  ImGui::SetNextItemWidth(-1.0f);
+  changed |= ImGui::SliderFloat("##White Point Scale", &settings.white_point_scale, 0.25f, 4.0f, "%.2f");
 
   ImGui::Separator();
 
@@ -394,7 +434,11 @@ void DrawSettings(reshade::api::effect_runtime*) {
     }
   }
 
-  changed |= ImGui::SliderFloat("UI Mask Threshold", &settings.ui_mask_threshold, 0.0f, 0.2f, "%.3f");
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted("UI Mask Threshold");
+  ImGui::SameLine(kControlLabelWidth);
+  ImGui::SetNextItemWidth(-1.0f);
+  changed |= ImGui::SliderFloat("##UI Mask Threshold", &settings.ui_mask_threshold, 0.0f, 0.2f, "%.3f");
 
   {
     static const char* debug_names[] = {
@@ -406,7 +450,11 @@ void DrawSettings(reshade::api::effect_runtime*) {
         "DLSS Stage (pre-UI)",
         "Selected Pass Resource",
     };
-    changed |= ImGui::Combo("Debug View", &settings.debug_view, debug_names, IM_ARRAYSIZE(debug_names));
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Debug View");
+    ImGui::SameLine(kControlLabelWidth);
+    ImGui::SetNextItemWidth(-1.0f);
+    changed |= ImGui::Combo("##Debug View", &settings.debug_view, debug_names, IM_ARRAYSIZE(debug_names));
 
     if (settings.debug_view == 4) {
       if (settings.use_selected_pass_as_input) {
