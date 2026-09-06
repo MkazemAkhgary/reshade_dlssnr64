@@ -23,6 +23,7 @@ void LoadSettings() {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "WorkingScale", g_settings.working_scale);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "ResidualSuppression", g_settings.residual_suppression);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "ResidualThreshold", g_settings.residual_threshold);
+  if (g_settings.residual_threshold <= 0.0f) g_settings.residual_threshold = 0.10f;
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "MVScaleX", g_settings.mv_scale_x);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "MVScaleY", g_settings.mv_scale_y);
 

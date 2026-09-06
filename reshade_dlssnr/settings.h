@@ -14,7 +14,7 @@ struct Settings {
   float white_point_scale = 100.0f;
   float working_scale = 1.0f;
   float residual_suppression = 0.85f;
-  float residual_threshold = 0.02f;
+  float residual_threshold = 0.10f;
   float mv_scale_x = 1.0f;
   float mv_scale_y = 1.0f;
 

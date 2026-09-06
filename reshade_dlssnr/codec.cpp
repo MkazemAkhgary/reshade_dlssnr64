@@ -712,6 +712,12 @@ cbuffer Params : register(b0)
     float gTransferStrength;
     float gLumaStrength;
     float gChromaStrength;
+    uint  gDebugView;
+    float gUiMaskThreshold;
+    float gUiMaskSoftness;
+    uint  gPassthrough;
+    float gResidualSuppression;
+    float gResidualThreshold;
 };
 
 Texture2D<float4> gOriginal : register(t0);
@@ -737,13 +743,15 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     float final_luma = lerp(low_input_luma, low_enhanced_luma, gLumaStrength);
     float luma_gain = final_luma / max(low_input_luma, 1e-4);
-
     luma_gain = clamp(luma_gain, 0.25, 4.0);
 
-    // Chroma residual is dampened strongly in dark areas to avoid amplifying
-    // low-resolution model noise into saturated pixel artifacts.
-    float noise_dampen = saturate(low_input_luma * 4.0);
-    float chroma_amount = gChromaStrength * noise_dampen;
+    float dark_dampen =
+        smoothstep(0.0, max(gResidualThreshold, 0.001), low_input_luma);
+    float suppression = lerp(1.0, dark_dampen, gResidualSuppression);
+
+    luma_gain = lerp(luma_gain, 1.0, (1.0 - suppression) * gResidualSuppression);
+
+    float chroma_amount = gChromaStrength * suppression;
 
     float3 low_input_chroma = low_input.rgb / max(low_input_luma, 1e-3);
     float3 low_enhanced_chroma = low_enhanced.rgb / max(low_enhanced_luma, 1e-3);
