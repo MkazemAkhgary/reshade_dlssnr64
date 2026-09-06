@@ -321,6 +321,8 @@ void DrawSettings(reshade::api::effect_runtime*) {
     ImGui::TextUnformatted("UI Correction");
     ImGui::SameLine(kControlLabelWidth);
 
+    ImGui::PushID("UI Correction");
+
     const bool ui_correction_on = settings.ui_correction;
     const bool ui_correction_off = !settings.ui_correction;
 
@@ -347,6 +349,8 @@ void DrawSettings(reshade::api::effect_runtime*) {
     if (ui_correction_on) {
       ImGui::PopStyleColor();
     }
+
+    ImGui::PopID();
   }
 
   ImGui::Separator();
@@ -365,6 +369,8 @@ void DrawSettings(reshade::api::effect_runtime*) {
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Character Mask");
     ImGui::SameLine(kControlLabelWidth);
+
+    ImGui::PushID("Character Mask");
 
     const bool character_mask_on = settings.auto_mask;
     const bool character_mask_off = !settings.auto_mask;
@@ -392,6 +398,8 @@ void DrawSettings(reshade::api::effect_runtime*) {
     if (character_mask_on) {
       ImGui::PopStyleColor();
     }
+
+    ImGui::PopID();
   }
 
   if (!settings.auto_mask) {
