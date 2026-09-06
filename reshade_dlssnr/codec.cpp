@@ -738,12 +738,15 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float final_luma = lerp(low_input_luma, low_enhanced_luma, gLumaStrength);
     float luma_gain = final_luma / max(low_input_luma, 1e-6);
 
-    float3 low_input_chroma = low_input.rgb / max(low_input_luma, 1e-6);
-    float3 low_enhanced_chroma = low_enhanced.rgb / max(low_enhanced_luma, 1e-6);
-    float3 final_chroma = lerp(low_input_chroma, low_enhanced_chroma, gChromaStrength);
+    float3 low_input_chroma = low_input.rgb / max(low_input_luma, 1e-3);
+    float3 low_enhanced_chroma = low_enhanced.rgb / max(low_enhanced_luma, 1e-3);
 
-    float3 result = original.rgb * luma_gain;
-    result = result * (final_chroma / max(low_input_chroma, 1e-6));
+    float3 chroma_ratio = lerp(
+        float3(1.0, 1.0, 1.0),
+        low_enhanced_chroma / max(low_input_chroma, 1e-3),
+        gChromaStrength);
+
+    float3 result = original.rgb * luma_gain * chroma_ratio;
 
     gOutput[id.xy] = float4(result, original.a);
 }
