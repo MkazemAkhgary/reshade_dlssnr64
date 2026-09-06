@@ -299,8 +299,7 @@ bool DlssNrDirect::EnsureFeature(
     ID3D12GraphicsCommandList* command_list,
     unsigned int width,
     unsigned int height) {
-  const PassSettings& pass = current_pass_ != nullptr ? *current_pass_
-                                                       : GetSettings().pass1;
+  const PassSettings& pass = GetSettings().pass1;
 
   const unsigned int model_value =
       static_cast<unsigned int>(std::clamp(pass.preset, 0, 2));
@@ -469,9 +468,7 @@ void DlssNrDirect::OnPresent(
   if (!settings.enabled) return;
   if (failed_ || command_queue == nullptr || swapchain == nullptr) return;
 
-  current_pass_ = settings.second_pass_enabled ? &settings.pass2
-                                               : &settings.pass1;
-  const PassSettings& pass = *current_pass_;
+  const PassSettings& pass = settings.pass1;
 
   IDXGISwapChain3* swapchain3 = nullptr;
   if (FAILED(swapchain->QueryInterface(IID_PPV_ARGS(&swapchain3))) || swapchain3 == nullptr) {
