@@ -4,8 +4,6 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "reshade_dlssnr", "reshade_dlssnr.vcxproj", "{8F9A1C2D-4E5F-4A1B-9C2D-1234567890AB}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "dlssnr_forwarder", "dlssnr_forwarder.vcxproj", "{1B2C3D4E-5F6A-4B7C-8D9E-ABCDEF012345}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Release|x64 = Release|x64
@@ -13,8 +11,6 @@ Global
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{8F9A1C2D-4E5F-4A1B-9C2D-1234567890AB}.Release|x64.ActiveCfg = Release|x64
 		{8F9A1C2D-4E5F-4A1B-9C2D-1234567890AB}.Release|x64.Build.0 = Release|x64
-		{1B2C3D4E-5F6A-4B7C-8D9E-ABCDEF012345}.Release|x64.ActiveCfg = Release|x64
-		{1B2C3D4E-5F6A-4B7C-8D9E-ABCDEF012345}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
