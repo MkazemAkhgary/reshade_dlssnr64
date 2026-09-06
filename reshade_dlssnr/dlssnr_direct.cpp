@@ -1068,6 +1068,8 @@ void DlssNrDirect::OnPresent(
               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
       Barrier(command_list_, working_input_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+      Barrier(command_list_, composite_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
       debug_codec_->DispatchUpsampleResidual(
           command_list_,
@@ -1075,16 +1077,18 @@ void DlssNrDirect::OnPresent(
           working_input_,
           working_input_,
           working_output_,
-          working_output_);
+          composite_output_);
 
-      Barrier(command_list_, working_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+      Barrier(command_list_, composite_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
               D3D12_RESOURCE_STATE_COPY_SOURCE);
       Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
               D3D12_RESOURCE_STATE_COPY_DEST);
-      command_list_->CopyResource(backbuffer, working_output_);
+      command_list_->CopyResource(backbuffer, composite_output_);
       Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_COPY_DEST,
               D3D12_RESOURCE_STATE_PRESENT);
-      Barrier(command_list_, working_output_, D3D12_RESOURCE_STATE_COPY_SOURCE,
+      Barrier(command_list_, composite_output_, D3D12_RESOURCE_STATE_COPY_SOURCE,
+              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+      Barrier(command_list_, working_output_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
               D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     }
 
