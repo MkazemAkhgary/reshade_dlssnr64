@@ -1359,6 +1359,7 @@ void DlssNrDirect::Shutdown() {
 
   failed_ = false;
   reason_ = "";
+  pass_index_ = 0;
 }
 
 }  // namespace reshade_dlssnr
