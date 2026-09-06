@@ -24,7 +24,8 @@ struct alignas(256) DlssNrConstants {
   uint32_t Height = 0;
 
   float TransferStrength = 0.5f;
-  float ColourStrength = 0.5f;
+  float LumaStrength = 1.0f;
+  float ColorStrength = 1.0f;
 
   uint32_t DebugView = 0;
   float MaxRatio = 4.0f;
@@ -85,6 +86,13 @@ class DlssNrCodec {
       ID3D12Resource* mask,
       ID3D12Resource* out_target);
 
+  bool DispatchLumaColor(
+      ID3D12GraphicsCommandList* command_list,
+      const DlssNrConstants& constants,
+      ID3D12Resource* enhanced,
+      ID3D12Resource* original,
+      ID3D12Resource* out_target);
+
   void Destroy();
 
   bool IsInit() const { return device_ != nullptr; }
@@ -95,6 +103,7 @@ class DlssNrCodec {
   ID3D12PipelineState* pipeline_state_ = nullptr;
   ID3D12PipelineState* mask_pipeline_state_ = nullptr;
   ID3D12PipelineState* composite_pipeline_state_ = nullptr;
+  ID3D12PipelineState* luma_color_pipeline_state_ = nullptr;
 
   ID3D12DescriptorHeap* descriptor_heap_ = nullptr;
   uint32_t descriptor_size_ = 0;
