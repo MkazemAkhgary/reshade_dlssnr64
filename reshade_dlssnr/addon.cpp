@@ -270,19 +270,20 @@ void DrawSettings(reshade::api::effect_runtime*) {
   auto& settings = reshade_dlssnr::GetSettings();
   bool changed = false;
 
+  const float kControlLabelWidth = 220.0f;
+
   changed |= ImGui::Checkbox("Enable DLSSNR", &settings.enabled);
   changed |= ImGui::Checkbox("Only run on SuperSampling", &settings.only_super_sampling);
 
   ImGui::Separator();
 
   {
-    const float label_width = 220.0f;
-    const float button_width = (ImGui::GetContentRegionAvail().x - label_width) / 3.0f -
+    const float button_width = (ImGui::GetContentRegionAvail().x - kControlLabelWidth) / 3.0f -
                                ImGui::GetStyle().ItemSpacing.x;
 
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Model");
-    ImGui::SameLine(label_width);
+    ImGui::SameLine(kControlLabelWidth);
 
     static const char* model_short_names[] = {"A", "B", "C"};
     for (int i = 0; i < 3; ++i) {
@@ -308,6 +309,9 @@ void DrawSettings(reshade::api::effect_runtime*) {
   changed |= ImGui::SliderFloat("Local Tone", &settings.local_tone, 0.0f, 2.0f, "%.2f");
 
   {
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("UI Correction");
+    ImGui::SameLine(kControlLabelWidth);
     const bool ui_correction_changed =
         ImGui::Button(settings.ui_correction ? "ON" : "OFF", ImVec2(-1.0f, 0.0f));
     changed |= ui_correction_changed;
@@ -321,6 +325,9 @@ void DrawSettings(reshade::api::effect_runtime*) {
   changed |= ImGui::SliderFloat("Local Structure", &settings.local_structure, 0.0f, 2.0f, "%.2f");
 
   {
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Character Mask");
+    ImGui::SameLine(kControlLabelWidth);
     const bool character_mask_changed =
         ImGui::Button(settings.auto_mask ? "ON" : "OFF", ImVec2(-1.0f, 0.0f));
     changed |= character_mask_changed;
@@ -352,13 +359,12 @@ void DrawSettings(reshade::api::effect_runtime*) {
   ImGui::Separator();
 
   {
-    const float label_width = 220.0f;
-    const float input_button_width = (ImGui::GetContentRegionAvail().x - label_width) / 2.0f -
+    const float input_button_width = (ImGui::GetContentRegionAvail().x - kControlLabelWidth) / 2.0f -
                                      ImGui::GetStyle().ItemSpacing.x;
 
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Model Input");
-    ImGui::SameLine(label_width);
+    ImGui::SameLine(kControlLabelWidth);
 
     const bool selected_pass_active = settings.use_selected_pass_as_input;
     const bool backbuffer_active = !settings.use_selected_pass_as_input;
