@@ -763,6 +763,10 @@ void DlssNrDirect::OnPresent(
     mask_constants.Width = width;
     mask_constants.Height = height;
     mask_constants.Passthrough = 1u;
+    mask_constants.UiMaskThreshold = settings.ui_mask_threshold;
+    mask_constants.UiMaskSoftness = settings.ui_mask_softness;
+    mask_constants.UiMaskThreshold = settings.ui_mask_threshold;
+    mask_constants.UiMaskSoftness = settings.ui_mask_softness;
 
     debug_codec_->DispatchMask(
         command_list_,

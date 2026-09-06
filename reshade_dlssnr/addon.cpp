@@ -529,6 +529,17 @@ void DrawSettings(reshade::api::effect_runtime*) {
     changed = true;
   }
 
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted("UI Mask Softness");
+  ImGui::SameLine(kControlLabelWidth);
+  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
+  changed |= ImGui::SliderFloat("##UI Mask Softness", &settings.ui_mask_softness, 0.0f, 0.2f, "%.3f");
+  ImGui::SameLine();
+  if (ImGui::Button("R##UI Mask Softness", ImVec2(24.0f, 0.0f))) {
+    settings.ui_mask_softness = 0.06f;
+    changed = true;
+  }
+
   {
     static const char* debug_names[] = {
         "Off",
