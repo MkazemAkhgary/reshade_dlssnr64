@@ -294,8 +294,12 @@ void DrawSettings(reshade::api::effect_runtime*) {
     settings.skin_structure = -1.0f;
   }
 
-  if (settings.auto_mask) {
-    changed |= ImGui::SliderFloat("Skin Structure", &settings.skin_structure, 0.0f, 1.0f, "%.2f");
+  if (!settings.auto_mask) {
+    ImGui::BeginDisabled();
+  }
+  changed |= ImGui::SliderFloat("Skin Structure", &settings.skin_structure, 0.0f, 1.0f, "%.2f");
+  if (!settings.auto_mask) {
+    ImGui::EndDisabled();
   }
 
   ImGui::Separator();
