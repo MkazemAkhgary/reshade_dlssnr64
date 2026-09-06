@@ -4,27 +4,38 @@
 
 namespace reshade_dlssnr {
 
-struct Settings {
-  bool enabled = true;
-  bool only_super_sampling = true;
+struct PassSettings {
+  int preset = 1;
+  int style = 1;
+
+  float local_tone = 0.0f;
+  bool ui_correction = true;
+
+  float local_structure = 0.0f;
+  bool auto_mask = true;
+  float skin_structure = 0.0f;
 
   float intensity = 0.50f;
-  float chroma_strength = 1.0f;
   float luma_strength = 1.0f;
-  float white_point_scale = 100.0f;
+  float chroma_strength = 1.0f;
+
   float working_scale = 1.0f;
   float residual_suppression = 0.85f;
   float residual_threshold = 0.10f;
-  float mv_scale_x = 1.0f;
-  float mv_scale_y = 1.0f;
+  float white_point_scale = 100.0f;
+};
 
-  int preset = 1;
-  int style = 1;
-  float local_structure = 0.0f;
-  float local_tone = 0.0f;
-  float skin_structure = 0.0f;
-  bool auto_mask = true;
-  bool ui_correction = true;
+struct Settings {
+  bool enabled = true;
+  bool only_super_sampling = true;
+  bool second_pass_enabled = false;
+
+  PassSettings pass1;
+  PassSettings pass2;
+
+  bool use_selected_pass_as_input = false;
+  float ui_mask_threshold = 0.02f;
+  float ui_mask_softness = 0.06f;
 
   int debug_view = 0;
   int compare_mode = 0;
@@ -33,9 +44,6 @@ struct Settings {
   bool compare_swap = false;
 
   bool passthrough_tone_mapped = false;
-  bool use_selected_pass_as_input = false;
-  float ui_mask_threshold = 0.02f;
-  float ui_mask_softness = 0.06f;
 };
 
 Settings& GetSettings();
