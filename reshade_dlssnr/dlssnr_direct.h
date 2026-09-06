@@ -118,6 +118,8 @@ class DlssNrDirect {
   unsigned int working_resource_height_ = 0;
   DXGI_FORMAT working_resource_format_ = DXGI_FORMAT_UNKNOWN;
 
+  const PassSettings* current_pass_ = nullptr;
+
   ID3D12CommandQueue* command_queue_ = nullptr;
   ID3D12CommandAllocator* command_allocator_ = nullptr;
   ID3D12GraphicsCommandList* command_list_ = nullptr;
