@@ -576,6 +576,8 @@ void DrawSettings(reshade::api::effect_runtime*) {
   if (ImGui::CollapsingHeader("Render Passes")) {
     ImGui::Checkbox("Freeze render pass list", &g_freeze_render_pass_list);
 
+    ImGui::BeginChild("##RenderPassScrolling", ImVec2(0.0f, 300.0f), true);
+
   std::lock_guard<std::mutex> pass_lock(g_pass_mutex);
 
   if (g_has_backbuffer_desc) {
@@ -650,6 +652,8 @@ void DrawSettings(reshade::api::effect_runtime*) {
       reshade_dlssnr::DlssGuides::Get().SetSelectedPassHandle(0);
     }
   }
+
+    ImGui::EndChild();
   }
 
   if (changed) {
