@@ -300,17 +300,18 @@ bool DlssNrDirect::EnsureFeature(
     unsigned int width,
     unsigned int height) {
   const Settings& settings = GetSettings();
+  const PassSettings& pass = settings.pass1;
 
   const unsigned int model_value =
-      static_cast<unsigned int>(std::clamp(settings.preset, 0, 2));
+      static_cast<unsigned int>(std::clamp(pass.preset, 0, 2));
   const bool tuning_changed =
       built_preset_ != model_value ||
-      built_intensity_ != settings.intensity ||
-      built_local_structure_ != settings.local_structure ||
-      built_local_tone_ != settings.local_tone ||
-      built_skin_structure_ != settings.skin_structure ||
-      built_auto_mask_ != settings.auto_mask ||
-      built_ui_correction_ != settings.ui_correction;
+      built_intensity_ != pass.intensity ||
+      built_local_structure_ != pass.local_structure ||
+      built_local_tone_ != pass.local_tone ||
+      built_skin_structure_ != pass.skin_structure ||
+      built_auto_mask_ != pass.auto_mask ||
+      built_ui_correction_ != pass.ui_correction;
 
   if (feature_handle_ != nullptr && built_width_ == width && built_height_ == height &&
       !tuning_changed) {
@@ -343,18 +344,18 @@ bool DlssNrDirect::EnsureFeature(
   parameter_block_.SetFloat("DLSSNR.Scale", 1.0f);
   parameter_block_.SetUInt("DLSSNR.Hint.Render.Preset", model_value + 1u);
   parameter_block_.SetUInt(NVSDK_NGX_Parameter_PerfQualityValue, 2u);
-  parameter_block_.SetFloat("DLSSNR.Intensity", settings.intensity);
+  parameter_block_.SetFloat("DLSSNR.Intensity", pass.intensity);
   parameter_block_.SetUInt("DLSSNR.Style", model_value);
   parameter_block_.SetFloat(
-      "DLSSNR.LocalStructureStrength", settings.local_structure);
-  parameter_block_.SetFloat("DLSSNR.LocalToneStrength", settings.local_tone);
+      "DLSSNR.LocalStructureStrength", pass.local_structure);
+  parameter_block_.SetFloat("DLSSNR.LocalToneStrength", pass.local_tone);
   parameter_block_.SetFloat(
       "DLSSNR.SkinStructureStrength",
-      settings.auto_mask ? settings.skin_structure : -1.0f);
+      pass.auto_mask ? pass.skin_structure : -1.0f);
   parameter_block_.SetUInt(
-      "DLSSNR.UseAutoMask", settings.auto_mask ? 1u : 0u);
+      "DLSSNR.UseAutoMask", pass.auto_mask ? 1u : 0u);
   parameter_block_.SetUInt(
-      "DLSSNR.UICorrection", settings.ui_correction ? 1u : 0u);
+      "DLSSNR.UICorrection", pass.ui_correction ? 1u : 0u);
   parameter_block_.SetUInt("CreationNodeMask", 1u);
   parameter_block_.SetUInt("VisibilityNodeMask", 1u);
 
@@ -373,14 +374,14 @@ bool DlssNrDirect::EnsureFeature(
 
   built_width_ = width;
   built_height_ = height;
-  built_working_scale_ = GetSettings().working_scale;
+  built_working_scale_ = pass.working_scale;
   built_preset_ = model_value;
-  built_intensity_ = settings.intensity;
-  built_local_structure_ = settings.local_structure;
-  built_local_tone_ = settings.local_tone;
-  built_skin_structure_ = settings.skin_structure;
-  built_auto_mask_ = settings.auto_mask;
-  built_ui_correction_ = settings.ui_correction;
+  built_intensity_ = pass.intensity;
+  built_local_structure_ = pass.local_structure;
+  built_local_tone_ = pass.local_tone;
+  built_skin_structure_ = pass.skin_structure;
+  built_auto_mask_ = pass.auto_mask;
+  built_ui_correction_ = pass.ui_correction;
 
   std::string msg = "Direct DLSSNR feature created at ";
   msg += std::to_string(width) + "x" + std::to_string(height);
