@@ -9,7 +9,8 @@ struct Settings {
   bool only_super_sampling = true;
 
   float intensity = 0.50f;
-  float colour_strength = 0.50f;
+  float color_strength = 0.50f;
+  float luma_strength = 0.50f;
   float white_point_scale = 100.0f;
   float max_ratio = 4.0f;
   float working_scale = 1.0f;
