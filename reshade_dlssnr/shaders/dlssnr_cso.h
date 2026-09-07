@@ -1,3 +1,7 @@
+// Precompiled DLSSNR shader bytecode used by the codec.
+// Generated from OptiScaler's DLSSNR shader.
+// Source: OptiScaler/shaders/dlssnr/precompile/dlssnr.hlsl
+// License: GPL-3.0-or-later
 #pragma once
 
 inline static const unsigned char DlssNr_cso[] = {
