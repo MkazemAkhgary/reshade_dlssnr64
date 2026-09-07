@@ -447,39 +447,34 @@ void DlssNrDirect::OnPresent(
   unsigned int eval_height = height;
 
   if (use_working_scale) {
-    if (!debug_codec_->InitDownsampleShader(device)) {
+    if (model_input == backbuffer) {
+      command_.Barrier(command_.GetCommandList(), backbuffer,
+                       D3D12_RESOURCE_STATE_PRESENT,
+                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    }
+
+    if (!dlssnr_stages_working_scale::PrepareInput(
+            command_,
+            resources_,
+            debug_codec_.get(),
+            device,
+            model_input,
+            &model_color,
+            &model_output,
+            &eval_width,
+            &eval_height,
+            width,
+            height,
+            work_width,
+            work_height,
+            true)) {
       failed_ = true;
-      reason_ = "failed to initialize downsample shader";
-      reshade::log::message(reshade::log::level::error, reason_);
+      reason_ = "failed to prepare working scale input";
       backbuffer->Release();
       swapchain3->Release();
       device->Release();
       return;
     }
-
-    if (model_input == backbuffer) {
-      command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_PRESENT,
-              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    }
-
-    DlssNrConstants downsample_constants = {};
-    downsample_constants.Mode = DlssNrMode_Downsample;
-    downsample_constants.Width = work_width;
-    downsample_constants.Height = work_height;
-
-    debug_codec_->DispatchDownsample(
-        command_.GetCommandList(),
-        downsample_constants,
-        model_input,
-        resources_.working_input);
-
-    command_.Barrier(command_.GetCommandList(), resources_.working_input, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-    model_color = resources_.working_input;
-    model_output = resources_.working_output;
-    eval_width = work_width;
-    eval_height = work_height;
   }
 
   auto* params = runtime_.Parameters().Get();
