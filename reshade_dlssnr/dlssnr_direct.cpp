@@ -13,6 +13,10 @@
 
 namespace reshade_dlssnr {
 
+namespace {
+std::mutex g_direct_mutex;
+}
+
 DlssNrDirect& DlssNrDirect::Get() {
   static DlssNrDirect direct;
   direct.pass_index_ = 0;
@@ -440,7 +444,7 @@ void DlssNrDirect::OnPresent(
       (built_width_ != work_width ||
        built_height_ != work_height ||
        built_working_scale_ != working_scale)) {
-    release_feature_(feature_handle_);
+    runtime_.ReleaseFeature(feature_handle_);
     feature_handle_ = nullptr;
     first_evaluate_ = true;
   }
