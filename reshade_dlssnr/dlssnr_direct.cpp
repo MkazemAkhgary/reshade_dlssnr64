@@ -178,7 +178,7 @@ void DlssNrDirect::OnPresent(
   ID3D12Device* device = nullptr;
   if (FAILED(command_queue->GetDevice(IID_PPV_ARGS(&device))) || device == nullptr) return;
 
-  if (!runtime_.Initialize(device) || !EnsureCommandInfrastructure(device)) {
+  if (!runtime_.Initialize(device) || !command_.Ensure(device)) {
     failed_ = true;
     reason_ = runtime_.GetLastError();
     reshade::log::message(reshade::log::level::error, reason_);
@@ -381,7 +381,6 @@ void DlssNrDirect::OnPresent(
   }
 
   command_.Reset();
-  command_.GetCommandList()->Reset(command_allocator_, nullptr);
 
   if (pending_selected_pass_ != nullptr) {
     DlssGuides::Get().CaptureSelectedPassIfNeeded(
@@ -451,7 +450,6 @@ void DlssNrDirect::OnPresent(
         settings.debug_view == 5 || settings.debug_view == 6) &&
        (guides.valid || settings.debug_view == 6))) {
     command_.Reset();
-    command_.GetCommandList()->Reset(command_allocator_, nullptr);
 
     ID3D12Resource* debug_input = nullptr;
     unsigned int debug_guide_width = width;
@@ -1018,18 +1016,9 @@ void DlssNrDirect::Shutdown() {
     fence_ = nullptr;
   }
 
-  if (command_.GetCommandList() != nullptr) {
-    command_.GetCommandList()->Release();
-    command_.GetCommandList() = nullptr;
-  }
-
-  if (command_allocator_ != nullptr) {
-    command_allocator_->Release();
-    command_allocator_ = nullptr;
-  }
+  command_.Shutdown();
 
   command_queue_ = nullptr;
-  fence_value_ = 0;
   built_width_ = 0;
   built_height_ = 0;
   built_working_scale_ = -1.0f;
