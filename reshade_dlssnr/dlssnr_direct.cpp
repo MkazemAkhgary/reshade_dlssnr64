@@ -414,6 +414,16 @@ void DlssNrDirect::OnPresent(
     return;
   }
 
+  if (settings.debug_view == 4) {
+    if (pre_ui_source == nullptr || resources_.ui_mask == nullptr ||
+        !guides.valid) {
+      backbuffer->Release();
+      swapchain3->Release();
+      device->Release();
+      return;
+    }
+  }
+
   bool ui_mask_generated = false;
 
   if (guides.valid && pre_ui_source != nullptr && resources_.ui_mask != nullptr) {
