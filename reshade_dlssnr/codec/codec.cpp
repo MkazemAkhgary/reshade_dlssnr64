@@ -289,6 +289,11 @@ void DlssNrCodec::Destroy() {
     luma_color_pipeline_state_ = nullptr;
   }
 
+  if (debug_residual_pipeline_state_ != nullptr) {
+    debug_residual_pipeline_state_->Release();
+    debug_residual_pipeline_state_ = nullptr;
+  }
+
   if (downsample_pipeline_state_ != nullptr) {
     downsample_pipeline_state_->Release();
     downsample_pipeline_state_ = nullptr;
