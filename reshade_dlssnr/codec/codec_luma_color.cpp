@@ -41,8 +41,10 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float4 enhanced = gEnhanced.SampleLevel(s0, uv, 0);
     float4 original = gOriginal.SampleLevel(s0, uv, 0);
 
-    float original_luma = dot(original.rgb, float3(0.2126, 0.7152, 0.0722));
-    float enhanced_luma = dot(enhanced.rgb, float3(0.2126, 0.7152, 0.0722));
+    float original_luma = dot(original.rgb, float3(0.2126, 0.7152, 0.0722)) /
+                          max(gWhitePoint, 1e-4);
+    float enhanced_luma = dot(enhanced.rgb, float3(0.2126, 0.7152, 0.0722)) /
+                          max(gWhitePoint, 1e-4);
 
     float final_luma = lerp(original_luma, enhanced_luma, gLumaStrength);
 
