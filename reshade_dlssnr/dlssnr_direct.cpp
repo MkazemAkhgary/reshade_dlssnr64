@@ -600,6 +600,8 @@ void DlssNrDirect::OnPresent(
     swapchain3->Release();
     device->Release();
     return;
+  }
+
   if (!dlssnr_stages_final_composite::Apply(
           command_,
           resources_,
