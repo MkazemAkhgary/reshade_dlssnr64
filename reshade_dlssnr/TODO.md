@@ -12,7 +12,7 @@ Refactor the addon into smaller domain files while keeping builds and runtime be
 - [x] Create `dlssnr_feature_lifecycle.h/.cpp` for feature creation/rebuild, tuning-change detection, built state, and feature parameter filling. Verify build and model feature creation still works. Verified.
 - [x] Create `dlssnr_stages_debug.h/.cpp` containing only debug-view dispatch logic. Verify build and debug views still work. Verified.
 - [x] Create `dlssnr_stages_ui_mask.h/.cpp` containing only UI mask generation logic. Verify build and UI mask still works. Verified.
-- [ ] Create `dlssnr_stages_working_scale.h/.cpp` containing only downsample and upsample-residual working-scale logic. Verify build and working scale still works.
+- [x] Create `dlssnr_stages_working_scale.h/.cpp` containing only downsample and upsample-residual working-scale logic. Verify build and working scale still works. Verified.
 - [ ] Create `dlssnr_stages_final_composite.h/.cpp` containing only final luma/chroma/UI composite and copy logic. Verify build and final output still works.
 - [ ] Create `dlssnr_pass_session.h/.cpp` as a small orchestrator using command context, pass resources, feature lifecycle, and stage functions. Verify build and pass 1 behavior still works.
 - [ ] Refactor `dlssnr_direct` into a controller/facade owning one `DlssNrRuntime` and two `DlssNrPassSession` instances; keep selected-pass/UI options only on pass 1. Verify build and both pass behaviors still work.
