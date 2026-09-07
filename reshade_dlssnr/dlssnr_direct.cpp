@@ -416,31 +416,16 @@ void DlssNrDirect::OnPresent(
   bool ui_mask_generated = false;
 
   if (guides.valid && pre_ui_source != nullptr && resources_.ui_mask != nullptr) {
-    if (!debug_codec_->InitMaskShader(device)) {
-      failed_ = true;
-      reason_ = "failed to initialize UI mask shader";
-      reshade::log::message(reshade::log::level::error, reason_);
-      backbuffer->Release();
-      swapchain3->Release();
-      device->Release();
-      return;
-    }
-
-    DlssNrConstants mask_constants = {};
-    mask_constants.Mode = DlssNrMode_Encode;
-    mask_constants.WhitePoint = 1.0f;
-    mask_constants.Width = width;
-    mask_constants.Height = height;
-    mask_constants.Passthrough = 1u;
-
-    debug_codec_->DispatchMask(
-        command_.GetCommandList(),
-        mask_constants,
+    ui_mask_generated = dlssnr_stages_ui_mask::Generate(
+        command_,
+        resources_,
+        debug_codec_.get(),
         pre_ui_source,
         backbuffer,
-        resources_.ui_mask);
-
-    ui_mask_generated = true;
+        width,
+        height,
+        settings.ui_mask_threshold,
+        settings.ui_mask_softness);
   }
 
   ID3D12Resource* model_color = model_input;
