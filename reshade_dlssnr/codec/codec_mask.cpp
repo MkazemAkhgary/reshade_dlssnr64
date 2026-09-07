@@ -10,7 +10,6 @@ bool DlssNrCodec::InitMaskShader(ID3D12Device* device) {
 cbuffer Params : register(b0)
 {
     uint  gMode;
-    float gWhitePoint;
     uint  gWidth;
     uint  gHeight;
     float gTransferStrength;
@@ -19,7 +18,6 @@ cbuffer Params : register(b0)
     uint  gDebugView;
     float gUiMaskThreshold;
     float gUiMaskSoftness;
-    uint  gPassthrough;
     float gMvScaleX;
     float gMvScaleY;
     uint  gGuideWidth;

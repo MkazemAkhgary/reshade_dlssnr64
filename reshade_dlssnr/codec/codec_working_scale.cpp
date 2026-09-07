@@ -10,7 +10,6 @@ bool DlssNrCodec::InitDownsampleShader(ID3D12Device* device) {
 cbuffer Params : register(b0)
 {
     uint  gMode;
-    float gWhitePoint;
     uint  gWidth;
     uint  gHeight;
 };
@@ -143,7 +142,6 @@ cbuffer Params : register(b0)
     uint  gDebugView;
     float gUiMaskThreshold;
     float gUiMaskSoftness;
-    uint  gPassthrough;
     float gResidualSuppression;
     float gResidualThreshold;
 };
