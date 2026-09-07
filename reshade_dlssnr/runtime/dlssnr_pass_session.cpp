@@ -426,9 +426,8 @@ void DlssNrPassSession::OnPresent(
                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   }
 
-  if (!use_working_scale &&
-      (settings.debug_view == 7 || settings.debug_view == 8 ||
-       settings.debug_view == 9)) {
+  if (settings.debug_view == 7 || settings.debug_view == 8 ||
+      settings.debug_view == 9) {
     if (!dlssnr_stages_working_scale::RunDebugView(
             command_,
             resources_,
