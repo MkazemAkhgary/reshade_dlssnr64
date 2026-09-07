@@ -1,3 +1,4 @@
+// DLSSNR compute codec: root signature, descriptor heap, shader dispatch API.
 #pragma once
 
 #include <d3d12.h>

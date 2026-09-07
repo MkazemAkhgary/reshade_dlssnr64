@@ -1,3 +1,4 @@
+// RenoDX-compatible NVSDK_NGX_D3D12 hook bridge for guide capture.
 #pragma once
 
 #include <d3d11.h>

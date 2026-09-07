@@ -1,3 +1,4 @@
+// Shared model loading, caller patch, NGX init, and parameter block ownership.
 #pragma once
 
 #include <d3d12.h>

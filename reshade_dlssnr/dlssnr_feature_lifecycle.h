@@ -1,3 +1,4 @@
+// Feature handle creation, tuning-change detection, and rebuild state.
 #pragma once
 
 #include <d3d12.h>

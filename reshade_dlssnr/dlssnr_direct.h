@@ -1,3 +1,4 @@
+// Controller facade owning shared runtime and per-pass sessions.
 #pragma once
 
 #include <d3d12.h>

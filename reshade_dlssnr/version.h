@@ -1,3 +1,4 @@
+// Addon version constant shown in the overlay.
 #pragma once
 
 namespace reshade_dlssnr {

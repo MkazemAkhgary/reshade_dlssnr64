@@ -1,3 +1,4 @@
+// Per-pass output, UI mask, composite, and working-scale resource ownership.
 #pragma once
 
 #include <d3d12.h>

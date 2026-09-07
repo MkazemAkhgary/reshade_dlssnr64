@@ -1,3 +1,4 @@
+// Driver NGX capability parameter block access with vtable slot probing.
 #pragma once
 
 #include <d3d12.h>

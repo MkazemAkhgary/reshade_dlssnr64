@@ -1,3 +1,4 @@
+// Tracks D3D12 command-list state for safe restore around injected work.
 #pragma once
 
 #include <d3d12.h>

@@ -1,3 +1,4 @@
+// D3D12 command allocator/list/fence ownership and barrier/submit helpers.
 #pragma once
 
 #include <d3d12.h>

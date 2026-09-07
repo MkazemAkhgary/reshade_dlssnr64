@@ -1,3 +1,4 @@
+// Captures D3D12 render passes and selected-pass/backbuffer identity for UI.
 #pragma once
 
 #include <reshade.hpp>

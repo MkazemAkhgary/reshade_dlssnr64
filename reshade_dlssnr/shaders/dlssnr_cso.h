@@ -1,3 +1,4 @@
+// Precompiled DLSSNR shader bytecode used by the codec.
 #pragma once
 
 inline static const unsigned char DlssNr_cso[] = {

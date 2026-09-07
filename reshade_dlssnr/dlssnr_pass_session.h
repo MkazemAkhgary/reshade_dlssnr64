@@ -1,3 +1,4 @@
+// Per-pass orchestrator coordinating resources, feature lifecycle, and stages.
 #pragma once
 
 #include <d3d12.h>

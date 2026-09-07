@@ -1,3 +1,4 @@
+// D3D12 command-list state hooking used for early integration points.
 #pragma once
 
 #include <d3d12.h>

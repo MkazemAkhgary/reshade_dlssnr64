@@ -1,3 +1,4 @@
+// Persistent user settings for model passes, UI masking, and debug views.
 #pragma once
 
 #include <reshade.hpp>

@@ -1,3 +1,4 @@
+// ReShade overlay entry point and all ImGui drawing.
 #pragma once
 
 #include <reshade.hpp>

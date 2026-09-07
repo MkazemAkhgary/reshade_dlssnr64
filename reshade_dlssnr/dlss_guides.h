@@ -1,3 +1,4 @@
+// Captures and owns DLSS SuperSampling depth/motion/color guide resources.
 #pragma once
 
 #include <d3d12.h>
