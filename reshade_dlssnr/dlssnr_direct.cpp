@@ -600,89 +600,24 @@ void DlssNrDirect::OnPresent(
     swapchain3->Release();
     device->Release();
     return;
-  } else if (use_selected_input && ui_mask_generated &&
-      resources_.ui_mask != nullptr && resources_.composite_output != nullptr) {
-    if (!debug_codec_->InitCompositeShader(device)) {
-      failed_ = true;
-      reason_ = "failed to initialize UI composite shader";
-      reshade::log::message(reshade::log::level::error, reason_);
-      backbuffer->Release();
-      swapchain3->Release();
-      device->Release();
-      return;
-    }
-
-    DlssNrConstants composite_constants = {};
-    composite_constants.Mode = DlssNrMode_Encode;
-    composite_constants.WhitePoint = 1.0f;
-    composite_constants.Width = width;
-    composite_constants.Height = height;
-    composite_constants.Passthrough = 1u;
-    composite_constants.LumaStrength = pass.luma_strength;
-    composite_constants.ChromaStrength = pass.chroma_strength;
-
-    command_.Barrier(command_.GetCommandList(), resources_.output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    command_.Barrier(command_.GetCommandList(), resources_.ui_mask, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-    debug_codec_->DispatchComposite(
-        command_.GetCommandList(),
-        composite_constants,
-        resources_.output,
-        backbuffer,
-        resources_.ui_mask,
-        resources_.composite_output);
-
-    command_.Barrier(command_.GetCommandList(), resources_.composite_output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
-    command_.GetCommandList()->CopyResource(backbuffer, resources_.composite_output);
-    command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
-    command_.Barrier(command_.GetCommandList(), resources_.composite_output, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    command_.Barrier(command_.GetCommandList(), resources_.ui_mask, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    command_.Barrier(command_.GetCommandList(), resources_.output, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  } else if ((pass.luma_strength != 1.0f || pass.chroma_strength != 1.0f) &&
-             resources_.composite_output != nullptr) {
-    if (!debug_codec_->InitLumaColorShader(device)) {
-      failed_ = true;
-      reason_ = "failed to initialize luma color composite shader";
-      reshade::log::message(reshade::log::level::error, reason_);
-      backbuffer->Release();
-      swapchain3->Release();
-      device->Release();
-      return;
-    }
-
-    DlssNrConstants luma_color_constants = {};
-    luma_color_constants.Mode = DlssNrMode_Encode;
-    luma_color_constants.WhitePoint = 1.0f;
-    luma_color_constants.Width = width;
-    luma_color_constants.Height = height;
-    luma_color_constants.Passthrough = 1u;
-    luma_color_constants.LumaStrength = pass.luma_strength;
-    luma_color_constants.ChromaStrength = pass.chroma_strength;
-
-    command_.Barrier(command_.GetCommandList(), resources_.output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-    debug_codec_->DispatchLumaColor(
-        command_.GetCommandList(),
-        luma_color_constants,
-        resources_.output,
-        backbuffer,
-        resources_.composite_output);
-
-    command_.Barrier(command_.GetCommandList(), resources_.composite_output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
-    command_.GetCommandList()->CopyResource(backbuffer, resources_.composite_output);
-    command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
-    command_.Barrier(command_.GetCommandList(), resources_.composite_output, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    command_.Barrier(command_.GetCommandList(), resources_.output, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  } else {
-    command_.Barrier(command_.GetCommandList(), resources_.output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
-    command_.GetCommandList()->CopyResource(backbuffer, resources_.output);
-    command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
-    command_.Barrier(command_.GetCommandList(), resources_.output, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  if (!dlssnr_stages_final_composite::Apply(
+          command_,
+          resources_,
+          debug_codec_.get(),
+          device,
+          backbuffer,
+          width,
+          height,
+          use_selected_input,
+          ui_mask_generated,
+          pass.luma_strength,
+          pass.chroma_strength)) {
+    failed_ = true;
+    reason_ = "failed to apply final composite";
+    backbuffer->Release();
+    swapchain3->Release();
+    device->Release();
+    return;
   }
 
   command_.GetCommandList()->Close();
