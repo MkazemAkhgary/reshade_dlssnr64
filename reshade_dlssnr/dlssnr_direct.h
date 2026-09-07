@@ -65,7 +65,9 @@ class DlssNrDirect {
   bool built_auto_mask_ = false;
   bool built_ui_correction_ = false;
 
-const PassSettings* current_pass_ = nullptr;
+  const PassSettings* current_pass_ = nullptr;
+
+  ID3D12CommandQueue* command_queue_ = nullptr;
 
   std::unique_ptr<DlssNrCodec> debug_codec_;
 
