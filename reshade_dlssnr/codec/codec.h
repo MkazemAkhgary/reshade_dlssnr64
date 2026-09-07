@@ -100,6 +100,15 @@ class DlssNrCodec {
       ID3D12Resource* original,
       ID3D12Resource* out_target);
 
+  bool InitDebugResidualShader(ID3D12Device* device);
+
+  bool DispatchDebugResidual(
+      ID3D12GraphicsCommandList* command_list,
+      const DlssNrConstants& constants,
+      ID3D12Resource* enhanced,
+      ID3D12Resource* original,
+      ID3D12Resource* out_target);
+
   bool InitDownsampleShader(ID3D12Device* device);
 
   bool DispatchDownsample(
@@ -129,6 +138,7 @@ class DlssNrCodec {
   ID3D12PipelineState* mask_pipeline_state_ = nullptr;
   ID3D12PipelineState* composite_pipeline_state_ = nullptr;
   ID3D12PipelineState* luma_color_pipeline_state_ = nullptr;
+  ID3D12PipelineState* debug_residual_pipeline_state_ = nullptr;
   ID3D12PipelineState* downsample_pipeline_state_ = nullptr;
   ID3D12PipelineState* upsample_residual_pipeline_state_ = nullptr;
 
