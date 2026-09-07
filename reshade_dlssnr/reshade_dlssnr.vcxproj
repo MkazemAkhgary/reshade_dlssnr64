@@ -81,6 +81,7 @@
     <ClCompile Include="stages\dlssnr_stages_debug.cpp" />
     <ClCompile Include="stages\dlssnr_stages_final_composite.cpp" />
     <ClCompile Include="stages\dlssnr_stages_ui_mask.cpp" />
+    <ClCompile Include="stages\dlssnr_stages_upscale.cpp" />
     <ClCompile Include="stages\dlssnr_stages_working_scale.cpp" />
     <ClCompile Include="state\render_pass_tracker.cpp" />
     <ClCompile Include="state\settings.cpp" />
@@ -103,6 +104,7 @@
     <ClInclude Include="stages\dlssnr_stages_debug.h" />
     <ClInclude Include="stages\dlssnr_stages_final_composite.h" />
     <ClInclude Include="stages\dlssnr_stages_ui_mask.h" />
+    <ClInclude Include="stages\dlssnr_stages_upscale.h" />
     <ClInclude Include="stages\dlssnr_stages_working_scale.h" />
     <ClInclude Include="state\render_pass_tracker.h" />
     <ClInclude Include="state\settings.h" />
