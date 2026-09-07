@@ -12,39 +12,14 @@
 #include "dlss_guides.h"
 #include "dlssnr_direct.h"
 #include "nvngx_hook_compat.h"
+#include "render_pass_tracker.h"
 #include "settings.h"
 
 namespace {
 
 bool g_initialized = false;
-bool g_freeze_render_pass_list = false;
 
-struct RenderPassInfo {
-  uint32_t index = 0;
-  uint32_t width = 0;
-  uint32_t height = 0;
-  uint32_t format = 0;
-  uint32_t draw_count = 0;
-  float viewport_width = 0.0f;
-  float viewport_height = 0.0f;
-  uint64_t target_handle = 0;
-  bool is_backbuffer_size = false;
-  bool is_backbuffer_resource = false;
-};
-
-std::mutex g_pass_mutex;
-std::vector<RenderPassInfo> g_render_passes;
-std::vector<RenderPassInfo> g_display_passes;
-std::unordered_map<reshade::api::command_list*, size_t> g_current_pass_for_command_list;
-uint32_t g_current_pass_index = 0;
-
-reshade::api::resource_desc g_backbuffer_desc = {};
-bool g_has_backbuffer_desc = false;
-uint64_t g_backbuffer_native_handle = 0;
-bool g_has_backbuffer_native_handle = false;
-
-uint64_t g_selected_pass_target_handle = 0;
-bool g_has_selected_pass_target = false;
+reshade_dlssnr::RenderPassTracker g_render_pass_tracker;
 
 
 void PinAddonModule() {
