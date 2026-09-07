@@ -24,6 +24,15 @@ bool PrepareInput(
     unsigned int work_height,
     bool use_working_scale);
 
+bool RunDebugView(
+    DlssNrCommandContext& command,
+    DlssNrPassResources& resources,
+    DlssNrCodec* codec,
+    ID3D12CommandQueue* command_queue,
+    ID3D12Resource* backbuffer,
+    ID3D12Resource* model_input,
+    int debug_view);
+
 bool Apply(
     DlssNrCommandContext& command,
     DlssNrPassResources& resources,

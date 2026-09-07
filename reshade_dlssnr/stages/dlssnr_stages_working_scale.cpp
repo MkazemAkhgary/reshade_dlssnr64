@@ -2,6 +2,59 @@
 
 namespace reshade_dlssnr::dlssnr_stages_working_scale {
 
+bool RunDebugView(
+    DlssNrCommandContext& command,
+    DlssNrPassResources& resources,
+    DlssNrCodec* codec,
+    ID3D12CommandQueue* command_queue,
+    ID3D12Resource* backbuffer,
+    ID3D12Resource* model_input,
+    int debug_view) {
+  if (codec == nullptr || backbuffer == nullptr || command_queue == nullptr) {
+    return false;
+  }
+
+  ID3D12Resource* debug_source = nullptr;
+
+  if (debug_view == 7) {
+    debug_source = model_input;
+  } else if (debug_view == 8) {
+    debug_source = resources.output;
+  } else if (debug_view == 9) {
+    debug_source = backbuffer;
+  }
+
+  if (debug_source == nullptr) return false;
+
+  command.GetCommandList()->Close();
+  ID3D12CommandList* lists[] = {command.GetCommandList()};
+  command_queue->ExecuteCommandLists(1, lists);
+  command.WaitGpu(command_queue);
+
+  command.Reset();
+
+  command.Barrier(command.GetCommandList(), debug_source,
+                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                  D3D12_RESOURCE_STATE_COPY_SOURCE);
+  command.Barrier(command.GetCommandList(), backbuffer,
+                  D3D12_RESOURCE_STATE_PRESENT,
+                  D3D12_RESOURCE_STATE_COPY_DEST);
+  command.GetCommandList()->CopyResource(backbuffer, debug_source);
+  command.Barrier(command.GetCommandList(), backbuffer,
+                  D3D12_RESOURCE_STATE_COPY_DEST,
+                  D3D12_RESOURCE_STATE_PRESENT);
+  command.Barrier(command.GetCommandList(), debug_source,
+                  D3D12_RESOURCE_STATE_COPY_SOURCE,
+                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+  command.GetCommandList()->Close();
+  lists[0] = command.GetCommandList();
+  command_queue->ExecuteCommandLists(1, lists);
+  command.WaitGpu(command_queue);
+
+  return true;
+}
+
 bool PrepareInput(
     DlssNrCommandContext& command,
     DlssNrPassResources& resources,
