@@ -11,6 +11,7 @@
 
 #include "codec.h"
 #include "dlssnr_command_context.h"
+#include "dlssnr_feature_lifecycle.h"
 #include "dlssnr_pass_resources.h"
 #include "dlssnr_runtime.h"
 #include "settings.h"
@@ -42,28 +43,12 @@ class DlssNrDirect {
   DlssNrDirect(const DlssNrDirect&) = delete;
   DlssNrDirect& operator=(const DlssNrDirect&) = delete;
 
-  bool EnsureFeature(ID3D12GraphicsCommandList* command_list, unsigned int width, unsigned int height);
-
   DlssNrRuntime runtime_;
   DlssNrCommandContext command_;
   DlssNrPassResources resources_;
+  DlssNrFeatureLifecycle feature_;
 
-  bool failed_ = false;
-  bool first_evaluate_ = true;
-  const char* reason_ = "";
-  int pass_index_ = 0;
-
-  NVSDK_NGX_Handle* feature_handle_ = nullptr;
-  unsigned int built_width_ = 0;
-  unsigned int built_height_ = 0;
-  float built_working_scale_ = -1.0f;
-  unsigned int built_preset_ = 0xFFFFFFFFu;
-  float built_intensity_ = -1.0f;
-  float built_local_structure_ = -1.0f;
-  float built_local_tone_ = -1.0f;
-  float built_skin_structure_ = -1.0f;
-  bool built_auto_mask_ = false;
-  bool built_ui_correction_ = false;
+bool failed_ = false;
 
   const PassSettings* current_pass_ = nullptr;
 
