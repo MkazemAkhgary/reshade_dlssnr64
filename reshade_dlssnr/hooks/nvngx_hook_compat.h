@@ -14,10 +14,6 @@
 
 #include <detours.h>
 
-#include "../../renodx/src/utils/directx.hpp"
-#include "../../renodx/src/utils/log.hpp"
-#include "../../renodx/src/utils/vtable.hpp"
-
 #include "d3d12_hooks.h"
 #include "dlss_guides.h"
 
@@ -83,5 +79,73 @@ static const std::vector<HookItem> DLSS_HOOKS = {
     {"NVSDK_NGX_D3D12_CreateFeature", (void**)&real_NVSDK_NGX_D3D12_CreateFeature, (void*)&hooked_NVSDK_NGX_D3D12_CreateFeature},
     {"NVSDK_NGX_D3D12_EvaluateFeature", (void**)&real_NVSDK_NGX_D3D12_EvaluateFeature, (void*)&hooked_NVSDK_NGX_D3D12_EvaluateFeature},
 };
+
+namespace local_vtable {
+
+static bool Hook(HMODULE module, const std::vector<HookItem>& hooks) {
+  if (module == nullptr) return false;
+
+  bool any_hooked = false;
+  bool transaction_started = false;
+
+  for (const auto& [name, real, hook] : hooks) {
+    FARPROC proc = GetProcAddress(module, name);
+    if (proc == nullptr) continue;
+
+    *real = reinterpret_cast<void*>(proc);
+
+    if (!transaction_started) {
+      if (DetourTransactionBegin() != NO_ERROR) continue;
+      if (DetourUpdateThread(GetCurrentThread()) != NO_ERROR) {
+        DetourTransactionAbort();
+        continue;
+      }
+      transaction_started = true;
+    }
+
+    if (DetourAttach(reinterpret_cast<void**>(real), hook) == NO_ERROR) {
+      any_hooked = true;
+    } else {
+      DetourTransactionAbort();
+      transaction_started = false;
+    }
+  }
+
+  if (transaction_started) {
+    if (DetourTransactionCommit() != NO_ERROR) {
+      DetourTransactionAbort();
+      any_hooked = false;
+    }
+  }
+
+  return any_hooked;
+}
+
+static void Unhook(HMODULE module, const std::vector<HookItem>& hooks) {
+  if (module == nullptr) return;
+
+  for (const auto& [name, real, hook] : hooks) {
+    if (*real == nullptr || hook == nullptr) continue;
+
+    if (DetourTransactionBegin() != NO_ERROR) continue;
+    if (DetourUpdateThread(GetCurrentThread()) != NO_ERROR) {
+      DetourTransactionAbort();
+      continue;
+    }
+
+    if (DetourDetach(reinterpret_cast<void**>(real), hook) != NO_ERROR) {
+      DetourTransactionAbort();
+      continue;
+    }
+
+    if (DetourTransactionCommit() == NO_ERROR) {
+      *real = nullptr;
+    } else {
+      DetourTransactionAbort();
+    }
+  }
+}
+
+}  // namespace local_vtable
 
 }  // namespace reshade_dlssnr::renodx_compat
