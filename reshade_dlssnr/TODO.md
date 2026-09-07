@@ -8,7 +8,7 @@ Refactor the addon into smaller domain files while keeping builds and runtime be
 - [x] Split codec shader implementations out of `codec.cpp` into `codec_mask.cpp`, `codec_ui_composite.cpp`, `codec_luma_color.cpp`, and `codec_working_scale.cpp`, leaving core codec/root-signature/descriptor setup in `codec.cpp`. Verify build and all shaders still function. Verified.
 - [x] Create `dlssnr_runtime.h/.cpp` for shared model loading, IAT patching, `Init_Ext`, function pointers, and parameter block ownership. Verify build and direct model execution still works. Verified.
 - [x] Create `dlssnr_command_context.h/.cpp` for command allocator/list/fence/queue ownership, barrier, reset, submit, and GPU wait helpers. Verify build and present path still works. Verified.
-- [ ] Create `dlssnr_pass_resources.h/.cpp` for per-pass output, UI mask, composite output, and working-scale input/output resource creation and dimension tracking. Verify build and present path still works.
+- [x] Create `dlssnr_pass_resources.h/.cpp` for per-pass output, UI mask, composite output, and working-scale input/output resource creation and dimension tracking. Verify build and present path still works. Verified.
 - [ ] Create `dlssnr_feature_lifecycle.h/.cpp` for feature creation/rebuild, tuning-change detection, built state, and feature parameter filling. Verify build and model feature creation still works.
 - [ ] Create `dlssnr_stages_debug.h/.cpp` containing only debug-view dispatch logic. Verify build and debug views still work.
 - [ ] Create `dlssnr_stages_ui_mask.h/.cpp` containing only UI mask generation logic. Verify build and UI mask still works.
