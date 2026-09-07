@@ -273,15 +273,6 @@ void DlssNrDirect::OnPresent(
     resources_.working_format = desc.Format;
   }
 
-  if (feature_.FeatureHandle() != nullptr &&
-      (built_width_ != work_width ||
-       built_height_ != work_height ||
-       built_working_scale_ != working_scale)) {
-    feature_.ReleaseFeature(runtime_);
-    feature_.ReleaseFeature(runtime_);
-    feature_.SetShouldReset(true);
-  }
-
   command_.Reset();
 
   if (pending_selected_pass_ != nullptr) {
