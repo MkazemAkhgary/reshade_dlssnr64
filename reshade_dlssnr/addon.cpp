@@ -472,23 +472,27 @@ void DrawSettings(reshade::api::effect_runtime*) {
   }
 
   if (ImGui::CollapsingHeader("Render Passes")) {
-    ImGui::Checkbox("Freeze render pass list", &g_freeze_render_pass_list);
+    bool freeze = g_render_pass_tracker.IsFreezeRenderPassList();
+    if (ImGui::Checkbox("Freeze render pass list", &freeze)) {
+      g_render_pass_tracker.SetFreezeRenderPassList(freeze);
+    }
 
     ImGui::BeginChild("##RenderPassScrolling", ImVec2(0.0f, 300.0f), true);
 
-  std::lock_guard<std::mutex> pass_lock(g_pass_mutex);
-
-  if (g_has_backbuffer_desc) {
+  if (g_render_pass_tracker.HasBackbufferDescription()) {
+    const auto& backbuffer_desc = g_render_pass_tracker.BackbufferDescription();
     ImGui::Text(
         "Backbuffer: %ux%u format=%u native=0x%llx",
-        g_backbuffer_desc.texture.width,
-        g_backbuffer_desc.texture.height,
-        static_cast<uint32_t>(g_backbuffer_desc.texture.format),
-        static_cast<unsigned long long>(g_backbuffer_native_handle));
+        backbuffer_desc.texture.width,
+        backbuffer_desc.texture.height,
+        static_cast<uint32_t>(backbuffer_desc.texture.format),
+        static_cast<unsigned long long>(
+            g_render_pass_tracker.BackbufferNativeHandle()));
   }
 
-  for (size_t i = 0; i < g_display_passes.size(); ++i) {
-    const RenderPassInfo& pass = g_display_passes[i];
+  const auto& display_passes = g_render_pass_tracker.DisplayPasses();
+  for (size_t i = 0; i < display_passes.size(); ++i) {
+    const auto& pass = display_passes[i];
 
     std::string label;
     label += std::to_string(static_cast<unsigned long long>(pass.index));
@@ -514,38 +518,38 @@ void DrawSettings(reshade::api::effect_runtime*) {
       label += " [BB]";
     }
 
-    if (g_has_selected_pass_target && pass.target_handle == g_selected_pass_target_handle) {
+    const bool is_selected =
+        g_render_pass_tracker.IsSelectedPassSet() &&
+        pass.target_handle == g_render_pass_tracker.SelectedPassHandle();
+
+    if (is_selected) {
       label += " <selected>";
     }
 
-    const bool is_selected =
-        g_has_selected_pass_target &&
-        pass.target_handle == g_selected_pass_target_handle;
-
     if (ImGui::Selectable(label.c_str(), is_selected)) {
       if (is_selected) {
-        g_selected_pass_target_handle = 0;
-        g_has_selected_pass_target = false;
+        g_render_pass_tracker.DeselectPass();
         reshade_dlssnr::DlssNrDirect::Get().ClearSelectedPass();
         reshade_dlssnr::DlssGuides::Get().ClearSelectedPass();
       } else {
-        g_selected_pass_target_handle = pass.target_handle;
-        g_has_selected_pass_target = true;
-        reshade_dlssnr::DlssNrDirect::Get().SetDebugSelectedResource(g_selected_pass_target_handle);
-        reshade_dlssnr::DlssGuides::Get().SetSelectedPassHandle(g_selected_pass_target_handle);
+        g_render_pass_tracker.SelectPass(pass.target_handle);
+        reshade_dlssnr::DlssNrDirect::Get().SetDebugSelectedResource(
+            pass.target_handle);
+        reshade_dlssnr::DlssGuides::Get().SetSelectedPassHandle(
+            pass.target_handle);
       }
     }
   }
 
-  if (g_has_selected_pass_target) {
+  if (g_render_pass_tracker.IsSelectedPassSet()) {
     ImGui::Separator();
     ImGui::Text(
         "Selected pass target: 0x%llx",
-        static_cast<unsigned long long>(g_selected_pass_target_handle));
+        static_cast<unsigned long long>(
+            g_render_pass_tracker.SelectedPassHandle()));
     ImGui::SameLine();
     if (ImGui::SmallButton("Deselect")) {
-      g_selected_pass_target_handle = 0;
-      g_has_selected_pass_target = false;
+      g_render_pass_tracker.DeselectPass();
       reshade_dlssnr::DlssNrDirect::Get().ClearSelectedPass();
       reshade_dlssnr::DlssGuides::Get().ClearSelectedPass();
     }
