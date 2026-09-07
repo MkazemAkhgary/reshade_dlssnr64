@@ -24,6 +24,8 @@ struct RenderPassInfo {
 
 class RenderPassTracker {
  public:
+  static RenderPassTracker& Get();
+
   void RecordBeginRenderPass(
       reshade::api::command_list* command_list,
       uint32_t count,

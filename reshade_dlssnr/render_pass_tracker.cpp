@@ -6,6 +6,11 @@
 
 namespace reshade_dlssnr {
 
+RenderPassTracker& RenderPassTracker::Get() {
+  static RenderPassTracker tracker;
+  return tracker;
+}
+
 void RenderPassTracker::RecordBeginRenderPass(
     reshade::api::command_list* command_list,
     uint32_t count,
