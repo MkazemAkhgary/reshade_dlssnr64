@@ -247,7 +247,7 @@ void DlssNrDirect::OnPresent(
   ID3D12Device* device = nullptr;
   if (FAILED(command_queue->GetDevice(IID_PPV_ARGS(&device))) || device == nullptr) return;
 
-  if (!runtime_.Initialize() || !EnsureCommandInfrastructure(device)) {
+  if (!runtime_.Initialize(device) || !EnsureCommandInfrastructure(device)) {
     failed_ = true;
     reason_ = runtime_.GetLastError();
     reshade::log::message(reshade::log::level::error, reason_);

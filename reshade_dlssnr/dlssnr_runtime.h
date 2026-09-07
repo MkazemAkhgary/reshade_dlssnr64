@@ -13,7 +13,7 @@ namespace reshade_dlssnr {
 
 class DlssNrRuntime {
  public:
-  bool Initialize();
+  bool Initialize(ID3D12Device* device);
   void Shutdown();
 
   NgxParameterBlock& Parameters() { return parameter_block_; }

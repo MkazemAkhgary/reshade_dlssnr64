@@ -146,10 +146,11 @@ bool DlssNrRuntime::EnsureInitialized(ID3D12Device* device) {
   return true;
 }
 
-bool DlssNrRuntime::Initialize() {
+bool DlssNrRuntime::Initialize(ID3D12Device* device) {
   std::lock_guard<std::mutex> lock(g_runtime_mutex);
 
   if (!EnsureModelAndPatch()) return false;
+  if (!EnsureInitialized(device)) return false;
   if (!parameter_block_.Initialize()) {
     reason_ = "driver NGX capability parameter block unavailable";
     return false;
