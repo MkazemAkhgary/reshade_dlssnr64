@@ -6,6 +6,7 @@ bool RunDebugView(
     DlssNrCommandContext& command,
     DlssNrPassResources& resources,
     DlssNrCodec* codec,
+    ID3D12Device* device,
     ID3D12CommandQueue* command_queue,
     ID3D12Resource* backbuffer,
     ID3D12Resource* model_input,
@@ -13,14 +14,15 @@ bool RunDebugView(
     unsigned int width,
     unsigned int height,
     int debug_view) {
-  if (codec == nullptr || backbuffer == nullptr || command_queue == nullptr) {
+  if (codec == nullptr || backbuffer == nullptr || command_queue == nullptr ||
+      device == nullptr) {
     return false;
   }
 
   command.Reset();
 
   if (debug_view == 9) {
-    if (!codec->InitDebugResidualShader(nullptr)) return false;
+    if (!codec->InitDebugResidualShader(device)) return false;
 
     DlssNrConstants constants = {};
     constants.Mode = DlssNrMode_Resolve;

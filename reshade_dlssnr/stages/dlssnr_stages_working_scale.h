@@ -28,6 +28,7 @@ bool RunDebugView(
     DlssNrCommandContext& command,
     DlssNrPassResources& resources,
     DlssNrCodec* codec,
+    ID3D12Device* device,
     ID3D12CommandQueue* command_queue,
     ID3D12Resource* backbuffer,
     ID3D12Resource* model_input,
