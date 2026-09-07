@@ -24,10 +24,8 @@ bool Generate(
 
   DlssNrConstants constants = {};
   constants.Mode = DlssNrMode_Encode;
-  constants.WhitePoint = 1.0f;
   constants.Width = width;
   constants.Height = height;
-  constants.Passthrough = 1u;
   constants.UiMaskThreshold = threshold;
   constants.UiMaskSoftness = softness;
 

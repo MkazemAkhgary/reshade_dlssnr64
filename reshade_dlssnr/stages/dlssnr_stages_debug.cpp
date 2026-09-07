@@ -70,8 +70,6 @@ bool Run(
   DlssNrConstants constants = {};
   constants.Mode = DlssNrMode_Resolve;
   constants.DebugView = 1;
-  constants.Passthrough = 1;
-  constants.WhitePoint = 1.0f;
   constants.Width = width;
   constants.Height = height;
   constants.GuideWidth = debug_guide_width;
