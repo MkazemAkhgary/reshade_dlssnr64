@@ -426,6 +426,31 @@ void DlssNrPassSession::OnPresent(
                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   }
 
+  if (!use_working_scale &&
+      (settings.debug_view == 7 || settings.debug_view == 8 ||
+       settings.debug_view == 9)) {
+    if (!dlssnr_stages_working_scale::RunDebugView(
+            command_,
+            resources_,
+            debug_codec_.get(),
+            command_queue_,
+            backbuffer,
+            model_input,
+            settings.debug_view)) {
+      failed_ = true;
+      reason_ = "failed to run working debug view";
+      backbuffer->Release();
+      swapchain3->Release();
+      device->Release();
+      return;
+    }
+
+    backbuffer->Release();
+    swapchain3->Release();
+    device->Release();
+    return;
+  }
+
   if (use_working_scale) {
     if (!dlssnr_stages_working_scale::Apply(
             command_,
