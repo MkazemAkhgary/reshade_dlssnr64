@@ -73,6 +73,7 @@
     <ClCompile Include="d3d12_state.cpp" />
     <ClCompile Include="dlssnr_command_context.cpp" />
     <ClCompile Include="dlssnr_direct.cpp" />
+    <ClCompile Include="dlssnr_feature_lifecycle.cpp" />
     <ClCompile Include="dlssnr_pass_resources.cpp" />
     <ClCompile Include="dlssnr_runtime.cpp" />
     <ClCompile Include="ngx_parameter_block.cpp" />
@@ -83,6 +84,7 @@
   <ItemGroup>
     <ClInclude Include="codec.h" />
     <ClInclude Include="dlssnr_command_context.h" />
+    <ClInclude Include="dlssnr_feature_lifecycle.h" />
     <ClInclude Include="d3d12_hooks.h" />
     <ClInclude Include="dlss_guides.h" />
     <ClInclude Include="d3d12_state.h" />
