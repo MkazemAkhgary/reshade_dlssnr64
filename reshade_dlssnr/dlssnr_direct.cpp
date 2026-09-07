@@ -278,8 +278,8 @@ void DlssNrDirect::OnPresent(
        built_height_ != work_height ||
        built_working_scale_ != working_scale)) {
     feature_.ReleaseFeature(runtime_);
-    feature_.FeatureHandle() = nullptr;
-    feature_.ShouldReset() = true;
+    feature_.ReleaseFeature(runtime_);
+    feature_.SetShouldReset(true);
   }
 
   command_.Reset();
@@ -616,7 +616,7 @@ void DlssNrDirect::OnPresent(
   }
 
   parameter_block.SetUInt("DLSSNR.Reset", feature_.ShouldReset() ? 1u : 0u);
-  feature_.ShouldReset() = false;
+  feature_.MarkEvaluated();
 
   if (resources_.ui_mask != nullptr) {
     command_.Barrier(command_.GetCommandList(), resources_.ui_mask, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -870,7 +870,7 @@ void DlssNrDirect::Shutdown() {
 
   if (feature_.FeatureHandle() != nullptr) {
     feature_.ReleaseFeature(runtime_);
-    feature_.FeatureHandle() = nullptr;
+    feature_.ReleaseFeature(runtime_);
   }
 
   if (resources_.output != nullptr) {
@@ -923,7 +923,7 @@ void DlssNrDirect::Shutdown() {
   built_ui_correction_ = false;
   resources_.output_width = 0;
   resources_.output_height = 0;
-  feature_.ShouldReset() = true;
+  feature_.SetShouldReset(true);
 
   runtime_.Shutdown();
 
