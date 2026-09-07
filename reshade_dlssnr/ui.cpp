@@ -58,9 +58,12 @@ void DrawPassSettings(
     ImGui::TextUnformatted(label);
     ImGui::SameLine(kControlLabelWidth);
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
-    changed |= ImGui::SliderFloat("##", value, min_value, max_value, format);
+    const std::string slider_id = "##" + std::string(label);
+    const std::string reset_id = "R##" + std::string(label);
+    changed |= ImGui::SliderFloat(slider_id.c_str(), value,
+                                  min_value, max_value, format);
     ImGui::SameLine();
-    if (ImGui::Button("R##", ImVec2(24.0f, 0.0f))) {
+    if (ImGui::Button(reset_id.c_str(), ImVec2(24.0f, 0.0f))) {
       *value = reset_value;
       changed = true;
     }
@@ -262,9 +265,12 @@ void DrawOverlay(reshade::api::effect_runtime*) {
     ImGui::TextUnformatted(label);
     ImGui::SameLine(kControlLabelWidth);
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
-    changed |= ImGui::SliderFloat("##", value, min_value, max_value, format);
+    const std::string slider_id = "##" + std::string(label);
+    const std::string reset_id = "R##" + std::string(label);
+    changed |= ImGui::SliderFloat(slider_id.c_str(), value,
+                                  min_value, max_value, format);
     ImGui::SameLine();
-    if (ImGui::Button("R##", ImVec2(24.0f, 0.0f))) {
+    if (ImGui::Button(reset_id.c_str(), ImVec2(24.0f, 0.0f))) {
       *value = reset_value;
       changed = true;
     }
