@@ -421,6 +421,7 @@ void DlssNrDirect::OnPresent(
         command_,
         resources_,
         debug_codec_.get(),
+        device,
         pre_ui_source,
         backbuffer,
         width,

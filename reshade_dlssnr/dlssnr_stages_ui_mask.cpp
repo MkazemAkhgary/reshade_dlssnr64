@@ -6,6 +6,7 @@ bool Generate(
     DlssNrCommandContext& command,
     DlssNrPassResources& resources,
     DlssNrCodec* codec,
+    ID3D12Device* device,
     ID3D12Resource* pre_ui_source,
     ID3D12Resource* backbuffer,
     unsigned int width,
@@ -17,7 +18,7 @@ bool Generate(
     return false;
   }
 
-  if (!codec->InitMaskShader(nullptr)) {
+  if (!codec->InitMaskShader(device)) {
     return false;
   }
 
