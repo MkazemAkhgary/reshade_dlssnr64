@@ -133,7 +133,6 @@ bool DlssNrCodec::InitUpsampleResidualShader(ID3D12Device* device) {
 cbuffer Params : register(b0)
 {
     uint  gMode;
-    float gWhitePoint;
     uint  gWidth;
     uint  gHeight;
     float gTransferStrength;

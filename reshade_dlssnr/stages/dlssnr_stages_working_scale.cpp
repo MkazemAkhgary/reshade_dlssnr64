@@ -28,7 +28,6 @@ bool RunDebugView(
 
     DlssNrConstants constants = {};
     constants.Mode = DlssNrMode_Resolve;
-    constants.WhitePoint = 1.0f;
     constants.Width = width;
     constants.Height = height;
 
