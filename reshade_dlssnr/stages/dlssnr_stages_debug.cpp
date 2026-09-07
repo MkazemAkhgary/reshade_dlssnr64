@@ -1,5 +1,7 @@
 #include "dlssnr_stages_debug.h"
 
+#include "dlssnr_stages_upscale.h"
+
 namespace reshade_dlssnr::dlssnr_stages_debug {
 
 bool Run(
@@ -34,6 +36,29 @@ bool Run(
   } else if (debug_view == 5) {
     debug_input = guides.pre_ui_color;
   } else if (debug_view == 6) {
+    if (guides.selected_pass_color != nullptr &&
+        (guides.selected_width != width || guides.selected_height != height)) {
+      if (!dlssnr_stages_upscale::Apply(
+              command,
+              resources,
+              codec,
+              nullptr,
+              guides.selected_pass_color,
+              backbuffer,
+              guides.selected_width,
+              guides.selected_height,
+              width,
+              height)) {
+        return false;
+      }
+
+      command.GetCommandList()->Close();
+      ID3D12CommandList* lists[] = {command.GetCommandList()};
+      command_queue->ExecuteCommandLists(1, lists);
+      command.WaitGpu(command_queue);
+      return true;
+    }
+
     debug_input = guides.selected_pass_color;
     debug_guide_width = guides.selected_width != 0 ? guides.selected_width : width;
     debug_guide_height = guides.selected_height != 0 ? guides.selected_height : height;
