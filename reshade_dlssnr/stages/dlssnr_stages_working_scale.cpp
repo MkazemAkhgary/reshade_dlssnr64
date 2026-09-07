@@ -70,19 +70,19 @@ bool RunDebugView(
 
   if (debug_source == nullptr) return false;
 
-  command.Barrier(command.GetCommandList(), debug_source,
-                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                  D3D12_RESOURCE_STATE_COPY_SOURCE);
-  command.Barrier(command.GetCommandList(), backbuffer,
-                  D3D12_RESOURCE_STATE_PRESENT,
-                  D3D12_RESOURCE_STATE_COPY_DEST);
-  command.GetCommandList()->CopyResource(backbuffer, debug_source);
-  command.Barrier(command.GetCommandList(), backbuffer,
-                  D3D12_RESOURCE_STATE_COPY_DEST,
-                  D3D12_RESOURCE_STATE_PRESENT);
-  command.Barrier(command.GetCommandList(), debug_source,
-                  D3D12_RESOURCE_STATE_COPY_SOURCE,
-                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  if (!dlssnr_stages_upscale::Apply(
+          command,
+          resources,
+          codec,
+          device,
+          debug_source,
+          backbuffer,
+          width,
+          height,
+          width,
+          height)) {
+    return false;
+  }
 
   command.GetCommandList()->Close();
   ID3D12CommandList* lists[] = {command.GetCommandList()};
