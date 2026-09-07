@@ -14,12 +14,14 @@
 #include "nvngx_hook_compat.h"
 #include "render_pass_tracker.h"
 #include "settings.h"
+#include "ui.h"
 
 namespace {
 
 bool g_initialized = false;
 
-reshade_dlssnr::RenderPassTracker g_render_pass_tracker;
+reshade_dlssnr::RenderPassTracker& g_render_pass_tracker =
+    reshade_dlssnr::RenderPassTracker::Get();
 
 
 void PinAddonModule() {
