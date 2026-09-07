@@ -902,19 +902,9 @@ void DlssNrDirect::Shutdown() {
   command_.Shutdown();
 
   command_queue_ = nullptr;
-  built_width_ = 0;
-  built_height_ = 0;
-  built_working_scale_ = -1.0f;
-  built_preset_ = 0xFFFFFFFFu;
-  built_intensity_ = -1.0f;
-  built_local_structure_ = -1.0f;
-  built_local_tone_ = -1.0f;
-  built_skin_structure_ = -1.0f;
-  built_auto_mask_ = false;
-  built_ui_correction_ = false;
   resources_.output_width = 0;
   resources_.output_height = 0;
-  feature_.SetShouldReset(true);
+  feature_.Shutdown(runtime_);
 
   runtime_.Shutdown();
 
