@@ -19,6 +19,7 @@
 namespace {
 
 bool g_initialized = false;
+HMODULE g_nvngx_dlss_module = nullptr;
 
 reshade_dlssnr::RenderPassTracker& g_render_pass_tracker =
     reshade_dlssnr::RenderPassTracker::Get();
@@ -138,9 +139,11 @@ void Attach(HMODULE module) {
   }
 
   if (nvngx_dlss != nullptr) {
-    reshade_dlssnr::local_vtable::Hook(
-        nvngx_dlss,
-        reshade_dlssnr::ngx_hook_compat::DLSS_HOOKS);
+    if (reshade_dlssnr::local_vtable::Hook(
+            nvngx_dlss,
+            reshade_dlssnr::ngx_hook_compat::DLSS_HOOKS)) {
+      g_nvngx_dlss_module = nvngx_dlss;
+    }
   } else {
     reshade::log::message(
         reshade::log::level::warning,
@@ -153,14 +156,12 @@ void Attach(HMODULE module) {
 void Detach() {
   if (!g_initialized) return;
 
-  reshade::unregister_overlay("ReShade DLSSNR", reshade_dlssnr::DrawOverlay);
-  reshade::unregister_event<reshade::addon_event::present>(OnPresent);
-  reshade::unregister_event<reshade::addon_event::draw>(OnDraw);
-  reshade::unregister_event<reshade::addon_event::draw_indexed>(OnDrawIndexed);
-  reshade::unregister_event<reshade::addon_event::bind_viewports>(OnBindViewports);
-  reshade::unregister_event<reshade::addon_event::begin_render_pass>(OnBeginRenderPass);
-  reshade::unregister_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(OnBindRenderTargets);
-  reshade::unregister_event<reshade::addon_event::init_device>(OnInitDevice);
+  if (g_nvngx_dlss_module != nullptr) {
+    reshade_dlssnr::local_vtable::Unhook(
+        g_nvngx_dlss_module,
+        reshade_dlssnr::ngx_hook_compat::DLSS_HOOKS);
+    g_nvngx_dlss_module = nullptr;
+  }
 
   reshade_dlssnr::DlssNrDirect::Get().Shutdown();
   reshade_dlssnr::DlssGuides::Get().Clear();
@@ -173,27 +174,20 @@ void Detach() {
 extern "C" __declspec(dllexport) const char* NAME = "ReShade DLSSNR";
 extern "C" __declspec(dllexport) const char* DESCRIPTION = "Runs NVIDIA DLSS Neural Rendering over DLSS upscaling";
 
-extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon_module, HMODULE) {
+extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon_module, HMODULE reshade_module) {
+  if (!reshade::register_addon(addon_module, reshade_module)) {
+    return false;
+  }
+
   Attach(addon_module);
   return true;
 }
 
-extern "C" __declspec(dllexport) void AddonUninit(HMODULE, HMODULE) {
+extern "C" __declspec(dllexport) void AddonUninit(HMODULE addon_module, HMODULE reshade_module) {
+  Detach();
+  reshade::unregister_addon(addon_module, reshade_module);
 }
 
-BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID reserved) {
-  switch (reason) {
-    case DLL_PROCESS_ATTACH:
-      if (!reshade::register_addon(module)) return FALSE;
-      Attach(module);
-      break;
-    case DLL_PROCESS_DETACH:
-      if (reserved != nullptr) {
-        Detach();
-        reshade::unregister_addon(module);
-      }
-      break;
-  }
-
+BOOL APIENTRY DllMain(HMODULE, DWORD, LPVOID) {
   return TRUE;
 }
