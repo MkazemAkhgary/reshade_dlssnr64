@@ -17,7 +17,7 @@
 #include "d3d12_hooks.h"
 #include "dlss_guides.h"
 
-namespace reshade_dlssnr::renodx_compat {
+namespace reshade_dlssnr::ngx_hook_compat {
 
 static decltype(&NVSDK_NGX_D3D12_EvaluateFeature) real_NVSDK_NGX_D3D12_EvaluateFeature = nullptr;
 static decltype(&NVSDK_NGX_D3D12_CreateFeature) real_NVSDK_NGX_D3D12_CreateFeature = nullptr;
@@ -148,4 +148,4 @@ static void Unhook(HMODULE module, const std::vector<HookItem>& hooks) {
 
 }  // namespace local_vtable
 
-}  // namespace reshade_dlssnr::renodx_compat
+}  // namespace reshade_dlssnr::ngx_hook_compat
