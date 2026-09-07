@@ -8,6 +8,7 @@ bool Run(
     DlssNrCommandContext& command,
     DlssNrPassResources& resources,
     DlssNrCodec* codec,
+    ID3D12Device* device,
     ID3D12CommandQueue* command_queue,
     ID3D12Resource* backbuffer,
     const DlssGuideState& guides,
@@ -15,7 +16,7 @@ bool Run(
     unsigned int width,
     unsigned int height,
     int debug_view) {
-  if (codec == nullptr || backbuffer == nullptr) return false;
+  if (codec == nullptr || backbuffer == nullptr || device == nullptr) return false;
 
   command.Reset();
 
@@ -42,7 +43,7 @@ bool Run(
               command,
               resources,
               codec,
-              nullptr,
+              device,
               guides.selected_pass_color,
               backbuffer,
               guides.selected_width,

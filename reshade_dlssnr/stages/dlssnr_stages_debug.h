@@ -13,6 +13,7 @@ bool Run(
     DlssNrCommandContext& command,
     DlssNrPassResources& resources,
     DlssNrCodec* codec,
+    ID3D12Device* device,
     ID3D12CommandQueue* command_queue,
     ID3D12Resource* backbuffer,
     const DlssGuideState& guides,

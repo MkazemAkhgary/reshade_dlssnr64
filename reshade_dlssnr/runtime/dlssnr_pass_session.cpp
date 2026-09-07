@@ -194,6 +194,7 @@ void DlssNrPassSession::OnPresent(
             command_,
             resources_,
             debug_codec_.get(),
+            device,
             command_queue_,
             backbuffer,
             guides,
