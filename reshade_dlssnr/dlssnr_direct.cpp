@@ -243,9 +243,9 @@ void DlssNrDirect::OnPresent(
   ID3D12Device* device = nullptr;
   if (FAILED(command_queue->GetDevice(IID_PPV_ARGS(&device))) || device == nullptr) return;
 
-  if (!EnsureModelAndPatch() || !EnsureInitialized(device) ||
-      !EnsureParameterBlock() || !EnsureCommandInfrastructure(device)) {
+  if (!runtime_.Initialize() || !EnsureCommandInfrastructure(device)) {
     failed_ = true;
+    reason_ = runtime_.GetLastError();
     reshade::log::message(reshade::log::level::error, reason_);
     swapchain3->Release();
     device->Release();
@@ -709,7 +709,7 @@ void DlssNrDirect::OnPresent(
     eval_height = work_height;
   }
 
-  auto* params = parameter_block_.Get();
+  auto* params = runtime_.Parameters().Get();
   if (params == nullptr) {
     reason_ = "DLSSNR parameter block unavailable";
     return;
@@ -717,68 +717,70 @@ void DlssNrDirect::OnPresent(
 
   params->Reset();
 
-  parameter_block_.SetResource("DLSSNR.Color", model_color);
-  parameter_block_.SetResource("DLSSNR.Output", model_output);
-  parameter_block_.SetUInt("DLSSNR.Enabled", 1u);
-  parameter_block_.SetUInt("DLSSNR.Width", eval_width);
-  parameter_block_.SetUInt("DLSSNR.Height", eval_height);
-  parameter_block_.SetUInt("DLSSNR.InputWidth", width);
-  parameter_block_.SetUInt("DLSSNR.InputHeight", height);
-  parameter_block_.SetUInt("DLSSNR.OutputWidth", eval_width);
-  parameter_block_.SetUInt("DLSSNR.OutputHeight", eval_height);
-  parameter_block_.SetUInt("DLSSNR.Upscaling", 1u);
-  parameter_block_.SetFloat("DLSSNR.ScalingRatio", 1.0f);
-  parameter_block_.SetFloat("DLSSNR.Scale", 1.0f);
-  parameter_block_.SetUInt(
+  NgxParameterBlock& parameter_block = runtime_.Parameters();
+
+  parameter_block.SetResource("DLSSNR.Color", model_color);
+  parameter_block.SetResource("DLSSNR.Output", model_output);
+  parameter_block.SetUInt("DLSSNR.Enabled", 1u);
+  parameter_block.SetUInt("DLSSNR.Width", eval_width);
+  parameter_block.SetUInt("DLSSNR.Height", eval_height);
+  parameter_block.SetUInt("DLSSNR.InputWidth", width);
+  parameter_block.SetUInt("DLSSNR.InputHeight", height);
+  parameter_block.SetUInt("DLSSNR.OutputWidth", eval_width);
+  parameter_block.SetUInt("DLSSNR.OutputHeight", eval_height);
+  parameter_block.SetUInt("DLSSNR.Upscaling", 1u);
+  parameter_block.SetFloat("DLSSNR.ScalingRatio", 1.0f);
+  parameter_block.SetFloat("DLSSNR.Scale", 1.0f);
+  parameter_block.SetUInt(
       "DLSSNR.Hint.Render.Preset",
       static_cast<unsigned int>(std::clamp(pass.preset, 0, 2)) + 1u);
-  parameter_block_.SetFloat("DLSSNR.Intensity", pass.intensity);
-  parameter_block_.SetUInt(
+  parameter_block.SetFloat("DLSSNR.Intensity", pass.intensity);
+  parameter_block.SetUInt(
       "DLSSNR.Style",
       static_cast<unsigned int>(std::clamp(pass.preset, 0, 2)));
-  parameter_block_.SetFloat(
+  parameter_block.SetFloat(
       "DLSSNR.LocalStructureStrength", pass.local_structure);
-  parameter_block_.SetFloat("DLSSNR.LocalToneStrength", pass.local_tone);
-  parameter_block_.SetFloat(
+  parameter_block.SetFloat("DLSSNR.LocalToneStrength", pass.local_tone);
+  parameter_block.SetFloat(
       "DLSSNR.SkinStructureStrength",
       pass.auto_mask ? pass.skin_structure : -1.0f);
-  parameter_block_.SetUInt(
+  parameter_block.SetUInt(
       "DLSSNR.UseAutoMask", pass.auto_mask ? 1u : 0u);
-  parameter_block_.SetUInt(
+  parameter_block.SetUInt(
       "DLSSNR.UICorrection", pass.ui_correction ? 1u : 0u);
 
   if (ui_mask_generated && !use_selected_input && ui_mask_ != nullptr) {
-    parameter_block_.SetResource("DLSSNR.UIAlpha", ui_mask_);
-    parameter_block_.SetResource("DLSSNR.Backbuffer", backbuffer);
+    parameter_block.SetResource("DLSSNR.UIAlpha", ui_mask_);
+    parameter_block.SetResource("DLSSNR.Backbuffer", backbuffer);
   }
 
   if (guides.valid) {
-    parameter_block_.SetResource("DLSSNR.Depth", guides.depth);
-    parameter_block_.SetResource("DLSSNR.MVec", guides.motion);
-    parameter_block_.SetUInt(
+    parameter_block.SetResource("DLSSNR.Depth", guides.depth);
+    parameter_block.SetResource("DLSSNR.MVec", guides.motion);
+    parameter_block.SetUInt(
         "DLSSNR.DepthInverted", guides.depth_inverted ? 1u : 0u);
-    parameter_block_.SetFloat("DLSSNR.MVecScaleX", guides.mv_scale_x);
-    parameter_block_.SetFloat("DLSSNR.MVecScaleY", guides.mv_scale_y);
+    parameter_block.SetFloat("DLSSNR.MVecScaleX", guides.mv_scale_x);
+    parameter_block.SetFloat("DLSSNR.MVecScaleY", guides.mv_scale_y);
 
-    parameter_block_.SetUInt("DLSSNR.ColorSubrectBaseX", 0u);
-    parameter_block_.SetUInt("DLSSNR.ColorSubrectBaseY", 0u);
-    parameter_block_.SetUInt("DLSSNR.ColorSubrectWidth", eval_width);
-    parameter_block_.SetUInt("DLSSNR.ColorSubrectHeight", eval_height);
-    parameter_block_.SetUInt("DLSSNR.OutputSubrectBaseX", 0u);
-    parameter_block_.SetUInt("DLSSNR.OutputSubrectBaseY", 0u);
-    parameter_block_.SetUInt("DLSSNR.OutputSubrectWidth", eval_width);
-    parameter_block_.SetUInt("DLSSNR.OutputSubrectHeight", eval_height);
-    parameter_block_.SetUInt("DLSSNR.DepthSubrectBaseX", 0u);
-    parameter_block_.SetUInt("DLSSNR.DepthSubrectBaseY", 0u);
-    parameter_block_.SetUInt("DLSSNR.DepthSubrectWidth", guides.guide_width);
-    parameter_block_.SetUInt("DLSSNR.DepthSubrectHeight", guides.guide_height);
-    parameter_block_.SetUInt("DLSSNR.MVecSubrectBaseX", 0u);
-    parameter_block_.SetUInt("DLSSNR.MVecSubrectBaseY", 0u);
-    parameter_block_.SetUInt("DLSSNR.MVecSubrectWidth", guides.guide_width);
-    parameter_block_.SetUInt("DLSSNR.MVecSubrectHeight", guides.guide_height);
+    parameter_block.SetUInt("DLSSNR.ColorSubrectBaseX", 0u);
+    parameter_block.SetUInt("DLSSNR.ColorSubrectBaseY", 0u);
+    parameter_block.SetUInt("DLSSNR.ColorSubrectWidth", eval_width);
+    parameter_block.SetUInt("DLSSNR.ColorSubrectHeight", eval_height);
+    parameter_block.SetUInt("DLSSNR.OutputSubrectBaseX", 0u);
+    parameter_block.SetUInt("DLSSNR.OutputSubrectBaseY", 0u);
+    parameter_block.SetUInt("DLSSNR.OutputSubrectWidth", eval_width);
+    parameter_block.SetUInt("DLSSNR.OutputSubrectHeight", eval_height);
+    parameter_block.SetUInt("DLSSNR.DepthSubrectBaseX", 0u);
+    parameter_block.SetUInt("DLSSNR.DepthSubrectBaseY", 0u);
+    parameter_block.SetUInt("DLSSNR.DepthSubrectWidth", guides.guide_width);
+    parameter_block.SetUInt("DLSSNR.DepthSubrectHeight", guides.guide_height);
+    parameter_block.SetUInt("DLSSNR.MVecSubrectBaseX", 0u);
+    parameter_block.SetUInt("DLSSNR.MVecSubrectBaseY", 0u);
+    parameter_block.SetUInt("DLSSNR.MVecSubrectWidth", guides.guide_width);
+    parameter_block.SetUInt("DLSSNR.MVecSubrectHeight", guides.guide_height);
   }
 
-  parameter_block_.SetUInt("DLSSNR.Reset", first_evaluate_ ? 1u : 0u);
+  parameter_block.SetUInt("DLSSNR.Reset", first_evaluate_ ? 1u : 0u);
   first_evaluate_ = false;
 
   if (ui_mask_ != nullptr) {
@@ -788,7 +790,8 @@ void DlssNrDirect::OnPresent(
   if (!use_working_scale) {
     Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   }
-  const NVSDK_NGX_Result result = evaluate_feature_(command_list_, feature_handle_, params, nullptr);
+  const NVSDK_NGX_Result result =
+      runtime_.EvaluateFeature(command_list_, feature_handle_, params, nullptr);
 
   if (ui_mask_ != nullptr) {
     Barrier(command_list_, ui_mask_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
@@ -1030,8 +1033,8 @@ void DlssNrDirect::OnPresent(
 void DlssNrDirect::Shutdown() {
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
-  if (feature_handle_ != nullptr && release_feature_ != nullptr) {
-    release_feature_(feature_handle_);
+  if (feature_handle_ != nullptr) {
+    runtime_.ReleaseFeature(feature_handle_);
     feature_handle_ = nullptr;
   }
 
@@ -1106,7 +1109,7 @@ void DlssNrDirect::Shutdown() {
   output_height_ = 0;
   first_evaluate_ = true;
 
-  parameter_block_.Shutdown();
+  runtime_.Shutdown();
 
   if (pending_selected_pass_ != nullptr) {
     DlssGuides::Get().RetireGameResource(pending_selected_pass_);
