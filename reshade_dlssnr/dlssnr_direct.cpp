@@ -859,10 +859,7 @@ void DlssNrDirect::OnPresent(
 void DlssNrDirect::Shutdown() {
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
-  if (feature_.FeatureHandle() != nullptr) {
-    feature_.ReleaseFeature(runtime_);
-    feature_.ReleaseFeature(runtime_);
-  }
+  feature_.Shutdown(runtime_);
 
   if (resources_.output != nullptr) {
     resources_.output->Release();
@@ -904,7 +901,6 @@ void DlssNrDirect::Shutdown() {
   command_queue_ = nullptr;
   resources_.output_width = 0;
   resources_.output_height = 0;
-  feature_.Shutdown(runtime_);
 
   runtime_.Shutdown();
 
