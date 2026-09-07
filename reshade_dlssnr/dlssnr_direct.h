@@ -10,7 +10,7 @@
 #include <unordered_map>
 
 #include "codec.h"
-#include "ngx_parameter_block.h"
+#include "dlssnr_runtime.h"
 #include "settings.h"
 
 namespace reshade_dlssnr {
@@ -40,28 +40,13 @@ class DlssNrDirect {
   DlssNrDirect(const DlssNrDirect&) = delete;
   DlssNrDirect& operator=(const DlssNrDirect&) = delete;
 
-  bool EnsureModelAndPatch();
-  bool EnsureInitialized(ID3D12Device* device);
-  bool EnsureParameterBlock();
   bool EnsureFeature(ID3D12GraphicsCommandList* command_list, unsigned int width, unsigned int height);
   bool EnsureCommandInfrastructure(ID3D12Device* device);
   void WaitGpu();
   void Barrier(ID3D12GraphicsCommandList* command_list, ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after);
 
-  HMODULE model_module_ = nullptr;
-  NgxParameterBlock parameter_block_;
+  DlssNrRuntime runtime_;
 
-  using PFN_InitExt = NVSDK_NGX_Result(NVSDK_CONV*)(unsigned long long, const wchar_t*, ID3D12Device*, NVSDK_NGX_Version, const NVSDK_NGX_Parameter*);
-  using PFN_CreateFeature = NVSDK_NGX_Result(NVSDK_CONV*)(ID3D12GraphicsCommandList*, NVSDK_NGX_Feature, NVSDK_NGX_Parameter*, NVSDK_NGX_Handle**);
-  using PFN_EvaluateFeature = NVSDK_NGX_Result(NVSDK_CONV*)(ID3D12GraphicsCommandList*, const NVSDK_NGX_Handle*, const NVSDK_NGX_Parameter*, void*);
-  using PFN_ReleaseFeature = NVSDK_NGX_Result(NVSDK_CONV*)(NVSDK_NGX_Handle*);
-
-  PFN_InitExt init_ext_ = nullptr;
-  PFN_CreateFeature create_feature_ = nullptr;
-  PFN_EvaluateFeature evaluate_feature_ = nullptr;
-  PFN_ReleaseFeature release_feature_ = nullptr;
-
-  bool initialized_ = false;
   bool failed_ = false;
   bool first_evaluate_ = true;
   const char* reason_ = "";
