@@ -138,7 +138,7 @@ void Attach(HMODULE module) {
   }
 
   if (nvngx_dlss != nullptr) {
-    renodx::utils::vtable::Hook(
+    reshade_dlssnr::renodx_compat::local_vtable::Hook(
         nvngx_dlss,
         reshade_dlssnr::renodx_compat::DLSS_HOOKS);
   } else {
