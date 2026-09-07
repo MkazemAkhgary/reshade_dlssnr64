@@ -380,12 +380,12 @@ void DlssNrDirect::OnPresent(
     first_evaluate_ = true;
   }
 
-  command_allocator_->Reset();
-  command_list_->Reset(command_allocator_, nullptr);
+  command_.Reset();
+  command_.GetCommandList()->Reset(command_allocator_, nullptr);
 
   if (pending_selected_pass_ != nullptr) {
     DlssGuides::Get().CaptureSelectedPassIfNeeded(
-        command_list_,
+        command_.GetCommandList(),
         pending_selected_pass_);
 
     DlssGuides::Get().RetireGameResource(pending_selected_pass_);
@@ -395,19 +395,19 @@ void DlssNrDirect::OnPresent(
   if (feature_handle_ == nullptr) {
     const unsigned int create_width = use_working_scale ? work_width : width;
     const unsigned int create_height = use_working_scale ? work_height : height;
-    if (!EnsureFeature(command_list_, create_width, create_height)) {
+    if (!EnsureFeature(command_.GetCommandList(), create_width, create_height)) {
       failed_ = true;
-      command_list_->Close();
+      command_.GetCommandList()->Close();
       backbuffer->Release();
       swapchain3->Release();
       device->Release();
       return;
     }
 
-    command_list_->Close();
-    ID3D12CommandList* const lists[] = {command_list_};
+    command_.GetCommandList()->Close();
+    ID3D12CommandList* const lists[] = {command_.GetCommandList()};
     command_queue_->ExecuteCommandLists(1, lists);
-    WaitGpu();
+    command_.WaitGpu(command_queue_);
 
     reshade::log::message(
         reshade::log::level::info,
@@ -450,8 +450,8 @@ void DlssNrDirect::OnPresent(
       ((settings.debug_view == 2 || settings.debug_view == 3 ||
         settings.debug_view == 5 || settings.debug_view == 6) &&
        (guides.valid || settings.debug_view == 6))) {
-    command_allocator_->Reset();
-    command_list_->Reset(command_allocator_, nullptr);
+    command_.Reset();
+    command_.GetCommandList()->Reset(command_allocator_, nullptr);
 
     ID3D12Resource* debug_input = nullptr;
     unsigned int debug_guide_width = width;
@@ -499,7 +499,7 @@ void DlssNrDirect::OnPresent(
     debug_constants.MvScaleY = 1.0f;
 
     debug_codec_->Dispatch(
-        command_list_,
+        command_.GetCommandList(),
         debug_constants,
         debug_input,
         debug_input,
@@ -509,16 +509,16 @@ void DlssNrDirect::OnPresent(
         output_,
         nullptr);
 
-    Barrier(command_list_, output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST);
-    command_list_->CopyResource(backbuffer, output_);
-    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
-    Barrier(command_list_, output_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    Barrier(command_.GetCommandList(), output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST);
+    command_.GetCommandList()->CopyResource(backbuffer, output_);
+    Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
+    Barrier(command_.GetCommandList(), output_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-    command_list_->Close();
-    ID3D12CommandList* const lists[] = {command_list_};
+    command_.GetCommandList()->Close();
+    ID3D12CommandList* const lists[] = {command_.GetCommandList()};
     command_queue_->ExecuteCommandLists(1, lists);
-    WaitGpu();
+    command_.WaitGpu(command_queue_);
 
     backbuffer->Release();
     swapchain3->Release();
@@ -550,22 +550,22 @@ void DlssNrDirect::OnPresent(
     mask_constants.UiMaskSoftness = settings.ui_mask_softness;
 
     debug_codec_->DispatchMask(
-        command_list_,
+        command_.GetCommandList(),
         mask_constants,
         pre_ui_source,
         backbuffer,
         ui_mask_);
 
-    Barrier(command_list_, ui_mask_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST);
-    command_list_->CopyResource(backbuffer, ui_mask_);
-    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
-    Barrier(command_list_, ui_mask_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    Barrier(command_.GetCommandList(), ui_mask_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST);
+    command_.GetCommandList()->CopyResource(backbuffer, ui_mask_);
+    Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
+    Barrier(command_.GetCommandList(), ui_mask_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-    command_list_->Close();
-    ID3D12CommandList* const lists[] = {command_list_};
+    command_.GetCommandList()->Close();
+    ID3D12CommandList* const lists[] = {command_.GetCommandList()};
     command_queue_->ExecuteCommandLists(1, lists);
-    WaitGpu();
+    command_.WaitGpu(command_queue_);
 
     backbuffer->Release();
     swapchain3->Release();
@@ -594,7 +594,7 @@ void DlssNrDirect::OnPresent(
     mask_constants.Passthrough = 1u;
 
     debug_codec_->DispatchMask(
-        command_list_,
+        command_.GetCommandList(),
         mask_constants,
         pre_ui_source,
         backbuffer,
@@ -620,7 +620,7 @@ void DlssNrDirect::OnPresent(
     }
 
     if (model_input == backbuffer) {
-      Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_PRESENT,
+      Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_PRESENT,
               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     }
 
@@ -630,12 +630,12 @@ void DlssNrDirect::OnPresent(
     downsample_constants.Height = work_height;
 
     debug_codec_->DispatchDownsample(
-        command_list_,
+        command_.GetCommandList(),
         downsample_constants,
         model_input,
         working_input_);
 
-    Barrier(command_list_, working_input_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+    Barrier(command_.GetCommandList(), working_input_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
     model_color = working_input_;
@@ -719,17 +719,17 @@ void DlssNrDirect::OnPresent(
   first_evaluate_ = false;
 
   if (ui_mask_ != nullptr) {
-    Barrier(command_list_, ui_mask_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    Barrier(command_.GetCommandList(), ui_mask_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   }
 
   if (!use_working_scale) {
-    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   }
   const NVSDK_NGX_Result result =
-      runtime_.EvaluateFeature(command_list_, feature_handle_, params, nullptr);
+      runtime_.EvaluateFeature(command_.GetCommandList(), feature_handle_, params, nullptr);
 
   if (ui_mask_ != nullptr) {
-    Barrier(command_list_, ui_mask_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    Barrier(command_.GetCommandList(), ui_mask_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   }
 
   if (use_working_scale &&
@@ -742,14 +742,14 @@ void DlssNrDirect::OnPresent(
           settings.debug_view == 7 ? working_input_ : working_output_;
 
       if (debug_source != nullptr) {
-        Barrier(command_list_, debug_source, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+        Barrier(command_.GetCommandList(), debug_source, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                 D3D12_RESOURCE_STATE_COPY_SOURCE);
-        Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+        Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
                 D3D12_RESOURCE_STATE_COPY_DEST);
-        command_list_->CopyResource(backbuffer, debug_source);
-        Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_COPY_DEST,
+        command_.GetCommandList()->CopyResource(backbuffer, debug_source);
+        Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_COPY_DEST,
                 D3D12_RESOURCE_STATE_PRESENT);
-        Barrier(command_list_, debug_source, D3D12_RESOURCE_STATE_COPY_SOURCE,
+        Barrier(command_.GetCommandList(), debug_source, D3D12_RESOURCE_STATE_COPY_SOURCE,
                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
       }
     } else {
@@ -771,38 +771,38 @@ void DlssNrDirect::OnPresent(
       residual_constants.ResidualSuppression = pass.residual_suppression;
       residual_constants.ResidualThreshold = pass.residual_threshold;
 
-      Barrier(command_list_, working_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+      Barrier(command_.GetCommandList(), working_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-      Barrier(command_list_, working_input_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+      Barrier(command_.GetCommandList(), working_input_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-      Barrier(command_list_, composite_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+      Barrier(command_.GetCommandList(), composite_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
               D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
       debug_codec_->DispatchUpsampleResidual(
-          command_list_,
+          command_.GetCommandList(),
           residual_constants,
           working_input_,
           working_input_,
           working_output_,
           composite_output_);
 
-      Barrier(command_list_, composite_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+      Barrier(command_.GetCommandList(), composite_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
               D3D12_RESOURCE_STATE_COPY_SOURCE);
-      Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+      Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
               D3D12_RESOURCE_STATE_COPY_DEST);
-      command_list_->CopyResource(backbuffer, composite_output_);
-      Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_COPY_DEST,
+      command_.GetCommandList()->CopyResource(backbuffer, composite_output_);
+      Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_COPY_DEST,
               D3D12_RESOURCE_STATE_PRESENT);
-      Barrier(command_list_, composite_output_, D3D12_RESOURCE_STATE_COPY_SOURCE,
+      Barrier(command_.GetCommandList(), composite_output_, D3D12_RESOURCE_STATE_COPY_SOURCE,
               D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-      Barrier(command_list_, working_output_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+      Barrier(command_.GetCommandList(), working_output_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
               D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     }
 
-    command_list_->Close();
-    ID3D12CommandList* const lists[] = {command_list_};
+    command_.GetCommandList()->Close();
+    ID3D12CommandList* const lists[] = {command_.GetCommandList()};
     command_queue_->ExecuteCommandLists(1, lists);
-    WaitGpu();
+    command_.WaitGpu(command_queue_);
 
     backbuffer->Release();
     swapchain3->Release();
@@ -830,29 +830,29 @@ void DlssNrDirect::OnPresent(
     upsample_constants.ResidualSuppression = pass.residual_suppression;
     upsample_constants.ResidualThreshold = pass.residual_threshold;
 
-    Barrier(command_list_, working_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+    Barrier(command_.GetCommandList(), working_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    Barrier(command_list_, working_input_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+    Barrier(command_.GetCommandList(), working_input_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
     debug_codec_->DispatchUpsampleResidual(
-        command_list_,
+        command_.GetCommandList(),
         upsample_constants,
         backbuffer,
         working_input_,
         working_output_,
         composite_output_);
 
-    Barrier(command_list_, composite_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+    Barrier(command_.GetCommandList(), composite_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
             D3D12_RESOURCE_STATE_COPY_SOURCE);
-    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+    Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
             D3D12_RESOURCE_STATE_COPY_DEST);
-    command_list_->CopyResource(backbuffer, composite_output_);
-    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_COPY_DEST,
+    command_.GetCommandList()->CopyResource(backbuffer, composite_output_);
+    Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_COPY_DEST,
             D3D12_RESOURCE_STATE_PRESENT);
-    Barrier(command_list_, composite_output_, D3D12_RESOURCE_STATE_COPY_SOURCE,
+    Barrier(command_.GetCommandList(), composite_output_, D3D12_RESOURCE_STATE_COPY_SOURCE,
             D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    Barrier(command_list_, working_output_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+    Barrier(command_.GetCommandList(), working_output_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
             D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   } else if (use_selected_input && ui_mask_generated &&
       ui_mask_ != nullptr && composite_output_ != nullptr) {
@@ -875,25 +875,25 @@ void DlssNrDirect::OnPresent(
     composite_constants.LumaStrength = pass.luma_strength;
     composite_constants.ChromaStrength = pass.chroma_strength;
 
-    Barrier(command_list_, output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    Barrier(command_list_, ui_mask_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    Barrier(command_.GetCommandList(), output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    Barrier(command_.GetCommandList(), ui_mask_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
     debug_codec_->DispatchComposite(
-        command_list_,
+        command_.GetCommandList(),
         composite_constants,
         output_,
         backbuffer,
         ui_mask_,
         composite_output_);
 
-    Barrier(command_list_, composite_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
-    command_list_->CopyResource(backbuffer, composite_output_);
-    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
-    Barrier(command_list_, composite_output_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    Barrier(command_list_, ui_mask_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    Barrier(command_list_, output_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    Barrier(command_.GetCommandList(), composite_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
+    command_.GetCommandList()->CopyResource(backbuffer, composite_output_);
+    Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
+    Barrier(command_.GetCommandList(), composite_output_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    Barrier(command_.GetCommandList(), ui_mask_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    Barrier(command_.GetCommandList(), output_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   } else if ((pass.luma_strength != 1.0f || pass.chroma_strength != 1.0f) &&
              composite_output_ != nullptr) {
     if (!debug_codec_->InitLumaColorShader(device)) {
@@ -915,34 +915,34 @@ void DlssNrDirect::OnPresent(
     luma_color_constants.LumaStrength = pass.luma_strength;
     luma_color_constants.ChromaStrength = pass.chroma_strength;
 
-    Barrier(command_list_, output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    Barrier(command_.GetCommandList(), output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
     debug_codec_->DispatchLumaColor(
-        command_list_,
+        command_.GetCommandList(),
         luma_color_constants,
         output_,
         backbuffer,
         composite_output_);
 
-    Barrier(command_list_, composite_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
-    command_list_->CopyResource(backbuffer, composite_output_);
-    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
-    Barrier(command_list_, composite_output_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    Barrier(command_list_, output_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    Barrier(command_.GetCommandList(), composite_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
+    command_.GetCommandList()->CopyResource(backbuffer, composite_output_);
+    Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
+    Barrier(command_.GetCommandList(), composite_output_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    Barrier(command_.GetCommandList(), output_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   } else {
-    Barrier(command_list_, output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
-    command_list_->CopyResource(backbuffer, output_);
-    Barrier(command_list_, backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
-    Barrier(command_list_, output_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    Barrier(command_.GetCommandList(), output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
+    command_.GetCommandList()->CopyResource(backbuffer, output_);
+    Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
+    Barrier(command_.GetCommandList(), output_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   }
 
-  command_list_->Close();
-  ID3D12CommandList* const lists[] = {command_list_};
+  command_.GetCommandList()->Close();
+  ID3D12CommandList* const lists[] = {command_.GetCommandList()};
   command_queue_->ExecuteCommandLists(1, lists);
-  WaitGpu();
+  command_.WaitGpu(command_queue_);
 
   static bool reported_first_evaluate = false;
   if (!reported_first_evaluate) {
@@ -1018,9 +1018,9 @@ void DlssNrDirect::Shutdown() {
     fence_ = nullptr;
   }
 
-  if (command_list_ != nullptr) {
-    command_list_->Release();
-    command_list_ = nullptr;
+  if (command_.GetCommandList() != nullptr) {
+    command_.GetCommandList()->Release();
+    command_.GetCommandList() = nullptr;
   }
 
   if (command_allocator_ != nullptr) {
