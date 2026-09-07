@@ -320,13 +320,24 @@ void DrawSettings(reshade::api::effect_runtime*) {
       }
 
       ImGui::AlignTextToFramePadding();
+      ImGui::TextUnformatted("Intensity");
+      ImGui::SameLine(kControlLabelWidth);
+      ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
+      changed |= ImGui::SliderFloat("##Intensity", &pass.intensity, 0.0f, 2.0f, "%.2f");
+      ImGui::SameLine();
+      if (ImGui::Button("R##Intensity", ImVec2(24.0f, 0.0f))) {
+        pass.intensity = 0.50f;
+        changed = true;
+      }
+
+      ImGui::AlignTextToFramePadding();
       ImGui::TextUnformatted("Local Tone");
       ImGui::SameLine(kControlLabelWidth);
       ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
       changed |= ImGui::SliderFloat("##Local Tone", &pass.local_tone, 0.0f, 2.0f, "%.2f");
       ImGui::SameLine();
       if (ImGui::Button("R##Local Tone", ImVec2(24.0f, 0.0f))) {
-        pass.local_tone = 0.0f;
+        pass.local_tone = 1.0f;
         changed = true;
       }
 
@@ -375,7 +386,7 @@ void DrawSettings(reshade::api::effect_runtime*) {
       changed |= ImGui::SliderFloat("##Local Structure", &pass.local_structure, 0.0f, 2.0f, "%.2f");
       ImGui::SameLine();
       if (ImGui::Button("R##Local Structure", ImVec2(24.0f, 0.0f))) {
-        pass.local_structure = 0.0f;
+        pass.local_structure = 1.0f;
         changed = true;
       }
 
@@ -433,17 +444,6 @@ void DrawSettings(reshade::api::effect_runtime*) {
       }
 
       ImGui::Separator();
-
-      ImGui::AlignTextToFramePadding();
-      ImGui::TextUnformatted("Intensity");
-      ImGui::SameLine(kControlLabelWidth);
-      ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
-      changed |= ImGui::SliderFloat("##Intensity", &pass.intensity, 0.0f, 2.0f, "%.2f");
-      ImGui::SameLine();
-      if (ImGui::Button("R##Intensity", ImVec2(24.0f, 0.0f))) {
-        pass.intensity = 0.50f;
-        changed = true;
-      }
 
       ImGui::AlignTextToFramePadding();
       ImGui::TextUnformatted("Luma Strength");
