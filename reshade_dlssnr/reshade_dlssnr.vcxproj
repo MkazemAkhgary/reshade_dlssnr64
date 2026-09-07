@@ -73,6 +73,7 @@
     <ClCompile Include="d3d12_state.cpp" />
     <ClCompile Include="dlssnr_command_context.cpp" />
     <ClCompile Include="dlssnr_direct.cpp" />
+    <ClCompile Include="dlssnr_pass_resources.cpp" />
     <ClCompile Include="dlssnr_runtime.cpp" />
     <ClCompile Include="ngx_parameter_block.cpp" />
     <ClCompile Include="render_pass_tracker.cpp" />
@@ -87,6 +88,7 @@
     <ClInclude Include="d3d12_state.h" />
     <ClInclude Include="nvngx_hook_compat.h" />
     <ClInclude Include="dlssnr_direct.h" />
+    <ClInclude Include="dlssnr_pass_resources.h" />
     <ClInclude Include="dlssnr_runtime.h" />
     <ClInclude Include="ngx_parameter_block.h" />
     <ClInclude Include="render_pass_tracker.h" />
