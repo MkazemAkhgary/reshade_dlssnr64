@@ -2,6 +2,8 @@
 
 #include <d3d12.h>
 
+#include "dlssnr_direct.h"
+
 namespace reshade_dlssnr {
 
 void RenderPassTracker::RecordBeginRenderPass(
