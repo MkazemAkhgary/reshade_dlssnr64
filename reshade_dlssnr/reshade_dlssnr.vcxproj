@@ -78,6 +78,7 @@
     <ClCompile Include="dlssnr_runtime.cpp" />
     <ClCompile Include="dlssnr_stages_debug.cpp" />
     <ClCompile Include="dlssnr_stages_ui_mask.cpp" />
+    <ClCompile Include="dlssnr_stages_working_scale.cpp" />
     <ClCompile Include="ngx_parameter_block.cpp" />
     <ClCompile Include="render_pass_tracker.cpp" />
     <ClCompile Include="settings.cpp" />
@@ -96,6 +97,7 @@
     <ClInclude Include="dlssnr_runtime.h" />
     <ClInclude Include="dlssnr_stages_debug.h" />
     <ClInclude Include="dlssnr_stages_ui_mask.h" />
+    <ClInclude Include="dlssnr_stages_working_scale.h" />
     <ClInclude Include="ngx_parameter_block.h" />
     <ClInclude Include="render_pass_tracker.h" />
     <ClInclude Include="settings.h" />
