@@ -49,44 +49,7 @@ bool OnBeginRenderPass(
     const reshade::api::render_pass_render_target_desc* render_targets,
     const reshade::api::render_pass_depth_stencil_desc*,
     reshade::api::render_pass_flags) {
-  if (command_list == nullptr || count == 0 || render_targets == nullptr) return false;
-
-  reshade::api::device* const device = command_list->get_device();
-  if (device == nullptr || device->get_api() != reshade::api::device_api::d3d12) return false;
-
-  const reshade::api::resource target_resource =
-      device->get_resource_from_view(render_targets[0].view);
-
-  if (target_resource == 0) return false;
-
-  const reshade::api::resource_desc desc = device->get_resource_desc(target_resource);
-
-  RenderPassInfo info;
-  info.index = g_current_pass_index++;
-  info.width = desc.texture.width;
-  info.height = desc.texture.height;
-  info.format = static_cast<uint32_t>(desc.texture.format);
-  info.target_handle = target_resource.handle;
-
-  if (g_has_backbuffer_desc) {
-    info.is_backbuffer_size =
-        info.width == g_backbuffer_desc.texture.width &&
-        info.height == g_backbuffer_desc.texture.height;
-  }
-
-  info.is_backbuffer_resource =
-      g_has_backbuffer_native_handle &&
-      info.target_handle == g_backbuffer_native_handle;
-
-  {
-    std::lock_guard<std::mutex> lock(g_pass_mutex);
-    const size_t pass_index = g_render_passes.size();
-    g_render_passes.push_back(info);
-    g_current_pass_for_command_list[command_list] = pass_index;
-  }
-
-  // Selected-pass capture for render-pass style games is intentionally not
-  // handled here. This title uses classic bind_render_targets instead.
+  g_render_pass_tracker.RecordBeginRenderPass(command_list, count, render_targets);
   return false;
 }
 
@@ -95,51 +58,7 @@ void OnBindRenderTargets(
     uint32_t count,
     const reshade::api::resource_view* render_targets,
     reshade::api::resource_view) {
-  if (command_list == nullptr || count == 0 || render_targets == nullptr) return;
-
-  reshade::api::device* const device = command_list->get_device();
-  if (device == nullptr || device->get_api() != reshade::api::device_api::d3d12) return;
-
-  const reshade::api::resource target_resource =
-      device->get_resource_from_view(render_targets[0]);
-
-  if (target_resource == 0) return;
-
-  const reshade::api::resource_desc desc = device->get_resource_desc(target_resource);
-
-  RenderPassInfo info;
-  info.index = g_current_pass_index++;
-  info.width = desc.texture.width;
-  info.height = desc.texture.height;
-  info.format = static_cast<uint32_t>(desc.texture.format);
-  info.target_handle = target_resource.handle;
-
-  if (g_has_backbuffer_desc) {
-    info.is_backbuffer_size =
-        info.width == g_backbuffer_desc.texture.width &&
-        info.height == g_backbuffer_desc.texture.height;
-  }
-
-  info.is_backbuffer_resource =
-      g_has_backbuffer_native_handle &&
-      info.target_handle == g_backbuffer_native_handle;
-
-  {
-    std::lock_guard<std::mutex> lock(g_pass_mutex);
-    const size_t pass_index = g_render_passes.size();
-    g_render_passes.push_back(info);
-    g_current_pass_for_command_list[command_list] = pass_index;
-  }
-
-  if (g_has_selected_pass_target &&
-      info.target_handle == g_selected_pass_target_handle) {
-    auto* native_target = reinterpret_cast<ID3D12Resource*>(target_resource.handle);
-
-    if (native_target != nullptr) {
-      native_target->AddRef();
-      reshade_dlssnr::DlssNrDirect::Get().SetPendingSelectedPass(native_target);
-    }
-  }
+  g_render_pass_tracker.RecordBindRenderTargets(command_list, count, render_targets);
 }
 
 void OnBindViewports(
@@ -147,18 +66,7 @@ void OnBindViewports(
     uint32_t first,
     uint32_t count,
     const reshade::api::viewport* viewports) {
-  if (command_list == nullptr || count == 0 || viewports == nullptr) return;
-
-  std::lock_guard<std::mutex> lock(g_pass_mutex);
-
-  auto it = g_current_pass_for_command_list.find(command_list);
-  if (it == g_current_pass_for_command_list.end()) return;
-
-  if (it->second >= g_render_passes.size()) return;
-
-  RenderPassInfo& pass = g_render_passes[it->second];
-  pass.viewport_width = viewports[first].width;
-  pass.viewport_height = viewports[first].height;
+  g_render_pass_tracker.RecordViewports(command_list, first, count, viewports);
 }
 
 bool OnDraw(
@@ -167,15 +75,7 @@ bool OnDraw(
     uint32_t,
     uint32_t,
     uint32_t) {
-  if (command_list == nullptr) return false;
-
-  std::lock_guard<std::mutex> lock(g_pass_mutex);
-
-  auto it = g_current_pass_for_command_list.find(command_list);
-  if (it == g_current_pass_for_command_list.end()) return false;
-  if (it->second >= g_render_passes.size()) return false;
-
-  g_render_passes[it->second].draw_count++;
+  g_render_pass_tracker.RecordDraw(command_list);
   return false;
 }
 
@@ -186,15 +86,7 @@ bool OnDrawIndexed(
     uint32_t,
     int32_t,
     uint32_t) {
-  if (command_list == nullptr) return false;
-
-  std::lock_guard<std::mutex> lock(g_pass_mutex);
-
-  auto it = g_current_pass_for_command_list.find(command_list);
-  if (it == g_current_pass_for_command_list.end()) return false;
-  if (it->second >= g_render_passes.size()) return false;
-
-  g_render_passes[it->second].draw_count++;
+  g_render_pass_tracker.RecordDrawIndexed(command_list);
   return false;
 }
 
