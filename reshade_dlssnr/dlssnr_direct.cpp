@@ -212,11 +212,11 @@ void DlssNrDirect::OnPresent(
   const bool use_working_scale =
       work_width != width || work_height != height;
 
-  if (output_ == nullptr || output_width_ != width || output_height_ != height ||
-      output_->GetDesc().Format != desc.Format) {
-    if (output_ != nullptr) {
-      output_->Release();
-      output_ = nullptr;
+  if (resources_.output == nullptr || resources_.output_width != width || resources_.output_height != height ||
+      resources_.output->GetDesc().Format != desc.Format) {
+    if (resources_.output != nullptr) {
+      resources_.output->Release();
+      resources_.output = nullptr;
     }
 
     D3D12_HEAP_PROPERTIES heap = {};
@@ -231,7 +231,7 @@ void DlssNrDirect::OnPresent(
             &output_desc,
             D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
             nullptr,
-            IID_PPV_ARGS(&output_)))) {
+            IID_PPV_ARGS(&resources_.output)))) {
       failed_ = true;
       reason_ = "failed to create DLSSNR output texture";
       backbuffer->Release();
@@ -240,15 +240,15 @@ void DlssNrDirect::OnPresent(
       return;
     }
 
-    output_width_ = width;
-    output_height_ = height;
+    resources_.output_width = width;
+    resources_.output_height = height;
   }
 
-  if (ui_mask_ == nullptr || ui_mask_width_ != width || ui_mask_height_ != height ||
-      ui_mask_format_ != desc.Format) {
-    if (ui_mask_ != nullptr) {
-      ui_mask_->Release();
-      ui_mask_ = nullptr;
+  if (resources_.ui_mask == nullptr || resources_.ui_mask_width != width || resources_.ui_mask_height != height ||
+      resources_.ui_mask_format != desc.Format) {
+    if (resources_.ui_mask != nullptr) {
+      resources_.ui_mask->Release();
+      resources_.ui_mask = nullptr;
     }
 
     D3D12_HEAP_PROPERTIES mask_heap = {};
@@ -263,7 +263,7 @@ void DlssNrDirect::OnPresent(
             &mask_desc,
             D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
             nullptr,
-            IID_PPV_ARGS(&ui_mask_)))) {
+            IID_PPV_ARGS(&resources_.ui_mask)))) {
       failed_ = true;
       reason_ = "failed to create DLSSNR UI mask texture";
       backbuffer->Release();
@@ -272,18 +272,18 @@ void DlssNrDirect::OnPresent(
       return;
     }
 
-    ui_mask_width_ = width;
-    ui_mask_height_ = height;
-    ui_mask_format_ = desc.Format;
+    resources_.ui_mask_width = width;
+    resources_.ui_mask_height = height;
+    resources_.ui_mask_format = desc.Format;
   }
 
-  if (composite_output_ == nullptr ||
-      composite_output_width_ != width ||
-      composite_output_height_ != height ||
-      composite_output_format_ != desc.Format) {
-    if (composite_output_ != nullptr) {
-      composite_output_->Release();
-      composite_output_ = nullptr;
+  if (resources_.composite_output == nullptr ||
+      resources_.composite_output_width != width ||
+      resources_.composite_output_height != height ||
+      resources_.composite_output_format != desc.Format) {
+    if (resources_.composite_output != nullptr) {
+      resources_.composite_output->Release();
+      resources_.composite_output = nullptr;
     }
 
     D3D12_HEAP_PROPERTIES composite_heap = {};
@@ -298,7 +298,7 @@ void DlssNrDirect::OnPresent(
             &composite_desc,
             D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
             nullptr,
-            IID_PPV_ARGS(&composite_output_)))) {
+            IID_PPV_ARGS(&resources_.composite_output)))) {
       failed_ = true;
       reason_ = "failed to create DLSSNR composite output texture";
       backbuffer->Release();
@@ -307,23 +307,23 @@ void DlssNrDirect::OnPresent(
       return;
     }
 
-    composite_output_width_ = width;
-    composite_output_height_ = height;
-    composite_output_format_ = desc.Format;
+    resources_.composite_output_width = width;
+    resources_.composite_output_height = height;
+    resources_.composite_output_format = desc.Format;
   }
 
   if (use_working_scale &&
-      (working_input_ == nullptr ||
-       working_resource_width_ != work_width ||
-       working_resource_height_ != work_height ||
-       working_resource_format_ != desc.Format)) {
-    if (working_input_ != nullptr) {
-      working_input_->Release();
-      working_input_ = nullptr;
+      (resources_.working_input == nullptr ||
+       resources_.working_width != work_width ||
+       resources_.working_height != work_height ||
+       resources_.working_format != desc.Format)) {
+    if (resources_.working_input != nullptr) {
+      resources_.working_input->Release();
+      resources_.working_input = nullptr;
     }
-    if (working_output_ != nullptr) {
-      working_output_->Release();
-      working_output_ = nullptr;
+    if (resources_.working_output != nullptr) {
+      resources_.working_output->Release();
+      resources_.working_output = nullptr;
     }
 
     D3D12_HEAP_PROPERTIES working_heap = {};
@@ -340,7 +340,7 @@ void DlssNrDirect::OnPresent(
             &working_desc,
             D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
             nullptr,
-            IID_PPV_ARGS(&working_input_)))) {
+            IID_PPV_ARGS(&resources_.working_input)))) {
       failed_ = true;
       reason_ = "failed to create DLSSNR working input texture";
       backbuffer->Release();
@@ -355,20 +355,20 @@ void DlssNrDirect::OnPresent(
             &working_desc,
             D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
             nullptr,
-            IID_PPV_ARGS(&working_output_)))) {
+            IID_PPV_ARGS(&resources_.working_output)))) {
       failed_ = true;
       reason_ = "failed to create DLSSNR working output texture";
-      working_input_->Release();
-      working_input_ = nullptr;
+      resources_.working_input->Release();
+      resources_.working_input = nullptr;
       backbuffer->Release();
       swapchain3->Release();
       device->Release();
       return;
     }
 
-    working_resource_width_ = work_width;
-    working_resource_height_ = work_height;
-    working_resource_format_ = desc.Format;
+    resources_.working_width = work_width;
+    resources_.working_height = work_height;
+    resources_.working_format = desc.Format;
   }
 
   if (feature_handle_ != nullptr &&
@@ -504,14 +504,14 @@ void DlssNrDirect::OnPresent(
         debug_input,
         nullptr,
         nullptr,
-        output_,
+        resources_.output,
         nullptr);
 
-    command_.Barrier(command_.GetCommandList(), output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    command_.Barrier(command_.GetCommandList(), resources_.output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
     command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST);
-    command_.GetCommandList()->CopyResource(backbuffer, output_);
+    command_.GetCommandList()->CopyResource(backbuffer, resources_.output);
     command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
-    command_.Barrier(command_.GetCommandList(), output_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    command_.Barrier(command_.GetCommandList(), resources_.output, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
     command_.GetCommandList()->Close();
     ID3D12CommandList* const lists[] = {command_.GetCommandList()};
@@ -525,7 +525,7 @@ void DlssNrDirect::OnPresent(
   }
 
   if (settings.debug_view == 4 && guides.valid &&
-      pre_ui_source != nullptr && ui_mask_ != nullptr) {
+      pre_ui_source != nullptr && resources_.ui_mask != nullptr) {
     if (!debug_codec_->InitMaskShader(device)) {
       failed_ = true;
       reason_ = "failed to initialize UI mask shader";
@@ -552,13 +552,13 @@ void DlssNrDirect::OnPresent(
         mask_constants,
         pre_ui_source,
         backbuffer,
-        ui_mask_);
+        resources_.ui_mask);
 
-    command_.Barrier(command_.GetCommandList(), ui_mask_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    command_.Barrier(command_.GetCommandList(), resources_.ui_mask, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
     command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST);
-    command_.GetCommandList()->CopyResource(backbuffer, ui_mask_);
+    command_.GetCommandList()->CopyResource(backbuffer, resources_.ui_mask);
     command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
-    command_.Barrier(command_.GetCommandList(), ui_mask_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    command_.Barrier(command_.GetCommandList(), resources_.ui_mask, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
     command_.GetCommandList()->Close();
     ID3D12CommandList* const lists[] = {command_.GetCommandList()};
@@ -573,7 +573,7 @@ void DlssNrDirect::OnPresent(
 
   bool ui_mask_generated = false;
 
-  if (guides.valid && pre_ui_source != nullptr && ui_mask_ != nullptr) {
+  if (guides.valid && pre_ui_source != nullptr && resources_.ui_mask != nullptr) {
     if (!debug_codec_->InitMaskShader(device)) {
       failed_ = true;
       reason_ = "failed to initialize UI mask shader";
@@ -596,13 +596,13 @@ void DlssNrDirect::OnPresent(
         mask_constants,
         pre_ui_source,
         backbuffer,
-        ui_mask_);
+        resources_.ui_mask);
 
     ui_mask_generated = true;
   }
 
   ID3D12Resource* model_color = model_input;
-  ID3D12Resource* model_output = output_;
+  ID3D12Resource* model_output = resources_.output;
   unsigned int eval_width = width;
   unsigned int eval_height = height;
 
@@ -631,13 +631,13 @@ void DlssNrDirect::OnPresent(
         command_.GetCommandList(),
         downsample_constants,
         model_input,
-        working_input_);
+        resources_.working_input);
 
-    command_.Barrier(command_.GetCommandList(), working_input_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+    command_.Barrier(command_.GetCommandList(), resources_.working_input, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-    model_color = working_input_;
-    model_output = working_output_;
+    model_color = resources_.working_input;
+    model_output = resources_.working_output;
     eval_width = work_width;
     eval_height = work_height;
   }
@@ -682,8 +682,8 @@ void DlssNrDirect::OnPresent(
   parameter_block.SetUInt(
       "DLSSNR.UICorrection", pass.ui_correction ? 1u : 0u);
 
-  if (ui_mask_generated && !use_selected_input && ui_mask_ != nullptr) {
-    parameter_block.SetResource("DLSSNR.UIAlpha", ui_mask_);
+  if (ui_mask_generated && !use_selected_input && resources_.ui_mask != nullptr) {
+    parameter_block.SetResource("DLSSNR.UIAlpha", resources_.ui_mask);
     parameter_block.SetResource("DLSSNR.Backbuffer", backbuffer);
   }
 
@@ -716,8 +716,8 @@ void DlssNrDirect::OnPresent(
   parameter_block.SetUInt("DLSSNR.Reset", first_evaluate_ ? 1u : 0u);
   first_evaluate_ = false;
 
-  if (ui_mask_ != nullptr) {
-    command_.Barrier(command_.GetCommandList(), ui_mask_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  if (resources_.ui_mask != nullptr) {
+    command_.Barrier(command_.GetCommandList(), resources_.ui_mask, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   }
 
   if (!use_working_scale) {
@@ -726,8 +726,8 @@ void DlssNrDirect::OnPresent(
   const NVSDK_NGX_Result result =
       runtime_.EvaluateFeature(command_.GetCommandList(), feature_handle_, params, nullptr);
 
-  if (ui_mask_ != nullptr) {
-    command_.Barrier(command_.GetCommandList(), ui_mask_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  if (resources_.ui_mask != nullptr) {
+    command_.Barrier(command_.GetCommandList(), resources_.ui_mask, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   }
 
   if (use_working_scale &&
@@ -737,7 +737,7 @@ void DlssNrDirect::OnPresent(
 
     if (!debug_residual) {
       ID3D12Resource* debug_source =
-          settings.debug_view == 7 ? working_input_ : working_output_;
+          settings.debug_view == 7 ? resources_.working_input : resources_.working_output;
 
       if (debug_source != nullptr) {
         command_.Barrier(command_.GetCommandList(), debug_source, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
@@ -769,31 +769,31 @@ void DlssNrDirect::OnPresent(
       residual_constants.ResidualSuppression = pass.residual_suppression;
       residual_constants.ResidualThreshold = pass.residual_threshold;
 
-      command_.Barrier(command_.GetCommandList(), working_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+      command_.Barrier(command_.GetCommandList(), resources_.working_output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-      command_.Barrier(command_.GetCommandList(), working_input_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+      command_.Barrier(command_.GetCommandList(), resources_.working_input, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-      command_.Barrier(command_.GetCommandList(), composite_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+      command_.Barrier(command_.GetCommandList(), resources_.composite_output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
               D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
       debug_codec_->DispatchUpsampleResidual(
           command_.GetCommandList(),
           residual_constants,
-          working_input_,
-          working_input_,
-          working_output_,
-          composite_output_);
+          resources_.working_input,
+          resources_.working_input,
+          resources_.working_output,
+          resources_.composite_output);
 
-      command_.Barrier(command_.GetCommandList(), composite_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+      command_.Barrier(command_.GetCommandList(), resources_.composite_output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
               D3D12_RESOURCE_STATE_COPY_SOURCE);
       command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
               D3D12_RESOURCE_STATE_COPY_DEST);
-      command_.GetCommandList()->CopyResource(backbuffer, composite_output_);
+      command_.GetCommandList()->CopyResource(backbuffer, resources_.composite_output);
       command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_COPY_DEST,
               D3D12_RESOURCE_STATE_PRESENT);
-      command_.Barrier(command_.GetCommandList(), composite_output_, D3D12_RESOURCE_STATE_COPY_SOURCE,
+      command_.Barrier(command_.GetCommandList(), resources_.composite_output, D3D12_RESOURCE_STATE_COPY_SOURCE,
               D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-      command_.Barrier(command_.GetCommandList(), working_output_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+      command_.Barrier(command_.GetCommandList(), resources_.working_output, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
               D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     }
 
@@ -828,32 +828,32 @@ void DlssNrDirect::OnPresent(
     upsample_constants.ResidualSuppression = pass.residual_suppression;
     upsample_constants.ResidualThreshold = pass.residual_threshold;
 
-    command_.Barrier(command_.GetCommandList(), working_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+    command_.Barrier(command_.GetCommandList(), resources_.working_output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    command_.Barrier(command_.GetCommandList(), working_input_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+    command_.Barrier(command_.GetCommandList(), resources_.working_input, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
     debug_codec_->DispatchUpsampleResidual(
         command_.GetCommandList(),
         upsample_constants,
         backbuffer,
-        working_input_,
-        working_output_,
-        composite_output_);
+        resources_.working_input,
+        resources_.working_output,
+        resources_.composite_output);
 
-    command_.Barrier(command_.GetCommandList(), composite_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+    command_.Barrier(command_.GetCommandList(), resources_.composite_output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
             D3D12_RESOURCE_STATE_COPY_SOURCE);
     command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
             D3D12_RESOURCE_STATE_COPY_DEST);
-    command_.GetCommandList()->CopyResource(backbuffer, composite_output_);
+    command_.GetCommandList()->CopyResource(backbuffer, resources_.composite_output);
     command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_COPY_DEST,
             D3D12_RESOURCE_STATE_PRESENT);
-    command_.Barrier(command_.GetCommandList(), composite_output_, D3D12_RESOURCE_STATE_COPY_SOURCE,
+    command_.Barrier(command_.GetCommandList(), resources_.composite_output, D3D12_RESOURCE_STATE_COPY_SOURCE,
             D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    command_.Barrier(command_.GetCommandList(), working_output_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+    command_.Barrier(command_.GetCommandList(), resources_.working_output, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
             D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   } else if (use_selected_input && ui_mask_generated &&
-      ui_mask_ != nullptr && composite_output_ != nullptr) {
+      resources_.ui_mask != nullptr && resources_.composite_output != nullptr) {
     if (!debug_codec_->InitCompositeShader(device)) {
       failed_ = true;
       reason_ = "failed to initialize UI composite shader";
@@ -873,27 +873,27 @@ void DlssNrDirect::OnPresent(
     composite_constants.LumaStrength = pass.luma_strength;
     composite_constants.ChromaStrength = pass.chroma_strength;
 
-    command_.Barrier(command_.GetCommandList(), output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    command_.Barrier(command_.GetCommandList(), resources_.output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    command_.Barrier(command_.GetCommandList(), ui_mask_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    command_.Barrier(command_.GetCommandList(), resources_.ui_mask, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
     debug_codec_->DispatchComposite(
         command_.GetCommandList(),
         composite_constants,
-        output_,
+        resources_.output,
         backbuffer,
-        ui_mask_,
-        composite_output_);
+        resources_.ui_mask,
+        resources_.composite_output);
 
-    command_.Barrier(command_.GetCommandList(), composite_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    command_.Barrier(command_.GetCommandList(), resources_.composite_output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
     command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
-    command_.GetCommandList()->CopyResource(backbuffer, composite_output_);
+    command_.GetCommandList()->CopyResource(backbuffer, resources_.composite_output);
     command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
-    command_.Barrier(command_.GetCommandList(), composite_output_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    command_.Barrier(command_.GetCommandList(), ui_mask_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    command_.Barrier(command_.GetCommandList(), output_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    command_.Barrier(command_.GetCommandList(), resources_.composite_output, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    command_.Barrier(command_.GetCommandList(), resources_.ui_mask, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    command_.Barrier(command_.GetCommandList(), resources_.output, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   } else if ((pass.luma_strength != 1.0f || pass.chroma_strength != 1.0f) &&
-             composite_output_ != nullptr) {
+             resources_.composite_output != nullptr) {
     if (!debug_codec_->InitLumaColorShader(device)) {
       failed_ = true;
       reason_ = "failed to initialize luma color composite shader";
@@ -913,28 +913,28 @@ void DlssNrDirect::OnPresent(
     luma_color_constants.LumaStrength = pass.luma_strength;
     luma_color_constants.ChromaStrength = pass.chroma_strength;
 
-    command_.Barrier(command_.GetCommandList(), output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    command_.Barrier(command_.GetCommandList(), resources_.output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
     debug_codec_->DispatchLumaColor(
         command_.GetCommandList(),
         luma_color_constants,
-        output_,
+        resources_.output,
         backbuffer,
-        composite_output_);
+        resources_.composite_output);
 
-    command_.Barrier(command_.GetCommandList(), composite_output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    command_.Barrier(command_.GetCommandList(), resources_.composite_output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
     command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
-    command_.GetCommandList()->CopyResource(backbuffer, composite_output_);
+    command_.GetCommandList()->CopyResource(backbuffer, resources_.composite_output);
     command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
-    command_.Barrier(command_.GetCommandList(), composite_output_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    command_.Barrier(command_.GetCommandList(), output_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    command_.Barrier(command_.GetCommandList(), resources_.composite_output, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    command_.Barrier(command_.GetCommandList(), resources_.output, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   } else {
-    command_.Barrier(command_.GetCommandList(), output_, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    command_.Barrier(command_.GetCommandList(), resources_.output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
     command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
-    command_.GetCommandList()->CopyResource(backbuffer, output_);
+    command_.GetCommandList()->CopyResource(backbuffer, resources_.output);
     command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
-    command_.Barrier(command_.GetCommandList(), output_, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    command_.Barrier(command_.GetCommandList(), resources_.output, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   }
 
   command_.GetCommandList()->Close();
@@ -971,40 +971,40 @@ void DlssNrDirect::Shutdown() {
     feature_handle_ = nullptr;
   }
 
-  if (output_ != nullptr) {
-    output_->Release();
-    output_ = nullptr;
+  if (resources_.output != nullptr) {
+    resources_.output->Release();
+    resources_.output = nullptr;
   }
 
-  if (ui_mask_ != nullptr) {
-    ui_mask_->Release();
-    ui_mask_ = nullptr;
+  if (resources_.ui_mask != nullptr) {
+    resources_.ui_mask->Release();
+    resources_.ui_mask = nullptr;
   }
 
-  if (composite_output_ != nullptr) {
-    composite_output_->Release();
-    composite_output_ = nullptr;
+  if (resources_.composite_output != nullptr) {
+    resources_.composite_output->Release();
+    resources_.composite_output = nullptr;
   }
 
-  if (working_input_ != nullptr) {
-    working_input_->Release();
-    working_input_ = nullptr;
+  if (resources_.working_input != nullptr) {
+    resources_.working_input->Release();
+    resources_.working_input = nullptr;
   }
 
-  if (working_output_ != nullptr) {
-    working_output_->Release();
-    working_output_ = nullptr;
+  if (resources_.working_output != nullptr) {
+    resources_.working_output->Release();
+    resources_.working_output = nullptr;
   }
 
-  ui_mask_width_ = 0;
-  ui_mask_height_ = 0;
-  ui_mask_format_ = DXGI_FORMAT_UNKNOWN;
-  composite_output_width_ = 0;
-  composite_output_height_ = 0;
-  composite_output_format_ = DXGI_FORMAT_UNKNOWN;
-  working_resource_width_ = 0;
-  working_resource_height_ = 0;
-  working_resource_format_ = DXGI_FORMAT_UNKNOWN;
+  resources_.ui_mask_width = 0;
+  resources_.ui_mask_height = 0;
+  resources_.ui_mask_format = DXGI_FORMAT_UNKNOWN;
+  resources_.composite_output_width = 0;
+  resources_.composite_output_height = 0;
+  resources_.composite_output_format = DXGI_FORMAT_UNKNOWN;
+  resources_.working_width = 0;
+  resources_.working_height = 0;
+  resources_.working_format = DXGI_FORMAT_UNKNOWN;
 
   command_.Shutdown();
 
@@ -1019,8 +1019,8 @@ void DlssNrDirect::Shutdown() {
   built_skin_structure_ = -1.0f;
   built_auto_mask_ = false;
   built_ui_correction_ = false;
-  output_width_ = 0;
-  output_height_ = 0;
+  resources_.output_width = 0;
+  resources_.output_height = 0;
   first_evaluate_ = true;
 
   runtime_.Shutdown();
