@@ -3,7 +3,7 @@
 Refactor the addon into smaller domain files while keeping builds and runtime behavior working after every step.
 
 - [x] Create `render_pass_tracker.h/.cpp` and move render-pass collection, display-pass swap, backbuffer identity, selected-pass state, and deselection out of `addon.cpp`; keep `addon.cpp` callbacks as thin adapters. Verify build and overlay pass list/selection still work.
-- [x] Create `ui.h/.cpp` and move all ImGui drawing, tabs, pass settings controls, reset buttons, and render-pass debug UI out of `addon.cpp`; expose a single `DrawOverlay` entry point. Verify build and overlay interaction still works.
+- [x] Create `ui.h/.cpp` and move all ImGui drawing, tabs, pass settings controls, reset buttons, and render-pass debug UI out of `addon.cpp`; expose a single `DrawOverlay` entry point. Verify build and overlay interaction still works. Verified.
 - [ ] Extract `ngx_parameter_block.h/.cpp` from `dlssnr_direct.cpp` so NGX capability parameter handling is isolated. Verify build and model tuning still works.
 - [ ] Split codec shader implementations out of `codec.cpp` into `codec_mask.cpp`, `codec_ui_composite.cpp`, `codec_luma_color.cpp`, and `codec_working_scale.cpp`, leaving core codec/root-signature/descriptor setup in `codec.cpp`. Verify build and all shaders still function.
 - [ ] Create `dlssnr_runtime.h/.cpp` for shared model loading, IAT patching, `Init_Ext`, function pointers, and parameter block ownership. Verify build and direct model execution still works.
