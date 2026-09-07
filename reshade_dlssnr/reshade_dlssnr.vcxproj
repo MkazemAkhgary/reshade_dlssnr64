@@ -18,7 +18,6 @@
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
-
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -49,7 +48,7 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <ErrorLog>$(IntDir)$(MSBuildProjectName).error.log;%(ErrorLog)</ErrorLog>
-<AdditionalIncludeDirectories>$(SolutionDir)..\..\reshade\include;$(SolutionDir)..\..\reshade;$(SolutionDir)..\..\reshade\deps\imgui;$(SolutionDir)..\..\renodx;$(SolutionDir)..\..\renodx\src;$(SolutionDir)..\..\optiscaler\external\nvngx_dlss_sdk;$(SolutionDir)..\..\optiscaler\OptiScaler\include;$(SolutionDir)..\..\optiscaler\OptiScaler\include\d3dx;$(SolutionDir)..\..\optiscaler\OptiScaler\include\detours;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+<AdditionalIncludeDirectories>$(SolutionDir)..\..\reshade\include;$(SolutionDir)..\..\reshade;$(SolutionDir)..\..\reshade\deps\imgui;$(SolutionDir)..\..\renodx;$(SolutionDir)..\..\renodx\src;$(SolutionDir)..\..\optiscaler\external\nvngx_dlss_sdk;$(SolutionDir)..\..\optiscaler\OptiScaler\include;$(SolutionDir)..\..\optiscaler\OptiScaler\include\d3dx;$(SolutionDir)..\..\optiscaler\OptiScaler\include\detours;$(ProjectDir)codec;$(ProjectDir)runtime;$(ProjectDir)stages;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)shaders;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -63,50 +62,50 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="addon.cpp" />
-    <ClCompile Include="codec.cpp" />
-    <ClCompile Include="codec_luma_color.cpp" />
-    <ClCompile Include="codec_mask.cpp" />
-    <ClCompile Include="codec_ui_composite.cpp" />
-    <ClCompile Include="codec_working_scale.cpp" />
-    <ClCompile Include="d3d12_hooks.cpp" />
-    <ClCompile Include="dlss_guides.cpp" />
-    <ClCompile Include="d3d12_state.cpp" />
-    <ClCompile Include="dlssnr_command_context.cpp" />
-    <ClCompile Include="dlssnr_direct.cpp" />
-    <ClCompile Include="dlssnr_feature_lifecycle.cpp" />
-    <ClCompile Include="dlssnr_pass_resources.cpp" />
-    <ClCompile Include="dlssnr_pass_session.cpp" />
-    <ClCompile Include="dlssnr_runtime.cpp" />
-    <ClCompile Include="dlssnr_stages_debug.cpp" />
-    <ClCompile Include="dlssnr_stages_ui_mask.cpp" />
-    <ClCompile Include="dlssnr_stages_final_composite.cpp" />
-    <ClCompile Include="dlssnr_stages_working_scale.cpp" />
-    <ClCompile Include="ngx_parameter_block.cpp" />
-    <ClCompile Include="render_pass_tracker.cpp" />
-    <ClCompile Include="settings.cpp" />
-    <ClCompile Include="ui.cpp" />
+    <ClCompile Include="codec\codec.cpp" />
+    <ClCompile Include="codec\codec_luma_color.cpp" />
+    <ClCompile Include="codec\codec_mask.cpp" />
+    <ClCompile Include="codec\codec_ui_composite.cpp" />
+    <ClCompile Include="codec\codec_working_scale.cpp" />
+    <ClCompile Include="hooks\d3d12_hooks.cpp" />
+    <ClCompile Include="hooks\d3d12_state.cpp" />
+    <ClCompile Include="hooks\dlss_guides.cpp" />
+    <ClCompile Include="runtime\dlssnr_command_context.cpp" />
+    <ClCompile Include="runtime\dlssnr_direct.cpp" />
+    <ClCompile Include="runtime\dlssnr_feature_lifecycle.cpp" />
+    <ClCompile Include="runtime\dlssnr_pass_resources.cpp" />
+    <ClCompile Include="runtime\dlssnr_pass_session.cpp" />
+    <ClCompile Include="runtime\dlssnr_runtime.cpp" />
+    <ClCompile Include="runtime\ngx_parameter_block.cpp" />
+    <ClCompile Include="stages\dlssnr_stages_debug.cpp" />
+    <ClCompile Include="stages\dlssnr_stages_final_composite.cpp" />
+    <ClCompile Include="stages\dlssnr_stages_ui_mask.cpp" />
+    <ClCompile Include="stages\dlssnr_stages_working_scale.cpp" />
+    <ClCompile Include="state\render_pass_tracker.cpp" />
+    <ClCompile Include="state\settings.cpp" />
+    <ClCompile Include="ui\ui.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="codec.h" />
-    <ClInclude Include="dlssnr_command_context.h" />
-    <ClInclude Include="dlssnr_feature_lifecycle.h" />
-    <ClInclude Include="d3d12_hooks.h" />
-    <ClInclude Include="dlss_guides.h" />
-    <ClInclude Include="d3d12_state.h" />
-    <ClInclude Include="nvngx_hook_compat.h" />
-    <ClInclude Include="dlssnr_direct.h" />
-    <ClInclude Include="dlssnr_pass_resources.h" />
-    <ClInclude Include="dlssnr_pass_session.h" />
-    <ClInclude Include="dlssnr_runtime.h" />
-    <ClInclude Include="dlssnr_stages_debug.h" />
-    <ClInclude Include="dlssnr_stages_ui_mask.h" />
-    <ClInclude Include="dlssnr_stages_final_composite.h" />
-    <ClInclude Include="dlssnr_stages_working_scale.h" />
-    <ClInclude Include="ngx_parameter_block.h" />
-    <ClInclude Include="render_pass_tracker.h" />
-    <ClInclude Include="settings.h" />
-    <ClInclude Include="ui.h" />
-    <ClInclude Include="version.h" />
+    <ClInclude Include="codec\codec.h" />
+    <ClInclude Include="hooks\d3d12_hooks.h" />
+    <ClInclude Include="hooks\d3d12_state.h" />
+    <ClInclude Include="hooks\dlss_guides.h" />
+    <ClInclude Include="hooks\nvngx_hook_compat.h" />
+    <ClInclude Include="runtime\dlssnr_command_context.h" />
+    <ClInclude Include="runtime\dlssnr_direct.h" />
+    <ClInclude Include="runtime\dlssnr_feature_lifecycle.h" />
+    <ClInclude Include="runtime\dlssnr_pass_resources.h" />
+    <ClInclude Include="runtime\dlssnr_pass_session.h" />
+    <ClInclude Include="runtime\dlssnr_runtime.h" />
+    <ClInclude Include="runtime\ngx_parameter_block.h" />
+    <ClInclude Include="stages\dlssnr_stages_debug.h" />
+    <ClInclude Include="stages\dlssnr_stages_final_composite.h" />
+    <ClInclude Include="stages\dlssnr_stages_ui_mask.h" />
+    <ClInclude Include="stages\dlssnr_stages_working_scale.h" />
+    <ClInclude Include="state\render_pass_tracker.h" />
+    <ClInclude Include="state\settings.h" />
+    <ClInclude Include="state\version.h" />
+    <ClInclude Include="ui\ui.h" />
     <ClInclude Include="shaders\dlssnr_cso.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
