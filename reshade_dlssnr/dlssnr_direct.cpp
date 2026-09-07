@@ -53,7 +53,7 @@ void DlssNrDirect::SetPendingSelectedPass(ID3D12Resource* resource) {
 }
 
 bool DlssNrDirect::IsReady() const {
-  return feature_handle_ != nullptr && !failed_;
+  return feature_.FeatureHandle() != nullptr && !failed_;
 }
 
 const char* DlssNrDirect::GetLastError() const {
@@ -78,15 +78,15 @@ bool DlssNrDirect::EnsureFeature(
       built_auto_mask_ != pass.auto_mask ||
       built_ui_correction_ != pass.ui_correction;
 
-  if (feature_handle_ != nullptr && built_width_ == width && built_height_ == height &&
+  if (feature_.FeatureHandle() != nullptr && built_width_ == width && built_height_ == height &&
       !tuning_changed) {
     return true;
   }
 
-  if (feature_handle_ != nullptr) {
-    runtime_.ReleaseFeature(feature_handle_);
-    feature_handle_ = nullptr;
-    first_evaluate_ = true;
+  if (feature_.FeatureHandle() != nullptr) {
+    feature_.ReleaseFeature(runtime_);
+    feature_.FeatureHandle() = nullptr;
+    feature_.ShouldReset() = true;
   }
 
   auto* params = runtime_.Parameters().Get();
@@ -130,10 +130,10 @@ bool DlssNrDirect::EnsureFeature(
       command_list,
       static_cast<NVSDK_NGX_Feature>(18),
       params,
-      &feature_handle_);
+      &feature_.FeatureHandle());
 
-  if (result != NVSDK_NGX_Result_Success || feature_handle_ == nullptr) {
-    feature_handle_ = nullptr;
+  if (result != NVSDK_NGX_Result_Success || feature_.FeatureHandle() == nullptr) {
+    feature_.FeatureHandle() = nullptr;
     reason_ = "DLSSNR CreateFeature failed";
     reshade::log::message(reshade::log::level::error, reason_);
     return false;
@@ -371,13 +371,13 @@ void DlssNrDirect::OnPresent(
     resources_.working_format = desc.Format;
   }
 
-  if (feature_handle_ != nullptr &&
+  if (feature_.FeatureHandle() != nullptr &&
       (built_width_ != work_width ||
        built_height_ != work_height ||
        built_working_scale_ != working_scale)) {
-    runtime_.ReleaseFeature(feature_handle_);
-    feature_handle_ = nullptr;
-    first_evaluate_ = true;
+    feature_.ReleaseFeature(runtime_);
+    feature_.FeatureHandle() = nullptr;
+    feature_.ShouldReset() = true;
   }
 
   command_.Reset();
@@ -391,10 +391,10 @@ void DlssNrDirect::OnPresent(
     pending_selected_pass_ = nullptr;
   }
 
-  if (feature_handle_ == nullptr) {
+  if (feature_.FeatureHandle() == nullptr) {
     const unsigned int create_width = use_working_scale ? work_width : width;
     const unsigned int create_height = use_working_scale ? work_height : height;
-    if (!EnsureFeature(command_.GetCommandList(), create_width, create_height)) {
+    if (!feature_.EnsureFeature(runtime_, pass, command_.GetCommandList(), create_width, create_height)) {
       failed_ = true;
       command_.GetCommandList()->Close();
       backbuffer->Release();
@@ -713,8 +713,8 @@ void DlssNrDirect::OnPresent(
     parameter_block.SetUInt("DLSSNR.MVecSubrectHeight", guides.guide_height);
   }
 
-  parameter_block.SetUInt("DLSSNR.Reset", first_evaluate_ ? 1u : 0u);
-  first_evaluate_ = false;
+  parameter_block.SetUInt("DLSSNR.Reset", feature_.ShouldReset() ? 1u : 0u);
+  feature_.ShouldReset() = false;
 
   if (resources_.ui_mask != nullptr) {
     command_.Barrier(command_.GetCommandList(), resources_.ui_mask, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -724,7 +724,7 @@ void DlssNrDirect::OnPresent(
     command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   }
   const NVSDK_NGX_Result result =
-      runtime_.EvaluateFeature(command_.GetCommandList(), feature_handle_, params, nullptr);
+      runtime_.EvaluateFeature(command_.GetCommandList(), feature_.FeatureHandle(), params, nullptr);
 
   if (resources_.ui_mask != nullptr) {
     command_.Barrier(command_.GetCommandList(), resources_.ui_mask, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
@@ -966,9 +966,9 @@ void DlssNrDirect::OnPresent(
 void DlssNrDirect::Shutdown() {
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
-  if (feature_handle_ != nullptr) {
-    runtime_.ReleaseFeature(feature_handle_);
-    feature_handle_ = nullptr;
+  if (feature_.FeatureHandle() != nullptr) {
+    feature_.ReleaseFeature(runtime_);
+    feature_.FeatureHandle() = nullptr;
   }
 
   if (resources_.output != nullptr) {
@@ -1021,7 +1021,7 @@ void DlssNrDirect::Shutdown() {
   built_ui_correction_ = false;
   resources_.output_width = 0;
   resources_.output_height = 0;
-  first_evaluate_ = true;
+  feature_.ShouldReset() = true;
 
   runtime_.Shutdown();
 
