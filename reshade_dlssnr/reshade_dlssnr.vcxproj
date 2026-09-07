@@ -90,6 +90,7 @@
     <ClInclude Include="hooks\d3d12_hooks.h" />
     <ClInclude Include="hooks\d3d12_state.h" />
     <ClInclude Include="hooks\dlss_guides.h" />
+    <ClInclude Include="hooks\local_vtable.h" />
     <ClInclude Include="hooks\nvngx_hook_compat.h" />
     <ClInclude Include="runtime\dlssnr_command_context.h" />
     <ClInclude Include="runtime\dlssnr_direct.h" />
