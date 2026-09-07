@@ -79,13 +79,13 @@ bool DlssNrDirect::EnsureFeature(
     return true;
   }
 
-  if (feature_handle_ != nullptr && release_feature_ != nullptr) {
-    release_feature_(feature_handle_);
+  if (feature_handle_ != nullptr) {
+    runtime_.ReleaseFeature(feature_handle_);
     feature_handle_ = nullptr;
     first_evaluate_ = true;
   }
 
-  auto* params = parameter_block_.Get();
+  auto* params = runtime_.Parameters().Get();
   if (params == nullptr) {
     reason_ = "DLSSNR parameter block unavailable";
     return false;
@@ -93,34 +93,36 @@ bool DlssNrDirect::EnsureFeature(
 
   params->Reset();
 
-  parameter_block_.SetUInt("DLSSNR.Enabled", 1u);
-  parameter_block_.SetUInt("DLSSNR.Width", width);
-  parameter_block_.SetUInt("DLSSNR.Height", height);
-  parameter_block_.SetUInt("DLSSNR.InputWidth", width);
-  parameter_block_.SetUInt("DLSSNR.InputHeight", height);
-  parameter_block_.SetUInt("DLSSNR.OutputWidth", width);
-  parameter_block_.SetUInt("DLSSNR.OutputHeight", height);
-  parameter_block_.SetUInt("DLSSNR.Upscaling", 1u);
-  parameter_block_.SetFloat("DLSSNR.ScalingRatio", 1.0f);
-  parameter_block_.SetFloat("DLSSNR.Scale", 1.0f);
-  parameter_block_.SetUInt("DLSSNR.Hint.Render.Preset", model_value + 1u);
-  parameter_block_.SetUInt(NVSDK_NGX_Parameter_PerfQualityValue, 2u);
-  parameter_block_.SetFloat("DLSSNR.Intensity", pass.intensity);
-  parameter_block_.SetUInt("DLSSNR.Style", model_value);
-  parameter_block_.SetFloat(
+  NgxParameterBlock& parameter_block = runtime_.Parameters();
+
+  parameter_block.SetUInt("DLSSNR.Enabled", 1u);
+  parameter_block.SetUInt("DLSSNR.Width", width);
+  parameter_block.SetUInt("DLSSNR.Height", height);
+  parameter_block.SetUInt("DLSSNR.InputWidth", width);
+  parameter_block.SetUInt("DLSSNR.InputHeight", height);
+  parameter_block.SetUInt("DLSSNR.OutputWidth", width);
+  parameter_block.SetUInt("DLSSNR.OutputHeight", height);
+  parameter_block.SetUInt("DLSSNR.Upscaling", 1u);
+  parameter_block.SetFloat("DLSSNR.ScalingRatio", 1.0f);
+  parameter_block.SetFloat("DLSSNR.Scale", 1.0f);
+  parameter_block.SetUInt("DLSSNR.Hint.Render.Preset", model_value + 1u);
+  parameter_block.SetUInt(NVSDK_NGX_Parameter_PerfQualityValue, 2u);
+  parameter_block.SetFloat("DLSSNR.Intensity", pass.intensity);
+  parameter_block.SetUInt("DLSSNR.Style", model_value);
+  parameter_block.SetFloat(
       "DLSSNR.LocalStructureStrength", pass.local_structure);
-  parameter_block_.SetFloat("DLSSNR.LocalToneStrength", pass.local_tone);
-  parameter_block_.SetFloat(
+  parameter_block.SetFloat("DLSSNR.LocalToneStrength", pass.local_tone);
+  parameter_block.SetFloat(
       "DLSSNR.SkinStructureStrength",
       pass.auto_mask ? pass.skin_structure : -1.0f);
-  parameter_block_.SetUInt(
+  parameter_block.SetUInt(
       "DLSSNR.UseAutoMask", pass.auto_mask ? 1u : 0u);
-  parameter_block_.SetUInt(
+  parameter_block.SetUInt(
       "DLSSNR.UICorrection", pass.ui_correction ? 1u : 0u);
-  parameter_block_.SetUInt("CreationNodeMask", 1u);
-  parameter_block_.SetUInt("VisibilityNodeMask", 1u);
+  parameter_block.SetUInt("CreationNodeMask", 1u);
+  parameter_block.SetUInt("VisibilityNodeMask", 1u);
 
-  const NVSDK_NGX_Result result = create_feature_(
+  const NVSDK_NGX_Result result = runtime_.CreateFeature(
       command_list,
       static_cast<NVSDK_NGX_Feature>(18),
       params,
