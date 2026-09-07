@@ -75,6 +75,7 @@
     <ClCompile Include="dlssnr_direct.cpp" />
     <ClCompile Include="dlssnr_feature_lifecycle.cpp" />
     <ClCompile Include="dlssnr_pass_resources.cpp" />
+    <ClCompile Include="dlssnr_pass_session.cpp" />
     <ClCompile Include="dlssnr_runtime.cpp" />
     <ClCompile Include="dlssnr_stages_debug.cpp" />
     <ClCompile Include="dlssnr_stages_ui_mask.cpp" />
@@ -95,6 +96,7 @@
     <ClInclude Include="nvngx_hook_compat.h" />
     <ClInclude Include="dlssnr_direct.h" />
     <ClInclude Include="dlssnr_pass_resources.h" />
+    <ClInclude Include="dlssnr_pass_session.h" />
     <ClInclude Include="dlssnr_runtime.h" />
     <ClInclude Include="dlssnr_stages_debug.h" />
     <ClInclude Include="dlssnr_stages_ui_mask.h" />
