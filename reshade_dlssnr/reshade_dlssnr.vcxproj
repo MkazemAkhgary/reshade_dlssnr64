@@ -76,6 +76,7 @@
     <ClCompile Include="dlssnr_feature_lifecycle.cpp" />
     <ClCompile Include="dlssnr_pass_resources.cpp" />
     <ClCompile Include="dlssnr_runtime.cpp" />
+    <ClCompile Include="dlssnr_stages_debug.cpp" />
     <ClCompile Include="ngx_parameter_block.cpp" />
     <ClCompile Include="render_pass_tracker.cpp" />
     <ClCompile Include="settings.cpp" />
@@ -92,6 +93,7 @@
     <ClInclude Include="dlssnr_direct.h" />
     <ClInclude Include="dlssnr_pass_resources.h" />
     <ClInclude Include="dlssnr_runtime.h" />
+    <ClInclude Include="dlssnr_stages_debug.h" />
     <ClInclude Include="ngx_parameter_block.h" />
     <ClInclude Include="render_pass_tracker.h" />
     <ClInclude Include="settings.h" />
