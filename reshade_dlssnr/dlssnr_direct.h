@@ -11,6 +11,7 @@
 
 #include "codec.h"
 #include "dlssnr_command_context.h"
+#include "dlssnr_pass_resources.h"
 #include "dlssnr_runtime.h"
 #include "settings.h"
 
@@ -45,6 +46,7 @@ class DlssNrDirect {
 
   DlssNrRuntime runtime_;
   DlssNrCommandContext command_;
+  DlssNrPassResources resources_;
 
   bool failed_ = false;
   bool first_evaluate_ = true;
@@ -63,29 +65,7 @@ class DlssNrDirect {
   bool built_auto_mask_ = false;
   bool built_ui_correction_ = false;
 
-  ID3D12Resource* output_ = nullptr;
-  unsigned int output_width_ = 0;
-  unsigned int output_height_ = 0;
-
-  ID3D12Resource* ui_mask_ = nullptr;
-  unsigned int ui_mask_width_ = 0;
-  unsigned int ui_mask_height_ = 0;
-  DXGI_FORMAT ui_mask_format_ = DXGI_FORMAT_UNKNOWN;
-
-  ID3D12Resource* composite_output_ = nullptr;
-  unsigned int composite_output_width_ = 0;
-  unsigned int composite_output_height_ = 0;
-  DXGI_FORMAT composite_output_format_ = DXGI_FORMAT_UNKNOWN;
-
-  ID3D12Resource* working_input_ = nullptr;
-  ID3D12Resource* working_output_ = nullptr;
-  unsigned int working_resource_width_ = 0;
-  unsigned int working_resource_height_ = 0;
-  DXGI_FORMAT working_resource_format_ = DXGI_FORMAT_UNKNOWN;
-
-  const PassSettings* current_pass_ = nullptr;
-
-ID3D12CommandQueue* command_queue_ = nullptr;
+const PassSettings* current_pass_ = nullptr;
 
   std::unique_ptr<DlssNrCodec> debug_codec_;
 
