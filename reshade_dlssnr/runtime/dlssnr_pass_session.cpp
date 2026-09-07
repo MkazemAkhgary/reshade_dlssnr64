@@ -436,6 +436,9 @@ void DlssNrPassSession::OnPresent(
             command_queue_,
             backbuffer,
             model_input,
+            resources_.output,
+            width,
+            height,
             settings.debug_view)) {
       failed_ = true;
       reason_ = "failed to run working debug view";
