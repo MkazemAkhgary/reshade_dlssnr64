@@ -186,8 +186,6 @@ void DrawPassSettings(
               0.0f, 1.0f, 0.85f, "%.2f");
   draw_slider("Residual Threshold", &pass.residual_threshold,
               0.0f, 0.2f, 0.02f, "%.3f");
-  draw_slider("White Point Scale", &pass.white_point_scale,
-              0.25f, 4.0f, 100.0f, "%.2f");
 
   ImGui::PopID();
   ImGui::EndTabItem();
