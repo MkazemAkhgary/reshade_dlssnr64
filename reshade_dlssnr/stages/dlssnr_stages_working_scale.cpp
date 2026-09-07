@@ -1,5 +1,7 @@
 #include "dlssnr_stages_working_scale.h"
 
+#include "dlssnr_stages_upscale.h"
+
 namespace reshade_dlssnr::dlssnr_stages_working_scale {
 
 bool RunDebugView(
