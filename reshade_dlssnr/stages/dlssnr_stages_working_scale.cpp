@@ -163,73 +163,7 @@ bool Apply(
     return false;
   }
 
-  if (debug_view == 7 || debug_view == 8) {
-    ID3D12Resource* debug_source =
-        debug_view == 7 ? resources.working_input : resources.working_output;
-    if (debug_source != nullptr) {
-      command.Barrier(command.GetCommandList(), debug_source,
-                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                      D3D12_RESOURCE_STATE_COPY_SOURCE);
-      command.Barrier(command.GetCommandList(), backbuffer,
-                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-                      D3D12_RESOURCE_STATE_COPY_DEST);
-      command.GetCommandList()->CopyResource(backbuffer, debug_source);
-      command.Barrier(command.GetCommandList(), backbuffer,
-                      D3D12_RESOURCE_STATE_COPY_DEST,
-                      D3D12_RESOURCE_STATE_PRESENT);
-      command.Barrier(command.GetCommandList(), debug_source,
-                      D3D12_RESOURCE_STATE_COPY_SOURCE,
-                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    }
-    return true;
-  }
-
   if (!codec->InitUpsampleResidualShader(device)) return false;
-
-  if (debug_view == 9) {
-    DlssNrConstants residual_constants = {};
-    residual_constants.Mode = DlssNrMode_Resolve;
-    residual_constants.Width = full_width;
-    residual_constants.Height = full_height;
-    residual_constants.LumaStrength = 1.0f;
-    residual_constants.ChromaStrength = 1.0f;
-    residual_constants.ResidualSuppression = residual_suppression;
-    residual_constants.ResidualThreshold = residual_threshold;
-    residual_constants.WhitePoint = white_point_scale;
-
-    command.Barrier(command.GetCommandList(), resources.working_output,
-                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    command.Barrier(command.GetCommandList(), resources.working_input,
-                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-    codec->DispatchUpsampleResidual(
-        command.GetCommandList(),
-        residual_constants,
-        resources.working_input,
-        resources.working_input,
-        resources.working_output,
-        resources.composite_output);
-
-    command.Barrier(command.GetCommandList(), resources.composite_output,
-                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                    D3D12_RESOURCE_STATE_COPY_SOURCE);
-    command.Barrier(command.GetCommandList(), backbuffer,
-                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-                    D3D12_RESOURCE_STATE_COPY_DEST);
-    command.GetCommandList()->CopyResource(backbuffer, resources.composite_output);
-    command.Barrier(command.GetCommandList(), backbuffer,
-                    D3D12_RESOURCE_STATE_COPY_DEST,
-                    D3D12_RESOURCE_STATE_PRESENT);
-    command.Barrier(command.GetCommandList(), resources.composite_output,
-                    D3D12_RESOURCE_STATE_COPY_SOURCE,
-                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    command.Barrier(command.GetCommandList(), resources.working_output,
-                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    return true;
-  }
 
   DlssNrConstants constants = {};
   constants.Mode = DlssNrMode_Resolve;
