@@ -48,7 +48,9 @@ class DlssNrDirect {
   DlssNrPassResources resources_;
   DlssNrFeatureLifecycle feature_;
 
-bool failed_ = false;
+  bool failed_ = false;
+  const char* reason_ = "";
+  int pass_index_ = 0;
 
   const PassSettings* current_pass_ = nullptr;
 
