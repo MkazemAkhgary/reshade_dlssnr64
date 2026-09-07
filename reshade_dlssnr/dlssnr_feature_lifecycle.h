@@ -24,6 +24,7 @@ class DlssNrFeatureLifecycle {
 
   bool ShouldReset() const { return first_evaluate_; }
   void MarkEvaluated() { first_evaluate_ = false; }
+  void SetShouldReset(bool value) { first_evaluate_ = value; }
 
   void Shutdown(const DlssNrRuntime& runtime);
 
