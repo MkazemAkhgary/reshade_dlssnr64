@@ -565,71 +565,29 @@ void DlssNrDirect::OnPresent(
     command_.Barrier(command_.GetCommandList(), resources_.ui_mask, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   }
 
-  if (use_working_scale &&
-      (settings.debug_view == 7 || settings.debug_view == 8 ||
-       settings.debug_view == 9)) {
-    const bool debug_residual = settings.debug_view == 9;
-
-    if (!debug_residual) {
-      ID3D12Resource* debug_source =
-          settings.debug_view == 7 ? resources_.working_input : resources_.working_output;
-
-      if (debug_source != nullptr) {
-        command_.Barrier(command_.GetCommandList(), debug_source, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                D3D12_RESOURCE_STATE_COPY_SOURCE);
-        command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-                D3D12_RESOURCE_STATE_COPY_DEST);
-        command_.GetCommandList()->CopyResource(backbuffer, debug_source);
-        command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_COPY_DEST,
-                D3D12_RESOURCE_STATE_PRESENT);
-        command_.Barrier(command_.GetCommandList(), debug_source, D3D12_RESOURCE_STATE_COPY_SOURCE,
-                D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-      }
-    } else {
-      if (!debug_codec_->InitUpsampleResidualShader(device)) {
-        failed_ = true;
-        reason_ = "failed to initialize residual debug shader";
-        backbuffer->Release();
-        swapchain3->Release();
-        device->Release();
-        return;
-      }
-
-      DlssNrConstants residual_constants = {};
-      residual_constants.Mode = DlssNrMode_Resolve;
-      residual_constants.Width = width;
-      residual_constants.Height = height;
-      residual_constants.LumaStrength = 1.0f;
-      residual_constants.ChromaStrength = 1.0f;
-      residual_constants.ResidualSuppression = pass.residual_suppression;
-      residual_constants.ResidualThreshold = pass.residual_threshold;
-
-      command_.Barrier(command_.GetCommandList(), resources_.working_output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-      command_.Barrier(command_.GetCommandList(), resources_.working_input, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-      command_.Barrier(command_.GetCommandList(), resources_.composite_output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-
-      debug_codec_->DispatchUpsampleResidual(
-          command_.GetCommandList(),
-          residual_constants,
-          resources_.working_input,
-          resources_.working_input,
-          resources_.working_output,
-          resources_.composite_output);
-
-      command_.Barrier(command_.GetCommandList(), resources_.composite_output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-              D3D12_RESOURCE_STATE_COPY_SOURCE);
-      command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-              D3D12_RESOURCE_STATE_COPY_DEST);
-      command_.GetCommandList()->CopyResource(backbuffer, resources_.composite_output);
-      command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_COPY_DEST,
-              D3D12_RESOURCE_STATE_PRESENT);
-      command_.Barrier(command_.GetCommandList(), resources_.composite_output, D3D12_RESOURCE_STATE_COPY_SOURCE,
-              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-      command_.Barrier(command_.GetCommandList(), resources_.working_output, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  if (use_working_scale) {
+    if (!dlssnr_stages_working_scale::Apply(
+            command_,
+            resources_,
+            debug_codec_.get(),
+            device,
+            backbuffer,
+            width,
+            height,
+            work_width,
+            work_height,
+            true,
+            pass.luma_strength,
+            pass.chroma_strength,
+            pass.residual_suppression,
+            pass.residual_threshold,
+            settings.debug_view)) {
+      failed_ = true;
+      reason_ = "failed to apply working scale";
+      backbuffer->Release();
+      swapchain3->Release();
+      device->Release();
+      return;
     }
 
     command_.GetCommandList()->Close();
@@ -641,52 +599,6 @@ void DlssNrDirect::OnPresent(
     swapchain3->Release();
     device->Release();
     return;
-  }
-
-  if (use_working_scale) {
-    if (!debug_codec_->InitUpsampleResidualShader(device)) {
-      failed_ = true;
-      reason_ = "failed to initialize upsample residual shader";
-      reshade::log::message(reshade::log::level::error, reason_);
-      backbuffer->Release();
-      swapchain3->Release();
-      device->Release();
-      return;
-    }
-
-    DlssNrConstants upsample_constants = {};
-    upsample_constants.Mode = DlssNrMode_Resolve;
-    upsample_constants.Width = width;
-    upsample_constants.Height = height;
-    upsample_constants.LumaStrength = pass.luma_strength;
-    upsample_constants.ChromaStrength = pass.chroma_strength;
-    upsample_constants.ResidualSuppression = pass.residual_suppression;
-    upsample_constants.ResidualThreshold = pass.residual_threshold;
-
-    command_.Barrier(command_.GetCommandList(), resources_.working_output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    command_.Barrier(command_.GetCommandList(), resources_.working_input, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-    debug_codec_->DispatchUpsampleResidual(
-        command_.GetCommandList(),
-        upsample_constants,
-        backbuffer,
-        resources_.working_input,
-        resources_.working_output,
-        resources_.composite_output);
-
-    command_.Barrier(command_.GetCommandList(), resources_.composite_output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-            D3D12_RESOURCE_STATE_COPY_SOURCE);
-    command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-            D3D12_RESOURCE_STATE_COPY_DEST);
-    command_.GetCommandList()->CopyResource(backbuffer, resources_.composite_output);
-    command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_COPY_DEST,
-            D3D12_RESOURCE_STATE_PRESENT);
-    command_.Barrier(command_.GetCommandList(), resources_.composite_output, D3D12_RESOURCE_STATE_COPY_SOURCE,
-            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    command_.Barrier(command_.GetCommandList(), resources_.working_output, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   } else if (use_selected_input && ui_mask_generated &&
       resources_.ui_mask != nullptr && resources_.composite_output != nullptr) {
     if (!debug_codec_->InitCompositeShader(device)) {
