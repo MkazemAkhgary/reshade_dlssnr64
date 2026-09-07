@@ -64,6 +64,10 @@
   <ItemGroup>
     <ClCompile Include="addon.cpp" />
     <ClCompile Include="codec.cpp" />
+    <ClCompile Include="codec_luma_color.cpp" />
+    <ClCompile Include="codec_mask.cpp" />
+    <ClCompile Include="codec_ui_composite.cpp" />
+    <ClCompile Include="codec_working_scale.cpp" />
     <ClCompile Include="d3d12_hooks.cpp" />
     <ClCompile Include="dlss_guides.cpp" />
     <ClCompile Include="d3d12_state.cpp" />
