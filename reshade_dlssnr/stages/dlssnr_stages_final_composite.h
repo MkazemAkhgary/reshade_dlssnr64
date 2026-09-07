@@ -19,6 +19,7 @@ bool Apply(
     bool use_selected_input,
     bool ui_mask_generated,
     float luma_strength,
-    float chroma_strength);
+    float chroma_strength,
+    float white_point_scale);
 
 }  // namespace reshade_dlssnr::dlssnr_stages_final_composite

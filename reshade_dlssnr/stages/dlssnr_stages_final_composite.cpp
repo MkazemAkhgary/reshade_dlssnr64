@@ -13,7 +13,8 @@ bool Apply(
     bool use_selected_input,
     bool ui_mask_generated,
     float luma_strength,
-    float chroma_strength) {
+    float chroma_strength,
+    float white_point_scale) {
   if (codec == nullptr || backbuffer == nullptr || resources.output == nullptr) {
     return false;
   }
@@ -26,7 +27,7 @@ bool Apply(
 
     DlssNrConstants constants = {};
     constants.Mode = DlssNrMode_Encode;
-    constants.WhitePoint = 1.0f;
+    constants.WhitePoint = white_point_scale;
     constants.Width = width;
     constants.Height = height;
     constants.Passthrough = 1u;
@@ -79,7 +80,7 @@ bool Apply(
 
     DlssNrConstants constants = {};
     constants.Mode = DlssNrMode_Encode;
-    constants.WhitePoint = 1.0f;
+    constants.WhitePoint = white_point_scale;
     constants.Width = width;
     constants.Height = height;
     constants.Passthrough = 1u;
