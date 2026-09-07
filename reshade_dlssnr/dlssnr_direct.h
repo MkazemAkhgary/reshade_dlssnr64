@@ -10,6 +10,7 @@
 #include <unordered_map>
 
 #include "codec.h"
+#include "dlssnr_command_context.h"
 #include "dlssnr_runtime.h"
 #include "settings.h"
 
@@ -41,11 +42,9 @@ class DlssNrDirect {
   DlssNrDirect& operator=(const DlssNrDirect&) = delete;
 
   bool EnsureFeature(ID3D12GraphicsCommandList* command_list, unsigned int width, unsigned int height);
-  bool EnsureCommandInfrastructure(ID3D12Device* device);
-  void WaitGpu();
-  void Barrier(ID3D12GraphicsCommandList* command_list, ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after);
 
   DlssNrRuntime runtime_;
+  DlssNrCommandContext command_;
 
   bool failed_ = false;
   bool first_evaluate_ = true;
@@ -86,12 +85,7 @@ class DlssNrDirect {
 
   const PassSettings* current_pass_ = nullptr;
 
-  ID3D12CommandQueue* command_queue_ = nullptr;
-  ID3D12CommandAllocator* command_allocator_ = nullptr;
-  ID3D12GraphicsCommandList* command_list_ = nullptr;
-  ID3D12Fence* fence_ = nullptr;
-  HANDLE fence_event_ = INVALID_HANDLE_VALUE;
-  UINT64 fence_value_ = 0;
+ID3D12CommandQueue* command_queue_ = nullptr;
 
   std::unique_ptr<DlssNrCodec> debug_codec_;
 
