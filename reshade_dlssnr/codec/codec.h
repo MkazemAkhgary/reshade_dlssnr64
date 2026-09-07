@@ -19,7 +19,6 @@ enum DlssNrMode : uint32_t {
 
 struct alignas(256) DlssNrConstants {
   uint32_t Mode = 0;
-  float WhitePoint = 1.0f;
 
   uint32_t Width = 0;
   uint32_t Height = 0;
@@ -31,8 +30,6 @@ struct alignas(256) DlssNrConstants {
   uint32_t DebugView = 0;
   float UiMaskThreshold = 0.02f;
   float UiMaskSoftness = 0.06f;
-
-  uint32_t Passthrough = 0;
 
   float ResidualSuppression = 0.85f;
   float ResidualThreshold = 0.10f;
