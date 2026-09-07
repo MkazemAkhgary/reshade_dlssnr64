@@ -70,7 +70,7 @@ void DrawPassSettings(
     }
   };
 
-  draw_slider("Intensity", &pass.intensity, 0.0f, 2.0f, 0.50f, "%.2f");
+  draw_slider("Intensity", &pass.intensity, 0.0f, 2.0f, 1.0f, "%.2f");
   draw_slider("Local Tone", &pass.local_tone, 0.0f, 2.0f, 1.0f, "%.2f");
 
   {

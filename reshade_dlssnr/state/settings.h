@@ -16,7 +16,7 @@ struct PassSettings {
   bool auto_mask = true;
   float skin_structure = 1.0f;
 
-  float intensity = 0.50f;
+  float intensity = 1.0f;
   float luma_strength = 1.0f;
   float chroma_strength = 1.0f;
 
