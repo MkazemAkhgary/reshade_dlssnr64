@@ -23,7 +23,6 @@ struct PassSettings {
   float working_scale = 1.0f;
   float residual_suppression = 0.85f;
   float residual_threshold = 0.10f;
-  float white_point_scale = 100.0f;
 };
 
 struct Settings {
@@ -43,8 +42,6 @@ struct Settings {
   float compare_split = 0.5f;
   float compare_zoom = 1.0f;
   bool compare_swap = false;
-
-  bool passthrough_tone_mapped = false;
 };
 
 Settings& GetSettings();

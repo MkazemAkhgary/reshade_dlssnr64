@@ -30,7 +30,6 @@ void LoadSettings() {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass1WorkingScale", g_settings.pass1.working_scale);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass1ResidualSuppression", g_settings.pass1.residual_suppression);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass1ResidualThreshold", g_settings.pass1.residual_threshold);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass1WhitePointScale", g_settings.pass1.white_point_scale);
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass2Preset", g_settings.pass2.preset);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass2LocalTone", g_settings.pass2.local_tone);
@@ -45,7 +44,6 @@ void LoadSettings() {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass2WorkingScale", g_settings.pass2.working_scale);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass2ResidualSuppression", g_settings.pass2.residual_suppression);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass2ResidualThreshold", g_settings.pass2.residual_threshold);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass2WhitePointScale", g_settings.pass2.white_point_scale);
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UseSelectedPassAsInput", g_settings.use_selected_pass_as_input);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UIMaskThreshold", g_settings.ui_mask_threshold);
@@ -56,7 +54,6 @@ void LoadSettings() {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "CompareSplit", g_settings.compare_split);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "CompareZoom", g_settings.compare_zoom);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "CompareSwap", g_settings.compare_swap);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "PassthroughToneMapped", g_settings.passthrough_tone_mapped);
 }
 
 void SaveSettings() {
@@ -76,7 +73,6 @@ void SaveSettings() {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Pass1WorkingScale", g_settings.pass1.working_scale);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Pass1ResidualSuppression", g_settings.pass1.residual_suppression);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Pass1ResidualThreshold", g_settings.pass1.residual_threshold);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Pass1WhitePointScale", g_settings.pass1.white_point_scale);
 
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Pass2Preset", g_settings.pass2.preset);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Pass2LocalTone", g_settings.pass2.local_tone);
@@ -90,7 +86,6 @@ void SaveSettings() {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Pass2WorkingScale", g_settings.pass2.working_scale);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Pass2ResidualSuppression", g_settings.pass2.residual_suppression);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Pass2ResidualThreshold", g_settings.pass2.residual_threshold);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Pass2WhitePointScale", g_settings.pass2.white_point_scale);
 
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UseSelectedPassAsInput", g_settings.use_selected_pass_as_input);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UIMaskThreshold", g_settings.ui_mask_threshold);
@@ -101,7 +96,6 @@ void SaveSettings() {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "CompareSplit", g_settings.compare_split);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "CompareZoom", g_settings.compare_zoom);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "CompareSwap", g_settings.compare_swap);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "PassthroughToneMapped", g_settings.passthrough_tone_mapped);
 }
 
 }  // namespace reshade_dlssnr
