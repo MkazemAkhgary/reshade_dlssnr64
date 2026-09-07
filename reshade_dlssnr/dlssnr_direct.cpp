@@ -9,6 +9,7 @@
 #include "codec.h"
 #include "dlss_guides.h"
 #include "dlssnr_stages_debug.h"
+#include "dlssnr_stages_ui_mask.h"
 #include "ngx_parameter_block.h"
 #include "settings.h"
 
