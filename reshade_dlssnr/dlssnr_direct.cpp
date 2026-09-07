@@ -1006,16 +1006,6 @@ void DlssNrDirect::Shutdown() {
   working_resource_height_ = 0;
   working_resource_format_ = DXGI_FORMAT_UNKNOWN;
 
-  if (fence_event_ != INVALID_HANDLE_VALUE) {
-    CloseHandle(fence_event_);
-    fence_event_ = INVALID_HANDLE_VALUE;
-  }
-
-  if (fence_ != nullptr) {
-    fence_->Release();
-    fence_ = nullptr;
-  }
-
   command_.Shutdown();
 
   command_queue_ = nullptr;
