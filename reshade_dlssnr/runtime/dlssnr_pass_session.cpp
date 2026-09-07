@@ -436,8 +436,8 @@ void DlssNrPassSession::OnPresent(
             device,
             command_queue_,
             backbuffer,
-            model_input,
-            resources_.output,
+            model_color,
+            model_output,
             width,
             height,
             settings.debug_view)) {
