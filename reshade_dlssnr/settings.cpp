@@ -23,6 +23,7 @@ void LoadSettings() {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass1LocalStructure", g_settings.pass1.local_structure);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass1AutoMask", g_settings.pass1.auto_mask);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass1SkinStructure", g_settings.pass1.skin_structure);
+  if (g_settings.pass1.skin_structure == 0.0f) g_settings.pass1.skin_structure = 1.0f;
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass1Intensity", g_settings.pass1.intensity);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass1LumaStrength", g_settings.pass1.luma_strength);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass1ChromaStrength", g_settings.pass1.chroma_strength);
@@ -37,6 +38,7 @@ void LoadSettings() {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass2LocalStructure", g_settings.pass2.local_structure);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass2AutoMask", g_settings.pass2.auto_mask);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass2SkinStructure", g_settings.pass2.skin_structure);
+  if (g_settings.pass2.skin_structure == 0.0f) g_settings.pass2.skin_structure = 1.0f;
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass2Intensity", g_settings.pass2.intensity);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass2LumaStrength", g_settings.pass2.luma_strength);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass2ChromaStrength", g_settings.pass2.chroma_strength);
