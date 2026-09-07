@@ -342,74 +342,22 @@ void DlssNrDirect::OnPresent(
       ((settings.debug_view == 2 || settings.debug_view == 3 ||
         settings.debug_view == 5 || settings.debug_view == 6) &&
        (guides.valid || settings.debug_view == 6))) {
-    command_.Reset();
-
-    ID3D12Resource* debug_input = nullptr;
-    unsigned int debug_guide_width = width;
-    unsigned int debug_guide_height = height;
-
-    if (settings.debug_view == 1) {
-      debug_input = model_input;
-      debug_guide_width = width;
-      debug_guide_height = height;
-    } else if (settings.debug_view == 2) {
-      debug_input = guides.depth;
-      debug_guide_width = guides.guide_width;
-      debug_guide_height = guides.guide_height;
-    } else if (settings.debug_view == 3) {
-      debug_input = guides.motion;
-      debug_guide_width = guides.guide_width;
-      debug_guide_height = guides.guide_height;
-    } else if (settings.debug_view == 5) {
-      debug_input = guides.pre_ui_color;
-      debug_guide_width = width;
-      debug_guide_height = height;
-    } else if (settings.debug_view == 6) {
-      debug_input = guides.selected_pass_color;
-      debug_guide_width = guides.selected_width != 0 ? guides.selected_width : width;
-      debug_guide_height = guides.selected_height != 0 ? guides.selected_height : height;
-    }
-
-    if (debug_input == nullptr) {
+    if (dlssnr_stages_debug::Run(
+            command_,
+            resources_,
+            debug_codec_.get(),
+            command_queue_,
+            backbuffer,
+            guides,
+            model_input,
+            width,
+            height,
+            settings.debug_view)) {
       backbuffer->Release();
       swapchain3->Release();
       device->Release();
       return;
     }
-
-    DlssNrConstants debug_constants = {};
-    debug_constants.Mode = DlssNrMode_Resolve;
-    debug_constants.DebugView = 1;
-    debug_constants.Passthrough = 1;
-    debug_constants.WhitePoint = 1.0f;
-    debug_constants.Width = width;
-    debug_constants.Height = height;
-    debug_constants.GuideWidth = debug_guide_width;
-    debug_constants.GuideHeight = debug_guide_height;
-    debug_constants.MvScaleX = 1.0f;
-    debug_constants.MvScaleY = 1.0f;
-
-    debug_codec_->Dispatch(
-        command_.GetCommandList(),
-        debug_constants,
-        debug_input,
-        debug_input,
-        debug_input,
-        nullptr,
-        nullptr,
-        resources_.output,
-        nullptr);
-
-    command_.Barrier(command_.GetCommandList(), resources_.output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST);
-    command_.GetCommandList()->CopyResource(backbuffer, resources_.output);
-    command_.Barrier(command_.GetCommandList(), backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
-    command_.Barrier(command_.GetCommandList(), resources_.output, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-
-    command_.GetCommandList()->Close();
-    ID3D12CommandList* const lists[] = {command_.GetCommandList()};
-    command_queue_->ExecuteCommandLists(1, lists);
-    command_.WaitGpu(command_queue_);
 
     backbuffer->Release();
     swapchain3->Release();
