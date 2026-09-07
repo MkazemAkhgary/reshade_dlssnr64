@@ -316,17 +316,23 @@ void DlssNrDirect::OnPresent(
 
   const DlssGuideState guides = DlssGuides::Get().GetState();
 
+  const bool selected_pass_size_ok =
+      guides.selected_pass_color != nullptr &&
+      guides.selected_width == width &&
+      guides.selected_height == height;
+
   const bool use_selected_input =
       settings.use_selected_pass_as_input &&
-      guides.selected_pass_color != nullptr;
+      selected_pass_size_ok;
 
   ID3D12Resource* model_input = use_selected_input
                                     ? guides.selected_pass_color
                                     : backbuffer;
 
   // The UI mask is always generated from the selected clean pass when one is
-  // available. Without a selected pass, no UI mask is used at all.
-  ID3D12Resource* pre_ui_source = guides.selected_pass_color;
+  // available and matches the backbuffer dimensions.
+  ID3D12Resource* pre_ui_source =
+      selected_pass_size_ok ? guides.selected_pass_color : nullptr;
 
   if (debug_codec_ == nullptr) {
     debug_codec_ = std::make_unique<DlssNrCodec>();
