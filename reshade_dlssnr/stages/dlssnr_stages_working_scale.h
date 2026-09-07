@@ -31,6 +31,9 @@ bool RunDebugView(
     ID3D12CommandQueue* command_queue,
     ID3D12Resource* backbuffer,
     ID3D12Resource* model_input,
+    ID3D12Resource* model_output,
+    unsigned int width,
+    unsigned int height,
     int debug_view);
 
 bool Apply(

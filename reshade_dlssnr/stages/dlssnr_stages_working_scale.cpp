@@ -9,29 +9,64 @@ bool RunDebugView(
     ID3D12CommandQueue* command_queue,
     ID3D12Resource* backbuffer,
     ID3D12Resource* model_input,
+    ID3D12Resource* model_output,
+    unsigned int width,
+    unsigned int height,
     int debug_view) {
   if (codec == nullptr || backbuffer == nullptr || command_queue == nullptr) {
     return false;
   }
 
-  ID3D12Resource* debug_source = nullptr;
+  command.Reset();
 
-  if (debug_view == 7) {
-    debug_source = model_input;
-  } else if (debug_view == 8) {
-    debug_source = resources.output;
-  } else if (debug_view == 9) {
-    debug_source = backbuffer;
+  if (debug_view == 9) {
+    if (!codec->InitDebugResidualShader(nullptr)) return false;
+
+    DlssNrConstants constants = {};
+    constants.Mode = DlssNrMode_Resolve;
+    constants.WhitePoint = 1.0f;
+    constants.Width = width;
+    constants.Height = height;
+
+    command.Barrier(command.GetCommandList(), model_input,
+                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    command.Barrier(command.GetCommandList(), model_output,
+                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+    codec->DispatchDebugResidual(
+        command.GetCommandList(),
+        constants,
+        model_output,
+        model_input,
+        resources.composite_output);
+
+    command.Barrier(command.GetCommandList(), resources.composite_output,
+                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                    D3D12_RESOURCE_STATE_COPY_SOURCE);
+    command.Barrier(command.GetCommandList(), backbuffer,
+                    D3D12_RESOURCE_STATE_PRESENT,
+                    D3D12_RESOURCE_STATE_COPY_DEST);
+    command.GetCommandList()->CopyResource(backbuffer, resources.composite_output);
+    command.Barrier(command.GetCommandList(), backbuffer,
+                    D3D12_RESOURCE_STATE_COPY_DEST,
+                    D3D12_RESOURCE_STATE_PRESENT);
+    command.Barrier(command.GetCommandList(), resources.composite_output,
+                    D3D12_RESOURCE_STATE_COPY_SOURCE,
+                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+    command.GetCommandList()->Close();
+    ID3D12CommandList* lists[] = {command.GetCommandList()};
+    command_queue->ExecuteCommandLists(1, lists);
+    command.WaitGpu(command_queue);
+    return true;
   }
 
+  ID3D12Resource* debug_source =
+      debug_view == 7 ? model_input : model_output;
+
   if (debug_source == nullptr) return false;
-
-  command.GetCommandList()->Close();
-  ID3D12CommandList* lists[] = {command.GetCommandList()};
-  command_queue->ExecuteCommandLists(1, lists);
-  command.WaitGpu(command_queue);
-
-  command.Reset();
 
   command.Barrier(command.GetCommandList(), debug_source,
                   D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
@@ -48,10 +83,9 @@ bool RunDebugView(
                   D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
   command.GetCommandList()->Close();
-  lists[0] = command.GetCommandList();
+  ID3D12CommandList* lists[] = {command.GetCommandList()};
   command_queue->ExecuteCommandLists(1, lists);
   command.WaitGpu(command_queue);
-
   return true;
 }
 
