@@ -9,6 +9,7 @@
 #include "dlssnr_direct.h"
 #include "render_pass_tracker.h"
 #include "settings.h"
+#include "version.h"
 
 namespace reshade_dlssnr {
 
@@ -197,6 +198,9 @@ void DrawPassSettings(
 void DrawOverlay(reshade::api::effect_runtime*) {
   Settings& settings = GetSettings();
   bool changed = false;
+
+  ImGui::Text("Version %s", reshade_dlssnr::kAddonVersion);
+  ImGui::Separator();
 
   changed |= ImGui::Checkbox("Enable DLSSNR", &settings.enabled);
   changed |= ImGui::Checkbox("Only run on SuperSampling",
