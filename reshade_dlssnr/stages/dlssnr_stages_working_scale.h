@@ -52,7 +52,6 @@ bool Apply(
     float chroma_strength,
     float residual_suppression,
     float residual_threshold,
-    float white_point_scale,
     int debug_view);
 
 }  // namespace reshade_dlssnr::dlssnr_stages_working_scale

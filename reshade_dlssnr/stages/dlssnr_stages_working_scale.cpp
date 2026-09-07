@@ -159,7 +159,6 @@ bool Apply(
     float chroma_strength,
     float residual_suppression,
     float residual_threshold,
-    float white_point_scale,
     int debug_view) {
   if (!use_working_scale || codec == nullptr || backbuffer == nullptr) {
     return false;
@@ -175,7 +174,6 @@ bool Apply(
   constants.ChromaStrength = chroma_strength;
   constants.ResidualSuppression = residual_suppression;
   constants.ResidualThreshold = residual_threshold;
-  constants.WhitePoint = white_point_scale;
 
   command.Barrier(command.GetCommandList(), resources.working_output,
                   D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
