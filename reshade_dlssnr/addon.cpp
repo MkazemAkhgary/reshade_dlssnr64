@@ -138,7 +138,7 @@ void Attach(HMODULE module) {
   }
 
   if (nvngx_dlss != nullptr) {
-    reshade_dlssnr::ngx_hook_compat::local_vtable::Hook(
+    reshade_dlssnr::local_vtable::Hook(
         nvngx_dlss,
         reshade_dlssnr::ngx_hook_compat::DLSS_HOOKS);
   } else {
