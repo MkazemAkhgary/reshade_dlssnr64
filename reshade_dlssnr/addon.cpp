@@ -117,26 +117,8 @@ void OnPresent(
         native_swapchain);
   }
 
-  // Capture backbuffer description and reset render-pass tracking for next frame.
-  reshade::api::device* const present_device = command_queue->get_device();
-  if (present_device != nullptr && present_device->get_api() == reshade::api::device_api::d3d12) {
-    const auto backbuffer_handle = swapchain->get_current_back_buffer();
-    if (backbuffer_handle != 0) {
-      g_backbuffer_desc = present_device->get_resource_desc(backbuffer_handle);
-      g_has_backbuffer_desc = true;
-      g_backbuffer_native_handle = backbuffer_handle.handle;
-      g_has_backbuffer_native_handle = true;
-    }
-  }
-
-  if (!g_freeze_render_pass_list) {
-    std::lock_guard<std::mutex> lock(g_pass_mutex);
-    g_display_passes.swap(g_render_passes);
-    g_render_passes.clear();
-    g_current_pass_for_command_list.clear();
-    g_current_pass_index = 0;
-  }
-
+  g_render_pass_tracker.CaptureBackbuffer(swapchain);
+  g_render_pass_tracker.SwapForNextFrame();
 }
 
 void DrawSettings(reshade::api::effect_runtime*) {
