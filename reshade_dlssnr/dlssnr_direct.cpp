@@ -56,67 +56,6 @@ const char* DlssNrDirect::GetLastError() const {
   return failed_ ? reason_ : "";
 }
 
-bool DlssNrDirect::EnsureModelAndPatch() {
-  if (model_module_ != nullptr) return true;
-
-  model_module_ = GetModuleHandleW(L"nvngx_dlssnr.dll");
-  if (model_module_ == nullptr) {
-    model_module_ = LoadLibraryW(L"nvngx_dlssnr.dll");
-  }
-
-  if (model_module_ == nullptr) {
-    reason_ = "nvngx_dlssnr.dll not found";
-    return false;
-  }
-
-  PatchImport(model_module_, "KERNEL32.dll", "GetModuleFileNameW", HookedGetModuleFileNameW);
-
-  init_ext_ = reinterpret_cast<PFN_InitExt>(GetProcAddress(model_module_, "NVSDK_NGX_D3D12_Init_Ext"));
-  create_feature_ = reinterpret_cast<PFN_CreateFeature>(GetProcAddress(model_module_, "NVSDK_NGX_D3D12_CreateFeature"));
-  evaluate_feature_ = reinterpret_cast<PFN_EvaluateFeature>(GetProcAddress(model_module_, "NVSDK_NGX_D3D12_EvaluateFeature"));
-  release_feature_ = reinterpret_cast<PFN_ReleaseFeature>(GetProcAddress(model_module_, "NVSDK_NGX_D3D12_ReleaseFeature"));
-
-  if (create_feature_ == nullptr || evaluate_feature_ == nullptr) {
-    reason_ = "nvngx_dlssnr.dll is missing required exports";
-    return false;
-  }
-
-  reshade::log::message(reshade::log::level::info, "Loaded and patched nvngx_dlssnr.dll directly");
-  return true;
-}
-
-bool DlssNrDirect::EnsureInitialized(ID3D12Device* device) {
-  if (initialized_) return true;
-  if (init_ext_ == nullptr) return false;
-
-  const std::wstring data_path = GetModuleDirectory().wstring();
-  const NVSDK_NGX_Result result = init_ext_(
-      0ull,
-      data_path.c_str(),
-      device,
-      NVSDK_NGX_Version_API,
-      nullptr);
-
-  if (result != NVSDK_NGX_Result_Success) {
-    reason_ = "nvngx_dlssnr.dll Init_Ext failed";
-    reshade::log::message(reshade::log::level::error, reason_);
-    return false;
-  }
-
-  initialized_ = true;
-  reshade::log::message(reshade::log::level::info, "nvngx_dlssnr.dll initialized directly");
-  return true;
-}
-
-bool DlssNrDirect::EnsureParameterBlock() {
-  if (parameter_block_.IsReady()) return true;
-  if (!parameter_block_.Initialize()) {
-    reason_ = "driver NGX capability parameter block unavailable";
-    return false;
-  }
-  return true;
-}
-
 bool DlssNrDirect::EnsureFeature(
     ID3D12GraphicsCommandList* command_list,
     unsigned int width,
