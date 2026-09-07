@@ -469,7 +469,6 @@ void DlssNrPassSession::OnPresent(
             pass.chroma_strength,
             pass.residual_suppression,
             pass.residual_threshold,
-            pass.white_point_scale,
             settings.debug_view)) {
       failed_ = true;
       reason_ = "failed to apply working scale";
@@ -501,8 +500,7 @@ void DlssNrPassSession::OnPresent(
           use_selected_input,
           ui_mask_generated,
           pass.luma_strength,
-          pass.chroma_strength,
-          pass.white_point_scale)) {
+          pass.chroma_strength)) {
     failed_ = true;
     reason_ = "failed to apply final composite";
     backbuffer->Release();
