@@ -8,7 +8,7 @@
 namespace reshade_dlssnr {
 
 bool DlssNrFeatureLifecycle::EnsureFeature(
-    const DlssNrRuntime& runtime,
+    DlssNrRuntime& runtime,
     const PassSettings& pass,
     ID3D12GraphicsCommandList* command_list,
     unsigned int width,
@@ -106,14 +106,14 @@ bool DlssNrFeatureLifecycle::EnsureFeature(
   return true;
 }
 
-void DlssNrFeatureLifecycle::ReleaseFeature(const DlssNrRuntime& runtime) {
+void DlssNrFeatureLifecycle::ReleaseFeature(DlssNrRuntime& runtime) {
   if (feature_handle_ != nullptr) {
     runtime.ReleaseFeature(feature_handle_);
     feature_handle_ = nullptr;
   }
 }
 
-void DlssNrFeatureLifecycle::Shutdown(const DlssNrRuntime& runtime) {
+void DlssNrFeatureLifecycle::Shutdown(DlssNrRuntime& runtime) {
   ReleaseFeature(runtime);
 
   built_width_ = 0;
