@@ -95,7 +95,7 @@ bool DlssNrCodec::DispatchComposite(
     return false;
   }
 
-  const ID3D12Resource* srvs[kDlssNrSrvCount] = {
+  ID3D12Resource* srvs[kDlssNrSrvCount] = {
       enhanced,
       original,
       mask,
@@ -103,7 +103,7 @@ bool DlssNrCodec::DispatchComposite(
       mask,
   };
 
-  const ID3D12Resource* uavs[kDlssNrUavCount] = {
+  ID3D12Resource* uavs[kDlssNrUavCount] = {
       out_target,
       out_target,
   };
