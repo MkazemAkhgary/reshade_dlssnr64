@@ -198,6 +198,49 @@ bool DlssNrCodec::CreateRootSignature(ID3D12Device* device) {
   return true;
 }
 
+bool DlssNrCodec::CreateComputePipelineState(
+    ID3D12Device* device,
+    const char* shader_source,
+    ID3D12PipelineState** out_pipeline_state) {
+  if (device == nullptr || shader_source == nullptr ||
+      out_pipeline_state == nullptr) {
+    return false;
+  }
+
+  ID3DBlob* shader_blob = nullptr;
+  ID3DBlob* error_blob = nullptr;
+
+  if (FAILED(D3DCompile(
+          shader_source,
+          strlen(shader_source),
+          nullptr,
+          nullptr,
+          nullptr,
+          "CSMain",
+          "cs_5_1",
+          0,
+          0,
+          &shader_blob,
+          &error_blob))) {
+    if (error_blob != nullptr) error_blob->Release();
+    return false;
+  }
+
+  if (error_blob != nullptr) error_blob->Release();
+
+  D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {};
+  pso_desc.pRootSignature = root_signature_;
+  pso_desc.CS.pShaderBytecode = shader_blob->GetBufferPointer();
+  pso_desc.CS.BytecodeLength = shader_blob->GetBufferSize();
+  pso_desc.NodeMask = 0;
+
+  const HRESULT hr = device->CreateComputePipelineState(
+      &pso_desc, IID_PPV_ARGS(out_pipeline_state));
+
+  shader_blob->Release();
+  return SUCCEEDED(hr);
+}
+
 bool DlssNrCodec::Init(ID3D12Device* device) {
   if (device_ != nullptr) return true;
   if (device == nullptr) return false;
