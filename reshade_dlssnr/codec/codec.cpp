@@ -71,10 +71,7 @@ void DlssNrCodec::CreateConstantBufferView(ID3D12Resource* resource, const void*
   device_->CreateConstantBufferView(&desc, handle);
 }
 
-bool DlssNrCodec::Init(ID3D12Device* device) {
-  if (device_ != nullptr) return true;
-  if (device == nullptr) return false;
-
+bool DlssNrCodec::CreateRootSignature(ID3D12Device* device) {
   D3D12_DESCRIPTOR_RANGE ranges[3] = {};
   ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
   ranges[0].NumDescriptors = kDlssNrSrvCount;
@@ -122,28 +119,35 @@ bool DlssNrCodec::Init(ID3D12Device* device) {
 
   ID3DBlob* signature = nullptr;
   ID3DBlob* error = nullptr;
-  if (FAILED(D3D12SerializeRootSignature(&root_desc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, &error))) {
+  if (FAILED(D3D12SerializeRootSignature(
+          &root_desc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, &error))) {
     if (error != nullptr) {
-      reshade::log::message(reshade::log::level::error, "DLSSNR codec root signature serialization failed");
+      reshade::log::message(
+          reshade::log::level::error,
+          "DLSSNR codec root signature serialization failed");
       error->Release();
     }
     return false;
   }
 
-  if (FAILED(device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(),
-                                         IID_PPV_ARGS(&root_signature_)))) {
+  if (FAILED(device->CreateRootSignature(
+          0,
+          signature->GetBufferPointer(),
+          signature->GetBufferSize(),
+          IID_PPV_ARGS(&root_signature_)))) {
     signature->Release();
     return false;
   }
   signature->Release();
 
-  D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {};
-  pso_desc.pRootSignature = root_signature_;
-  pso_desc.CS.pShaderBytecode = DlssNr_cso;
-  pso_desc.CS.BytecodeLength = sizeof(DlssNr_cso);
-  pso_desc.NodeMask = 0;
+  return true;
+}
 
-  if (FAILED(device->CreateComputePipelineState(&pso_desc, IID_PPV_ARGS(&pipeline_state_)))) {
+bool DlssNrCodec::Init(ID3D12Device* device) {
+  if (device_ != nullptr) return true;
+  if (device == nullptr) return false;
+
+  if (!CreateRootSignature(device)) {
     return false;
   }
 
@@ -153,11 +157,14 @@ bool DlssNrCodec::Init(ID3D12Device* device) {
   heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
   heap_desc.NodeMask = 0;
 
-  if (FAILED(device->CreateDescriptorHeap(&heap_desc, IID_PPV_ARGS(&descriptor_heap_)))) {
+  if (FAILED(device->CreateDescriptorHeap(
+          &heap_desc, IID_PPV_ARGS(&descriptor_heap_)))) {
     return false;
   }
 
-  descriptor_size_ = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+  descriptor_size_ =
+      device->GetDescriptorHandleIncrementSize(
+          D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
   D3D12_HEAP_PROPERTIES heap_props = {};
   heap_props.Type = D3D12_HEAP_TYPE_UPLOAD;
