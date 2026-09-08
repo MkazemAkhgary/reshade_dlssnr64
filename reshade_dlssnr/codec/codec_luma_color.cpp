@@ -100,15 +100,7 @@ bool DlssNrCodec::DispatchLumaColor(
     return false;
   }
 
-  const uint32_t slot = heap_index_;
-  heap_index_ = (heap_index_ + 1) % kDlssNrHeapCount;
-
-  D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle = descriptor_heap_->GetCPUDescriptorHandleForHeapStart();
-  cpu_handle.ptr += static_cast<SIZE_T>(slot) * kDlssNrPerDispatchDescriptors * descriptor_size_;
-  D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle = descriptor_heap_->GetGPUDescriptorHandleForHeapStart();
-  gpu_handle.ptr += static_cast<UINT64>(slot) * kDlssNrPerDispatchDescriptors * descriptor_size_;
-
-  ID3D12Resource* srvs[kDlssNrSrvCount] = {
+  const ID3D12Resource* srvs[kDlssNrSrvCount] = {
       enhanced,
       original,
       enhanced,
@@ -116,38 +108,13 @@ bool DlssNrCodec::DispatchLumaColor(
       enhanced,
   };
 
-  for (uint32_t i = 0; i < kDlssNrSrvCount; ++i) {
-    D3D12_CPU_DESCRIPTOR_HANDLE handle = cpu_handle;
-    handle.ptr += static_cast<SIZE_T>(i) * descriptor_size_;
-    CreateShaderResourceView(srvs[i], handle);
-  }
-
-  ID3D12Resource* uavs[kDlssNrUavCount] = {
+  const ID3D12Resource* uavs[kDlssNrUavCount] = {
       out_target,
       out_target,
   };
 
-  for (uint32_t i = 0; i < kDlssNrUavCount; ++i) {
-    D3D12_CPU_DESCRIPTOR_HANDLE handle = cpu_handle;
-    handle.ptr += static_cast<SIZE_T>(kDlssNrSrvCount + i) * descriptor_size_;
-    CreateUnorderedAccessView(uavs[i], handle);
-  }
-
-  D3D12_CPU_DESCRIPTOR_HANDLE cbv_handle = cpu_handle;
-  cbv_handle.ptr += static_cast<SIZE_T>(kDlssNrSrvCount + kDlssNrUavCount) * descriptor_size_;
-  CreateConstantBufferView(constant_buffers_[slot], &constants, sizeof(constants), cbv_handle);
-
-  ID3D12DescriptorHeap* heaps[] = {descriptor_heap_};
-  command_list->SetDescriptorHeaps(1, heaps);
-  command_list->SetComputeRootSignature(root_signature_);
-  command_list->SetPipelineState(luma_color_pipeline_state_);
-  command_list->SetComputeRootDescriptorTable(0, gpu_handle);
-  command_list->Dispatch(
-      (constants.Width + 7) / 8,
-      (constants.Height + 7) / 8,
-      1);
-
-  return true;
+  return BindAndDispatch(
+      command_list, luma_color_pipeline_state_, constants, srvs, uavs);
 }
 
 }  // namespace reshade_dlssnr
