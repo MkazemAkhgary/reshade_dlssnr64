@@ -293,9 +293,8 @@ void DlssNrPassSession::OnPresent(
 
   if (use_working_scale) {
     if (model_input == backbuffer) {
-      command_.Barrier(command_.GetCommandList(), backbuffer,
-                       D3D12_RESOURCE_STATE_PRESENT,
-                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+      command_.Transition(command_.GetCommandList(), backbuffer,
+                          D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     }
 
     if (!dlssnr_stages_working_scale::PrepareInput(
