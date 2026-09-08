@@ -87,19 +87,15 @@ bool Run(
       debug_input,
       resources.output);
 
-  command.Barrier(command.GetCommandList(), resources.output,
-                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                  D3D12_RESOURCE_STATE_COPY_SOURCE);
-  command.Barrier(command.GetCommandList(), backbuffer,
-                  D3D12_RESOURCE_STATE_PRESENT,
-                  D3D12_RESOURCE_STATE_COPY_DEST);
+  command.Transition(command.GetCommandList(), resources.output,
+                     D3D12_RESOURCE_STATE_COPY_SOURCE);
+  command.Transition(command.GetCommandList(), backbuffer,
+                     D3D12_RESOURCE_STATE_COPY_DEST);
   command.GetCommandList()->CopyResource(backbuffer, resources.output);
-  command.Barrier(command.GetCommandList(), backbuffer,
-                  D3D12_RESOURCE_STATE_COPY_DEST,
-                  D3D12_RESOURCE_STATE_PRESENT);
-  command.Barrier(command.GetCommandList(), resources.output,
-                  D3D12_RESOURCE_STATE_COPY_SOURCE,
-                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  command.Transition(command.GetCommandList(), backbuffer,
+                     D3D12_RESOURCE_STATE_PRESENT);
+  command.Transition(command.GetCommandList(), resources.output,
+                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
   command.GetCommandList()->Close();
   ID3D12CommandList* lists[] = {command.GetCommandList()};
