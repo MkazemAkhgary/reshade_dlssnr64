@@ -75,8 +75,8 @@ bool DlssNrCodec::BindAndDispatch(
     ID3D12GraphicsCommandList* command_list,
     ID3D12PipelineState* pipeline_state,
     const DlssNrConstants& constants,
-    const ID3D12Resource* const* srvs,
-    const ID3D12Resource* const* uavs) {
+    ID3D12Resource* const* srvs,
+    ID3D12Resource* const* uavs) {
   if (command_list == nullptr || pipeline_state == nullptr ||
       srvs == nullptr || uavs == nullptr) {
     return false;
