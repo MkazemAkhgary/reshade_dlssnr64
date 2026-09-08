@@ -7,7 +7,7 @@
 **Benefits:** Removes GPL-3.0 license contamination, enables shader modifications, reduces binary size, improves maintainability.
 **Analysis:** The blob is ONLY used for its root signature. The main `Dispatch()` method that uses the blob pipeline state is NEVER called in the current codebase. All actual compute work uses the other shaders (mask, composite, luma_color, debug_residual, downsample, upsample_residual) compiled from HLSL source at runtime. The blob's constants layout also doesn't match OptiScaler's current `dlssnr.hlsl` — it was compiled from an older/simpler version.
 **Task:** Extract root signature creation to be independent of the blob, remove blob PSO from `Init()`, delete `shaders/dlssnr_cso.h`.
-**Status:** In progress
+**Status:** Complete
 **Goal:** Replace the precompiled CSO blob from OptiScaler with runtime HLSL compilation, like the other codec shaders.
 **Benefits:** Removes GPL-3.0 license contamination, enables shader modifications, reduces binary size, improves maintainability.
 **Task:** Extract the needed encode/resolve modes (0, 1, 2) from OptiScaler's `dlssnr.hlsl`, strip comparison modes (4+) we don't use, compile from source in `codec.cpp`.
