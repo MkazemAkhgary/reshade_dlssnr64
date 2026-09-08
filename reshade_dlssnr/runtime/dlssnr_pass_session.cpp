@@ -396,15 +396,13 @@ void DlssNrPassSession::OnPresent(
   feature_.MarkEvaluated();
 
   if (resources_.ui_mask != nullptr) {
-    command_.Barrier(command_.GetCommandList(), resources_.ui_mask,
-                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    command_.Transition(command_.GetCommandList(), resources_.ui_mask,
+                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   }
 
   if (!use_working_scale) {
-    command_.Barrier(command_.GetCommandList(), backbuffer,
-                     D3D12_RESOURCE_STATE_PRESENT,
-                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    command_.Transition(command_.GetCommandList(), backbuffer,
+                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   }
 
   const NVSDK_NGX_Result result =
@@ -415,9 +413,8 @@ void DlssNrPassSession::OnPresent(
           nullptr);
 
   if (resources_.ui_mask != nullptr) {
-    command_.Barrier(command_.GetCommandList(), resources_.ui_mask,
-                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    command_.Transition(command_.GetCommandList(), resources_.ui_mask,
+                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   }
 
   if (settings.debug_view == 7 || settings.debug_view == 8 ||
