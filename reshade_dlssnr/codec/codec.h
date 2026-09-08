@@ -133,6 +133,10 @@ class DlssNrCodec {
   ID3D12Resource* constant_buffers_[kDlssNrHeapCount] = {};
 
   bool CreateRootSignature(ID3D12Device* device);
+  bool CreateComputePipelineState(
+      ID3D12Device* device,
+      const char* shader_source,
+      ID3D12PipelineState** out_pipeline_state);
   void CreateShaderResourceView(ID3D12Resource* resource, D3D12_CPU_DESCRIPTOR_HANDLE handle);
   void CreateUnorderedAccessView(ID3D12Resource* resource, D3D12_CPU_DESCRIPTOR_HANDLE handle);
   void CreateConstantBufferView(ID3D12Resource* resource, const void* data, size_t size, D3D12_CPU_DESCRIPTOR_HANDLE handle);
