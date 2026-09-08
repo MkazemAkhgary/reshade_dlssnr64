@@ -21,8 +21,6 @@ bool RunDebugView(
     return false;
   }
 
-  command.Reset();
-
   if (debug_view == 9) {
     if (!codec->InitDebugResidualShader(device)) return false;
 
