@@ -13,7 +13,7 @@
 **Goal:** Create a shared descriptor management class to eliminate the duplicated binding logic across all `codec_*.cpp` files.
 **Benefits:** Reduces code duplication by ~6x, simplifies future shader additions.
 **Task:** Create `DlssNrDescriptorHelper` or similar that handles SRV/UAV/CBV binding, heap slot management.
-**Status:** Not started
+**Status:** Complete
 
 ### 3. Unify resource state management in `DlssNrCommandContext`
 **Goal:** Auto-track resource states and transition them automatically instead of manual `Barrier()` calls everywhere.
