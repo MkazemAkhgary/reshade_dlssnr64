@@ -95,7 +95,7 @@ bool DlssNrCodec::DispatchMask(
     return false;
   }
 
-  const ID3D12Resource* srvs[kDlssNrSrvCount] = {
+  ID3D12Resource* srvs[kDlssNrSrvCount] = {
       pre_ui,
       backbuffer,
       pre_ui,
@@ -103,7 +103,7 @@ bool DlssNrCodec::DispatchMask(
       pre_ui,
   };
 
-  const ID3D12Resource* uavs[kDlssNrUavCount] = {
+  ID3D12Resource* uavs[kDlssNrUavCount] = {
       out_mask,
       out_mask,
   };
