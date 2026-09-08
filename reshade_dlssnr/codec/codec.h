@@ -59,17 +59,6 @@ class DlssNrCodec {
 
   bool InitMaskShader(ID3D12Device* device);
 
-  bool Dispatch(
-      ID3D12GraphicsCommandList* command_list,
-      const DlssNrConstants& constants,
-      ID3D12Resource* source,
-      ID3D12Resource* model,
-      ID3D12Resource* original,
-      ID3D12Resource* motion,
-      ID3D12Resource* prev_edit,
-      ID3D12Resource* out_target,
-      ID3D12Resource* out_keep);
-
   bool DispatchMask(
       ID3D12GraphicsCommandList* command_list,
       const DlssNrConstants& constants,
