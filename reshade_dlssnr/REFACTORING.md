@@ -19,7 +19,7 @@
 **Goal:** Auto-track resource states and transition them automatically instead of manual `Barrier()` calls everywhere.
 **Benefits:** Fewer bugs from missed transitions, cleaner stage code.
 **Task:** Add state tracking to `DlssNrCommandContext`, replace manual barriers.
-**Status:** Not started
+**Status:** Complete
 
 ### 4. Consolidate codec files into fewer files with shared infrastructure
 **Goal:** Merge the 6 codec files into 1-2 files with a common pipeline state creation helper.
