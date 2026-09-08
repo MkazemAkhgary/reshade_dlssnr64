@@ -81,7 +81,7 @@ bool DlssNrCodec::DispatchDebugResidual(
     return false;
   }
 
-  const ID3D12Resource* srvs[kDlssNrSrvCount] = {
+  ID3D12Resource* srvs[kDlssNrSrvCount] = {
       enhanced,
       original,
       enhanced,
@@ -89,7 +89,7 @@ bool DlssNrCodec::DispatchDebugResidual(
       enhanced,
   };
 
-  const ID3D12Resource* uavs[kDlssNrUavCount] = {
+  ID3D12Resource* uavs[kDlssNrUavCount] = {
       out_target,
       out_target,
   };
