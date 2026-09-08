@@ -173,12 +173,10 @@ bool Apply(
   constants.ResidualSuppression = residual_suppression;
   constants.ResidualThreshold = residual_threshold;
 
-  command.Barrier(command.GetCommandList(), resources.working_output,
-                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                  D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  command.Barrier(command.GetCommandList(), resources.working_input,
-                  D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-                  D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  command.Transition(command.GetCommandList(), resources.working_output,
+                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  command.Transition(command.GetCommandList(), resources.working_input,
+                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
   codec->DispatchUpsampleResidual(
       command.GetCommandList(),
@@ -188,22 +186,17 @@ bool Apply(
       resources.working_output,
       resources.composite_output);
 
-  command.Barrier(command.GetCommandList(), resources.composite_output,
-                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                  D3D12_RESOURCE_STATE_COPY_SOURCE);
-  command.Barrier(command.GetCommandList(), backbuffer,
-                  D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-                  D3D12_RESOURCE_STATE_COPY_DEST);
+  command.Transition(command.GetCommandList(), resources.composite_output,
+                     D3D12_RESOURCE_STATE_COPY_SOURCE);
+  command.Transition(command.GetCommandList(), backbuffer,
+                     D3D12_RESOURCE_STATE_COPY_DEST);
   command.GetCommandList()->CopyResource(backbuffer, resources.composite_output);
-  command.Barrier(command.GetCommandList(), backbuffer,
-                  D3D12_RESOURCE_STATE_COPY_DEST,
-                  D3D12_RESOURCE_STATE_PRESENT);
-  command.Barrier(command.GetCommandList(), resources.composite_output,
-                  D3D12_RESOURCE_STATE_COPY_SOURCE,
-                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  command.Barrier(command.GetCommandList(), resources.working_output,
-                  D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  command.Transition(command.GetCommandList(), backbuffer,
+                     D3D12_RESOURCE_STATE_PRESENT);
+  command.Transition(command.GetCommandList(), resources.composite_output,
+                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  command.Transition(command.GetCommandList(), resources.working_output,
+                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
   return true;
 }
