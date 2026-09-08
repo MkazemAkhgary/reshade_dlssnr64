@@ -132,9 +132,8 @@ bool PrepareInput(
       full_input,
       resources.working_input);
 
-  command.Barrier(command.GetCommandList(), resources.working_input,
-                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                  D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  command.Transition(command.GetCommandList(), resources.working_input,
+                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
   *out_model_color = resources.working_input;
   *out_model_output = resources.working_output;
