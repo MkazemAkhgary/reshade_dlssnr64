@@ -77,16 +77,15 @@ bool Run(
   constants.MvScaleX = 1.0f;
   constants.MvScaleY = 1.0f;
 
-  codec->Dispatch(
+  if (!codec->InitDownsampleShader(device)) return false;
+
+  constants.Mode = DlssNrMode_Downsample;
+
+  codec->DispatchDownsample(
       command.GetCommandList(),
       constants,
       debug_input,
-      debug_input,
-      debug_input,
-      nullptr,
-      nullptr,
-      resources.output,
-      nullptr);
+      resources.output);
 
   command.Barrier(command.GetCommandList(), resources.output,
                   D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
