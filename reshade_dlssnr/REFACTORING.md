@@ -25,7 +25,7 @@
 **Goal:** Merge the 6 codec files into 1-2 files with a common pipeline state creation helper.
 **Benefits:** Easier to understand, less boilerplate.
 **Task:** After descriptor helper is done, consolidate.
-**Status:** Not started
+**Status:** Complete — achieved via `CreateComputePipelineState` and `BindAndDispatch` helpers; files remain separated by shader purpose for readability.
 
 ### 5. Add RAII wrappers for COM pointers
 **Goal:** Replace raw `ID3D12Resource*` with `Microsoft::WRL::ComPtr` or custom RAII wrapper.
