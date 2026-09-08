@@ -137,6 +137,13 @@ class DlssNrCodec {
   void CreateUnorderedAccessView(ID3D12Resource* resource, D3D12_CPU_DESCRIPTOR_HANDLE handle);
   void CreateConstantBufferView(ID3D12Resource* resource, const void* data, size_t size, D3D12_CPU_DESCRIPTOR_HANDLE handle);
   DXGI_FORMAT TypedFormat(DXGI_FORMAT format) const;
+
+  bool BindAndDispatch(
+      ID3D12GraphicsCommandList* command_list,
+      ID3D12PipelineState* pipeline_state,
+      const DlssNrConstants& constants,
+      const ID3D12Resource* const* srvs,
+      const ID3D12Resource* const* uavs);
 };
 
 }  // namespace reshade_dlssnr
