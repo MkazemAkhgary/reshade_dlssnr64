@@ -207,7 +207,7 @@ bool DlssNrCodec::DispatchUpsampleResidual(
     return false;
   }
 
-  const ID3D12Resource* srvs[kDlssNrSrvCount] = {
+  ID3D12Resource* srvs[kDlssNrSrvCount] = {
       original,
       low_input,
       low_enhanced,
@@ -215,7 +215,7 @@ bool DlssNrCodec::DispatchUpsampleResidual(
       low_enhanced,
   };
 
-  const ID3D12Resource* uavs[kDlssNrUavCount] = {
+  ID3D12Resource* uavs[kDlssNrUavCount] = {
       out_target,
       out_target,
   };
