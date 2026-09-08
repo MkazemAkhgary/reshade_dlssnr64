@@ -110,7 +110,6 @@
     <ClInclude Include="state\settings.h" />
     <ClInclude Include="state\version.h" />
     <ClInclude Include="ui\ui.h" />
-    <ClInclude Include="shaders\dlssnr_cso.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
