@@ -142,8 +142,8 @@ class DlssNrCodec {
       ID3D12GraphicsCommandList* command_list,
       ID3D12PipelineState* pipeline_state,
       const DlssNrConstants& constants,
-      const ID3D12Resource* const* srvs,
-      const ID3D12Resource* const* uavs);
+      ID3D12Resource* const* srvs,
+      ID3D12Resource* const* uavs);
 };
 
 }  // namespace reshade_dlssnr
