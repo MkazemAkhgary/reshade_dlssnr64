@@ -75,7 +75,7 @@ bool DlssNrCodec::DispatchDownsample(
     return false;
   }
 
-  const ID3D12Resource* srvs[kDlssNrSrvCount] = {
+  ID3D12Resource* srvs[kDlssNrSrvCount] = {
       source,
       source,
       source,
@@ -83,7 +83,7 @@ bool DlssNrCodec::DispatchDownsample(
       source,
   };
 
-  const ID3D12Resource* uavs[kDlssNrUavCount] = {
+  ID3D12Resource* uavs[kDlssNrUavCount] = {
       out_target,
       out_target,
   };
