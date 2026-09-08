@@ -71,6 +71,61 @@ void DlssNrCodec::CreateConstantBufferView(ID3D12Resource* resource, const void*
   device_->CreateConstantBufferView(&desc, handle);
 }
 
+bool DlssNrCodec::BindAndDispatch(
+    ID3D12GraphicsCommandList* command_list,
+    ID3D12PipelineState* pipeline_state,
+    const DlssNrConstants& constants,
+    const ID3D12Resource* const* srvs,
+    const ID3D12Resource* const* uavs) {
+  if (command_list == nullptr || pipeline_state == nullptr ||
+      srvs == nullptr || uavs == nullptr) {
+    return false;
+  }
+
+  const uint32_t slot = heap_index_;
+  heap_index_ = (heap_index_ + 1) % kDlssNrHeapCount;
+
+  D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle =
+      descriptor_heap_->GetCPUDescriptorHandleForHeapStart();
+  cpu_handle.ptr += static_cast<SIZE_T>(slot) *
+                    kDlssNrPerDispatchDescriptors * descriptor_size_;
+  D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle =
+      descriptor_heap_->GetGPUDescriptorHandleForHeapStart();
+  gpu_handle.ptr += static_cast<UINT64>(slot) *
+                    kDlssNrPerDispatchDescriptors * descriptor_size_;
+
+  for (uint32_t i = 0; i < kDlssNrSrvCount; ++i) {
+    D3D12_CPU_DESCRIPTOR_HANDLE handle = cpu_handle;
+    handle.ptr += static_cast<SIZE_T>(i) * descriptor_size_;
+    CreateShaderResourceView(srvs[i], handle);
+  }
+
+  for (uint32_t i = 0; i < kDlssNrUavCount; ++i) {
+    D3D12_CPU_DESCRIPTOR_HANDLE handle = cpu_handle;
+    handle.ptr += static_cast<SIZE_T>(kDlssNrSrvCount + i) *
+                  descriptor_size_;
+    CreateUnorderedAccessView(uavs[i], handle);
+  }
+
+  D3D12_CPU_DESCRIPTOR_HANDLE cbv_handle = cpu_handle;
+  cbv_handle.ptr += static_cast<SIZE_T>(kDlssNrSrvCount + kDlssNrUavCount) *
+                    descriptor_size_;
+  CreateConstantBufferView(
+      constant_buffers_[slot], &constants, sizeof(constants), cbv_handle);
+
+  ID3D12DescriptorHeap* heaps[] = {descriptor_heap_};
+  command_list->SetDescriptorHeaps(1, heaps);
+  command_list->SetComputeRootSignature(root_signature_);
+  command_list->SetPipelineState(pipeline_state);
+  command_list->SetComputeRootDescriptorTable(0, gpu_handle);
+  command_list->Dispatch(
+      (constants.Width + 7) / 8,
+      (constants.Height + 7) / 8,
+      1);
+
+  return true;
+}
+
 bool DlssNrCodec::CreateRootSignature(ID3D12Device* device) {
   D3D12_DESCRIPTOR_RANGE ranges[3] = {};
   ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
