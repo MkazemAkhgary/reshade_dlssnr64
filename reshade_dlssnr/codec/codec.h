@@ -130,7 +130,6 @@ class DlssNrCodec {
  private:
   ID3D12Device* device_ = nullptr;
   ID3D12RootSignature* root_signature_ = nullptr;
-  ID3D12PipelineState* pipeline_state_ = nullptr;
   ID3D12PipelineState* mask_pipeline_state_ = nullptr;
   ID3D12PipelineState* composite_pipeline_state_ = nullptr;
   ID3D12PipelineState* luma_color_pipeline_state_ = nullptr;
