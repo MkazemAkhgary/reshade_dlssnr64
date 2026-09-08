@@ -25,6 +25,9 @@ bool Apply(
   constants.Width = target_width;
   constants.Height = target_height;
 
+  command.Transition(command.GetCommandList(), source,
+                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
   codec->DispatchDownsample(
       command.GetCommandList(),
       constants,
