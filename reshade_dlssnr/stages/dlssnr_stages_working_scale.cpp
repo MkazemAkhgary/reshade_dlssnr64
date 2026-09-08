@@ -31,12 +31,10 @@ bool RunDebugView(
     constants.Width = width;
     constants.Height = height;
 
-    command.Barrier(command.GetCommandList(), model_input,
-                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    command.Barrier(command.GetCommandList(), model_output,
-                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    command.Transition(command.GetCommandList(), model_input,
+                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    command.Transition(command.GetCommandList(), model_output,
+                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
     codec->DispatchDebugResidual(
         command.GetCommandList(),
@@ -45,19 +43,15 @@ bool RunDebugView(
         model_input,
         resources.composite_output);
 
-    command.Barrier(command.GetCommandList(), resources.composite_output,
-                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                    D3D12_RESOURCE_STATE_COPY_SOURCE);
-    command.Barrier(command.GetCommandList(), backbuffer,
-                    D3D12_RESOURCE_STATE_PRESENT,
-                    D3D12_RESOURCE_STATE_COPY_DEST);
+    command.Transition(command.GetCommandList(), resources.composite_output,
+                       D3D12_RESOURCE_STATE_COPY_SOURCE);
+    command.Transition(command.GetCommandList(), backbuffer,
+                       D3D12_RESOURCE_STATE_COPY_DEST);
     command.GetCommandList()->CopyResource(backbuffer, resources.composite_output);
-    command.Barrier(command.GetCommandList(), backbuffer,
-                    D3D12_RESOURCE_STATE_COPY_DEST,
-                    D3D12_RESOURCE_STATE_PRESENT);
-    command.Barrier(command.GetCommandList(), resources.composite_output,
-                    D3D12_RESOURCE_STATE_COPY_SOURCE,
-                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    command.Transition(command.GetCommandList(), backbuffer,
+                       D3D12_RESOURCE_STATE_PRESENT);
+    command.Transition(command.GetCommandList(), resources.composite_output,
+                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
     command.GetCommandList()->Close();
     ID3D12CommandList* lists[] = {command.GetCommandList()};
