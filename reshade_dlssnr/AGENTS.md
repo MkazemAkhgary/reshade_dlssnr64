@@ -61,9 +61,6 @@ reshade_dlssnr/
   ui/
     ui.h/.cpp                    // all ImGui overlay drawing
 
-  shaders/
-    dlssnr_cso.h                 // precompiled upstream OptiScaler shader
-
   third_party/
     detours/                     // local Detours headers + lib
     nvngx_dlss_sdk/              // NGX SDK headers
