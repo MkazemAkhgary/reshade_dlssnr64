@@ -30,39 +30,8 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 }
 )";
 
-  ID3DBlob* shader_blob = nullptr;
-  ID3DBlob* error_blob = nullptr;
-
-  if (FAILED(D3DCompile(
-          downsample_shader_source,
-          strlen(downsample_shader_source),
-          nullptr,
-          nullptr,
-          nullptr,
-          "CSMain",
-          "cs_5_1",
-          0,
-          0,
-          &shader_blob,
-          &error_blob))) {
-    if (error_blob != nullptr) error_blob->Release();
-    return false;
-  }
-
-  if (error_blob != nullptr) error_blob->Release();
-
-  D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {};
-  pso_desc.pRootSignature = root_signature_;
-  pso_desc.CS.pShaderBytecode = shader_blob->GetBufferPointer();
-  pso_desc.CS.BytecodeLength = shader_blob->GetBufferSize();
-  pso_desc.NodeMask = 0;
-
-  const HRESULT hr = device->CreateComputePipelineState(
-      &pso_desc,
-      IID_PPV_ARGS(&downsample_pipeline_state_));
-
-  shader_blob->Release();
-  return SUCCEEDED(hr);
+  return CreateComputePipelineState(
+      device, downsample_shader_source, &downsample_pipeline_state_);
 }
 
 bool DlssNrCodec::DispatchDownsample(
