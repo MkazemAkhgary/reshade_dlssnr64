@@ -271,11 +271,6 @@ void DlssNrCodec::Destroy() {
     }
   }
 
-  if (pipeline_state_ != nullptr) {
-    pipeline_state_->Release();
-    pipeline_state_ = nullptr;
-  }
-
   if (root_signature_ != nullptr) {
     root_signature_->Release();
     root_signature_ = nullptr;
