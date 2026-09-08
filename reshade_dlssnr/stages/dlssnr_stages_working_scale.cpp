@@ -71,6 +71,12 @@ bool RunDebugView(
 
   if (debug_source == nullptr) return false;
 
+  const D3D12_RESOURCE_DESC source_desc = debug_source->GetDesc();
+  const unsigned int source_width =
+      static_cast<unsigned int>(source_desc.Width);
+  const unsigned int source_height =
+      static_cast<unsigned int>(source_desc.Height);
+
   if (!dlssnr_stages_upscale::Apply(
           command,
           resources,
@@ -78,8 +84,8 @@ bool RunDebugView(
           device,
           debug_source,
           backbuffer,
-          width,
-          height,
+          source_width,
+          source_height,
           width,
           height)) {
     return false;
