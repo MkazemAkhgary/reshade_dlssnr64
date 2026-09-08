@@ -73,12 +73,10 @@ bool Apply(
     constants.LumaStrength = luma_strength;
     constants.ChromaStrength = chroma_strength;
 
-    command.Barrier(list, resources.output,
-                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    command.Barrier(list, backbuffer,
-                    D3D12_RESOURCE_STATE_PRESENT,
-                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    command.Transition(list, resources.output,
+                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    command.Transition(list, backbuffer,
+                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
     codec->DispatchLumaColor(
         list,
@@ -87,22 +85,17 @@ bool Apply(
         backbuffer,
         resources.composite_output);
 
-    command.Barrier(list, resources.composite_output,
-                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                    D3D12_RESOURCE_STATE_COPY_SOURCE);
-    command.Barrier(list, backbuffer,
-                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-                    D3D12_RESOURCE_STATE_COPY_DEST);
+    command.Transition(list, resources.composite_output,
+                       D3D12_RESOURCE_STATE_COPY_SOURCE);
+    command.Transition(list, backbuffer,
+                       D3D12_RESOURCE_STATE_COPY_DEST);
     list->CopyResource(backbuffer, resources.composite_output);
-    command.Barrier(list, backbuffer,
-                    D3D12_RESOURCE_STATE_COPY_DEST,
-                    D3D12_RESOURCE_STATE_PRESENT);
-    command.Barrier(list, resources.composite_output,
-                    D3D12_RESOURCE_STATE_COPY_SOURCE,
-                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    command.Barrier(list, resources.output,
-                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    command.Transition(list, backbuffer,
+                       D3D12_RESOURCE_STATE_PRESENT);
+    command.Transition(list, resources.composite_output,
+                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    command.Transition(list, resources.output,
+                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     return true;
   }
 
