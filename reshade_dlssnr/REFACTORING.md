@@ -46,6 +46,6 @@
 ---
 
 ## Notes
-- The blob in `shaders/dlssnr_cso.h` is sourced from `OptiScaler/shaders/dlssnr/precompile/dlssnr.hlsl` (GPL-3.0)
+- ~~The blob in `shaders/dlssnr_cso.h` is sourced from `OptiScaler/shaders/dlssnr/precompile/dlssnr.hlsl` (GPL-3.0)~~ — removed, blob file deleted
 - Our `DlssNrConstants` struct is a simplified subset of OptiScaler's full shader interface
 - We only use modes 0 (encode), 1 (resolve), 2 (downsample) — the comparison modes (4+) are unused
