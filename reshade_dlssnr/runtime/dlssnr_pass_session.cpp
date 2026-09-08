@@ -239,19 +239,15 @@ void DlssNrPassSession::OnPresent(
         backbuffer,
         resources_.ui_mask);
 
-    command_.Barrier(command_.GetCommandList(), resources_.ui_mask,
-                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                     D3D12_RESOURCE_STATE_COPY_SOURCE);
-    command_.Barrier(command_.GetCommandList(), backbuffer,
-                     D3D12_RESOURCE_STATE_PRESENT,
-                     D3D12_RESOURCE_STATE_COPY_DEST);
+    command_.Transition(command_.GetCommandList(), resources_.ui_mask,
+                        D3D12_RESOURCE_STATE_COPY_SOURCE);
+    command_.Transition(command_.GetCommandList(), backbuffer,
+                        D3D12_RESOURCE_STATE_COPY_DEST);
     command_.GetCommandList()->CopyResource(backbuffer, resources_.ui_mask);
-    command_.Barrier(command_.GetCommandList(), backbuffer,
-                     D3D12_RESOURCE_STATE_COPY_DEST,
-                     D3D12_RESOURCE_STATE_PRESENT);
-    command_.Barrier(command_.GetCommandList(), resources_.ui_mask,
-                     D3D12_RESOURCE_STATE_COPY_SOURCE,
-                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    command_.Transition(command_.GetCommandList(), backbuffer,
+                        D3D12_RESOURCE_STATE_PRESENT);
+    command_.Transition(command_.GetCommandList(), resources_.ui_mask,
+                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
     command_.GetCommandList()->Close();
     ID3D12CommandList* lists[] = {command_.GetCommandList()};
