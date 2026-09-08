@@ -55,6 +55,8 @@ void DlssNrCommandContext::Reset() {
     command_allocator_->Reset();
     command_list_->Reset(command_allocator_, nullptr);
   }
+
+  resource_states_.clear();
 }
 
 void DlssNrCommandContext::CloseAndSubmit(ID3D12CommandQueue* command_queue) {
