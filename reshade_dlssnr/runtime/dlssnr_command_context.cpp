@@ -95,6 +95,58 @@ void DlssNrCommandContext::Barrier(
   barrier.Transition.StateBefore = before;
   barrier.Transition.StateAfter = after;
   command_list->ResourceBarrier(1, &barrier);
+
+  resource_states_[resource] = after;
+}
+
+void DlssNrCommandContext::Transition(
+    ID3D12GraphicsCommandList* command_list,
+    ID3D12Resource* resource,
+    D3D12_RESOURCE_STATES after) {
+  if (resource == nullptr || command_list == nullptr) return;
+
+  auto it = resource_states_.find(resource);
+  D3D12_RESOURCE_STATES before;
+
+  if (it != resource_states_.end()) {
+    before = it->second;
+  } else {
+    const D3D12_RESOURCE_DESC desc = resource->GetDesc();
+    switch (desc.Dimension) {
+      case D3D12_RESOURCE_DIMENSION_BUFFER:
+        before = D3D12_RESOURCE_STATE_GENERIC_READ;
+        break;
+      case D3D12_RESOURCE_DIMENSION_TEXTURE2D:
+        if ((desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET) != 0) {
+          before = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        } else if ((desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL) != 0) {
+          before = D3D12_RESOURCE_STATE_DEPTH_WRITE;
+        } else if ((desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS) != 0) {
+          before = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+        } else {
+          before = D3D12_RESOURCE_STATE_COMMON;
+        }
+        break;
+      default:
+        before = D3D12_RESOURCE_STATE_COMMON;
+        break;
+    }
+  }
+
+  if (before == after) {
+    resource_states_[resource] = after;
+    return;
+  }
+
+  D3D12_RESOURCE_BARRIER barrier = {};
+  barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+  barrier.Transition.pResource = resource;
+  barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+  barrier.Transition.StateBefore = before;
+  barrier.Transition.StateAfter = after;
+  command_list->ResourceBarrier(1, &barrier);
+
+  resource_states_[resource] = after;
 }
 
 void DlssNrCommandContext::Shutdown() {
