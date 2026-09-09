@@ -63,15 +63,9 @@ bool Apply(
     ID3D12Resource* low_enhanced,
     unsigned int full_width,
     unsigned int full_height,
-    float luma_strength,
-    float chroma_strength,
-    bool soft_compression,
-    float soft_max_brighten,
-    float soft_max_darken,
-    float soft_max_chroma,
-    float soft_knee) {
+    const float* params) {
   if (codec == nullptr || backbuffer == nullptr ||
-      low_input == nullptr || low_enhanced == nullptr) {
+      low_input == nullptr || low_enhanced == nullptr || params == nullptr) {
     return false;
   }
 
@@ -80,13 +74,9 @@ bool Apply(
   DlssNrConstants constants = {};
   constants.Width = full_width;
   constants.Height = full_height;
-  constants.params[0] = luma_strength;
-  constants.params[1] = chroma_strength;
-  constants.params[2] = soft_compression ? 1.0f : 0.0f;
-  constants.params[3] = soft_max_brighten;
-  constants.params[4] = soft_max_darken;
-  constants.params[5] = soft_max_chroma;
-  constants.params[6] = soft_knee;
+  for (uint32_t i = 0; i < kShaderParamCount; ++i) {
+    constants.params[i] = params[i];
+  }
 
   command.Transition(command.GetCommandList(), low_input,
                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);

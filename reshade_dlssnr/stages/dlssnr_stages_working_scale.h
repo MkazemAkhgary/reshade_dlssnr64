@@ -34,12 +34,6 @@ bool Apply(
     ID3D12Resource* low_enhanced,
     unsigned int full_width,
     unsigned int full_height,
-    float luma_strength,
-    float chroma_strength,
-    bool soft_compression,
-    float soft_max_brighten,
-    float soft_max_darken,
-    float soft_max_chroma,
-    float soft_knee);
+    const float* params);
 
 }  // namespace reshade_dlssnr::dlssnr_stages_working_scale
