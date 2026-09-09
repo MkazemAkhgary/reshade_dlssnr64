@@ -50,7 +50,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 )";
 
   return CreateComputePipelineState(
-      device, mask_shader_source, &mask_pipeline_state_);
+      device, mask_shader_source, mask_pipeline_state_.GetAddressOf());
 }
 
 bool DlssNrCodec::DispatchMask(
