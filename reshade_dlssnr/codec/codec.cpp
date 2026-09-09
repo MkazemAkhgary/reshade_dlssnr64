@@ -256,7 +256,7 @@ bool DlssNrCodec::Init(ID3D12Device* device) {
   heap_desc.NodeMask = 0;
 
   if (FAILED(device->CreateDescriptorHeap(
-          &heap_desc, IID_PPV_ARGS(&descriptor_heap_)))) {
+          &heap_desc, IID_PPV_ARGS(descriptor_heap_.GetAddressOf())))) {
     return false;
   }
 
