@@ -105,14 +105,6 @@ void DlssNrPassSession::OnPresent(
   command_.Reset();
   command_.SetResourceState(backbuffer, D3D12_RESOURCE_STATE_PRESENT);
 
-  if (pending_selected_pass_ != nullptr) {
-    guides_->CaptureSelectedPassIfNeeded(
-        command_.GetCommandList(),
-        pending_selected_pass_.Get());
-
-    guides_->RetireGameResource(pending_selected_pass_.Detach());
-  }
-
   if (!feature_.HasFeature()) {
     const unsigned int create_width = use_working_scale ? work_width : width;
     const unsigned int create_height = use_working_scale ? work_height : height;
