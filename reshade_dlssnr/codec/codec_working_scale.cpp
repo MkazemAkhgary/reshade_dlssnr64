@@ -31,7 +31,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 )";
 
   return CreateComputePipelineState(
-      device, downsample_shader_source, &downsample_pipeline_state_);
+      device, downsample_shader_source, downsample_pipeline_state_.GetAddressOf());
 }
 
 bool DlssNrCodec::DispatchDownsample(
@@ -58,7 +58,7 @@ bool DlssNrCodec::DispatchDownsample(
   };
 
   return BindAndDispatch(
-      command_list, downsample_pipeline_state_, constants, srvs, uavs);
+      command_list, downsample_pipeline_state_.Get(), constants, srvs, uavs);
 }
 
 bool DlssNrCodec::InitUpsampleResidualShader(ID3D12Device* device) {
@@ -129,7 +129,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 )";
 
   return CreateComputePipelineState(
-      device, upsample_residual_shader_source, &upsample_residual_pipeline_state_);
+      device, upsample_residual_shader_source, upsample_residual_pipeline_state_.GetAddressOf());
 }
 
 bool DlssNrCodec::DispatchUpsampleResidual(
@@ -159,7 +159,7 @@ bool DlssNrCodec::DispatchUpsampleResidual(
   };
 
   return BindAndDispatch(
-      command_list, upsample_residual_pipeline_state_, constants, srvs, uavs);
+      command_list, upsample_residual_pipeline_state_.Get(), constants, srvs, uavs);
 }
 
 }  // namespace reshade_dlssnr
