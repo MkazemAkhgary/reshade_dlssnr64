@@ -274,8 +274,8 @@ void DlssNrPassSession::OnPresent(
           params,
           nullptr);
 
-  if (settings.debug_view == 7 || settings.debug_view == 8 ||
-      settings.debug_view == 9) {
+  if (settings.debug_view == 1 || settings.debug_view == 2 ||
+      settings.debug_view == 3) {
     if (!dlssnr_stages_working_scale::RunDebugView(
             command_,
             resources_,
