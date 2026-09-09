@@ -229,7 +229,7 @@ bool DlssNrCodec::CreateComputePipelineState(
   if (error_blob != nullptr) error_blob->Release();
 
   D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {};
-  pso_desc.pRootSignature = root_signature_;
+  pso_desc.pRootSignature = root_signature_.Get();
   pso_desc.CS.pShaderBytecode = shader_blob->GetBufferPointer();
   pso_desc.CS.BytecodeLength = shader_blob->GetBufferSize();
   pso_desc.NodeMask = 0;
