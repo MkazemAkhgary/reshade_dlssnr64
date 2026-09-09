@@ -23,10 +23,8 @@ reshade_dlssnr/
   TODO.md                        // current feature plan
 
   codec/
-    codec.h/.cpp                 // root signature, descriptor heap, main dispatch
+    codec.h/.cpp                 // root signature, descriptor heap, shared helpers
     codec_luma_color.cpp         // luma/chroma composite shader
-    codec_mask.cpp               // UI mask shader
-    codec_ui_composite.cpp       // UI composite shader
     codec_working_scale.cpp      // downsample + upsample-residual shaders
     codec_debug_residual.cpp     // debug residual shader
 
@@ -40,21 +38,18 @@ reshade_dlssnr/
     ngx_parameter_block.h/.cpp     // real driver NGX parameter block vtable access
 
   stages/
-    dlssnr_stages_debug.h/.cpp
     dlssnr_stages_final_composite.h/.cpp
-    dlssnr_stages_ui_mask.h/.cpp
     dlssnr_stages_working_scale.h/.cpp
     dlssnr_stages_upscale.h/.cpp
 
   hooks/
     d3d12_hooks.h/.cpp           // early D3D12 command-list state hooking
     d3d12_state.h/.cpp           // D3D12 state tracker
-    dlss_guides.h/.cpp           // DLSS guide capture and selected-pass clone
+    dlss_guides.h/.cpp           // DLSS depth/motion guide capture
     local_vtable.h               // minimal Detours vtable hook wrapper
     nvngx_hook_compat.h          // hooks NVSDK_NGX Create/Evaluate
 
   state/
-    render_pass_tracker.h/.cpp   // render-pass capture/selected-pass state
     settings.h/.cpp              // persistent settings, two passes
     version.h                    // addon version constant
 
@@ -83,14 +78,13 @@ Each `DlssNrPassSession::OnPresent`:
 
 1. Ensures D3D12 command context and pass resources.
 2. Creates/rebuilds DLSSNR feature through `DlssNrFeatureLifecycle`.
-3. Gets DLSS guide state from `DlssGuides`.
-4. Handles debug views.
-5. Generates optional UI mask.
-6. Prepares working-scale input if enabled.
-7. Fills real NGX parameter block via `NgxParameterBlock`.
-8. Evaluates the model.
-9. Applies working-scale upsample or final luma/chroma composite.
-10. Copies result to the swapchain backbuffer.
+3. Gets DLSS guide state (depth/motion) from `DlssGuides`.
+4. Handles working-scale debug views.
+5. Prepares working-scale input if enabled.
+6. Fills real NGX parameter block via `NgxParameterBlock`.
+7. Evaluates the model.
+8. Applies working-scale upsample or final luma/chroma composite.
+9. Copies result to the swapchain backbuffer.
 
 ---
 
@@ -122,10 +116,10 @@ The real model selectors are:
 - Use owned command list/fence to avoid interfering with game D3D12 state.
 - Release retired game resources only after GPU idle to avoid `DXGI_ERROR_DEVICE_HUNG`.
 
-### Selected pass
+### UI mask (intentionally unused)
 
-- Selected pass input is used only when its dimensions match the backbuffer.
-- Selected pass capture must happen after rendering, not at render-target bind time.
+- The model supports `DLSSNR.UIAlpha` and `DLSSNR.Backbuffer` resources for UI masking.
+- These are intentionally not bound for now. See the comment in `dlssnr_pass_session.cpp`.
 
 ### White point and passthrough
 
