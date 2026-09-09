@@ -15,11 +15,10 @@ bool DlssNrCommandContext::Ensure(ID3D12Device* device) {
   if (FAILED(device->CreateCommandList(
           0,
           D3D12_COMMAND_LIST_TYPE_DIRECT,
-          command_allocator_,
+          command_allocator_.Get(),
           nullptr,
           IID_PPV_ARGS(&command_list_)))) {
-    command_allocator_->Release();
-    command_allocator_ = nullptr;
+    command_allocator_.Reset();
     return false;
   }
 
@@ -29,21 +28,16 @@ bool DlssNrCommandContext::Ensure(ID3D12Device* device) {
           0,
           D3D12_FENCE_FLAG_NONE,
           IID_PPV_ARGS(&fence_)))) {
-    command_list_->Release();
-    command_list_ = nullptr;
-    command_allocator_->Release();
-    command_allocator_ = nullptr;
+    command_list_.Reset();
+    command_allocator_.Reset();
     return false;
   }
 
   fence_event_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
   if (fence_event_ == nullptr) {
-    fence_->Release();
-    fence_ = nullptr;
-    command_list_->Release();
-    command_list_ = nullptr;
-    command_allocator_->Release();
-    command_allocator_ = nullptr;
+    fence_.Reset();
+    command_list_.Reset();
+    command_allocator_.Reset();
     return false;
   }
 
