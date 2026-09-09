@@ -12,7 +12,6 @@ class NgxParameterBlock {
   bool Initialize();
   void Shutdown();
 
-  bool IsReady() const { return params_ != nullptr; }
   NVSDK_NGX_Parameter* Get() const { return params_; }
 
   void SetUInt(const char* name, unsigned int value);
