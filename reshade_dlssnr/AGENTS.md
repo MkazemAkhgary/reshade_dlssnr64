@@ -39,7 +39,6 @@ reshade_dlssnr/
   stages/
     dlssnr_stages_final_composite.h/.cpp
     dlssnr_stages_working_scale.h/.cpp
-    dlssnr_stages_upscale.h/.cpp
 
   hooks/
     d3d12_hooks.h/.cpp           // early D3D12 command-list state hooking

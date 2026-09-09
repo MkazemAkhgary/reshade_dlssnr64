@@ -76,7 +76,6 @@
     <ClCompile Include="runtime\dlssnr_runtime.cpp" />
     <ClCompile Include="runtime\ngx_parameter_block.cpp" />
     <ClCompile Include="stages\dlssnr_stages_final_composite.cpp" />
-    <ClCompile Include="stages\dlssnr_stages_upscale.cpp" />
     <ClCompile Include="stages\dlssnr_stages_working_scale.cpp" />
     <ClCompile Include="state\settings.cpp" />
     <ClCompile Include="ui\ui.cpp" />
@@ -96,7 +95,6 @@
     <ClInclude Include="runtime\dlssnr_runtime.h" />
     <ClInclude Include="runtime\ngx_parameter_block.h" />
     <ClInclude Include="stages\dlssnr_stages_final_composite.h" />
-    <ClInclude Include="stages\dlssnr_stages_upscale.h" />
     <ClInclude Include="stages\dlssnr_stages_working_scale.h" />
     <ClInclude Include="state\settings.h" />
     <ClInclude Include="state\version.h" />
