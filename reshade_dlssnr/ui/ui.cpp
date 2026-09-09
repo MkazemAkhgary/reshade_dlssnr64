@@ -21,10 +21,15 @@ constexpr float kControlLabelWidth = 220.0f;
 void DrawPassSettings(
     const char* tab_label,
     PassSettings& pass,
+    bool enabled,
     bool& changed) {
   if (!ImGui::BeginTabItem(tab_label)) return;
 
   ImGui::PushID(tab_label);
+
+  if (!enabled) {
+    ImGui::BeginDisabled();
+  }
 
   const float button_width =
       (ImGui::GetContentRegionAvail().x - kControlLabelWidth) / 3.0f -
@@ -211,6 +216,10 @@ void DrawPassSettings(
     }
   }
 
+  if (!enabled) {
+    ImGui::EndDisabled();
+  }
+
   ImGui::PopID();
   ImGui::EndTabItem();
 }
@@ -236,10 +245,9 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   ImGui::Separator();
 
   if (ImGui::BeginTabBar("PassTabs")) {
-    DrawPassSettings("Pass 1", settings.pass1, changed);
-    if (settings.second_pass_enabled) {
-      DrawPassSettings("Pass 2", settings.pass2, changed);
-    }
+    DrawPassSettings("Pass 1", settings.pass1, true, changed);
+    DrawPassSettings("Pass 2", settings.pass2,
+                     settings.second_pass_enabled, changed);
     ImGui::EndTabBar();
   }
 
