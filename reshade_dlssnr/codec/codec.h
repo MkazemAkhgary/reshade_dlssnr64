@@ -14,8 +14,11 @@ namespace reshade_dlssnr {
 struct alignas(256) DlssNrConstants {
   uint32_t Width = 0;
   uint32_t Height = 0;
+  uint32_t pad0 = 0;
+  uint32_t pad1 = 0;
 
   // Dynamic shader parameters, indexed by kShaderParams order.
+  // Must align with HLSL float4 gParams[4] (16-byte boundary).
   float params[16] = {};
 };
 static_assert(sizeof(DlssNrConstants) == 256, "Constants must have a 256-byte CBV allocation size");
