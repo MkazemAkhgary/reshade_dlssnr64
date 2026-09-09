@@ -298,52 +298,18 @@ bool DlssNrCodec::Init(ID3D12Device* device) {
 }
 
 void DlssNrCodec::Destroy() {
-  for (auto* buffer : constant_buffers_) {
-    if (buffer != nullptr) {
-      buffer->Release();
-      buffer = nullptr;
-    }
+  for (auto& buffer : constant_buffers_) {
+    buffer.Reset();
   }
 
-  if (root_signature_ != nullptr) {
-    root_signature_->Release();
-    root_signature_ = nullptr;
-  }
-
-  if (mask_pipeline_state_ != nullptr) {
-    mask_pipeline_state_->Release();
-    mask_pipeline_state_ = nullptr;
-  }
-
-  if (composite_pipeline_state_ != nullptr) {
-    composite_pipeline_state_->Release();
-    composite_pipeline_state_ = nullptr;
-  }
-
-  if (luma_color_pipeline_state_ != nullptr) {
-    luma_color_pipeline_state_->Release();
-    luma_color_pipeline_state_ = nullptr;
-  }
-
-  if (debug_residual_pipeline_state_ != nullptr) {
-    debug_residual_pipeline_state_->Release();
-    debug_residual_pipeline_state_ = nullptr;
-  }
-
-  if (downsample_pipeline_state_ != nullptr) {
-    downsample_pipeline_state_->Release();
-    downsample_pipeline_state_ = nullptr;
-  }
-
-  if (upsample_residual_pipeline_state_ != nullptr) {
-    upsample_residual_pipeline_state_->Release();
-    upsample_residual_pipeline_state_ = nullptr;
-  }
-
-  if (descriptor_heap_ != nullptr) {
-    descriptor_heap_->Release();
-    descriptor_heap_ = nullptr;
-  }
+  root_signature_.Reset();
+  mask_pipeline_state_.Reset();
+  composite_pipeline_state_.Reset();
+  luma_color_pipeline_state_.Reset();
+  debug_residual_pipeline_state_.Reset();
+  downsample_pipeline_state_.Reset();
+  upsample_residual_pipeline_state_.Reset();
+  descriptor_heap_.Reset();
 
   device_ = nullptr;
 }
