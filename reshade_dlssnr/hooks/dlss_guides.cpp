@@ -378,15 +378,8 @@ void DlssGuides::ReleaseRetiredGameResources() {
 void DlssGuides::Clear() {
   std::lock_guard<std::mutex> lock(lock_);
 
-  if (depth_clone_ != nullptr) {
-    depth_clone_->Release();
-    depth_clone_ = nullptr;
-  }
-
-  if (motion_clone_ != nullptr) {
-    motion_clone_->Release();
-    motion_clone_ = nullptr;
-  }
+  depth_clone_.Reset();
+  motion_clone_.Reset();
 
   RetireResource(pre_ui_clone_);
   RetireResource(selected_pass_clone_);
@@ -394,7 +387,7 @@ void DlssGuides::Clear() {
   ReleaseRetiredResourcesLocked();
   ReleaseRetiredGameResourcesLocked();
 
-  selected_pass_clone_ = nullptr;
+  selected_pass_clone_.Reset();
 
   state_.valid = false;
   state_.pre_ui_color = nullptr;
