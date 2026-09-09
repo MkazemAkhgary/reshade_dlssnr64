@@ -52,17 +52,24 @@ void DrawPassSettings(
     }
   }
 
-  auto draw_slider = [&](const char* label, float* value,
+  auto draw_slider = [&](const char* label, const char* tooltip,
+                         float* value,
                          float min_value, float max_value,
                          float reset_value, const char* format) {
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(label);
+    if (tooltip != nullptr && ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("%s", tooltip);
+    }
     ImGui::SameLine(kControlLabelWidth);
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
     const std::string slider_id = "##" + std::string(label);
     const std::string reset_id = "R##" + std::string(label);
     changed |= ImGui::SliderFloat(slider_id.c_str(), value,
                                   min_value, max_value, format);
+    if (tooltip != nullptr && ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("%s", tooltip);
+    }
     ImGui::SameLine();
     if (ImGui::Button(reset_id.c_str(), ImVec2(24.0f, 0.0f))) {
       *value = reset_value;
