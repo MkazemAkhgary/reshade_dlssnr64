@@ -71,8 +71,6 @@ void DlssNrCommandContext::WaitGpu(ID3D12CommandQueue* command_queue) {
     fence_->SetEventOnCompletion(value, fence_event_);
     WaitForSingleObject(fence_event_, INFINITE);
   }
-
-  DlssGuides::Get().ReleaseRetiredGameResources();
 }
 
 void DlssNrCommandContext::Barrier(
