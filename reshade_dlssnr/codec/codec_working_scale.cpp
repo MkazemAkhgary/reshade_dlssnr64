@@ -48,12 +48,9 @@ bool DlssNrCodec::DispatchDownsample(
       source,
       source,
       source,
-      source,
-      source,
   };
 
   ID3D12Resource* uavs[kDlssNrUavCount] = {
-      out_target,
       out_target,
   };
 
@@ -145,12 +142,9 @@ bool DlssNrCodec::DispatchUpsampleResidual(
       original,
       low_input,
       low_enhanced,
-      low_input,
-      low_enhanced,
   };
 
   ID3D12Resource* uavs[kDlssNrUavCount] = {
-      out_target,
       out_target,
   };
 

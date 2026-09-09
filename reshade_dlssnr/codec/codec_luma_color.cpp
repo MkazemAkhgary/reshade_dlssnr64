@@ -65,12 +65,9 @@ bool DlssNrCodec::DispatchLumaColor(
       enhanced,
       original,
       enhanced,
-      enhanced,
-      enhanced,
   };
 
   ID3D12Resource* uavs[kDlssNrUavCount] = {
-      out_target,
       out_target,
   };
 
