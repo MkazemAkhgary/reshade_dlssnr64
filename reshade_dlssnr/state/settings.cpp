@@ -16,7 +16,6 @@ Settings& GetSettings() {
 
 namespace {
 
-template <typename T>
 void LoadPassSettings(const char* prefix, PassSettings& pass) {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             (std::string(prefix) + "Preset").c_str(),
