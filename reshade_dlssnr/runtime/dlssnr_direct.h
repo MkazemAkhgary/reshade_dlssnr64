@@ -23,10 +23,6 @@ class DlssNrDirect {
       ID3D12CommandQueue* command_queue,
       IDXGISwapChain* swapchain);
 
-  void SetDebugSelectedResource(uint64_t handle);
-  void ClearSelectedPass();
-  void SetPendingSelectedPass(ID3D12Resource* resource);
-
   void Shutdown();
 
   bool IsReady() const;
