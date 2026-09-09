@@ -8,6 +8,7 @@
 #include "dlss_guides.h"
 #include "dlssnr_direct.h"
 #include "settings.h"
+#include "shader_params.h"
 #include "version.h"
 
 namespace reshade_dlssnr {
@@ -172,33 +173,22 @@ void DrawPassSettings(
 
   ImGui::Separator();
 
-  draw_slider("Luma Strength", &pass.luma_strength,
-              0.0f, 1.0f, 1.0f, "%.2f");
-  draw_slider("Chroma Strength", &pass.chroma_strength,
-              0.0f, 1.0f, 1.0f, "%.2f");
-
-  ImGui::Separator();
-
   draw_slider("Working Scale", &pass.working_scale,
               0.25f, 1.0f, 1.0f, "%.2f");
 
   ImGui::Separator();
 
-  changed |= ImGui::Checkbox("Soft Compression", &pass.soft_compression);
-
-  if (!pass.soft_compression) {
-    ImGui::BeginDisabled();
-  }
-  draw_slider("Max Brighten", &pass.soft_max_brighten,
-              0.0f, 2.0f, 0.50f, "%.2f");
-  draw_slider("Max Darken", &pass.soft_max_darken,
-              0.0f, 2.0f, 0.50f, "%.2f");
-  draw_slider("Max Chroma", &pass.soft_max_chroma,
-              0.0f, 1.0f, 0.25f, "%.2f");
-  draw_slider("Soft Knee", &pass.soft_knee,
-              0.0f, 4.0f, 1.00f, "%.2f");
-  if (!pass.soft_compression) {
-    ImGui::EndDisabled();
+  for (uint32_t i = 0; i < kShaderParamCount; ++i) {
+    const auto& param = kShaderParams[i];
+    if (param.is_checkbox) {
+      bool checked = pass.params[i] > 0.5f;
+      changed |= ImGui::Checkbox(param.name, &checked);
+      pass.params[i] = checked ? 1.0f : 0.0f;
+    } else {
+      draw_slider(param.name, &pass.params[i],
+                  param.min_value, param.max_value,
+                  param.default_value, "%.2f");
+    }
   }
 
   ImGui::PopID();
