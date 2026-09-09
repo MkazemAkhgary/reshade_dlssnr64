@@ -55,7 +55,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 )";
 
   return CreateComputePipelineState(
-      device, luma_color_shader_source, &luma_color_pipeline_state_);
+      device, luma_color_shader_source, luma_color_pipeline_state_.GetAddressOf());
 }
 
 bool DlssNrCodec::DispatchLumaColor(
@@ -83,7 +83,7 @@ bool DlssNrCodec::DispatchLumaColor(
   };
 
   return BindAndDispatch(
-      command_list, luma_color_pipeline_state_, constants, srvs, uavs);
+      command_list, luma_color_pipeline_state_.Get(), constants, srvs, uavs);
 }
 
 }  // namespace reshade_dlssnr
