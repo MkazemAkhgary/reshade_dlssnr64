@@ -24,7 +24,6 @@ reshade_dlssnr/
 
   codec/
     codec.h/.cpp                 // root signature, descriptor heap, shared helpers
-    codec_luma_color.cpp         // luma/chroma composite shader
     codec_working_scale.cpp      // downsample + upsample-residual shaders
 
   runtime/
@@ -37,7 +36,6 @@ reshade_dlssnr/
     ngx_parameter_block.h/.cpp     // real driver NGX parameter block vtable access
 
   stages/
-    dlssnr_stages_final_composite.h/.cpp
     dlssnr_stages_working_scale.h/.cpp
 
   hooks/
