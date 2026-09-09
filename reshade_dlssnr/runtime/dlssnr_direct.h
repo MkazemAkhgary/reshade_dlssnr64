@@ -28,7 +28,8 @@ class DlssNrDirect {
  private:
   DlssNrDirect()
       : pass1_(&DlssGuides::Get()),
-        pass2_(&DlssGuides::Get()) {}
+        pass2_(&DlssGuides::Get()),
+        pass3_(&DlssGuides::Get()) {}
   ~DlssNrDirect() = default;
 
   DlssNrDirect(const DlssNrDirect&) = delete;
@@ -37,6 +38,7 @@ class DlssNrDirect {
   DlssNrRuntime runtime_;
   DlssNrPassSession pass1_;
   DlssNrPassSession pass2_;
+  DlssNrPassSession pass3_;
 };
 
 }  // namespace reshade_dlssnr

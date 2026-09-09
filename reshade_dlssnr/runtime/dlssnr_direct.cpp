@@ -39,6 +39,15 @@ void DlssNrDirect::OnPresent(
         command_queue,
         swapchain);
   }
+
+  if (settings.third_pass_enabled) {
+    pass3_.OnPresent(
+        runtime_,
+        settings.pass3,
+        settings,
+        command_queue,
+        swapchain);
+  }
 }
 
 void DlssNrDirect::Shutdown() {
@@ -46,6 +55,7 @@ void DlssNrDirect::Shutdown() {
 
   pass1_.Shutdown(runtime_);
   pass2_.Shutdown(runtime_);
+  pass3_.Shutdown(runtime_);
   runtime_.Shutdown();
 }
 

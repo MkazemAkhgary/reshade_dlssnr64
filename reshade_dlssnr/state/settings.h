@@ -27,9 +27,11 @@ struct Settings {
   bool enabled = true;
   bool only_super_sampling = true;
   bool second_pass_enabled = false;
+  bool third_pass_enabled = false;
 
   PassSettings pass1;
   PassSettings pass2;
+  PassSettings pass3;
 };
 
 Settings& GetSettings();

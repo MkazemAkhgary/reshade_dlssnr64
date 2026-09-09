@@ -240,6 +240,8 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   if (settings.enabled) {
     changed |= ImGui::Checkbox("Enable Second Pass",
                                &settings.second_pass_enabled);
+    changed |= ImGui::Checkbox("Enable Third Pass",
+                               &settings.third_pass_enabled);
   }
 
   ImGui::Separator();
@@ -248,6 +250,8 @@ void DrawOverlay(reshade::api::effect_runtime*) {
     DrawPassSettings("Pass 1", settings.pass1, true, changed);
     DrawPassSettings("Pass 2", settings.pass2,
                      settings.second_pass_enabled, changed);
+    DrawPassSettings("Pass 3", settings.pass3,
+                     settings.third_pass_enabled, changed);
     ImGui::EndTabBar();
   }
 

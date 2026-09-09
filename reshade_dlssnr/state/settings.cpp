@@ -78,18 +78,22 @@ void LoadSettings() {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Enabled", g_settings.enabled);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "OnlySuperSampling", g_settings.only_super_sampling);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "SecondPassEnabled", g_settings.second_pass_enabled);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "ThirdPassEnabled", g_settings.third_pass_enabled);
 
   LoadPassSettings("Pass1", g_settings.pass1);
   LoadPassSettings("Pass2", g_settings.pass2);
+  LoadPassSettings("Pass3", g_settings.pass3);
 }
 
 void SaveSettings() {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Enabled", g_settings.enabled);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "OnlySuperSampling", g_settings.only_super_sampling);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "SecondPassEnabled", g_settings.second_pass_enabled);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "ThirdPassEnabled", g_settings.third_pass_enabled);
 
   SavePassSettings("Pass1", g_settings.pass1);
   SavePassSettings("Pass2", g_settings.pass2);
+  SavePassSettings("Pass3", g_settings.pass3);
 }
 
 }  // namespace reshade_dlssnr
