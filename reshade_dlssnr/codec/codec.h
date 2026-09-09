@@ -119,19 +119,19 @@ class DlssNrCodec {
 
  private:
   ID3D12Device* device_ = nullptr;
-  ID3D12RootSignature* root_signature_ = nullptr;
-  ID3D12PipelineState* mask_pipeline_state_ = nullptr;
-  ID3D12PipelineState* composite_pipeline_state_ = nullptr;
-  ID3D12PipelineState* luma_color_pipeline_state_ = nullptr;
-  ID3D12PipelineState* debug_residual_pipeline_state_ = nullptr;
-  ID3D12PipelineState* downsample_pipeline_state_ = nullptr;
-  ID3D12PipelineState* upsample_residual_pipeline_state_ = nullptr;
+  Microsoft::WRL::ComPtr<ID3D12RootSignature> root_signature_;
+  Microsoft::WRL::ComPtr<ID3D12PipelineState> mask_pipeline_state_;
+  Microsoft::WRL::ComPtr<ID3D12PipelineState> composite_pipeline_state_;
+  Microsoft::WRL::ComPtr<ID3D12PipelineState> luma_color_pipeline_state_;
+  Microsoft::WRL::ComPtr<ID3D12PipelineState> debug_residual_pipeline_state_;
+  Microsoft::WRL::ComPtr<ID3D12PipelineState> downsample_pipeline_state_;
+  Microsoft::WRL::ComPtr<ID3D12PipelineState> upsample_residual_pipeline_state_;
 
-  ID3D12DescriptorHeap* descriptor_heap_ = nullptr;
+  Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptor_heap_;
   uint32_t descriptor_size_ = 0;
   uint32_t heap_index_ = 0;
 
-  ID3D12Resource* constant_buffers_[kDlssNrHeapCount] = {};
+  Microsoft::WRL::ComPtr<ID3D12Resource> constant_buffers_[kDlssNrHeapCount];
 
   bool CreateRootSignature(ID3D12Device* device);
   bool CreateComputePipelineState(
