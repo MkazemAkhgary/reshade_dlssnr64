@@ -32,8 +32,6 @@ class DlssNrPassSession {
 
   void Shutdown(DlssNrRuntime& runtime);
 
-  void SetPendingSelectedPass(ID3D12Resource* resource);
-
   bool IsReady() const;
   const char* GetLastError() const;
 
@@ -46,8 +44,6 @@ class DlssNrPassSession {
 
   ID3D12CommandQueue* command_queue_ = nullptr;
   std::unique_ptr<DlssNrCodec> debug_codec_;
-
-  Microsoft::WRL::ComPtr<ID3D12Resource> pending_selected_pass_;
 
   bool failed_ = false;
   const char* reason_ = "";
