@@ -50,12 +50,6 @@ void LoadPassSettings(const char* prefix, PassSettings& pass) {
                             (std::string(prefix) + "WorkingScale").c_str(),
                             pass.working_scale);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "ResidualSuppression").c_str(),
-                            pass.residual_suppression);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "ResidualThreshold").c_str(),
-                            pass.residual_threshold);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             (std::string(prefix) + "SoftCompression").c_str(),
                             pass.soft_compression);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
@@ -103,12 +97,6 @@ void SavePassSettings(const char* prefix, const PassSettings& pass) {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             (std::string(prefix) + "WorkingScale").c_str(),
                             pass.working_scale);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "ResidualSuppression").c_str(),
-                            pass.residual_suppression);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "ResidualThreshold").c_str(),
-                            pass.residual_threshold);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             (std::string(prefix) + "SoftCompression").c_str(),
                             pass.soft_compression);

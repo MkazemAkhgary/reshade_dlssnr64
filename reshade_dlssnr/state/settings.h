@@ -20,8 +20,6 @@ struct PassSettings {
   float chroma_strength = 1.0f;
 
   float working_scale = 1.0f;
-  float residual_suppression = 0.85f;
-  float residual_threshold = 0.10f;
 
   bool soft_compression = false;
   float soft_max_brighten = 0.50f;

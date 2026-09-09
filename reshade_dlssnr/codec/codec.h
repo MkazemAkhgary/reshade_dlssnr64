@@ -18,9 +18,6 @@ struct alignas(256) DlssNrConstants {
   float LumaStrength = 1.0f;
   float ChromaStrength = 1.0f;
 
-  float ResidualSuppression = 0.85f;
-  float ResidualThreshold = 0.10f;
-
   uint32_t SoftCompression = 0;
   float SoftMaxBrighten = 0.50f;
   float SoftMaxDarken = 0.50f;
@@ -39,15 +36,6 @@ constexpr uint32_t kDlssNrPerDispatchDescriptors = kDlssNrSrvCount + kDlssNrUavC
 class DlssNrCodec {
  public:
   bool Init(ID3D12Device* device);
-
-  bool InitLumaColorShader(ID3D12Device* device);
-
-  bool DispatchLumaColor(
-      ID3D12GraphicsCommandList* command_list,
-      const DlssNrConstants& constants,
-      ID3D12Resource* enhanced,
-      ID3D12Resource* original,
-      ID3D12Resource* out_target);
 
   bool InitDownsampleShader(ID3D12Device* device);
 
@@ -74,7 +62,6 @@ class DlssNrCodec {
  private:
   ID3D12Device* device_ = nullptr;
   Microsoft::WRL::ComPtr<ID3D12RootSignature> root_signature_;
-  Microsoft::WRL::ComPtr<ID3D12PipelineState> luma_color_pipeline_state_;
   Microsoft::WRL::ComPtr<ID3D12PipelineState> downsample_pipeline_state_;
   Microsoft::WRL::ComPtr<ID3D12PipelineState> upsample_residual_pipeline_state_;
 

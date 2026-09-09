@@ -6,7 +6,6 @@
 #include <reshade.hpp>
 
 #include "dlss_guides.h"
-#include "dlssnr_stages_final_composite.h"
 #include "dlssnr_stages_working_scale.h"
 
 namespace reshade_dlssnr {
@@ -244,53 +243,25 @@ void DlssNrPassSession::OnPresent(
           params,
           nullptr);
 
-  if (use_working_scale) {
-    if (!dlssnr_stages_working_scale::Apply(
-            command_,
-            resources_,
-            debug_codec_.get(),
-            device.Get(),
-            backbuffer.Get(),
-            width,
-            height,
-            work_width,
-            work_height,
-            true,
-            pass.luma_strength,
-            pass.chroma_strength,
-            pass.residual_suppression,
-            pass.residual_threshold,
-            pass.soft_compression,
-            pass.soft_max_brighten,
-            pass.soft_max_darken,
-            pass.soft_max_chroma,
-            pass.soft_knee)) {
-      failed_ = true;
-      reason_ = "failed to apply working scale";
-      return;
-    }
-
-    command_.GetCommandList()->Close();
-    ID3D12CommandList* lists[] = {command_.GetCommandList()};
-    command_queue_->ExecuteCommandLists(1, lists);
-    command_.WaitGpu(command_queue_);
-    guides_->ReleaseRetiredGameResources();
-
-    return;
-  }
-
-  if (!dlssnr_stages_final_composite::Apply(
+  if (!dlssnr_stages_working_scale::Apply(
           command_,
           resources_,
           debug_codec_.get(),
           device.Get(),
           backbuffer.Get(),
+          model_color,
+          model_output,
           width,
           height,
           pass.luma_strength,
-          pass.chroma_strength)) {
+          pass.chroma_strength,
+          pass.soft_compression,
+          pass.soft_max_brighten,
+          pass.soft_max_darken,
+          pass.soft_max_chroma,
+          pass.soft_knee)) {
     failed_ = true;
-    reason_ = "failed to apply final composite";
+    reason_ = "failed to apply post-model processing";
     return;
   }
 

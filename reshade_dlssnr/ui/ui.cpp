@@ -181,10 +181,6 @@ void DrawPassSettings(
 
   draw_slider("Working Scale", &pass.working_scale,
               0.25f, 1.0f, 1.0f, "%.2f");
-  draw_slider("Residual Suppression", &pass.residual_suppression,
-              0.0f, 1.0f, 0.85f, "%.2f");
-  draw_slider("Residual Threshold", &pass.residual_threshold,
-              0.0f, 0.2f, 0.02f, "%.3f");
 
   ImGui::Separator();
 

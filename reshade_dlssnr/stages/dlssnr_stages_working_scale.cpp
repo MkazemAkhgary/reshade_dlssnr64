@@ -57,21 +57,19 @@ bool Apply(
     DlssNrCodec* codec,
     ID3D12Device* device,
     ID3D12Resource* backbuffer,
+    ID3D12Resource* low_input,
+    ID3D12Resource* low_enhanced,
     unsigned int full_width,
     unsigned int full_height,
-    unsigned int work_width,
-    unsigned int work_height,
-    bool use_working_scale,
     float luma_strength,
     float chroma_strength,
-    float residual_suppression,
-    float residual_threshold,
     bool soft_compression,
     float soft_max_brighten,
     float soft_max_darken,
     float soft_max_chroma,
     float soft_knee) {
-  if (!use_working_scale || codec == nullptr || backbuffer == nullptr) {
+  if (codec == nullptr || backbuffer == nullptr ||
+      low_input == nullptr || low_enhanced == nullptr) {
     return false;
   }
 
@@ -82,30 +80,28 @@ bool Apply(
   constants.Height = full_height;
   constants.LumaStrength = luma_strength;
   constants.ChromaStrength = chroma_strength;
-  constants.ResidualSuppression = residual_suppression;
-  constants.ResidualThreshold = residual_threshold;
   constants.SoftCompression = soft_compression ? 1u : 0u;
   constants.SoftMaxBrighten = soft_max_brighten;
   constants.SoftMaxDarken = soft_max_darken;
   constants.SoftMaxChroma = soft_max_chroma;
   constants.SoftKnee = soft_knee;
 
-  command.Transition(command.GetCommandList(), resources.GetWorkingOutput(),
+  command.Transition(command.GetCommandList(), low_input,
                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  command.Transition(command.GetCommandList(), resources.GetWorkingInput(),
+  command.Transition(command.GetCommandList(), low_enhanced,
                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
   codec->DispatchUpsampleResidual(
       command.GetCommandList(),
       constants,
       backbuffer,
-      resources.GetWorkingInput(),
-      resources.GetWorkingOutput(),
+      low_input,
+      low_enhanced,
       resources.GetCompositeOutput());
 
   command.CopyResourceToBackbuffer(
       command.GetCommandList(), resources.GetCompositeOutput(), backbuffer);
-  command.Transition(command.GetCommandList(), resources.GetWorkingOutput(),
+  command.Transition(command.GetCommandList(), low_enhanced,
                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
   return true;

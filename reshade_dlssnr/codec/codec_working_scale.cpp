@@ -68,8 +68,6 @@ cbuffer Params : register(b0)
     uint  gHeight;
     float gLumaStrength;
     float gChromaStrength;
-    float gResidualSuppression;
-    float gResidualThreshold;
     uint  gSoftCompression;
     float gSoftMaxBrighten;
     float gSoftMaxDarken;
@@ -104,10 +102,11 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float4 low_input = gLowInput.SampleLevel(s0, uv, 0);
     float4 low_enhanced = gLowEnhanced.SampleLevel(s0, uv, 0);
 
-    if (gSoftCompression != 0) {
-        float3 in_rgb = low_input.rgb;
-        float3 out_rgb = low_enhanced.rgb;
+    float3 in_rgb = low_input.rgb;
+    float3 out_rgb = low_enhanced.rgb;
 
+    float3 residual;
+    if (gSoftCompression != 0) {
         float in_luma = max(dot(in_rgb, float3(0.2126, 0.7152, 0.0722)), 1e-6);
         float out_luma = max(dot(out_rgb, float3(0.2126, 0.7152, 0.0722)), 1e-6);
 
@@ -129,38 +128,25 @@ void CSMain(uint3 id : SV_DispatchThreadID)
             exp(log(in_rgb / in_luma) + residual_chroma);
         float3 edited_rgb = edited_luma * edited_chroma;
 
-        float3 edited_diff = edited_rgb - in_rgb;
-
-        gOutput[id.xy] = float4(original.rgb + edited_diff, original.a);
-        return;
+        residual = edited_rgb - in_rgb;
+    } else {
+        residual = out_rgb - in_rgb;
     }
 
-    float low_input_luma = dot(low_input.rgb, float3(0.2126, 0.7152, 0.0722));
-    float low_enhanced_luma = dot(low_enhanced.rgb, float3(0.2126, 0.7152, 0.0722));
+    float3 edited = original.rgb + residual;
 
-    float final_luma = lerp(low_input_luma, low_enhanced_luma, gLumaStrength);
-    float luma_gain = final_luma / max(low_input_luma, 1e-4);
-    luma_gain = clamp(luma_gain, 0.25, 4.0);
+    // Final luma/chroma strength blend (after soft compression).
+    float original_luma = max(dot(original.rgb, float3(0.2126, 0.7152, 0.0722)), 1e-6);
+    float edited_luma = max(dot(edited, float3(0.2126, 0.7152, 0.0722)), 1e-6);
+    float final_luma = lerp(original_luma, edited_luma, gLumaStrength);
 
-    float dark_dampen =
-        smoothstep(0.0, max(gResidualThreshold, 0.001), low_input_luma);
-    float suppression = lerp(1.0, dark_dampen, gResidualSuppression);
+    float3 original_chroma = original.rgb / original_luma;
+    float3 edited_chroma = edited / edited_luma;
+    float3 final_chroma = lerp(original_chroma, edited_chroma, gChromaStrength);
 
-    luma_gain = lerp(luma_gain, 1.0, (1.0 - suppression) * gResidualSuppression);
+    float3 final_rgb = final_luma * final_chroma;
 
-    float chroma_amount = gChromaStrength * suppression;
-
-    float3 low_input_chroma = low_input.rgb / max(low_input_luma, 1e-3);
-    float3 low_enhanced_chroma = low_enhanced.rgb / max(low_enhanced_luma, 1e-3);
-
-    float3 chroma_ratio = lerp(
-        float3(1.0, 1.0, 1.0),
-        low_enhanced_chroma / max(low_input_chroma, 1e-3),
-        chroma_amount);
-
-    float3 result = original.rgb * luma_gain * chroma_ratio;
-
-    gOutput[id.xy] = float4(result, original.a);
+    gOutput[id.xy] = float4(final_rgb, original.a);
 }
 )";
 
