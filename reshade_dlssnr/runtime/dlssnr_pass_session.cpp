@@ -265,11 +265,6 @@ void DlssNrPassSession::OnPresent(
   parameter_block.SetUInt("DLSSNR.Reset", feature_.ShouldReset() ? 1u : 0u);
   feature_.MarkEvaluated();
 
-  if (resources_.GetUiMask() != nullptr) {
-    command_.Transition(command_.GetCommandList(), resources_.GetUiMask(),
-                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  }
-
   if (!use_working_scale) {
     command_.Transition(command_.GetCommandList(), backbuffer,
                         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -281,11 +276,6 @@ void DlssNrPassSession::OnPresent(
           feature_.FeatureHandle(),
           params,
           nullptr);
-
-  if (resources_.GetUiMask() != nullptr) {
-    command_.Transition(command_.GetCommandList(), resources_.GetUiMask(),
-                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  }
 
   if (settings.debug_view == 7 || settings.debug_view == 8 ||
       settings.debug_view == 9) {
@@ -360,8 +350,6 @@ void DlssNrPassSession::OnPresent(
           backbuffer,
           width,
           height,
-          use_selected_input,
-          ui_mask_generated,
           pass.luma_strength,
           pass.chroma_strength)) {
     failed_ = true;
@@ -395,10 +383,6 @@ void DlssNrPassSession::Shutdown(DlssNrRuntime& runtime) {
   feature_.Shutdown(runtime);
   resources_.Shutdown();
   command_.Shutdown();
-
-  if (pending_selected_pass_ != nullptr) {
-    guides_->RetireGameResource(pending_selected_pass_.Detach());
-  }
 
   debug_codec_.reset();
   command_queue_ = nullptr;
