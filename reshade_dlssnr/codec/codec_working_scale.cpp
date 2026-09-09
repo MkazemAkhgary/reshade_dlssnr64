@@ -155,6 +155,10 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     final_rgb.g = final_y - 0.1873 * final_cb - 0.4681 * final_cr;
     final_rgb.b = final_y + 1.8556 * final_cb;
 
+    // Smoothly project to non-negative values to avoid display clipping
+    // while preserving detail and monotonicity (no hard clamp).
+    final_rgb = 0.5 * (final_rgb + sqrt(final_rgb * final_rgb + 1e-6));
+
     gOutput[id.xy] = float4(final_rgb, original.a);
 }
 )";
