@@ -303,8 +303,6 @@ void DlssNrCodec::Destroy() {
   }
 
   root_signature_.Reset();
-  mask_pipeline_state_.Reset();
-  composite_pipeline_state_.Reset();
   luma_color_pipeline_state_.Reset();
   debug_residual_pipeline_state_.Reset();
   downsample_pipeline_state_.Reset();
