@@ -57,7 +57,7 @@ void DlssNrCommandContext::CloseAndSubmit(ID3D12CommandQueue* command_queue) {
   if (command_list_ == nullptr || command_queue == nullptr) return;
 
   command_list_->Close();
-  ID3D12CommandList* lists[] = {command_list_};
+  ID3D12CommandList* lists[] = {command_list_.Get()};
   command_queue->ExecuteCommandLists(1, lists);
 }
 
