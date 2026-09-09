@@ -21,7 +21,7 @@ void DlssNrPassSession::SetPendingSelectedPass(ID3D12Resource* resource) {
   std::lock_guard<std::mutex> lock(g_session_mutex);
 
   if (pending_selected_pass_ != nullptr) {
-    DlssGuides::Get().RetireGameResource(pending_selected_pass_.Get());
+    guides_->RetireGameResource(pending_selected_pass_.Get());
   }
 
   pending_selected_pass_ = resource;
@@ -115,11 +115,11 @@ void DlssNrPassSession::OnPresent(
   command_.Reset();
 
   if (pending_selected_pass_ != nullptr) {
-    DlssGuides::Get().CaptureSelectedPassIfNeeded(
+    guides_->CaptureSelectedPassIfNeeded(
         command_.GetCommandList(),
         pending_selected_pass_.Get());
 
-    DlssGuides::Get().RetireGameResource(pending_selected_pass_.Get());
+    guides_->RetireGameResource(pending_selected_pass_.Get());
     pending_selected_pass_.Reset();
   }
 
@@ -155,7 +155,7 @@ void DlssNrPassSession::OnPresent(
     return;
   }
 
-  const DlssGuideState guides = DlssGuides::Get().GetState();
+  const DlssGuideState guides = guides_->GetState();
 
   const bool selected_pass_size_ok =
       guides.selected_pass_color != nullptr &&
@@ -525,7 +525,7 @@ void DlssNrPassSession::Shutdown(DlssNrRuntime& runtime) {
   command_.Shutdown();
 
   if (pending_selected_pass_ != nullptr) {
-    DlssGuides::Get().RetireGameResource(pending_selected_pass_.Get());
+    guides_->RetireGameResource(pending_selected_pass_.Get());
     pending_selected_pass_.Reset();
   }
 
