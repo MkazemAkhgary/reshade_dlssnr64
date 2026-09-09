@@ -39,16 +39,16 @@ bool RunDebugView(
         constants,
         model_output,
         model_input,
-        resources.composite_output);
+        resources.GetCompositeOutput());
 
-    command.Transition(command.GetCommandList(), resources.composite_output,
+    command.Transition(command.GetCommandList(), resources.GetCompositeOutput(),
                        D3D12_RESOURCE_STATE_COPY_SOURCE);
     command.Transition(command.GetCommandList(), backbuffer,
                        D3D12_RESOURCE_STATE_COPY_DEST);
-    command.GetCommandList()->CopyResource(backbuffer, resources.composite_output);
+    command.GetCommandList()->CopyResource(backbuffer, resources.GetCompositeOutput());
     command.Transition(command.GetCommandList(), backbuffer,
                        D3D12_RESOURCE_STATE_PRESENT);
-    command.Transition(command.GetCommandList(), resources.composite_output,
+    command.Transition(command.GetCommandList(), resources.GetCompositeOutput(),
                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
     command.GetCommandList()->Close();
@@ -108,7 +108,7 @@ bool PrepareInput(
   if (out_model_color == nullptr || out_model_output == nullptr) return false;
 
   *out_model_color = full_input;
-  *out_model_output = resources.output;
+  *out_model_output = resources.GetOutput();
   *out_eval_width = full_width;
   *out_eval_height = full_height;
 
@@ -128,13 +128,13 @@ bool PrepareInput(
       command.GetCommandList(),
       constants,
       full_input,
-      resources.working_input);
+      resources.GetWorkingInput());
 
-  command.Transition(command.GetCommandList(), resources.working_input,
+  command.Transition(command.GetCommandList(), resources.GetWorkingInput(),
                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-  *out_model_color = resources.working_input;
-  *out_model_output = resources.working_output;
+  *out_model_color = resources.GetWorkingInput();
+  *out_model_output = resources.GetWorkingOutput();
   *out_eval_width = work_width;
   *out_eval_height = work_height;
   return true;
@@ -171,29 +171,29 @@ bool Apply(
   constants.ResidualSuppression = residual_suppression;
   constants.ResidualThreshold = residual_threshold;
 
-  command.Transition(command.GetCommandList(), resources.working_output,
+  command.Transition(command.GetCommandList(), resources.GetWorkingOutput(),
                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  command.Transition(command.GetCommandList(), resources.working_input,
+  command.Transition(command.GetCommandList(), resources.GetWorkingInput(),
                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
   codec->DispatchUpsampleResidual(
       command.GetCommandList(),
       constants,
       backbuffer,
-      resources.working_input,
-      resources.working_output,
-      resources.composite_output);
+      resources.GetWorkingInput(),
+      resources.GetWorkingOutput(),
+      resources.GetCompositeOutput());
 
-  command.Transition(command.GetCommandList(), resources.composite_output,
+  command.Transition(command.GetCommandList(), resources.GetCompositeOutput(),
                      D3D12_RESOURCE_STATE_COPY_SOURCE);
   command.Transition(command.GetCommandList(), backbuffer,
                      D3D12_RESOURCE_STATE_COPY_DEST);
-  command.GetCommandList()->CopyResource(backbuffer, resources.composite_output);
+  command.GetCommandList()->CopyResource(backbuffer, resources.GetCompositeOutput());
   command.Transition(command.GetCommandList(), backbuffer,
                      D3D12_RESOURCE_STATE_PRESENT);
-  command.Transition(command.GetCommandList(), resources.composite_output,
+  command.Transition(command.GetCommandList(), resources.GetCompositeOutput(),
                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  command.Transition(command.GetCommandList(), resources.working_output,
+  command.Transition(command.GetCommandList(), resources.GetWorkingOutput(),
                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
   return true;
