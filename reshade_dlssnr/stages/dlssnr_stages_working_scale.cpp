@@ -2,6 +2,8 @@
 
 #include <cstring>
 
+#include "shader_params.h"
+
 namespace reshade_dlssnr::dlssnr_stages_working_scale {
 
 bool PrepareInput(
