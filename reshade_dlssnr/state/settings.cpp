@@ -4,6 +4,8 @@
 
 #include <string>
 
+#include "shader_params.h"
+
 namespace reshade_dlssnr {
 
 namespace {
@@ -17,100 +19,57 @@ Settings& GetSettings() {
 namespace {
 
 void LoadPassSettings(const char* prefix, PassSettings& pass) {
+  const std::string pref(prefix);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "Preset").c_str(),
-                            pass.preset);
+                            (pref + "Preset").c_str(), pass.preset);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "LocalTone").c_str(),
-                            pass.local_tone);
+                            (pref + "LocalTone").c_str(), pass.local_tone);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "UICorrection").c_str(),
-                            pass.ui_correction);
+                            (pref + "UICorrection").c_str(), pass.ui_correction);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "LocalStructure").c_str(),
-                            pass.local_structure);
+                            (pref + "LocalStructure").c_str(), pass.local_structure);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "AutoMask").c_str(),
-                            pass.auto_mask);
+                            (pref + "AutoMask").c_str(), pass.auto_mask);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "SkinStructure").c_str(),
-                            pass.skin_structure);
+                            (pref + "SkinStructure").c_str(), pass.skin_structure);
   if (pass.skin_structure == 0.0f) pass.skin_structure = 1.0f;
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "Intensity").c_str(),
-                            pass.intensity);
+                            (pref + "Intensity").c_str(), pass.intensity);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "LumaStrength").c_str(),
-                            pass.luma_strength);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "ChromaStrength").c_str(),
-                            pass.chroma_strength);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "WorkingScale").c_str(),
-                            pass.working_scale);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "SoftCompression").c_str(),
-                            pass.soft_compression);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "SoftMaxBrighten").c_str(),
-                            pass.soft_max_brighten);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "SoftMaxDarken").c_str(),
-                            pass.soft_max_darken);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "SoftMaxChroma").c_str(),
-                            pass.soft_max_chroma);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "SoftKnee").c_str(),
-                            pass.soft_knee);
+                            (pref + "WorkingScale").c_str(), pass.working_scale);
+
+  for (uint32_t i = 0; i < kShaderParamCount; ++i) {
+    float v = kShaderParams[i].default_value;
+    reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                              (pref + kShaderParams[i].name).c_str(), v);
+    pass.params[i] = v;
+  }
 }
 
 void SavePassSettings(const char* prefix, const PassSettings& pass) {
+  const std::string pref(prefix);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "Preset").c_str(),
-                            pass.preset);
+                            (pref + "Preset").c_str(), pass.preset);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "LocalTone").c_str(),
-                            pass.local_tone);
+                            (pref + "LocalTone").c_str(), pass.local_tone);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "UICorrection").c_str(),
-                            pass.ui_correction);
+                            (pref + "UICorrection").c_str(), pass.ui_correction);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "LocalStructure").c_str(),
-                            pass.local_structure);
+                            (pref + "LocalStructure").c_str(), pass.local_structure);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "AutoMask").c_str(),
-                            pass.auto_mask);
+                            (pref + "AutoMask").c_str(), pass.auto_mask);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "SkinStructure").c_str(),
-                            pass.skin_structure);
+                            (pref + "SkinStructure").c_str(), pass.skin_structure);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "Intensity").c_str(),
-                            pass.intensity);
+                            (pref + "Intensity").c_str(), pass.intensity);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "LumaStrength").c_str(),
-                            pass.luma_strength);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "ChromaStrength").c_str(),
-                            pass.chroma_strength);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "WorkingScale").c_str(),
-                            pass.working_scale);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "SoftCompression").c_str(),
-                            pass.soft_compression);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "SoftMaxBrighten").c_str(),
-                            pass.soft_max_brighten);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "SoftMaxDarken").c_str(),
-                            pass.soft_max_darken);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "SoftMaxChroma").c_str(),
-                            pass.soft_max_chroma);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            (std::string(prefix) + "SoftKnee").c_str(),
-                            pass.soft_knee);
+                            (pref + "WorkingScale").c_str(), pass.working_scale);
+
+  for (uint32_t i = 0; i < kShaderParamCount; ++i) {
+    reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                              (pref + kShaderParams[i].name).c_str(),
+                              pass.params[i]);
+  }
 }
 
 }  // namespace
