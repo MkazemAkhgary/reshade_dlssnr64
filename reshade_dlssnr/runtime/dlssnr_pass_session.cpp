@@ -21,7 +21,7 @@ void DlssNrPassSession::SetPendingSelectedPass(ID3D12Resource* resource) {
   std::lock_guard<std::mutex> lock(g_session_mutex);
 
   if (pending_selected_pass_ != nullptr) {
-    DlssGuides::Get().RetireGameResource(pending_selected_pass_);
+    DlssGuides::Get().RetireGameResource(pending_selected_pass_.Get());
   }
 
   pending_selected_pass_ = resource;
