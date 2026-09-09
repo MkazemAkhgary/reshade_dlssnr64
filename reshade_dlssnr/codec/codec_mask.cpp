@@ -78,7 +78,7 @@ bool DlssNrCodec::DispatchMask(
   };
 
   return BindAndDispatch(
-      command_list, mask_pipeline_state_, constants, srvs, uavs);
+      command_list, mask_pipeline_state_.Get(), constants, srvs, uavs);
 }
 
 }  // namespace reshade_dlssnr
