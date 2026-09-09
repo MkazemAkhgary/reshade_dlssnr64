@@ -342,10 +342,12 @@ void DlssGuides::CaptureSelectedPassIfNeeded(
     return;
   }
 
-  Barrier(command_list, selected_pass_source, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
+  const D3D12_RESOURCE_STATES source_state =
+      InferResourceState(selected_pass_source);
+  Barrier(command_list, selected_pass_source, source_state, D3D12_RESOURCE_STATE_COPY_SOURCE);
   Barrier(command_list, selected_pass_clone_.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
   command_list->CopyResource(selected_pass_clone_.Get(), selected_pass_source);
-  Barrier(command_list, selected_pass_source, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+  Barrier(command_list, selected_pass_source, D3D12_RESOURCE_STATE_COPY_SOURCE, source_state);
   Barrier(command_list, selected_pass_clone_.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
   state_.selected_pass_color = selected_pass_clone_.Get();
