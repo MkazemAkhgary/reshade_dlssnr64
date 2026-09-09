@@ -40,7 +40,7 @@ class DlssNrPassSession {
   ID3D12CommandQueue* command_queue_ = nullptr;
   std::unique_ptr<DlssNrCodec> debug_codec_;
 
-  ID3D12Resource* pending_selected_pass_ = nullptr;
+  Microsoft::WRL::ComPtr<ID3D12Resource> pending_selected_pass_;
 
   bool failed_ = false;
   const char* reason_ = "";
