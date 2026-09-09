@@ -288,7 +288,7 @@ bool DlssNrCodec::Init(ID3D12Device* device) {
             &buffer_desc,
             D3D12_RESOURCE_STATE_GENERIC_READ,
             nullptr,
-            IID_PPV_ARGS(&constant_buffers_[i])))) {
+            IID_PPV_ARGS(constant_buffers_[i].GetAddressOf())))) {
       return false;
     }
   }
