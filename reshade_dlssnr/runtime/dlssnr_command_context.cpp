@@ -65,7 +65,7 @@ void DlssNrCommandContext::WaitGpu(ID3D12CommandQueue* command_queue) {
   if (command_queue == nullptr || fence_ == nullptr) return;
 
   const UINT64 value = ++fence_value_;
-  command_queue->Signal(fence_, value);
+  command_queue->Signal(fence_.Get(), value);
 
   if (fence_->GetCompletedValue() < value) {
     fence_->SetEventOnCompletion(value, fence_event_);
