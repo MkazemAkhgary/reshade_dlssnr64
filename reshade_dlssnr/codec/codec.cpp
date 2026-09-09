@@ -111,11 +111,11 @@ bool DlssNrCodec::BindAndDispatch(
   cbv_handle.ptr += static_cast<SIZE_T>(kDlssNrSrvCount + kDlssNrUavCount) *
                     descriptor_size_;
   CreateConstantBufferView(
-      constant_buffers_[slot], &constants, sizeof(constants), cbv_handle);
+      constant_buffers_[slot].Get(), &constants, sizeof(constants), cbv_handle);
 
-  ID3D12DescriptorHeap* heaps[] = {descriptor_heap_};
+  ID3D12DescriptorHeap* heaps[] = {descriptor_heap_.Get()};
   command_list->SetDescriptorHeaps(1, heaps);
-  command_list->SetComputeRootSignature(root_signature_);
+  command_list->SetComputeRootSignature(root_signature_.Get());
   command_list->SetPipelineState(pipeline_state);
   command_list->SetComputeRootDescriptorTable(0, gpu_handle);
   command_list->Dispatch(
