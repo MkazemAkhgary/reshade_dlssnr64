@@ -306,12 +306,12 @@ void DlssGuides::CaptureSelectedPassIfNeeded(
                                     ? TypedGuideFormat(selected_pass_source->GetDesc().Format)
                                     : selected_pass_source->GetDesc().Format)) {
     RetireResource(selected_pass_clone_);
-    selected_pass_clone_ = CreateGuideClone(
+    selected_pass_clone_.Attach(CreateGuideClone(
         device,
         selected_pass_source,
         &selected_pass_width_,
         &selected_pass_height_,
-        &selected_pass_format_);
+        &selected_pass_format_));
   }
 
   if (selected_pass_clone_ == nullptr) {
