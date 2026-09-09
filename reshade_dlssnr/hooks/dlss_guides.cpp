@@ -239,9 +239,9 @@ void DlssGuides::Capture(
     }
   }
 
-  state_.depth = depth_clone_;
-  state_.motion = motion_clone_;
-  state_.pre_ui_color = pre_ui_clone_;
+  state_.depth = depth_clone_.Get();
+  state_.motion = motion_clone_.Get();
+  state_.pre_ui_color = pre_ui_clone_.Get();
   state_.guide_width = guide_width;
   state_.guide_height = guide_height;
   state_.color_width = pre_ui_width_;
