@@ -9,8 +9,6 @@ bool Apply(
     ID3D12Device* device,
     ID3D12Resource* source,
     ID3D12Resource* backbuffer,
-    unsigned int source_width,
-    unsigned int source_height,
     unsigned int target_width,
     unsigned int target_height) {
   if (codec == nullptr || source == nullptr || backbuffer == nullptr ||

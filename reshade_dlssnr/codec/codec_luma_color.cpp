@@ -12,15 +12,8 @@ cbuffer Params : register(b0)
     uint  gMode;
     uint  gWidth;
     uint  gHeight;
-    float gTransferStrength;
     float gLumaStrength;
     float gChromaStrength;
-    float gResidualSuppression;
-    float gResidualThreshold;
-    float gMvScaleX;
-    float gMvScaleY;
-    uint  gGuideWidth;
-    uint  gGuideHeight;
 };
 
 Texture2D<float4> gEnhanced : register(t0);
