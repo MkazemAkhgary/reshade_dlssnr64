@@ -78,12 +78,9 @@
     <ClCompile Include="runtime\dlssnr_pass_session.cpp" />
     <ClCompile Include="runtime\dlssnr_runtime.cpp" />
     <ClCompile Include="runtime\ngx_parameter_block.cpp" />
-    <ClCompile Include="stages\dlssnr_stages_debug.cpp" />
     <ClCompile Include="stages\dlssnr_stages_final_composite.cpp" />
-    <ClCompile Include="stages\dlssnr_stages_ui_mask.cpp" />
     <ClCompile Include="stages\dlssnr_stages_upscale.cpp" />
     <ClCompile Include="stages\dlssnr_stages_working_scale.cpp" />
-    <ClCompile Include="state\render_pass_tracker.cpp" />
     <ClCompile Include="state\settings.cpp" />
     <ClCompile Include="ui\ui.cpp" />
   </ItemGroup>
@@ -101,12 +98,9 @@
     <ClInclude Include="runtime\dlssnr_pass_session.h" />
     <ClInclude Include="runtime\dlssnr_runtime.h" />
     <ClInclude Include="runtime\ngx_parameter_block.h" />
-    <ClInclude Include="stages\dlssnr_stages_debug.h" />
     <ClInclude Include="stages\dlssnr_stages_final_composite.h" />
-    <ClInclude Include="stages\dlssnr_stages_ui_mask.h" />
     <ClInclude Include="stages\dlssnr_stages_upscale.h" />
     <ClInclude Include="stages\dlssnr_stages_working_scale.h" />
-    <ClInclude Include="state\render_pass_tracker.h" />
     <ClInclude Include="state\settings.h" />
     <ClInclude Include="state\version.h" />
     <ClInclude Include="ui\ui.h" />
