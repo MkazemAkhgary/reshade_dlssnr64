@@ -14,14 +14,14 @@ bool Apply(
     bool ui_mask_generated,
     float luma_strength,
     float chroma_strength) {
-  if (codec == nullptr || backbuffer == nullptr || resources.output == nullptr) {
+  if (codec == nullptr || backbuffer == nullptr || resources.GetOutput() == nullptr) {
     return false;
   }
 
   ID3D12GraphicsCommandList* list = command.GetCommandList();
 
   if (use_selected_input && ui_mask_generated &&
-      resources.ui_mask != nullptr && resources.composite_output != nullptr) {
+      resources.GetUiMask() != nullptr && resources.GetCompositeOutput() != nullptr) {
     if (!codec->InitCompositeShader(device)) return false;
 
     DlssNrConstants constants = {};
@@ -31,40 +31,40 @@ bool Apply(
     constants.LumaStrength = luma_strength;
     constants.ChromaStrength = chroma_strength;
 
-    command.Transition(list, resources.output,
+    command.Transition(list, resources.GetOutput(),
                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     command.Transition(list, backbuffer,
                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    command.Transition(list, resources.ui_mask,
+    command.Transition(list, resources.GetUiMask(),
                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
     codec->DispatchComposite(
         list,
         constants,
-        resources.output,
+        resources.GetOutput(),
         backbuffer,
-        resources.ui_mask,
-        resources.composite_output);
+        resources.GetUiMask(),
+        resources.GetCompositeOutput());
 
-    command.Transition(list, resources.composite_output,
+    command.Transition(list, resources.GetCompositeOutput(),
                        D3D12_RESOURCE_STATE_COPY_SOURCE);
     command.Transition(list, backbuffer,
                        D3D12_RESOURCE_STATE_COPY_DEST);
-    list->CopyResource(backbuffer, resources.composite_output);
+    list->CopyResource(backbuffer, resources.GetCompositeOutput());
     command.Transition(list, backbuffer,
                        D3D12_RESOURCE_STATE_PRESENT);
-    command.Transition(list, resources.composite_output,
+    command.Transition(list, resources.GetCompositeOutput(),
                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    command.Transition(list, resources.ui_mask,
+    command.Transition(list, resources.GetUiMask(),
                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    command.Transition(list, resources.output,
+    command.Transition(list, resources.GetOutput(),
                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     return true;
   }
 
   if (luma_strength != 1.0f || chroma_strength != 1.0f) {
     if (!codec->InitLumaColorShader(device)) return false;
-    if (resources.composite_output == nullptr) return false;
+    if (resources.GetCompositeOutput() == nullptr) return false;
 
     DlssNrConstants constants = {};
     constants.Mode = DlssNrMode_Encode;
@@ -73,7 +73,7 @@ bool Apply(
     constants.LumaStrength = luma_strength;
     constants.ChromaStrength = chroma_strength;
 
-    command.Transition(list, resources.output,
+    command.Transition(list, resources.GetOutput(),
                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     command.Transition(list, backbuffer,
                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -81,32 +81,32 @@ bool Apply(
     codec->DispatchLumaColor(
         list,
         constants,
-        resources.output,
+        resources.GetOutput(),
         backbuffer,
-        resources.composite_output);
+        resources.GetCompositeOutput());
 
-    command.Transition(list, resources.composite_output,
+    command.Transition(list, resources.GetCompositeOutput(),
                        D3D12_RESOURCE_STATE_COPY_SOURCE);
     command.Transition(list, backbuffer,
                        D3D12_RESOURCE_STATE_COPY_DEST);
-    list->CopyResource(backbuffer, resources.composite_output);
+    list->CopyResource(backbuffer, resources.GetCompositeOutput());
     command.Transition(list, backbuffer,
                        D3D12_RESOURCE_STATE_PRESENT);
-    command.Transition(list, resources.composite_output,
+    command.Transition(list, resources.GetCompositeOutput(),
                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    command.Transition(list, resources.output,
+    command.Transition(list, resources.GetOutput(),
                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     return true;
   }
 
-  command.Transition(list, resources.output,
+  command.Transition(list, resources.GetOutput(),
                      D3D12_RESOURCE_STATE_COPY_SOURCE);
   command.Transition(list, backbuffer,
                      D3D12_RESOURCE_STATE_COPY_DEST);
-  list->CopyResource(backbuffer, resources.output);
+  list->CopyResource(backbuffer, resources.GetOutput());
   command.Transition(list, backbuffer,
                      D3D12_RESOURCE_STATE_PRESENT);
-  command.Transition(list, resources.output,
+  command.Transition(list, resources.GetOutput(),
                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   return true;
 }
