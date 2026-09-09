@@ -306,31 +306,16 @@ void DlssGuides::Clear() {
   depth_clone_.Reset();
   motion_clone_.Reset();
 
-  RetireResource(pre_ui_clone_);
-  RetireResource(selected_pass_clone_);
-
   ReleaseRetiredResourcesLocked();
   ReleaseRetiredGameResourcesLocked();
 
-  selected_pass_clone_.Reset();
-
   state_.valid = false;
-  state_.pre_ui_color = nullptr;
-  state_.selected_pass_color = nullptr;
   depth_width_ = 0;
   depth_height_ = 0;
   depth_format_ = DXGI_FORMAT_UNKNOWN;
   motion_width_ = 0;
   motion_height_ = 0;
   motion_format_ = DXGI_FORMAT_UNKNOWN;
-  pre_ui_width_ = 0;
-  pre_ui_height_ = 0;
-  pre_ui_format_ = DXGI_FORMAT_UNKNOWN;
-  selected_pass_width_ = 0;
-  selected_pass_height_ = 0;
-  selected_pass_format_ = DXGI_FORMAT_UNKNOWN;
-  has_selected_pass_handle_ = false;
-  selected_pass_handle_ = 0;
 }
 
 }  // namespace reshade_dlssnr
