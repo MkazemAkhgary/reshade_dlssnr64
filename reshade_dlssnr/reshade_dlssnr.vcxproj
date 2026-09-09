@@ -65,8 +65,6 @@
     <ClCompile Include="codec\codec.cpp" />
     <ClCompile Include="codec\codec_debug_residual.cpp" />
     <ClCompile Include="codec\codec_luma_color.cpp" />
-    <ClCompile Include="codec\codec_mask.cpp" />
-    <ClCompile Include="codec\codec_ui_composite.cpp" />
     <ClCompile Include="codec\codec_working_scale.cpp" />
     <ClCompile Include="hooks\d3d12_hooks.cpp" />
     <ClCompile Include="hooks\d3d12_state.cpp" />
