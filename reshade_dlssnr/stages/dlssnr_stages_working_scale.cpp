@@ -1,5 +1,7 @@
 #include "dlssnr_stages_working_scale.h"
 
+#include <cstring>
+
 namespace reshade_dlssnr::dlssnr_stages_working_scale {
 
 bool PrepareInput(
@@ -78,13 +80,13 @@ bool Apply(
   DlssNrConstants constants = {};
   constants.Width = full_width;
   constants.Height = full_height;
-  constants.LumaStrength = luma_strength;
-  constants.ChromaStrength = chroma_strength;
-  constants.SoftCompression = soft_compression ? 1u : 0u;
-  constants.SoftMaxBrighten = soft_max_brighten;
-  constants.SoftMaxDarken = soft_max_darken;
-  constants.SoftMaxChroma = soft_max_chroma;
-  constants.SoftKnee = soft_knee;
+  constants.params[0] = luma_strength;
+  constants.params[1] = chroma_strength;
+  constants.params[2] = soft_compression ? 1.0f : 0.0f;
+  constants.params[3] = soft_max_brighten;
+  constants.params[4] = soft_max_darken;
+  constants.params[5] = soft_max_chroma;
+  constants.params[6] = soft_knee;
 
   command.Transition(command.GetCommandList(), low_input,
                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
