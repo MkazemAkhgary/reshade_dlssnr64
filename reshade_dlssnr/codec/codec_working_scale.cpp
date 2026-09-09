@@ -94,7 +94,12 @@ float SoftCompress(float x, float max_pos, float max_neg, float knee)
 
 float safe_log(float x)
 {
-    return log(x + 1e-6);
+    return log(max(x, 0.0) + 1e-6);
+}
+
+float3 safe_log3(float3 v)
+{
+    return log(max(v, 0.0) + 1e-6);
 }
 
 [numthreads(8, 8, 1)]
@@ -119,8 +124,8 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
         float residual_luma = safe_log(out_luma) - safe_log(in_luma);
         float3 residual_chroma =
-            safe_log(out_rgb) - safe_log(out_luma) -
-            safe_log(in_rgb) + safe_log(in_luma);
+            safe_log3(out_rgb) - safe_log(out_luma) -
+            safe_log3(in_rgb) + safe_log(in_luma);
 
         residual_luma = SoftCompress(
             residual_luma, gSoftMaxBrighten, gSoftMaxDarken, gSoftKnee);
@@ -133,7 +138,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
         float edited_luma = in_luma * exp(residual_luma);
         float3 edited_chroma =
-            exp(safe_log(in_rgb) - safe_log(in_luma) + residual_chroma);
+            exp(safe_log3(in_rgb) - safe_log(in_luma) + residual_chroma);
         float3 edited_rgb = edited_luma * edited_chroma;
 
         residual = edited_rgb - in_rgb;
