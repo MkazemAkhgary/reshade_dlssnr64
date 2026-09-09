@@ -24,19 +24,6 @@ bool PrepareInput(
     unsigned int work_height,
     bool use_working_scale);
 
-bool RunDebugView(
-    DlssNrCommandContext& command,
-    DlssNrPassResources& resources,
-    DlssNrCodec* codec,
-    ID3D12Device* device,
-    ID3D12CommandQueue* command_queue,
-    ID3D12Resource* backbuffer,
-    ID3D12Resource* model_input,
-    ID3D12Resource* model_output,
-    unsigned int width,
-    unsigned int height,
-    int debug_view);
-
 bool Apply(
     DlssNrCommandContext& command,
     DlssNrPassResources& resources,
@@ -51,7 +38,6 @@ bool Apply(
     float luma_strength,
     float chroma_strength,
     float residual_suppression,
-    float residual_threshold,
-    int debug_view);
+    float residual_threshold);
 
 }  // namespace reshade_dlssnr::dlssnr_stages_working_scale

@@ -218,41 +218,6 @@ void DrawOverlay(reshade::api::effect_runtime*) {
     ImGui::EndTabBar();
   }
 
-  ImGui::Separator();
-
-  auto draw_slider = [&](const char* label, float* value,
-                         float min_value, float max_value,
-                         float reset_value, const char* format) {
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(label);
-    ImGui::SameLine(kControlLabelWidth);
-    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
-    const std::string slider_id = "##" + std::string(label);
-    const std::string reset_id = "R##" + std::string(label);
-    changed |= ImGui::SliderFloat(slider_id.c_str(), value,
-                                  min_value, max_value, format);
-    ImGui::SameLine();
-    if (ImGui::Button(reset_id.c_str(), ImVec2(24.0f, 0.0f))) {
-      *value = reset_value;
-      changed = true;
-    }
-  };
-
-  {
-    static const char* debug_names[] = {
-        "Off",
-        "Working Input",
-        "Working Output",
-        "Working Residual",
-    };
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Debug View");
-    ImGui::SameLine(kControlLabelWidth);
-    ImGui::SetNextItemWidth(-1.0f);
-    changed |= ImGui::Combo("##Debug View", &settings.debug_view,
-                            debug_names, IM_ARRAYSIZE(debug_names));
-  }
-
   if (changed) {
     SaveSettings();
   }

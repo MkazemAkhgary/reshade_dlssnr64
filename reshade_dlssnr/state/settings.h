@@ -33,7 +33,6 @@ struct Settings {
   PassSettings pass1;
   PassSettings pass2;
 
-  int debug_view = 0;
   int compare_mode = 0;
   float compare_split = 0.5f;
   float compare_zoom = 1.0f;

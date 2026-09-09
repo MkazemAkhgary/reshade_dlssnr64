@@ -1,94 +1,6 @@
 #include "dlssnr_stages_working_scale.h"
 
-#include "dlssnr_stages_upscale.h"
-
 namespace reshade_dlssnr::dlssnr_stages_working_scale {
-
-bool RunDebugView(
-    DlssNrCommandContext& command,
-    DlssNrPassResources& resources,
-    DlssNrCodec* codec,
-    ID3D12Device* device,
-    ID3D12CommandQueue* command_queue,
-    ID3D12Resource* backbuffer,
-    ID3D12Resource* model_input,
-    ID3D12Resource* model_output,
-    unsigned int width,
-    unsigned int height,
-    int debug_view) {
-  if (codec == nullptr || backbuffer == nullptr || command_queue == nullptr ||
-      device == nullptr) {
-    return false;
-  }
-
-  if (debug_view == 3) {
-    if (!codec->InitDebugResidualShader(device)) return false;
-
-    DlssNrConstants constants = {};
-    constants.Mode = DlssNrMode_Resolve;
-    constants.Width = width;
-    constants.Height = height;
-
-    command.Transition(command.GetCommandList(), model_input,
-                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    command.Transition(command.GetCommandList(), model_output,
-                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-    codec->DispatchDebugResidual(
-        command.GetCommandList(),
-        constants,
-        model_output,
-        model_input,
-        resources.GetCompositeOutput());
-
-    command.Transition(command.GetCommandList(), resources.GetCompositeOutput(),
-                       D3D12_RESOURCE_STATE_COPY_SOURCE);
-    command.Transition(command.GetCommandList(), backbuffer,
-                       D3D12_RESOURCE_STATE_COPY_DEST);
-    command.GetCommandList()->CopyResource(backbuffer, resources.GetCompositeOutput());
-    command.Transition(command.GetCommandList(), backbuffer,
-                       D3D12_RESOURCE_STATE_PRESENT);
-    command.Transition(command.GetCommandList(), resources.GetCompositeOutput(),
-                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-
-    command.GetCommandList()->Close();
-    ID3D12CommandList* lists[] = {command.GetCommandList()};
-    command_queue->ExecuteCommandLists(1, lists);
-    command.WaitGpu(command_queue);
-    return true;
-  }
-
-  ID3D12Resource* debug_source =
-      debug_view == 1 ? model_input : model_output;
-
-  if (debug_source == nullptr) return false;
-
-  const D3D12_RESOURCE_DESC source_desc = debug_source->GetDesc();
-  const unsigned int source_width =
-      static_cast<unsigned int>(source_desc.Width);
-  const unsigned int source_height =
-      static_cast<unsigned int>(source_desc.Height);
-
-  if (!dlssnr_stages_upscale::Apply(
-          command,
-          resources,
-          codec,
-          device,
-          debug_source,
-          backbuffer,
-          source_width,
-          source_height,
-          width,
-          height)) {
-    return false;
-  }
-
-  command.GetCommandList()->Close();
-  ID3D12CommandList* lists[] = {command.GetCommandList()};
-  command_queue->ExecuteCommandLists(1, lists);
-  command.WaitGpu(command_queue);
-  return true;
-}
 
 bool PrepareInput(
     DlssNrCommandContext& command,
@@ -154,8 +66,7 @@ bool Apply(
     float luma_strength,
     float chroma_strength,
     float residual_suppression,
-    float residual_threshold,
-    int debug_view) {
+    float residual_threshold) {
   if (!use_working_scale || codec == nullptr || backbuffer == nullptr) {
     return false;
   }

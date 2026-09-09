@@ -274,34 +274,6 @@ void DlssNrPassSession::OnPresent(
           params,
           nullptr);
 
-  if (settings.debug_view == 1 || settings.debug_view == 2 ||
-      settings.debug_view == 3) {
-    if (!dlssnr_stages_working_scale::RunDebugView(
-            command_,
-            resources_,
-            debug_codec_.get(),
-            device,
-            command_queue_,
-            backbuffer,
-            model_color,
-            model_output,
-            width,
-            height,
-            settings.debug_view)) {
-      failed_ = true;
-      reason_ = "failed to run working debug view";
-      backbuffer->Release();
-      swapchain3->Release();
-      device->Release();
-      return;
-    }
-
-    backbuffer->Release();
-    swapchain3->Release();
-    device->Release();
-    return;
-  }
-
   if (use_working_scale) {
     if (!dlssnr_stages_working_scale::Apply(
             command_,
@@ -317,8 +289,7 @@ void DlssNrPassSession::OnPresent(
             pass.luma_strength,
             pass.chroma_strength,
             pass.residual_suppression,
-            pass.residual_threshold,
-            settings.debug_view)) {
+            pass.residual_threshold)) {
       failed_ = true;
       reason_ = "failed to apply working scale";
       backbuffer->Release();

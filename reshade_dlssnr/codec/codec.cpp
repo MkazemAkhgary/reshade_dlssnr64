@@ -304,7 +304,6 @@ void DlssNrCodec::Destroy() {
 
   root_signature_.Reset();
   luma_color_pipeline_state_.Reset();
-  debug_residual_pipeline_state_.Reset();
   downsample_pipeline_state_.Reset();
   upsample_residual_pipeline_state_.Reset();
   descriptor_heap_.Reset();
