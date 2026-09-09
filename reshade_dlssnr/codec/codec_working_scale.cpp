@@ -92,6 +92,11 @@ float SoftCompress(float x, float max_pos, float max_neg, float knee)
         return max_neg * x / (max_neg + knee * abs(x));
 }
 
+float safe_log(float x)
+{
+    return log(x + 1e-6);
+}
+
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
@@ -109,9 +114,6 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     float3 residual;
     if (gSoftCompression != 0) {
-        // Smooth log avoids log(0) and 0/0 without any hard clamp.
-        float safe_log(float x) { return log(x + 1e-6); }
-
         float in_luma = max(dot(in_rgb, float3(0.2126, 0.7152, 0.0722)), 1e-6);
         float out_luma = max(dot(out_rgb, float3(0.2126, 0.7152, 0.0722)), 1e-6);
 
