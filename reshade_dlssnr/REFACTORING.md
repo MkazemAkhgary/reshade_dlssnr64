@@ -37,7 +37,7 @@
 **Goal:** Reduce global state, make dependencies explicit.
 **Benefits:** Easier to test, clearer lifecycle.
 **Task:** Review each singleton, inject dependencies where possible.
-**Status:** Not started
+**Status:** Complete — `DlssGuides` injected into `DlssNrPassSession` via constructor; removed hidden `DlssGuides::Get()` call from `DlssNrCommandContext::WaitGpu`. Remaining singletons (`DlssNrDirect`, `RenderPassTracker`, `D3D12Hooks`) are architectural (global addon state).
 
 ---
 
