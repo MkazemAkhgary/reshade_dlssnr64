@@ -113,6 +113,7 @@ void DlssNrPassSession::OnPresent(
   }
 
   command_.Reset();
+  command_.SetResourceState(backbuffer, D3D12_RESOURCE_STATE_PRESENT);
 
   if (pending_selected_pass_ != nullptr) {
     guides_->CaptureSelectedPassIfNeeded(
