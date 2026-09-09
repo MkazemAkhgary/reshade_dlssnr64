@@ -253,13 +253,7 @@ void DlssNrPassSession::OnPresent(
           model_output,
           width,
           height,
-          pass.luma_strength,
-          pass.chroma_strength,
-          pass.soft_compression,
-          pass.soft_max_brighten,
-          pass.soft_max_darken,
-          pass.soft_max_chroma,
-          pass.soft_knee)) {
+          pass.params)) {
     failed_ = true;
     reason_ = "failed to apply post-model processing";
     return;
