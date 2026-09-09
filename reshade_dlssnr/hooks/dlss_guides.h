@@ -62,10 +62,10 @@ class DlssGuides {
 
   mutable std::mutex lock_;
 
-  ID3D12Resource* depth_clone_ = nullptr;
-  ID3D12Resource* motion_clone_ = nullptr;
-  ID3D12Resource* pre_ui_clone_ = nullptr;
-  ID3D12Resource* selected_pass_clone_ = nullptr;
+  Microsoft::WRL::ComPtr<ID3D12Resource> depth_clone_;
+  Microsoft::WRL::ComPtr<ID3D12Resource> motion_clone_;
+  Microsoft::WRL::ComPtr<ID3D12Resource> pre_ui_clone_;
+  Microsoft::WRL::ComPtr<ID3D12Resource> selected_pass_clone_;
 
   unsigned int depth_width_ = 0;
   unsigned int depth_height_ = 0;
