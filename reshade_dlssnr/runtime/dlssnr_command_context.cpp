@@ -47,7 +47,7 @@ bool DlssNrCommandContext::Ensure(ID3D12Device* device) {
 void DlssNrCommandContext::Reset() {
   if (command_allocator_ != nullptr && command_list_ != nullptr) {
     command_allocator_->Reset();
-    command_list_->Reset(command_allocator_, nullptr);
+    command_list_->Reset(command_allocator_.Get(), nullptr);
   }
 
   resource_states_.clear();
