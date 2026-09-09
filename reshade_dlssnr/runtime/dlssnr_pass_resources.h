@@ -39,6 +39,12 @@ class DlssNrPassResources {
 
   void Shutdown();
 
+  ID3D12Resource* GetOutput() const { return output.Get(); }
+  ID3D12Resource* GetUiMask() const { return ui_mask.Get(); }
+  ID3D12Resource* GetCompositeOutput() const { return composite_output.Get(); }
+  ID3D12Resource* GetWorkingInput() const { return working_input.Get(); }
+  ID3D12Resource* GetWorkingOutput() const { return working_output.Get(); }
+
  private:
   static bool CreateUavTexture(
       ID3D12Device* device,
