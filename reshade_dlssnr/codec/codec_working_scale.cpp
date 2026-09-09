@@ -84,6 +84,8 @@ SamplerState s0 : register(s0);
 float SoftCompress(float x, float max_pos, float max_neg, float knee)
 {
     knee = max(knee, 1e-6);
+    max_pos = max(max_pos, 1e-6);
+    max_neg = max(max_neg, 1e-6);
     if (x >= 0.0)
         return max_pos * x / (max_pos + knee * abs(x));
     else
