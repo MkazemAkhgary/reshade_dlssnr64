@@ -71,11 +71,6 @@ void Attach(HMODULE module) {
   PinAddonModule();
 
   reshade::register_event<reshade::addon_event::init_device>(OnInitDevice);
-  reshade::register_event<reshade::addon_event::begin_render_pass>(OnBeginRenderPass);
-  reshade::register_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(OnBindRenderTargets);
-  reshade::register_event<reshade::addon_event::bind_viewports>(OnBindViewports);
-  reshade::register_event<reshade::addon_event::draw>(OnDraw);
-  reshade::register_event<reshade::addon_event::draw_indexed>(OnDrawIndexed);
   reshade::register_event<reshade::addon_event::present>(OnPresent);
   reshade::register_overlay("ReShade DLSSNR", reshade_dlssnr::DrawOverlay);
 
