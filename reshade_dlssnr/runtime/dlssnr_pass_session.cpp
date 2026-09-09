@@ -112,7 +112,7 @@ void DlssNrPassSession::OnPresent(
 
   const DlssGuideState guides = guides_->GetState();
 
-  ID3D12Resource* model_input = backbuffer;
+  ID3D12Resource* model_input = backbuffer.Get();
 
   if (debug_codec_ == nullptr) {
     debug_codec_ = std::make_unique<DlssNrCodec>();
