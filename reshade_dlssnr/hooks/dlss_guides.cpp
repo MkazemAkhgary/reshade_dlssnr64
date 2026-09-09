@@ -285,8 +285,7 @@ void DlssGuides::Capture(
 
 void DlssGuides::RetireResource(Microsoft::WRL::ComPtr<ID3D12Resource>& resource) {
   if (resource == nullptr) return;
-  retired_resources_.push_back(resource.Get());
-  resource.Reset();
+  retired_resources_.push_back(resource.Detach());
 }
 
 void DlssGuides::SetSelectedPassHandle(uint64_t handle) {
