@@ -42,53 +42,6 @@ void OnInitDevice(reshade::api::device* device) {
   reshade_dlssnr::D3D12Hooks::Get().InstallEarlyHooks(native_device);
 }
 
-bool OnBeginRenderPass(
-    reshade::api::command_list* command_list,
-    uint32_t count,
-    const reshade::api::render_pass_render_target_desc* render_targets,
-    const reshade::api::render_pass_depth_stencil_desc*,
-    reshade::api::render_pass_flags) {
-  g_render_pass_tracker.RecordBeginRenderPass(command_list, count, render_targets);
-  return false;
-}
-
-void OnBindRenderTargets(
-    reshade::api::command_list* command_list,
-    uint32_t count,
-    const reshade::api::resource_view* render_targets,
-    reshade::api::resource_view) {
-  g_render_pass_tracker.RecordBindRenderTargets(command_list, count, render_targets);
-}
-
-void OnBindViewports(
-    reshade::api::command_list* command_list,
-    uint32_t first,
-    uint32_t count,
-    const reshade::api::viewport* viewports) {
-  g_render_pass_tracker.RecordViewports(command_list, first, count, viewports);
-}
-
-bool OnDraw(
-    reshade::api::command_list* command_list,
-    uint32_t,
-    uint32_t,
-    uint32_t,
-    uint32_t) {
-  g_render_pass_tracker.RecordDraw(command_list);
-  return false;
-}
-
-bool OnDrawIndexed(
-    reshade::api::command_list* command_list,
-    uint32_t,
-    uint32_t,
-    uint32_t,
-    int32_t,
-    uint32_t) {
-  g_render_pass_tracker.RecordDrawIndexed(command_list);
-  return false;
-}
-
 void OnPresent(
     reshade::api::command_queue* command_queue,
     reshade::api::swapchain* swapchain,
@@ -109,9 +62,6 @@ void OnPresent(
   reshade_dlssnr::DlssNrDirect::Get().OnPresent(
       native_command_queue,
       native_swapchain);
-
-  g_render_pass_tracker.CaptureBackbuffer(swapchain);
-  g_render_pass_tracker.SwapForNextFrame();
 }
 
 void Attach(HMODULE module) {
