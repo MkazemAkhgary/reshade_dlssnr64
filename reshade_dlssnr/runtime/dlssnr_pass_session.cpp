@@ -145,6 +145,7 @@ void DlssNrPassSession::OnPresent(
     ID3D12CommandList* lists[] = {command_.GetCommandList()};
     command_queue_->ExecuteCommandLists(1, lists);
     command_.WaitGpu(command_queue_);
+    guides_->ReleaseRetiredGameResources();
 
     reshade::log::message(
         reshade::log::level::info,
@@ -253,6 +254,7 @@ void DlssNrPassSession::OnPresent(
     ID3D12CommandList* lists[] = {command_.GetCommandList()};
     command_queue_->ExecuteCommandLists(1, lists);
     command_.WaitGpu(command_queue_);
+    guides_->ReleaseRetiredGameResources();
 
     backbuffer->Release();
     swapchain3->Release();
@@ -474,6 +476,7 @@ void DlssNrPassSession::OnPresent(
     ID3D12CommandList* lists[] = {command_.GetCommandList()};
     command_queue_->ExecuteCommandLists(1, lists);
     command_.WaitGpu(command_queue_);
+    guides_->ReleaseRetiredGameResources();
 
     backbuffer->Release();
     swapchain3->Release();
@@ -505,6 +508,7 @@ void DlssNrPassSession::OnPresent(
   ID3D12CommandList* lists[] = {command_.GetCommandList()};
   command_queue_->ExecuteCommandLists(1, lists);
   command_.WaitGpu(command_queue_);
+  guides_->ReleaseRetiredGameResources();
 
   if (result != NVSDK_NGX_Result_Success) {
     failed_ = true;
