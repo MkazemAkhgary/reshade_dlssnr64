@@ -140,20 +140,7 @@ void DlssNrPassSession::OnPresent(
 
   const DlssGuideState guides = guides_->GetState();
 
-  const bool selected_pass_size_ok =
-      guides.selected_pass_color != nullptr &&
-      guides.selected_width == width &&
-      guides.selected_height == height;
-
-  const bool use_selected_input =
-      settings.use_selected_pass_as_input &&
-      selected_pass_size_ok;
-
-  ID3D12Resource* model_input =
-      use_selected_input ? guides.selected_pass_color : backbuffer;
-
-  ID3D12Resource* pre_ui_source =
-      selected_pass_size_ok ? guides.selected_pass_color : nullptr;
+  ID3D12Resource* model_input = backbuffer;
 
   if (debug_codec_ == nullptr) {
     debug_codec_ = std::make_unique<DlssNrCodec>();
