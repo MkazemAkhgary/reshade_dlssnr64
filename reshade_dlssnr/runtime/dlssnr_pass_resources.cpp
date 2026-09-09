@@ -44,30 +44,6 @@ bool DlssNrPassResources::EnsureOutput(
   return true;
 }
 
-bool DlssNrPassResources::EnsureUiMask(
-    ID3D12Device* device,
-    const D3D12_RESOURCE_DESC& desc) {
-  if (ui_mask != nullptr &&
-      ui_mask_width == desc.Width &&
-      ui_mask_height == desc.Height &&
-      ui_mask_format == desc.Format) {
-    return true;
-  }
-
-  ui_mask.Reset();
-
-  ID3D12Resource* raw = nullptr;
-  if (!CreateUavTexture(device, desc, &raw)) {
-    return false;
-  }
-  ui_mask.Attach(raw);
-
-  ui_mask_width = static_cast<unsigned int>(desc.Width);
-  ui_mask_height = desc.Height;
-  ui_mask_format = desc.Format;
-  return true;
-}
-
 bool DlssNrPassResources::EnsureCompositeOutput(
     ID3D12Device* device,
     const D3D12_RESOURCE_DESC& desc) {
@@ -132,16 +108,12 @@ bool DlssNrPassResources::EnsureWorkingResources(
 
 void DlssNrPassResources::Shutdown() {
   output.Reset();
-  ui_mask.Reset();
   composite_output.Reset();
   working_input.Reset();
   working_output.Reset();
 
   output_width = 0;
   output_height = 0;
-  ui_mask_width = 0;
-  ui_mask_height = 0;
-  ui_mask_format = DXGI_FORMAT_UNKNOWN;
   composite_output_width = 0;
   composite_output_height = 0;
   composite_output_format = DXGI_FORMAT_UNKNOWN;
