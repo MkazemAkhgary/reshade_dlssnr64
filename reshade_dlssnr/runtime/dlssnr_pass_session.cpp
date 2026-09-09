@@ -82,7 +82,6 @@ void DlssNrPassSession::OnPresent(
       work_width != width || work_height != height;
 
   if (!resources_.EnsureOutput(device, desc) ||
-      !resources_.EnsureUiMask(device, desc) ||
       !resources_.EnsureCompositeOutput(device, desc)) {
     failed_ = true;
     reason_ = "failed to create DLSSNR pass resources";
