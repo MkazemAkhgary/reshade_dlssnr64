@@ -141,6 +141,13 @@ void DlssNrCommandContext::Transition(
   resource_states_[resource] = after;
 }
 
+void DlssNrCommandContext::SetResourceState(
+    ID3D12Resource* resource,
+    D3D12_RESOURCE_STATES state) {
+  if (resource == nullptr) return;
+  resource_states_[resource] = state;
+}
+
 void DlssNrCommandContext::Shutdown() {
   if (fence_event_ != INVALID_HANDLE_VALUE) {
     CloseHandle(fence_event_);
