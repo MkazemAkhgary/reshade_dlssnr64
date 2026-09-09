@@ -321,12 +321,12 @@ void DlssGuides::CaptureSelectedPassIfNeeded(
   }
 
   Barrier(command_list, selected_pass_source, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
-  Barrier(command_list, selected_pass_clone_, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
-  command_list->CopyResource(selected_pass_clone_, selected_pass_source);
+  Barrier(command_list, selected_pass_clone_.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
+  command_list->CopyResource(selected_pass_clone_.Get(), selected_pass_source);
   Barrier(command_list, selected_pass_source, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
-  Barrier(command_list, selected_pass_clone_, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  Barrier(command_list, selected_pass_clone_.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-  state_.selected_pass_color = selected_pass_clone_;
+  state_.selected_pass_color = selected_pass_clone_.Get();
   state_.selected_width = selected_pass_width_;
   state_.selected_height = selected_pass_height_;
 
