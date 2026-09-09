@@ -74,7 +74,6 @@ cbuffer Params : register(b0)
     float gTransferStrength;
     float gLumaStrength;
     float gChromaStrength;
-    uint  gDebugView;
     float gResidualSuppression;
     float gResidualThreshold;
     float gMvScaleX;
