@@ -215,7 +215,7 @@ void DlssNrPassSession::OnPresent(
   }
 
   if (settings.debug_view == 4 && guides.valid &&
-      pre_ui_source != nullptr && resources_.ui_mask != nullptr) {
+      pre_ui_source != nullptr && resources_.GetUiMask() != nullptr) {
     if (!debug_codec_->InitMaskShader(device)) {
       failed_ = true;
       reason_ = "failed to initialize UI mask shader";
@@ -237,16 +237,16 @@ void DlssNrPassSession::OnPresent(
         mask_constants,
         pre_ui_source,
         backbuffer,
-        resources_.ui_mask);
+        resources_.GetUiMask());
 
-    command_.Transition(command_.GetCommandList(), resources_.ui_mask,
+    command_.Transition(command_.GetCommandList(), resources_.GetUiMask(),
                         D3D12_RESOURCE_STATE_COPY_SOURCE);
     command_.Transition(command_.GetCommandList(), backbuffer,
                         D3D12_RESOURCE_STATE_COPY_DEST);
-    command_.GetCommandList()->CopyResource(backbuffer, resources_.ui_mask);
+    command_.GetCommandList()->CopyResource(backbuffer, resources_.GetUiMask());
     command_.Transition(command_.GetCommandList(), backbuffer,
                         D3D12_RESOURCE_STATE_PRESENT);
-    command_.Transition(command_.GetCommandList(), resources_.ui_mask,
+    command_.Transition(command_.GetCommandList(), resources_.GetUiMask(),
                         D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
     command_.GetCommandList()->Close();
@@ -261,7 +261,7 @@ void DlssNrPassSession::OnPresent(
   }
 
   if (settings.debug_view == 4) {
-    if (pre_ui_source == nullptr || resources_.ui_mask == nullptr ||
+    if (pre_ui_source == nullptr || resources_.GetUiMask() == nullptr ||
         !guides.valid) {
       backbuffer->Release();
       swapchain3->Release();
@@ -272,7 +272,7 @@ void DlssNrPassSession::OnPresent(
 
   bool ui_mask_generated = false;
 
-  if (guides.valid && pre_ui_source != nullptr && resources_.ui_mask != nullptr) {
+  if (guides.valid && pre_ui_source != nullptr && resources_.GetUiMask() != nullptr) {
     ui_mask_generated = dlssnr_stages_ui_mask::Generate(
         command_,
         resources_,
@@ -287,7 +287,7 @@ void DlssNrPassSession::OnPresent(
   }
 
   ID3D12Resource* model_color = model_input;
-  ID3D12Resource* model_output = resources_.output;
+  ID3D12Resource* model_output = resources_.GetOutput();
   unsigned int eval_width = width;
   unsigned int eval_height = height;
 
@@ -361,8 +361,8 @@ void DlssNrPassSession::OnPresent(
   parameter_block.SetUInt(
       "DLSSNR.UICorrection", pass.ui_correction ? 1u : 0u);
 
-  if (ui_mask_generated && !use_selected_input && resources_.ui_mask != nullptr) {
-    parameter_block.SetResource("DLSSNR.UIAlpha", resources_.ui_mask);
+  if (ui_mask_generated && !use_selected_input && resources_.GetUiMask() != nullptr) {
+    parameter_block.SetResource("DLSSNR.UIAlpha", resources_.GetUiMask());
     parameter_block.SetResource("DLSSNR.Backbuffer", backbuffer);
   }
 
@@ -395,8 +395,8 @@ void DlssNrPassSession::OnPresent(
   parameter_block.SetUInt("DLSSNR.Reset", feature_.ShouldReset() ? 1u : 0u);
   feature_.MarkEvaluated();
 
-  if (resources_.ui_mask != nullptr) {
-    command_.Transition(command_.GetCommandList(), resources_.ui_mask,
+  if (resources_.GetUiMask() != nullptr) {
+    command_.Transition(command_.GetCommandList(), resources_.GetUiMask(),
                         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   }
 
@@ -412,8 +412,8 @@ void DlssNrPassSession::OnPresent(
           params,
           nullptr);
 
-  if (resources_.ui_mask != nullptr) {
-    command_.Transition(command_.GetCommandList(), resources_.ui_mask,
+  if (resources_.GetUiMask() != nullptr) {
+    command_.Transition(command_.GetCommandList(), resources_.GetUiMask(),
                         D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   }
 
