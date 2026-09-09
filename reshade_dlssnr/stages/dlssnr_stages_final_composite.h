@@ -16,8 +16,6 @@ bool Apply(
     ID3D12Resource* backbuffer,
     unsigned int width,
     unsigned int height,
-    bool use_selected_input,
-    bool ui_mask_generated,
     float luma_strength,
     float chroma_strength);
 
