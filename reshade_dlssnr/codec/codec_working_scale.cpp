@@ -66,14 +66,16 @@ cbuffer Params : register(b0)
 {
     uint  gWidth;
     uint  gHeight;
-    float gLumaStrength;
-    float gChromaStrength;
-    uint  gSoftCompression;
-    float gSoftMaxBrighten;
-    float gSoftMaxDarken;
-    float gSoftMaxChroma;
-    float gSoftKnee;
+    float4 gParams[4];
 };
+
+#define kLumaStrength     gParams[0].x
+#define kChromaStrength   gParams[0].y
+#define kSoftCompression  gParams[0].z
+#define kSoftMaxBrighten  gParams[0].w
+#define kSoftMaxDarken    gParams[1].x
+#define kSoftMaxChroma    gParams[1].y
+#define kSoftKnee         gParams[1].z
 
 Texture2D<float4> gOriginal : register(t0);
 Texture2D<float4> gLowInput : register(t1);
@@ -118,7 +120,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float3 out_rgb = low_enhanced.rgb;
 
     float3 residual;
-    if (gSoftCompression != 0) {
+    if (kSoftCompression != 0) {
         float in_luma = max(dot(in_rgb, float3(0.2126, 0.7152, 0.0722)), 1e-6);
         float out_luma = max(dot(out_rgb, float3(0.2126, 0.7152, 0.0722)), 1e-6);
 
@@ -128,13 +130,13 @@ void CSMain(uint3 id : SV_DispatchThreadID)
             safe_log3(in_rgb) + safe_log(in_luma);
 
         residual_luma = SoftCompress(
-            residual_luma, gSoftMaxBrighten, gSoftMaxDarken, gSoftKnee);
+            residual_luma, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
         residual_chroma.x = SoftCompress(
-            residual_chroma.x, gSoftMaxChroma, gSoftMaxChroma, gSoftKnee);
+            residual_chroma.x, kSoftMaxChroma, kSoftMaxChroma, kSoftKnee);
         residual_chroma.y = SoftCompress(
-            residual_chroma.y, gSoftMaxChroma, gSoftMaxChroma, gSoftKnee);
+            residual_chroma.y, kSoftMaxChroma, kSoftMaxChroma, kSoftKnee);
         residual_chroma.z = SoftCompress(
-            residual_chroma.z, gSoftMaxChroma, gSoftMaxChroma, gSoftKnee);
+            residual_chroma.z, kSoftMaxChroma, kSoftMaxChroma, kSoftKnee);
 
         float edited_luma = in_luma * exp(residual_luma);
         float3 edited_chroma =
@@ -153,15 +155,15 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     // by luma, which causes artifacts in dark areas. No clamping needed.
     float original_y = dot(original.rgb, float3(0.2126, 0.7152, 0.0722));
     float edited_y   = dot(edited,   float3(0.2126, 0.7152, 0.0722));
-    float final_y = lerp(original_y, edited_y, gLumaStrength);
+    float final_y = lerp(original_y, edited_y, kLumaStrength);
 
     float original_cb = (original.b - original_y) / 1.8556;
     float original_cr = (original.r - original_y) / 1.5748;
     float edited_cb   = (edited.b   - edited_y)   / 1.8556;
     float edited_cr   = (edited.r   - edited_y)   / 1.5748;
 
-    float final_cb = lerp(original_cb, edited_cb, gChromaStrength);
-    float final_cr = lerp(original_cr, edited_cr, gChromaStrength);
+    float final_cb = lerp(original_cb, edited_cb, kChromaStrength);
+    float final_cr = lerp(original_cr, edited_cr, kChromaStrength);
 
     float3 final_rgb;
     final_rgb.r = final_y + 1.5748 * final_cr;
