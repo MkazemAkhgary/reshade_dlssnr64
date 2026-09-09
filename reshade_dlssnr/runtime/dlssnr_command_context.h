@@ -7,8 +7,6 @@
 
 #include <unordered_map>
 
-#include "dlss_guides.h"
-
 namespace reshade_dlssnr {
 
 class DlssNrCommandContext {
