@@ -231,10 +231,10 @@ void DlssNrPassSession::OnPresent(
   parameter_block.SetUInt(
       "DLSSNR.UICorrection", pass.ui_correction ? 1u : 0u);
 
-  if (ui_mask_generated && !use_selected_input && resources_.GetUiMask() != nullptr) {
-    parameter_block.SetResource("DLSSNR.UIAlpha", resources_.GetUiMask());
-    parameter_block.SetResource("DLSSNR.Backbuffer", backbuffer);
-  }
+  // UI mask capability is intentionally unused for now. The model supports:
+  //   parameter_block.SetResource("DLSSNR.UIAlpha", <ui_mask_resource>);
+  //   parameter_block.SetResource("DLSSNR.Backbuffer", <backbuffer>);
+  // which will be re-enabled when a reliable UI mask source is available.
 
   if (guides.valid) {
     parameter_block.SetResource("DLSSNR.Depth", guides.depth);
