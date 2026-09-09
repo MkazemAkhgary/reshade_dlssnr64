@@ -85,16 +85,16 @@ bool Run(
       command.GetCommandList(),
       constants,
       debug_input,
-      resources.output);
+      resources.GetOutput());
 
-  command.Transition(command.GetCommandList(), resources.output,
+  command.Transition(command.GetCommandList(), resources.GetOutput(),
                      D3D12_RESOURCE_STATE_COPY_SOURCE);
   command.Transition(command.GetCommandList(), backbuffer,
                      D3D12_RESOURCE_STATE_COPY_DEST);
-  command.GetCommandList()->CopyResource(backbuffer, resources.output);
+  command.GetCommandList()->CopyResource(backbuffer, resources.GetOutput());
   command.Transition(command.GetCommandList(), backbuffer,
                      D3D12_RESOURCE_STATE_PRESENT);
-  command.Transition(command.GetCommandList(), resources.output,
+  command.Transition(command.GetCommandList(), resources.GetOutput(),
                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
   command.GetCommandList()->Close();
