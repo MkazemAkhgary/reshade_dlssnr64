@@ -33,10 +33,6 @@ struct Settings {
   PassSettings pass1;
   PassSettings pass2;
 
-  bool use_selected_pass_as_input = false;
-  float ui_mask_threshold = 0.02f;
-  float ui_mask_softness = 0.06f;
-
   int debug_view = 0;
   int compare_mode = 0;
   float compare_split = 0.5f;
