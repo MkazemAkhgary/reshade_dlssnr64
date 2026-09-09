@@ -192,7 +192,8 @@ void DlssGuides::Capture(
                              ? TypedGuideFormat(motion->GetDesc().Format)
                              : motion->GetDesc().Format)) {
     RetireResource(motion_clone_);
-    motion_clone_ = CreateGuideClone(device, motion, &motion_width_, &motion_height_, &motion_format_);
+    motion_clone_.Attach(
+        CreateGuideClone(device, motion, &motion_width_, &motion_height_, &motion_format_));
   }
 
   if (depth_clone_ == nullptr || motion_clone_ == nullptr) {
