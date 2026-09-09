@@ -14,7 +14,7 @@ bool Generate(
     float threshold,
     float softness) {
   if (codec == nullptr || pre_ui_source == nullptr ||
-      backbuffer == nullptr || resources.ui_mask == nullptr) {
+      backbuffer == nullptr || resources.GetUiMask() == nullptr) {
     return false;
   }
 
@@ -34,7 +34,7 @@ bool Generate(
       constants,
       pre_ui_source,
       backbuffer,
-      resources.ui_mask);
+      resources.GetUiMask());
 
   return true;
 }
