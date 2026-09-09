@@ -4,6 +4,7 @@
 #include <d3d12.h>
 #include <nvsdk_ngx.h>
 #include <windows.h>
+#include <wrl/client.h>
 
 #include <mutex>
 #include <vector>
