@@ -91,7 +91,7 @@ class DlssGuides {
 
   DlssGuideState state_;
 
-  void RetireResource(ID3D12Resource*& resource);
+  void RetireResource(Microsoft::WRL::ComPtr<ID3D12Resource>& resource);
 
   ID3D12Resource* CreateGuideClone(
       ID3D12Device* device,
