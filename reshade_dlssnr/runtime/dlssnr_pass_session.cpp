@@ -117,10 +117,10 @@ void DlssNrPassSession::OnPresent(
   if (pending_selected_pass_ != nullptr) {
     DlssGuides::Get().CaptureSelectedPassIfNeeded(
         command_.GetCommandList(),
-        pending_selected_pass_);
+        pending_selected_pass_.Get());
 
-    DlssGuides::Get().RetireGameResource(pending_selected_pass_);
-    pending_selected_pass_ = nullptr;
+    DlssGuides::Get().RetireGameResource(pending_selected_pass_.Get());
+    pending_selected_pass_.Reset();
   }
 
   if (!feature_.HasFeature()) {
