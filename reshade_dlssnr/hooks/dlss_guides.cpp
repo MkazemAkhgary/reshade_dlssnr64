@@ -226,7 +226,8 @@ void DlssGuides::Capture(
                                ? TypedGuideFormat(target->GetDesc().Format)
                                : target->GetDesc().Format)) {
       RetireResource(pre_ui_clone_);
-      pre_ui_clone_ = CreateGuideClone(device, target, &pre_ui_width_, &pre_ui_height_, &pre_ui_format_);
+      pre_ui_clone_.Attach(
+          CreateGuideClone(device, target, &pre_ui_width_, &pre_ui_height_, &pre_ui_format_));
     }
 
     if (pre_ui_clone_ != nullptr) {
