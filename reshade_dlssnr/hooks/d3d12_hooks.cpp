@@ -271,53 +271,6 @@ void D3D12Hooks::SetTrackingEnabled(bool enabled) {
   g_tracking_enabled = enabled;
 }
 
-void D3D12Hooks::HookCommandList(ID3D12GraphicsCommandList* command_list) {
-  if (command_list == nullptr) return;
-
-  void** vtable = *reinterpret_cast<void***>(command_list);
-  if (vtable == nullptr) return;
-
-  D3D12StateTracker::Get().TrackCommandList(command_list);
-
-  if (g_hooked_command_lists) {
-    return;
-  }
-
-  g_original_set_pipeline_state = reinterpret_cast<PFN_SetPipelineState>(vtable[25]);
-  g_original_set_descriptor_heaps = reinterpret_cast<PFN_SetDescriptorHeaps>(vtable[28]);
-  g_original_set_compute_root_signature = reinterpret_cast<PFN_SetComputeRootSignature>(vtable[29]);
-  g_original_set_graphics_root_signature = reinterpret_cast<PFN_SetGraphicsRootSignature>(vtable[30]);
-  g_original_set_compute_root_descriptor_table = reinterpret_cast<PFN_SetComputeRootDescriptorTable>(vtable[31]);
-  g_original_set_compute_root_32bit_constant = reinterpret_cast<PFN_SetComputeRoot32BitConstant>(vtable[33]);
-  g_original_set_compute_root_32bit_constants = reinterpret_cast<PFN_SetComputeRoot32BitConstants>(vtable[35]);
-  g_original_set_compute_root_cbv = reinterpret_cast<PFN_SetComputeRootConstantBufferView>(vtable[37]);
-  g_original_set_compute_root_srv = reinterpret_cast<PFN_SetComputeRootShaderResourceView>(vtable[39]);
-  g_original_set_compute_root_uav = reinterpret_cast<PFN_SetComputeRootUnorderedAccessView>(vtable[41]);
-
-  DetourTransactionBegin();
-  DetourUpdateThread(GetCurrentThread());
-
-  DetourAttach(reinterpret_cast<void**>(&g_original_set_pipeline_state), HookedSetPipelineState);
-  DetourAttach(reinterpret_cast<void**>(&g_original_set_descriptor_heaps), HookedSetDescriptorHeaps);
-  DetourAttach(reinterpret_cast<void**>(&g_original_set_compute_root_signature), HookedSetComputeRootSignature);
-  DetourAttach(reinterpret_cast<void**>(&g_original_set_graphics_root_signature), HookedSetGraphicsRootSignature);
-  DetourAttach(reinterpret_cast<void**>(&g_original_set_compute_root_descriptor_table), HookedSetComputeRootDescriptorTable);
-  DetourAttach(reinterpret_cast<void**>(&g_original_set_compute_root_32bit_constant), HookedSetComputeRoot32BitConstant);
-  DetourAttach(reinterpret_cast<void**>(&g_original_set_compute_root_32bit_constants), HookedSetComputeRoot32BitConstants);
-  DetourAttach(reinterpret_cast<void**>(&g_original_set_compute_root_cbv), HookedSetComputeRootConstantBufferView);
-  DetourAttach(reinterpret_cast<void**>(&g_original_set_compute_root_srv), HookedSetComputeRootShaderResourceView);
-  DetourAttach(reinterpret_cast<void**>(&g_original_set_compute_root_uav), HookedSetComputeRootUnorderedAccessView);
-
-  if (DetourTransactionCommit() == NO_ERROR) {
-    g_hooked_command_lists = true;
-  }
-}
-
-void D3D12Hooks::UnhookCommandList(ID3D12GraphicsCommandList* command_list) {
-  if (command_list == nullptr) return;
-  D3D12StateTracker::Get().UntrackCommandList(command_list);
-}
-
 void D3D12Hooks::RestoreCommandList(ID3D12GraphicsCommandList* command_list) {
   if (command_list == nullptr) return;
 

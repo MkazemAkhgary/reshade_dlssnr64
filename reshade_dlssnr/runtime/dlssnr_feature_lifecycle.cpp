@@ -90,7 +90,6 @@ bool DlssNrFeatureLifecycle::EnsureFeature(
 
   built_width_ = width;
   built_height_ = height;
-  built_working_scale_ = pass.working_scale;
   built_preset_ = model_value;
   built_intensity_ = pass.intensity;
   built_local_structure_ = pass.local_structure;
@@ -118,7 +117,6 @@ void DlssNrFeatureLifecycle::Shutdown(DlssNrRuntime& runtime) {
 
   built_width_ = 0;
   built_height_ = 0;
-  built_working_scale_ = -1.0f;
   built_preset_ = 0xFFFFFFFFu;
   built_intensity_ = -1.0f;
   built_local_structure_ = -1.0f;

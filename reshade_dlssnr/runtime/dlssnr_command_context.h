@@ -17,19 +17,19 @@ class DlssNrCommandContext {
   void CloseAndSubmit(ID3D12CommandQueue* command_queue);
   void WaitGpu(ID3D12CommandQueue* command_queue);
 
-  // Backward-compatible barrier: transitions a resource and updates tracking.
-  void Barrier(
-      ID3D12GraphicsCommandList* command_list,
-      ID3D12Resource* resource,
-      D3D12_RESOURCE_STATES before,
-      D3D12_RESOURCE_STATES after);
-
   // Auto-tracked transition: uses tracked state (or resource's initial state
   // from its descriptor if not yet tracked) and transitions to `after`.
   void Transition(
       ID3D12GraphicsCommandList* command_list,
       ID3D12Resource* resource,
       D3D12_RESOURCE_STATES after);
+
+  // Copies a source texture into the swapchain backbuffer, handling the
+  // common COPY_SOURCE/COPY_DEST/PRESENT/UNORDERED_ACCESS transitions.
+  void CopyResourceToBackbuffer(
+      ID3D12GraphicsCommandList* command_list,
+      ID3D12Resource* source,
+      ID3D12Resource* backbuffer);
 
   ID3D12GraphicsCommandList* GetCommandList() const { return command_list_.Get(); }
 

@@ -11,15 +11,7 @@
 
 namespace reshade_dlssnr {
 
-enum DlssNrMode : uint32_t {
-  DlssNrMode_Encode = 0,
-  DlssNrMode_Resolve = 1,
-  DlssNrMode_Downsample = 2,
-};
-
 struct alignas(256) DlssNrConstants {
-  uint32_t Mode = 0;
-
   uint32_t Width = 0;
   uint32_t Height = 0;
 

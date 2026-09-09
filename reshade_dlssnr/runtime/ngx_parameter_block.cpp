@@ -5,7 +5,6 @@ namespace reshade_dlssnr {
 namespace {
 
 using PFN_SetUInt = void(__thiscall*)(void*, const char*, unsigned int);
-using PFN_SetInt = void(__thiscall*)(void*, const char*, int);
 using PFN_SetFloat = void(__thiscall*)(void*, const char*, float);
 using PFN_SetULL = void(__thiscall*)(void*, const char*, unsigned long long);
 
@@ -17,23 +16,12 @@ void CallSetUInt(void* params, const char* name, unsigned int value) {
   reinterpret_cast<PFN_SetUInt>(vtable[kNgxSetUIntSlot])(params, name, value);
 }
 
-void CallSetInt(void* params, const char* name, int value) {
-  void** vtable = *reinterpret_cast<void***>(params);
-  reinterpret_cast<PFN_SetInt>(vtable[kNgxSetUIntSlot])(params, name, value);
-}
-
 void CallSetFloat(void* params, const char* name, float value, int slot) {
   void** vtable = *reinterpret_cast<void***>(params);
   reinterpret_cast<PFN_SetFloat>(vtable[slot])(params, name, value);
 }
 
 void CallSetResource(void* params, const char* name, ID3D12Resource* value) {
-  void** vtable = *reinterpret_cast<void***>(params);
-  reinterpret_cast<PFN_SetULL>(vtable[kNgxSetUllSlot])(
-      params, name, static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(value)));
-}
-
-void CallSetPointer(void* params, const char* name, void* value) {
   void** vtable = *reinterpret_cast<void***>(params);
   reinterpret_cast<PFN_SetULL>(vtable[kNgxSetUllSlot])(
       params, name, static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(value)));
@@ -106,20 +94,12 @@ void NgxParameterBlock::SetUInt(const char* name, unsigned int value) {
   if (params_ != nullptr) CallSetUInt(params_, name, value);
 }
 
-void NgxParameterBlock::SetInt(const char* name, int value) {
-  if (params_ != nullptr) CallSetInt(params_, name, value);
-}
-
 void NgxParameterBlock::SetFloat(const char* name, float value) {
   if (params_ != nullptr) CallSetFloat(params_, name, value, float_slot_);
 }
 
 void NgxParameterBlock::SetResource(const char* name, ID3D12Resource* value) {
   if (params_ != nullptr) CallSetResource(params_, name, value);
-}
-
-void NgxParameterBlock::SetPointer(const char* name, void* value) {
-  if (params_ != nullptr) CallSetPointer(params_, name, value);
 }
 
 }  // namespace reshade_dlssnr

@@ -23,7 +23,6 @@ bool Apply(
     if (resources.GetCompositeOutput() == nullptr) return false;
 
     DlssNrConstants constants = {};
-    constants.Mode = DlssNrMode_Encode;
     constants.Width = width;
     constants.Height = height;
     constants.LumaStrength = luma_strength;
@@ -41,29 +40,13 @@ bool Apply(
         backbuffer,
         resources.GetCompositeOutput());
 
-    command.Transition(list, resources.GetCompositeOutput(),
-                       D3D12_RESOURCE_STATE_COPY_SOURCE);
-    command.Transition(list, backbuffer,
-                       D3D12_RESOURCE_STATE_COPY_DEST);
-    list->CopyResource(backbuffer, resources.GetCompositeOutput());
-    command.Transition(list, backbuffer,
-                       D3D12_RESOURCE_STATE_PRESENT);
-    command.Transition(list, resources.GetCompositeOutput(),
-                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    command.CopyResourceToBackbuffer(list, resources.GetCompositeOutput(), backbuffer);
     command.Transition(list, resources.GetOutput(),
                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     return true;
   }
 
-  command.Transition(list, resources.GetOutput(),
-                     D3D12_RESOURCE_STATE_COPY_SOURCE);
-  command.Transition(list, backbuffer,
-                     D3D12_RESOURCE_STATE_COPY_DEST);
-  list->CopyResource(backbuffer, resources.GetOutput());
-  command.Transition(list, backbuffer,
-                     D3D12_RESOURCE_STATE_PRESENT);
-  command.Transition(list, resources.GetOutput(),
-                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  command.CopyResourceToBackbuffer(list, resources.GetOutput(), backbuffer);
   return true;
 }
 

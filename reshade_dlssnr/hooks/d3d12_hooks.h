@@ -14,8 +14,6 @@ class D3D12Hooks {
 
   bool InstallEarlyHooks(ID3D12Device* device);
   void SetTrackingEnabled(bool enabled);
-  void HookCommandList(ID3D12GraphicsCommandList* command_list);
-  void UnhookCommandList(ID3D12GraphicsCommandList* command_list);
   void RestoreCommandList(ID3D12GraphicsCommandList* command_list);
 
  private:
@@ -24,8 +22,6 @@ class D3D12Hooks {
 
   D3D12Hooks(const D3D12Hooks&) = delete;
   D3D12Hooks& operator=(const D3D12Hooks&) = delete;
-
-  std::mutex mutex_;
 };
 
 }  // namespace reshade_dlssnr

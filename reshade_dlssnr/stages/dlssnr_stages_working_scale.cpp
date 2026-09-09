@@ -32,7 +32,6 @@ bool PrepareInput(
   if (full_input == nullptr) return false;
 
   DlssNrConstants constants = {};
-  constants.Mode = DlssNrMode_Downsample;
   constants.Width = work_width;
   constants.Height = work_height;
 
@@ -74,7 +73,6 @@ bool Apply(
   if (!codec->InitUpsampleResidualShader(device)) return false;
 
   DlssNrConstants constants = {};
-  constants.Mode = DlssNrMode_Resolve;
   constants.Width = full_width;
   constants.Height = full_height;
   constants.LumaStrength = luma_strength;
@@ -95,15 +93,8 @@ bool Apply(
       resources.GetWorkingOutput(),
       resources.GetCompositeOutput());
 
-  command.Transition(command.GetCommandList(), resources.GetCompositeOutput(),
-                     D3D12_RESOURCE_STATE_COPY_SOURCE);
-  command.Transition(command.GetCommandList(), backbuffer,
-                     D3D12_RESOURCE_STATE_COPY_DEST);
-  command.GetCommandList()->CopyResource(backbuffer, resources.GetCompositeOutput());
-  command.Transition(command.GetCommandList(), backbuffer,
-                     D3D12_RESOURCE_STATE_PRESENT);
-  command.Transition(command.GetCommandList(), resources.GetCompositeOutput(),
-                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  command.CopyResourceToBackbuffer(
+      command.GetCommandList(), resources.GetCompositeOutput(), backbuffer);
   command.Transition(command.GetCommandList(), resources.GetWorkingOutput(),
                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 

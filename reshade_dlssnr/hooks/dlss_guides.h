@@ -77,7 +77,6 @@ class DlssGuides {
 
   DXGI_FORMAT TypedGuideFormat(DXGI_FORMAT format) const;
   bool IsTypelessFormat(DXGI_FORMAT format) const;
-  D3D12_RESOURCE_STATES InferResourceState(ID3D12Resource* resource) const;
   void Barrier(
       ID3D12GraphicsCommandList* command_list,
       ID3D12Resource* resource,

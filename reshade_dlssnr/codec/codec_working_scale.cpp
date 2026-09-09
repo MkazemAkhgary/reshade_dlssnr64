@@ -9,7 +9,6 @@ bool DlssNrCodec::InitDownsampleShader(ID3D12Device* device) {
   const char* downsample_shader_source = R"(
 cbuffer Params : register(b0)
 {
-    uint  gMode;
     uint  gWidth;
     uint  gHeight;
 };
@@ -65,7 +64,6 @@ bool DlssNrCodec::InitUpsampleResidualShader(ID3D12Device* device) {
   const char* upsample_residual_shader_source = R"(
 cbuffer Params : register(b0)
 {
-    uint  gMode;
     uint  gWidth;
     uint  gHeight;
     float gLumaStrength;

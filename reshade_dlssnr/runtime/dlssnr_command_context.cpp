@@ -1,5 +1,7 @@
 #include "dlssnr_command_context.h"
 
+#include "d3d12_utils.h"
+
 namespace reshade_dlssnr {
 
 bool DlssNrCommandContext::Ensure(ID3D12Device* device) {
@@ -73,24 +75,6 @@ void DlssNrCommandContext::WaitGpu(ID3D12CommandQueue* command_queue) {
   }
 }
 
-void DlssNrCommandContext::Barrier(
-    ID3D12GraphicsCommandList* command_list,
-    ID3D12Resource* resource,
-    D3D12_RESOURCE_STATES before,
-    D3D12_RESOURCE_STATES after) {
-  if (before == after || resource == nullptr || command_list == nullptr) return;
-
-  D3D12_RESOURCE_BARRIER barrier = {};
-  barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-  barrier.Transition.pResource = resource;
-  barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-  barrier.Transition.StateBefore = before;
-  barrier.Transition.StateAfter = after;
-  command_list->ResourceBarrier(1, &barrier);
-
-  resource_states_[resource] = after;
-}
-
 void DlssNrCommandContext::Transition(
     ID3D12GraphicsCommandList* command_list,
     ID3D12Resource* resource,
@@ -98,32 +82,8 @@ void DlssNrCommandContext::Transition(
   if (resource == nullptr || command_list == nullptr) return;
 
   auto it = resource_states_.find(resource);
-  D3D12_RESOURCE_STATES before;
-
-  if (it != resource_states_.end()) {
-    before = it->second;
-  } else {
-    const D3D12_RESOURCE_DESC desc = resource->GetDesc();
-    switch (desc.Dimension) {
-      case D3D12_RESOURCE_DIMENSION_BUFFER:
-        before = D3D12_RESOURCE_STATE_GENERIC_READ;
-        break;
-      case D3D12_RESOURCE_DIMENSION_TEXTURE2D:
-        if ((desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET) != 0) {
-          before = D3D12_RESOURCE_STATE_RENDER_TARGET;
-        } else if ((desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL) != 0) {
-          before = D3D12_RESOURCE_STATE_DEPTH_WRITE;
-        } else if ((desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS) != 0) {
-          before = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-        } else {
-          before = D3D12_RESOURCE_STATE_COMMON;
-        }
-        break;
-      default:
-        before = D3D12_RESOURCE_STATE_COMMON;
-        break;
-    }
-  }
+  const D3D12_RESOURCE_STATES before =
+      it != resource_states_.end() ? it->second : InferResourceState(resource);
 
   if (before == after) {
     resource_states_[resource] = after;
@@ -146,6 +106,19 @@ void DlssNrCommandContext::SetResourceState(
     D3D12_RESOURCE_STATES state) {
   if (resource == nullptr) return;
   resource_states_[resource] = state;
+}
+
+void DlssNrCommandContext::CopyResourceToBackbuffer(
+    ID3D12GraphicsCommandList* command_list,
+    ID3D12Resource* source,
+    ID3D12Resource* backbuffer) {
+  if (command_list == nullptr || source == nullptr || backbuffer == nullptr) return;
+
+  Transition(command_list, source, D3D12_RESOURCE_STATE_COPY_SOURCE);
+  Transition(command_list, backbuffer, D3D12_RESOURCE_STATE_COPY_DEST);
+  command_list->CopyResource(backbuffer, source);
+  Transition(command_list, backbuffer, D3D12_RESOURCE_STATE_PRESENT);
+  Transition(command_list, source, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
 
 void DlssNrCommandContext::Shutdown() {

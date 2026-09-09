@@ -9,7 +9,6 @@ bool DlssNrCodec::InitLumaColorShader(ID3D12Device* device) {
   const char* luma_color_shader_source = R"(
 cbuffer Params : register(b0)
 {
-    uint  gMode;
     uint  gWidth;
     uint  gHeight;
     float gLumaStrength;

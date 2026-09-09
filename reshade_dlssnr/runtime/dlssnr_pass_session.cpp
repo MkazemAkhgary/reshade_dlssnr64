@@ -15,14 +15,6 @@ namespace {
 std::mutex g_session_mutex;
 }
 
-bool DlssNrPassSession::IsReady() const {
-  return feature_.HasFeature() && !failed_;
-}
-
-const char* DlssNrPassSession::GetLastError() const {
-  return failed_ ? reason_ : "";
-}
-
 void DlssNrPassSession::OnPresent(
     DlssNrRuntime& runtime,
     const PassSettings& pass,

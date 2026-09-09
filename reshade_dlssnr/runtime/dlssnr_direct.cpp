@@ -22,7 +22,7 @@ void DlssNrDirect::OnPresent(
 
   const Settings& settings = GetSettings();
   if (!settings.enabled) return;
-  if (failed_ || command_queue == nullptr || swapchain == nullptr) return;
+  if (command_queue == nullptr || swapchain == nullptr) return;
 
   pass1_.OnPresent(
       runtime_,
@@ -47,17 +47,6 @@ void DlssNrDirect::Shutdown() {
   pass1_.Shutdown(runtime_);
   pass2_.Shutdown(runtime_);
   runtime_.Shutdown();
-
-  failed_ = false;
-  reason_ = "";
-}
-
-bool DlssNrDirect::IsReady() const {
-  return pass1_.IsReady() && !failed_;
-}
-
-const char* DlssNrDirect::GetLastError() const {
-  return failed_ ? reason_ : "";
 }
 
 }  // namespace reshade_dlssnr

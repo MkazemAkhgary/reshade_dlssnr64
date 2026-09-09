@@ -32,9 +32,6 @@ class DlssNrPassSession {
 
   void Shutdown(DlssNrRuntime& runtime);
 
-  bool IsReady() const;
-  const char* GetLastError() const;
-
  private:
   DlssNrCommandContext command_;
   DlssNrPassResources resources_;

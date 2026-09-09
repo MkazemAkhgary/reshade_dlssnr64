@@ -7,7 +7,6 @@ namespace reshade_dlssnr {
 
 struct PassSettings {
   int preset = 1;
-  int style = 1;
 
   float local_tone = 1.0f;
   bool ui_correction = true;

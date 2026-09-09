@@ -16,10 +16,8 @@ class NgxParameterBlock {
   NVSDK_NGX_Parameter* Get() const { return params_; }
 
   void SetUInt(const char* name, unsigned int value);
-  void SetInt(const char* name, int value);
   void SetFloat(const char* name, float value);
   void SetResource(const char* name, ID3D12Resource* value);
-  void SetPointer(const char* name, void* value);
 
  private:
   void ProbeFloatSlot();

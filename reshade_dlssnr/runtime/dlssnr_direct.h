@@ -25,9 +25,6 @@ class DlssNrDirect {
 
   void Shutdown();
 
-  bool IsReady() const;
-  const char* GetLastError() const;
-
  private:
   DlssNrDirect()
       : pass1_(&DlssGuides::Get()),
@@ -40,9 +37,6 @@ class DlssNrDirect {
   DlssNrRuntime runtime_;
   DlssNrPassSession pass1_;
   DlssNrPassSession pass2_;
-
-  bool failed_ = false;
-  const char* reason_ = "";
 };
 
 }  // namespace reshade_dlssnr
