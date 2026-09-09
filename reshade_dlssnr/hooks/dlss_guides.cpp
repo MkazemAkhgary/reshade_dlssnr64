@@ -253,10 +253,12 @@ void DlssGuides::Capture(
     }
 
     if (pre_ui_clone_ != nullptr) {
-      Barrier(command_list, target, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+      const D3D12_RESOURCE_STATES target_state =
+          InferResourceState(target);
+      Barrier(command_list, target, target_state, D3D12_RESOURCE_STATE_COPY_SOURCE);
       Barrier(command_list, pre_ui_clone_.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
       command_list->CopyResource(pre_ui_clone_.Get(), target);
-      Barrier(command_list, target, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+      Barrier(command_list, target, D3D12_RESOURCE_STATE_COPY_SOURCE, target_state);
       Barrier(command_list, pre_ui_clone_.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     }
   }
