@@ -41,17 +41,6 @@ void DlssNrDirect::OnPresent(
   }
 }
 
-void DlssNrDirect::SetDebugSelectedResource(uint64_t handle) {
-}
-
-void DlssNrDirect::ClearSelectedPass() {
-  pass1_.SetPendingSelectedPass(nullptr);
-}
-
-void DlssNrDirect::SetPendingSelectedPass(ID3D12Resource* resource) {
-  pass1_.SetPendingSelectedPass(resource);
-}
-
 void DlssNrDirect::Shutdown() {
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
