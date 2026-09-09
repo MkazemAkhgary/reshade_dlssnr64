@@ -36,7 +36,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 )";
 
   return CreateComputePipelineState(
-      device, debug_residual_shader_source, &debug_residual_pipeline_state_);
+      device, debug_residual_shader_source, debug_residual_pipeline_state_.GetAddressOf());
 }
 
 bool DlssNrCodec::DispatchDebugResidual(
@@ -64,7 +64,7 @@ bool DlssNrCodec::DispatchDebugResidual(
   };
 
   return BindAndDispatch(
-      command_list, debug_residual_pipeline_state_, constants, srvs, uavs);
+      command_list, debug_residual_pipeline_state_.Get(), constants, srvs, uavs);
 }
 
 }  // namespace reshade_dlssnr
