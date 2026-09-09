@@ -16,8 +16,8 @@ cbuffer Params : register(b0)
     float gLumaStrength;
     float gChromaStrength;
     uint  gDebugView;
-    float gUiMaskThreshold;
-    float gUiMaskSoftness;
+    float gResidualSuppression;
+    float gResidualThreshold;
     float gMvScaleX;
     float gMvScaleY;
     uint  gGuideWidth;
