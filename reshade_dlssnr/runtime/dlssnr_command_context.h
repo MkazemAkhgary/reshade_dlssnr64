@@ -3,6 +3,7 @@
 
 #include <d3d12.h>
 #include <windows.h>
+#include <wrl/client.h>
 
 #include <unordered_map>
 
@@ -32,14 +33,14 @@ class DlssNrCommandContext {
       ID3D12Resource* resource,
       D3D12_RESOURCE_STATES after);
 
-  ID3D12GraphicsCommandList* GetCommandList() const { return command_list_; }
+  ID3D12GraphicsCommandList* GetCommandList() const { return command_list_.Get(); }
 
   void Shutdown();
 
  private:
-  ID3D12CommandAllocator* command_allocator_ = nullptr;
-  ID3D12GraphicsCommandList* command_list_ = nullptr;
-  ID3D12Fence* fence_ = nullptr;
+  Microsoft::WRL::ComPtr<ID3D12CommandAllocator> command_allocator_;
+  Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> command_list_;
+  Microsoft::WRL::ComPtr<ID3D12Fence> fence_;
   HANDLE fence_event_ = INVALID_HANDLE_VALUE;
   UINT64 fence_value_ = 0;
 
