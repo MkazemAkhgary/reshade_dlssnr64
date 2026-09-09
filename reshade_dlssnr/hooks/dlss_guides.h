@@ -31,12 +31,6 @@ class DlssGuides {
       const NVSDK_NGX_Parameter* params,
       NVSDK_NGX_Feature feature_id);
 
-  void SetSelectedPassHandle(uint64_t handle);
-  void ClearSelectedPass();
-  void CaptureSelectedPassIfNeeded(
-      ID3D12GraphicsCommandList* command_list,
-      ID3D12Resource* selected_pass_source);
-
   DlssGuideState GetState() const;
   void ReleaseRetiredResources();
   void RetireGameResource(ID3D12Resource* resource);
@@ -58,8 +52,6 @@ class DlssGuides {
 
   Microsoft::WRL::ComPtr<ID3D12Resource> depth_clone_;
   Microsoft::WRL::ComPtr<ID3D12Resource> motion_clone_;
-  Microsoft::WRL::ComPtr<ID3D12Resource> pre_ui_clone_;
-  Microsoft::WRL::ComPtr<ID3D12Resource> selected_pass_clone_;
 
   unsigned int depth_width_ = 0;
   unsigned int depth_height_ = 0;
@@ -68,17 +60,6 @@ class DlssGuides {
   unsigned int motion_width_ = 0;
   unsigned int motion_height_ = 0;
   DXGI_FORMAT motion_format_ = DXGI_FORMAT_UNKNOWN;
-
-  unsigned int pre_ui_width_ = 0;
-  unsigned int pre_ui_height_ = 0;
-  DXGI_FORMAT pre_ui_format_ = DXGI_FORMAT_UNKNOWN;
-
-  unsigned int selected_pass_width_ = 0;
-  unsigned int selected_pass_height_ = 0;
-  DXGI_FORMAT selected_pass_format_ = DXGI_FORMAT_UNKNOWN;
-
-  uint64_t selected_pass_handle_ = 0;
-  bool has_selected_pass_handle_ = false;
 
   std::vector<ID3D12Resource*> retired_resources_;
   std::vector<ID3D12Resource*> retired_game_resources_;
