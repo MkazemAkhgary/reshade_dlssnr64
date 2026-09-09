@@ -17,16 +17,6 @@ namespace {
 std::mutex g_session_mutex;
 }
 
-void DlssNrPassSession::SetPendingSelectedPass(ID3D12Resource* resource) {
-  std::lock_guard<std::mutex> lock(g_session_mutex);
-
-  if (pending_selected_pass_ != nullptr) {
-    guides_->RetireGameResource(pending_selected_pass_.Detach());
-  }
-
-  pending_selected_pass_.Attach(resource);
-}
-
 bool DlssNrPassSession::IsReady() const {
   return feature_.HasFeature() && !failed_;
 }
