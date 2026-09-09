@@ -77,8 +77,8 @@ void DrawPassSettings(
     }
   };
 
-  draw_slider("Intensity", &pass.intensity, 0.0f, 2.0f, 1.0f, "%.2f");
-  draw_slider("Local Tone", &pass.local_tone, 0.0f, 2.0f, 1.0f, "%.2f");
+  draw_slider("Intensity", nullptr, &pass.intensity, 0.0f, 2.0f, 1.0f, "%.2f");
+  draw_slider("Local Tone", nullptr, &pass.local_tone, 0.0f, 2.0f, 1.0f, "%.2f");
 
   {
     const float input_button_width =
@@ -124,7 +124,7 @@ void DrawPassSettings(
 
   ImGui::Separator();
 
-  draw_slider("Local Structure", &pass.local_structure,
+  draw_slider("Local Structure", nullptr, &pass.local_structure,
               0.0f, 2.0f, 1.0f, "%.2f");
 
   {
@@ -172,7 +172,7 @@ void DrawPassSettings(
   if (!pass.auto_mask) {
     ImGui::BeginDisabled();
   }
-  draw_slider("Skin Structure", &pass.skin_structure,
+  draw_slider("Skin Structure", nullptr, &pass.skin_structure,
               0.0f, 1.0f, 0.0f, "%.2f");
   if (!pass.auto_mask) {
     ImGui::EndDisabled();
@@ -180,19 +180,31 @@ void DrawPassSettings(
 
   ImGui::Separator();
 
-  draw_slider("Working Scale", &pass.working_scale,
+  draw_slider("Working Scale", nullptr, &pass.working_scale,
               0.25f, 1.0f, 1.0f, "%.2f");
 
   ImGui::Separator();
 
+  // Group dynamic shader params by category.
+  const char* last_category = nullptr;
   for (uint32_t i = 0; i < kShaderParamCount; ++i) {
     const auto& param = kShaderParams[i];
+    if (last_category == nullptr ||
+        strcmp(last_category, param.category) != 0) {
+      if (last_category != nullptr) ImGui::Separator();
+      ImGui::TextUnformatted(param.category);
+      last_category = param.category;
+    }
+
     if (param.is_checkbox) {
       bool checked = pass.params[i] > 0.5f;
       changed |= ImGui::Checkbox(param.name, &checked);
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", param.tooltip);
+      }
       pass.params[i] = checked ? 1.0f : 0.0f;
     } else {
-      draw_slider(param.name, &pass.params[i],
+      draw_slider(param.name, param.tooltip, &pass.params[i],
                   param.min_value, param.max_value,
                   param.default_value, "%.2f");
     }
