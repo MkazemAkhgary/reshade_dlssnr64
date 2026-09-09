@@ -45,10 +45,6 @@ void LoadSettings() {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass2ResidualSuppression", g_settings.pass2.residual_suppression);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass2ResidualThreshold", g_settings.pass2.residual_threshold);
 
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UseSelectedPassAsInput", g_settings.use_selected_pass_as_input);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UIMaskThreshold", g_settings.ui_mask_threshold);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UIMaskSoftness", g_settings.ui_mask_softness);
-
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "DebugView", g_settings.debug_view);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "CompareMode", g_settings.compare_mode);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "CompareSplit", g_settings.compare_split);
@@ -86,10 +82,6 @@ void SaveSettings() {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Pass2WorkingScale", g_settings.pass2.working_scale);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Pass2ResidualSuppression", g_settings.pass2.residual_suppression);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Pass2ResidualThreshold", g_settings.pass2.residual_threshold);
-
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UseSelectedPassAsInput", g_settings.use_selected_pass_as_input);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UIMaskThreshold", g_settings.ui_mask_threshold);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UIMaskSoftness", g_settings.ui_mask_softness);
 
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "DebugView", g_settings.debug_view);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "CompareMode", g_settings.compare_mode);
