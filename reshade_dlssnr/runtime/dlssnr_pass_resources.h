@@ -2,27 +2,28 @@
 #pragma once
 
 #include <d3d12.h>
+#include <wrl/client.h>
 
 namespace reshade_dlssnr {
 
 class DlssNrPassResources {
  public:
-  ID3D12Resource* output = nullptr;
+  Microsoft::WRL::ComPtr<ID3D12Resource> output;
   unsigned int output_width = 0;
   unsigned int output_height = 0;
 
-  ID3D12Resource* ui_mask = nullptr;
+  Microsoft::WRL::ComPtr<ID3D12Resource> ui_mask;
   unsigned int ui_mask_width = 0;
   unsigned int ui_mask_height = 0;
   DXGI_FORMAT ui_mask_format = DXGI_FORMAT_UNKNOWN;
 
-  ID3D12Resource* composite_output = nullptr;
+  Microsoft::WRL::ComPtr<ID3D12Resource> composite_output;
   unsigned int composite_output_width = 0;
   unsigned int composite_output_height = 0;
   DXGI_FORMAT composite_output_format = DXGI_FORMAT_UNKNOWN;
 
-  ID3D12Resource* working_input = nullptr;
-  ID3D12Resource* working_output = nullptr;
+  Microsoft::WRL::ComPtr<ID3D12Resource> working_input;
+  Microsoft::WRL::ComPtr<ID3D12Resource> working_output;
   unsigned int working_width = 0;
   unsigned int working_height = 0;
   DXGI_FORMAT working_format = DXGI_FORMAT_UNKNOWN;
