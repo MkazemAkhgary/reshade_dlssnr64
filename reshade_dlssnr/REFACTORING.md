@@ -31,7 +31,7 @@
 **Goal:** Replace raw `ID3D12Resource*` with `Microsoft::WRL::ComPtr` or custom RAII wrapper.
 **Benefits:** Prevents memory leaks on early returns, simplifies cleanup.
 **Task:** Replace raw pointers throughout codebase.
-**Status:** Not started
+**Status:** Complete — `ComPtr` used in `DlssNrPassResources`, `DlssNrCommandContext`, `DlssNrCodec`, `DlssGuides`, and `DlssNrPassSession::pending_selected_pass_`.
 
 ### 6. Simplify singleton usage where possible
 **Goal:** Reduce global state, make dependencies explicit.
