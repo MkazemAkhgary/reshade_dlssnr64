@@ -136,18 +136,24 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float3 edited = original.rgb + residual;
 
     // Final luma/chroma strength blend (after soft compression).
-    // Use chroma ratios instead of raw chroma to prevent hue shifts and
-    // channel blowup when edited_luma is small.
-    float original_luma = max(dot(original.rgb, float3(0.2126, 0.7152, 0.0722)), 1e-6);
-    float edited_luma = max(dot(edited, float3(0.2126, 0.7152, 0.0722)), 1e-6);
-    float final_luma = lerp(original_luma, edited_luma, gLumaStrength);
+    // Use linear YCbCr (BT.709) color-difference space to avoid division
+    // by luma, which causes artifacts in dark areas. No clamping needed.
+    float original_y = dot(original.rgb, float3(0.2126, 0.7152, 0.0722));
+    float edited_y   = dot(edited,   float3(0.2126, 0.7152, 0.0722));
+    float final_y = lerp(original_y, edited_y, gLumaStrength);
 
-    float3 original_chroma = original.rgb / original_luma;
-    float3 edited_chroma = edited / edited_luma;
-    float3 chroma_ratio = edited_chroma / max(original_chroma, 1e-3);
-    chroma_ratio = lerp(float3(1.0, 1.0, 1.0), chroma_ratio, gChromaStrength);
+    float original_cb = (original.b - original_y) / 1.8556;
+    float original_cr = (original.r - original_y) / 1.5748;
+    float edited_cb   = (edited.b   - edited_y)   / 1.8556;
+    float edited_cr   = (edited.r   - edited_y)   / 1.5748;
 
-    float3 final_rgb = final_luma * original_chroma * chroma_ratio;
+    float final_cb = lerp(original_cb, edited_cb, gChromaStrength);
+    float final_cr = lerp(original_cr, edited_cr, gChromaStrength);
+
+    float3 final_rgb;
+    final_rgb.r = final_y + 1.5748 * final_cr;
+    final_rgb.g = final_y - 0.1873 * final_cb - 0.4681 * final_cr;
+    final_rgb.b = final_y + 1.8556 * final_cb;
 
     gOutput[id.xy] = float4(final_rgb, original.a);
 }
