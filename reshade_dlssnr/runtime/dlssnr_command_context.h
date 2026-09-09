@@ -33,6 +33,8 @@ class DlssNrCommandContext {
 
   ID3D12GraphicsCommandList* GetCommandList() const { return command_list_.Get(); }
 
+  void SetResourceState(ID3D12Resource* resource, D3D12_RESOURCE_STATES state);
+
   void Shutdown();
 
  private:
