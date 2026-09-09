@@ -225,16 +225,20 @@ void DlssGuides::Capture(
     return;
   }
 
-  Barrier(command_list, depth, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE);
+  const D3D12_RESOURCE_STATES depth_state =
+      InferResourceState(depth);
+  Barrier(command_list, depth, depth_state, D3D12_RESOURCE_STATE_COPY_SOURCE);
   Barrier(command_list, depth_clone_.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
   command_list->CopyResource(depth_clone_.Get(), depth);
-  Barrier(command_list, depth, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  Barrier(command_list, depth, D3D12_RESOURCE_STATE_COPY_SOURCE, depth_state);
   Barrier(command_list, depth_clone_.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-  Barrier(command_list, motion, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE);
+  const D3D12_RESOURCE_STATES motion_state =
+      InferResourceState(motion);
+  Barrier(command_list, motion, motion_state, D3D12_RESOURCE_STATE_COPY_SOURCE);
   Barrier(command_list, motion_clone_.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
   command_list->CopyResource(motion_clone_.Get(), motion);
-  Barrier(command_list, motion, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  Barrier(command_list, motion, D3D12_RESOURCE_STATE_COPY_SOURCE, motion_state);
   Barrier(command_list, motion_clone_.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
   // Capture the DLSS output color before UI/post-processing for the UI mask.
