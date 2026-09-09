@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "codec.h"
+#include "dlss_guides.h"
 #include "dlssnr_command_context.h"
 #include "dlssnr_feature_lifecycle.h"
 #include "dlssnr_pass_resources.h"
@@ -19,6 +20,9 @@ namespace reshade_dlssnr {
 
 class DlssNrPassSession {
  public:
+  explicit DlssNrPassSession(DlssGuides* guides)
+      : guides_(guides) {}
+
   void OnPresent(
       DlssNrRuntime& runtime,
       const PassSettings& pass,
