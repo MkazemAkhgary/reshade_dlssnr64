@@ -528,8 +528,7 @@ void DlssNrPassSession::Shutdown(DlssNrRuntime& runtime) {
   command_.Shutdown();
 
   if (pending_selected_pass_ != nullptr) {
-    guides_->RetireGameResource(pending_selected_pass_.Get());
-    pending_selected_pass_.Reset();
+    guides_->RetireGameResource(pending_selected_pass_.Detach());
   }
 
   debug_codec_.reset();
