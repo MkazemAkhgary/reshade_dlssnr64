@@ -63,7 +63,6 @@
   <ItemGroup>
     <ClCompile Include="addon.cpp" />
     <ClCompile Include="codec\codec.cpp" />
-    <ClCompile Include="codec\codec_luma_color.cpp" />
     <ClCompile Include="codec\codec_working_scale.cpp" />
     <ClCompile Include="hooks\d3d12_hooks.cpp" />
     <ClCompile Include="hooks\d3d12_state.cpp" />
@@ -75,7 +74,6 @@
     <ClCompile Include="runtime\dlssnr_pass_session.cpp" />
     <ClCompile Include="runtime\dlssnr_runtime.cpp" />
     <ClCompile Include="runtime\ngx_parameter_block.cpp" />
-    <ClCompile Include="stages\dlssnr_stages_final_composite.cpp" />
     <ClCompile Include="stages\dlssnr_stages_working_scale.cpp" />
     <ClCompile Include="state\settings.cpp" />
     <ClCompile Include="ui\ui.cpp" />
@@ -95,7 +93,6 @@
     <ClInclude Include="runtime\dlssnr_pass_session.h" />
     <ClInclude Include="runtime\dlssnr_runtime.h" />
     <ClInclude Include="runtime\ngx_parameter_block.h" />
-    <ClInclude Include="stages\dlssnr_stages_final_composite.h" />
     <ClInclude Include="stages\dlssnr_stages_working_scale.h" />
     <ClInclude Include="state\settings.h" />
     <ClInclude Include="state\version.h" />
