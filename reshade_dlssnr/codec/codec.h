@@ -15,15 +15,8 @@ struct alignas(256) DlssNrConstants {
   uint32_t Width = 0;
   uint32_t Height = 0;
 
-  float LumaStrength = 1.0f;
-  float ChromaStrength = 1.0f;
-
-  uint32_t SoftCompression = 0;
-  float SoftMaxBrighten = 0.50f;
-  float SoftMaxDarken = 0.50f;
-
-  float SoftMaxChroma = 0.25f;
-  float SoftKnee = 1.00f;
+  // Dynamic shader parameters, indexed by kShaderParams order.
+  float params[16] = {};
 };
 static_assert(sizeof(DlssNrConstants) == 256, "Constants must have a 256-byte CBV allocation size");
 
