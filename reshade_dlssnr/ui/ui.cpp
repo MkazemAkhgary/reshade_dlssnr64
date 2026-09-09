@@ -7,7 +7,6 @@
 
 #include "dlss_guides.h"
 #include "dlssnr_direct.h"
-#include "render_pass_tracker.h"
 #include "settings.h"
 #include "version.h"
 
@@ -221,45 +220,6 @@ void DrawOverlay(reshade::api::effect_runtime*) {
 
   ImGui::Separator();
 
-  {
-    const float input_button_width =
-        (ImGui::GetContentRegionAvail().x - kControlLabelWidth) / 2.0f -
-        ImGui::GetStyle().ItemSpacing.x;
-
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Model Input");
-    ImGui::SameLine(kControlLabelWidth);
-
-    const bool selected_pass_active = settings.use_selected_pass_as_input;
-    const bool backbuffer_active = !settings.use_selected_pass_as_input;
-
-    if (selected_pass_active) {
-      ImGui::PushStyleColor(ImGuiCol_Button,
-                            ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-    }
-    if (ImGui::Button("Selected Pass", ImVec2(input_button_width, 0.0f))) {
-      settings.use_selected_pass_as_input = true;
-      changed = true;
-    }
-    if (selected_pass_active) {
-      ImGui::PopStyleColor();
-    }
-
-    ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
-
-    if (backbuffer_active) {
-      ImGui::PushStyleColor(ImGuiCol_Button,
-                            ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-    }
-    if (ImGui::Button("Backbuffer", ImVec2(input_button_width, 0.0f))) {
-      settings.use_selected_pass_as_input = false;
-      changed = true;
-    }
-    if (backbuffer_active) {
-      ImGui::PopStyleColor();
-    }
-  }
-
   auto draw_slider = [&](const char* label, float* value,
                          float min_value, float max_value,
                          float reset_value, const char* format) {
@@ -278,20 +238,9 @@ void DrawOverlay(reshade::api::effect_runtime*) {
     }
   };
 
-  draw_slider("UI Mask Threshold", &settings.ui_mask_threshold,
-              0.0f, 0.2f, 0.02f, "%.3f");
-  draw_slider("UI Mask Softness", &settings.ui_mask_softness,
-              0.0f, 0.2f, 0.06f, "%.3f");
-
   {
     static const char* debug_names[] = {
         "Off",
-        "Color (model input)",
-        "Depth (guide)",
-        "Motion (guide)",
-        "UI Mask",
-        "DLSS Stage (pre-UI)",
-        "Selected Pass Resource",
         "Working Input",
         "Working Output",
         "Working Residual",
@@ -302,108 +251,6 @@ void DrawOverlay(reshade::api::effect_runtime*) {
     ImGui::SetNextItemWidth(-1.0f);
     changed |= ImGui::Combo("##Debug View", &settings.debug_view,
                             debug_names, IM_ARRAYSIZE(debug_names));
-
-    if (settings.debug_view == 4) {
-      if (settings.use_selected_pass_as_input) {
-        ImGui::TextUnformatted("UI Mask: composited manually after model.");
-      } else {
-        ImGui::TextUnformatted("UI Mask: passed to model.");
-      }
-    }
-  }
-
-  ImGui::Separator();
-
-  static bool first_pass_frame = true;
-  if (first_pass_frame) {
-    ImGui::SetNextItemOpen(false, ImGuiCond_Once);
-    first_pass_frame = false;
-  }
-
-  if (ImGui::CollapsingHeader("Render Passes")) {
-    RenderPassTracker& tracker = RenderPassTracker::Get();
-
-    bool freeze = tracker.IsFreezeRenderPassList();
-    if (ImGui::Checkbox("Freeze render pass list", &freeze)) {
-      tracker.SetFreezeRenderPassList(freeze);
-    }
-
-    ImGui::BeginChild("##RenderPassScrolling", ImVec2(0.0f, 300.0f), true);
-
-    if (tracker.HasBackbufferDescription()) {
-      const auto& desc = tracker.BackbufferDescription();
-      ImGui::Text(
-          "Backbuffer: %ux%u format=%u native=0x%llx",
-          desc.texture.width,
-          desc.texture.height,
-          static_cast<uint32_t>(desc.texture.format),
-          static_cast<unsigned long long>(tracker.BackbufferNativeHandle()));
-    }
-
-    const auto& display_passes = tracker.DisplayPasses();
-    for (size_t i = 0; i < display_passes.size(); ++i) {
-      const auto& pass = display_passes[i];
-
-      std::string label;
-      label += std::to_string(static_cast<unsigned long long>(pass.index));
-      label += ": ";
-      label += std::to_string(pass.width);
-      label += "x";
-      label += std::to_string(pass.height);
-      label += " fmt=";
-      label += std::to_string(pass.format);
-      label += " draws=";
-      label += std::to_string(pass.draw_count);
-      label += " vp=";
-      label += std::to_string(static_cast<int>(pass.viewport_width));
-      label += "x";
-      label += std::to_string(static_cast<int>(pass.viewport_height));
-      label += " id=0x";
-
-      char id_buffer[32] = {};
-      sprintf_s(id_buffer, "%llx",
-                static_cast<unsigned long long>(pass.target_handle));
-      label += id_buffer;
-
-      if (pass.is_backbuffer_resource) {
-        label += " [BB]";
-      }
-
-      const bool is_selected =
-          tracker.IsSelectedPassSet() &&
-          pass.target_handle == tracker.SelectedPassHandle();
-
-      if (is_selected) {
-        label += " <selected>";
-      }
-
-      if (ImGui::Selectable(label.c_str(), is_selected)) {
-        if (is_selected) {
-          tracker.DeselectPass();
-          DlssNrDirect::Get().ClearSelectedPass();
-          DlssGuides::Get().ClearSelectedPass();
-        } else {
-          tracker.SelectPass(pass.target_handle);
-          DlssNrDirect::Get().SetDebugSelectedResource(pass.target_handle);
-          DlssGuides::Get().SetSelectedPassHandle(pass.target_handle);
-        }
-      }
-    }
-
-    if (tracker.IsSelectedPassSet()) {
-      ImGui::Separator();
-      ImGui::Text(
-          "Selected pass target: 0x%llx",
-          static_cast<unsigned long long>(tracker.SelectedPassHandle()));
-      ImGui::SameLine();
-      if (ImGui::SmallButton("Deselect")) {
-        tracker.DeselectPass();
-        DlssNrDirect::Get().ClearSelectedPass();
-        DlssGuides::Get().ClearSelectedPass();
-      }
-    }
-
-    ImGui::EndChild();
   }
 
   if (changed) {
