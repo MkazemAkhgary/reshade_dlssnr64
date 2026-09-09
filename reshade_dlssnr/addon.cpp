@@ -12,7 +12,6 @@
 #include "dlss_guides.h"
 #include "dlssnr_direct.h"
 #include "nvngx_hook_compat.h"
-#include "render_pass_tracker.h"
 #include "settings.h"
 #include "ui.h"
 
@@ -20,9 +19,6 @@ namespace {
 
 bool g_initialized = false;
 HMODULE g_nvngx_dlss_module = nullptr;
-
-reshade_dlssnr::RenderPassTracker& g_render_pass_tracker =
-    reshade_dlssnr::RenderPassTracker::Get();
 
 
 void PinAddonModule() {
