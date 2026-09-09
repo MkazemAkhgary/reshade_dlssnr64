@@ -45,10 +45,6 @@ void LoadSettings() {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass2ResidualSuppression", g_settings.pass2.residual_suppression);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Pass2ResidualThreshold", g_settings.pass2.residual_threshold);
 
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "CompareMode", g_settings.compare_mode);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "CompareSplit", g_settings.compare_split);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "CompareZoom", g_settings.compare_zoom);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "CompareSwap", g_settings.compare_swap);
 }
 
 void SaveSettings() {
@@ -82,10 +78,6 @@ void SaveSettings() {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Pass2ResidualSuppression", g_settings.pass2.residual_suppression);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Pass2ResidualThreshold", g_settings.pass2.residual_threshold);
 
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "CompareMode", g_settings.compare_mode);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "CompareSplit", g_settings.compare_split);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "CompareZoom", g_settings.compare_zoom);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "CompareSwap", g_settings.compare_swap);
 }
 
 }  // namespace reshade_dlssnr
