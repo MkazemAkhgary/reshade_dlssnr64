@@ -12,11 +12,6 @@ class DlssNrPassResources {
   unsigned int output_width = 0;
   unsigned int output_height = 0;
 
-  Microsoft::WRL::ComPtr<ID3D12Resource> ui_mask;
-  unsigned int ui_mask_width = 0;
-  unsigned int ui_mask_height = 0;
-  DXGI_FORMAT ui_mask_format = DXGI_FORMAT_UNKNOWN;
-
   Microsoft::WRL::ComPtr<ID3D12Resource> composite_output;
   unsigned int composite_output_width = 0;
   unsigned int composite_output_height = 0;
@@ -29,7 +24,6 @@ class DlssNrPassResources {
   DXGI_FORMAT working_format = DXGI_FORMAT_UNKNOWN;
 
   bool EnsureOutput(ID3D12Device* device, const D3D12_RESOURCE_DESC& desc);
-  bool EnsureUiMask(ID3D12Device* device, const D3D12_RESOURCE_DESC& desc);
   bool EnsureCompositeOutput(ID3D12Device* device, const D3D12_RESOURCE_DESC& desc);
   bool EnsureWorkingResources(
       ID3D12Device* device,
@@ -40,7 +34,6 @@ class DlssNrPassResources {
   void Shutdown();
 
   ID3D12Resource* GetOutput() const { return output.Get(); }
-  ID3D12Resource* GetUiMask() const { return ui_mask.Get(); }
   ID3D12Resource* GetCompositeOutput() const { return composite_output.Get(); }
   ID3D12Resource* GetWorkingInput() const { return working_input.Get(); }
   ID3D12Resource* GetWorkingOutput() const { return working_output.Get(); }
