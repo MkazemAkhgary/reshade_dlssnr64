@@ -21,11 +21,8 @@ struct PassSettings {
 
   float working_scale = 1.0f;
 
-  bool soft_compression = false;
-  float soft_max_brighten = 0.50f;
-  float soft_max_darken = 0.50f;
-  float soft_max_chroma = 0.25f;
-  float soft_knee = 1.00f;
+  // Dynamic shader parameter values, indexed by kShaderParams order.
+  float params[16] = {};
 };
 
 struct Settings {
