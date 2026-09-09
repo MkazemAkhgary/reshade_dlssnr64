@@ -21,7 +21,7 @@ bool RunDebugView(
     return false;
   }
 
-  if (debug_view == 9) {
+  if (debug_view == 3) {
     if (!codec->InitDebugResidualShader(device)) return false;
 
     DlssNrConstants constants = {};
@@ -59,7 +59,7 @@ bool RunDebugView(
   }
 
   ID3D12Resource* debug_source =
-      debug_view == 7 ? model_input : model_output;
+      debug_view == 1 ? model_input : model_output;
 
   if (debug_source == nullptr) return false;
 
