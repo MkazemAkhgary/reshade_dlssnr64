@@ -28,9 +28,6 @@ struct alignas(256) DlssNrConstants {
   float ChromaStrength = 1.0f;
 
   uint32_t DebugView = 0;
-  float UiMaskThreshold = 0.02f;
-  float UiMaskSoftness = 0.06f;
-
   float ResidualSuppression = 0.85f;
   float ResidualThreshold = 0.10f;
 
