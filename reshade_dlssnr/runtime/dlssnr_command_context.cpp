@@ -149,20 +149,9 @@ void DlssNrCommandContext::Shutdown() {
     fence_event_ = INVALID_HANDLE_VALUE;
   }
 
-  if (fence_ != nullptr) {
-    fence_->Release();
-    fence_ = nullptr;
-  }
-
-  if (command_list_ != nullptr) {
-    command_list_->Release();
-    command_list_ = nullptr;
-  }
-
-  if (command_allocator_ != nullptr) {
-    command_allocator_->Release();
-    command_allocator_ = nullptr;
-  }
+  fence_.Reset();
+  command_list_.Reset();
+  command_allocator_.Reset();
 
   fence_value_ = 0;
 }
