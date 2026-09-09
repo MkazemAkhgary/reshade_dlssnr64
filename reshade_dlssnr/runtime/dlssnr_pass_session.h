@@ -42,6 +42,8 @@ class DlssNrPassSession {
   DlssNrPassResources resources_;
   DlssNrFeatureLifecycle feature_;
 
+  DlssGuides* guides_ = nullptr;
+
   ID3D12CommandQueue* command_queue_ = nullptr;
   std::unique_ptr<DlssNrCodec> debug_codec_;
 
