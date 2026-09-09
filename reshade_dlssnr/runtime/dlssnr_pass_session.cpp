@@ -6,9 +6,7 @@
 #include <reshade.hpp>
 
 #include "dlss_guides.h"
-#include "dlssnr_stages_debug.h"
 #include "dlssnr_stages_final_composite.h"
-#include "dlssnr_stages_ui_mask.h"
 #include "dlssnr_stages_working_scale.h"
 
 namespace reshade_dlssnr {
