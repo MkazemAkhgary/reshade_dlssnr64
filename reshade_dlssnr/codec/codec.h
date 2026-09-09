@@ -20,6 +20,13 @@ struct alignas(256) DlssNrConstants {
 
   float ResidualSuppression = 0.85f;
   float ResidualThreshold = 0.10f;
+
+  uint32_t SoftCompression = 0;
+  float SoftMaxBrighten = 0.50f;
+  float SoftMaxDarken = 0.50f;
+
+  float SoftMaxChroma = 0.25f;
+  float SoftKnee = 1.00f;
 };
 static_assert(sizeof(DlssNrConstants) == 256, "Constants must have a 256-byte CBV allocation size");
 

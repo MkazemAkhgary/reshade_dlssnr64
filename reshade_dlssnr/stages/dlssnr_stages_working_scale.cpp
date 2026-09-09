@@ -65,7 +65,12 @@ bool Apply(
     float luma_strength,
     float chroma_strength,
     float residual_suppression,
-    float residual_threshold) {
+    float residual_threshold,
+    bool soft_compression,
+    float soft_max_brighten,
+    float soft_max_darken,
+    float soft_max_chroma,
+    float soft_knee) {
   if (!use_working_scale || codec == nullptr || backbuffer == nullptr) {
     return false;
   }
@@ -79,6 +84,11 @@ bool Apply(
   constants.ChromaStrength = chroma_strength;
   constants.ResidualSuppression = residual_suppression;
   constants.ResidualThreshold = residual_threshold;
+  constants.SoftCompression = soft_compression ? 1u : 0u;
+  constants.SoftMaxBrighten = soft_max_brighten;
+  constants.SoftMaxDarken = soft_max_darken;
+  constants.SoftMaxChroma = soft_max_chroma;
+  constants.SoftKnee = soft_knee;
 
   command.Transition(command.GetCommandList(), resources.GetWorkingOutput(),
                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);

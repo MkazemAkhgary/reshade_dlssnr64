@@ -55,6 +55,21 @@ void LoadPassSettings(const char* prefix, PassSettings& pass) {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             (std::string(prefix) + "ResidualThreshold").c_str(),
                             pass.residual_threshold);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (std::string(prefix) + "SoftCompression").c_str(),
+                            pass.soft_compression);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (std::string(prefix) + "SoftMaxBrighten").c_str(),
+                            pass.soft_max_brighten);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (std::string(prefix) + "SoftMaxDarken").c_str(),
+                            pass.soft_max_darken);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (std::string(prefix) + "SoftMaxChroma").c_str(),
+                            pass.soft_max_chroma);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (std::string(prefix) + "SoftKnee").c_str(),
+                            pass.soft_knee);
 }
 
 void SavePassSettings(const char* prefix, const PassSettings& pass) {
@@ -94,6 +109,21 @@ void SavePassSettings(const char* prefix, const PassSettings& pass) {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             (std::string(prefix) + "ResidualThreshold").c_str(),
                             pass.residual_threshold);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (std::string(prefix) + "SoftCompression").c_str(),
+                            pass.soft_compression);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (std::string(prefix) + "SoftMaxBrighten").c_str(),
+                            pass.soft_max_brighten);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (std::string(prefix) + "SoftMaxDarken").c_str(),
+                            pass.soft_max_darken);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (std::string(prefix) + "SoftMaxChroma").c_str(),
+                            pass.soft_max_chroma);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (std::string(prefix) + "SoftKnee").c_str(),
+                            pass.soft_knee);
 }
 
 }  // namespace

@@ -259,7 +259,12 @@ void DlssNrPassSession::OnPresent(
             pass.luma_strength,
             pass.chroma_strength,
             pass.residual_suppression,
-            pass.residual_threshold)) {
+            pass.residual_threshold,
+            pass.soft_compression,
+            pass.soft_max_brighten,
+            pass.soft_max_darken,
+            pass.soft_max_chroma,
+            pass.soft_knee)) {
       failed_ = true;
       reason_ = "failed to apply working scale";
       return;

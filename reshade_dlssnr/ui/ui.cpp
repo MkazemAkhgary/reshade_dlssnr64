@@ -186,6 +186,25 @@ void DrawPassSettings(
   draw_slider("Residual Threshold", &pass.residual_threshold,
               0.0f, 0.2f, 0.02f, "%.3f");
 
+  ImGui::Separator();
+
+  changed |= ImGui::Checkbox("Soft Compression", &pass.soft_compression);
+
+  if (!pass.soft_compression) {
+    ImGui::BeginDisabled();
+  }
+  draw_slider("Max Brighten", &pass.soft_max_brighten,
+              0.0f, 2.0f, 0.50f, "%.2f");
+  draw_slider("Max Darken", &pass.soft_max_darken,
+              0.0f, 2.0f, 0.50f, "%.2f");
+  draw_slider("Max Chroma", &pass.soft_max_chroma,
+              0.0f, 1.0f, 0.25f, "%.2f");
+  draw_slider("Soft Knee", &pass.soft_knee,
+              0.0f, 4.0f, 1.00f, "%.2f");
+  if (!pass.soft_compression) {
+    ImGui::EndDisabled();
+  }
+
   ImGui::PopID();
   ImGui::EndTabItem();
 }

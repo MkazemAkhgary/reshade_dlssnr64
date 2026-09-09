@@ -38,6 +38,11 @@ bool Apply(
     float luma_strength,
     float chroma_strength,
     float residual_suppression,
-    float residual_threshold);
+    float residual_threshold,
+    bool soft_compression,
+    float soft_max_brighten,
+    float soft_max_darken,
+    float soft_max_chroma,
+    float soft_knee);
 
 }  // namespace reshade_dlssnr::dlssnr_stages_working_scale

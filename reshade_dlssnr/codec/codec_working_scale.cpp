@@ -70,6 +70,11 @@ cbuffer Params : register(b0)
     float gChromaStrength;
     float gResidualSuppression;
     float gResidualThreshold;
+    uint  gSoftCompression;
+    float gSoftMaxBrighten;
+    float gSoftMaxDarken;
+    float gSoftMaxChroma;
+    float gSoftKnee;
 };
 
 Texture2D<float4> gOriginal : register(t0);
@@ -77,6 +82,15 @@ Texture2D<float4> gLowInput : register(t1);
 Texture2D<float4> gLowEnhanced : register(t2);
 RWTexture2D<float4> gOutput : register(u0);
 SamplerState s0 : register(s0);
+
+float SoftCompress(float x, float max_pos, float max_neg, float knee)
+{
+    knee = max(knee, 1e-6);
+    if (x >= 0.0)
+        return max_pos * x / (max_pos + knee * abs(x));
+    else
+        return max_neg * x / (max_neg + knee * abs(x));
+}
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)
@@ -89,6 +103,37 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float4 original = gOriginal.SampleLevel(s0, uv, 0);
     float4 low_input = gLowInput.SampleLevel(s0, uv, 0);
     float4 low_enhanced = gLowEnhanced.SampleLevel(s0, uv, 0);
+
+    if (gSoftCompression != 0) {
+        float3 in_rgb = low_input.rgb;
+        float3 out_rgb = low_enhanced.rgb;
+
+        float in_luma = max(dot(in_rgb, float3(0.2126, 0.7152, 0.0722)), 1e-6);
+        float out_luma = max(dot(out_rgb, float3(0.2126, 0.7152, 0.0722)), 1e-6);
+
+        float residual_luma = log(out_luma) - log(in_luma);
+        float3 residual_chroma =
+            log(out_rgb / out_luma) - log(in_rgb / in_luma);
+
+        residual_luma = SoftCompress(
+            residual_luma, gSoftMaxBrighten, gSoftMaxDarken, gSoftKnee);
+        residual_chroma.x = SoftCompress(
+            residual_chroma.x, gSoftMaxChroma, gSoftMaxChroma, gSoftKnee);
+        residual_chroma.y = SoftCompress(
+            residual_chroma.y, gSoftMaxChroma, gSoftMaxChroma, gSoftKnee);
+        residual_chroma.z = SoftCompress(
+            residual_chroma.z, gSoftMaxChroma, gSoftMaxChroma, gSoftKnee);
+
+        float edited_luma = in_luma * exp(residual_luma);
+        float3 edited_chroma =
+            exp(log(in_rgb / in_luma) + residual_chroma);
+        float3 edited_rgb = edited_luma * edited_chroma;
+
+        float3 edited_diff = edited_rgb - in_rgb;
+
+        gOutput[id.xy] = float4(original.rgb + edited_diff, original.a);
+        return;
+    }
 
     float low_input_luma = dot(low_input.rgb, float3(0.2126, 0.7152, 0.0722));
     float low_enhanced_luma = dot(low_enhanced.rgb, float3(0.2126, 0.7152, 0.0722));
