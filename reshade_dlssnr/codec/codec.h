@@ -32,8 +32,8 @@ struct alignas(256) DlssNrConstants {
 static_assert(sizeof(DlssNrConstants) == 256, "Constants must have a 256-byte CBV allocation size");
 
 constexpr uint32_t kDlssNrHeapCount = 16;
-constexpr uint32_t kDlssNrSrvCount = 5;
-constexpr uint32_t kDlssNrUavCount = 2;
+constexpr uint32_t kDlssNrSrvCount = 3;
+constexpr uint32_t kDlssNrUavCount = 1;
 constexpr uint32_t kDlssNrCbvCount = 1;
 constexpr uint32_t kDlssNrPerDispatchDescriptors = kDlssNrSrvCount + kDlssNrUavCount + kDlssNrCbvCount;
 
