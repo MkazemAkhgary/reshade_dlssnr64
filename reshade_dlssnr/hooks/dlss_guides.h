@@ -14,14 +14,8 @@ namespace reshade_dlssnr {
 struct DlssGuideState {
   ID3D12Resource* depth = nullptr;
   ID3D12Resource* motion = nullptr;
-  ID3D12Resource* pre_ui_color = nullptr;
-  ID3D12Resource* selected_pass_color = nullptr;
   unsigned int guide_width = 0;
   unsigned int guide_height = 0;
-  unsigned int color_width = 0;
-  unsigned int color_height = 0;
-  unsigned int selected_width = 0;
-  unsigned int selected_height = 0;
   float mv_scale_x = 1.0f;
   float mv_scale_y = 1.0f;
   bool depth_inverted = false;
