@@ -189,7 +189,7 @@ bool DlssNrCodec::CreateRootSignature(ID3D12Device* device) {
           0,
           signature->GetBufferPointer(),
           signature->GetBufferSize(),
-          IID_PPV_ARGS(&root_signature_)))) {
+          IID_PPV_ARGS(root_signature_.GetAddressOf())))) {
     signature->Release();
     return false;
   }
