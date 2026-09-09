@@ -2,6 +2,8 @@
 
 #include <reshade.hpp>
 
+#include <string>
+
 namespace reshade_dlssnr {
 
 namespace {
