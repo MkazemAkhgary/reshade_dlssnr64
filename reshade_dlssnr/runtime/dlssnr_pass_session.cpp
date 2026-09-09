@@ -26,36 +26,32 @@ void DlssNrPassSession::OnPresent(
   if (!settings.enabled) return;
   if (failed_ || command_queue == nullptr || swapchain == nullptr) return;
 
-  IDXGISwapChain3* swapchain3 = nullptr;
+  Microsoft::WRL::ComPtr<IDXGISwapChain3> swapchain3;
   if (FAILED(swapchain->QueryInterface(IID_PPV_ARGS(&swapchain3))) ||
       swapchain3 == nullptr) {
     return;
   }
 
-  ID3D12Device* device = nullptr;
+  Microsoft::WRL::ComPtr<ID3D12Device> device;
   if (FAILED(command_queue->GetDevice(IID_PPV_ARGS(&device))) || device == nullptr) {
     return;
   }
 
-  if (!runtime.Initialize(device) || !command_.Ensure(device)) {
+  if (!runtime.Initialize(device.Get()) || !command_.Ensure(device.Get())) {
     failed_ = true;
     reason_ = runtime.GetLastError();
     reshade::log::message(reshade::log::level::error, reason_);
-    swapchain3->Release();
-    device->Release();
     return;
   }
 
   command_queue_ = command_queue;
 
   const UINT back_buffer_index = swapchain3->GetCurrentBackBufferIndex();
-  ID3D12Resource* backbuffer = nullptr;
+  Microsoft::WRL::ComPtr<ID3D12Resource> backbuffer;
 
   if (FAILED(swapchain3->GetBuffer(
           back_buffer_index,
           IID_PPV_ARGS(&backbuffer))) || backbuffer == nullptr) {
-    swapchain3->Release();
-    device->Release();
     return;
   }
 
@@ -71,28 +67,22 @@ void DlssNrPassSession::OnPresent(
   const bool use_working_scale =
       work_width != width || work_height != height;
 
-  if (!resources_.EnsureOutput(device, desc) ||
-      !resources_.EnsureCompositeOutput(device, desc)) {
+  if (!resources_.EnsureOutput(device.Get(), desc) ||
+      !resources_.EnsureCompositeOutput(device.Get(), desc)) {
     failed_ = true;
     reason_ = "failed to create DLSSNR pass resources";
-    backbuffer->Release();
-    swapchain3->Release();
-    device->Release();
     return;
   }
 
   if (use_working_scale &&
-      !resources_.EnsureWorkingResources(device, desc, work_width, work_height)) {
+      !resources_.EnsureWorkingResources(device.Get(), desc, work_width, work_height)) {
     failed_ = true;
     reason_ = "failed to create DLSSNR working resources";
-    backbuffer->Release();
-    swapchain3->Release();
-    device->Release();
     return;
   }
 
   command_.Reset();
-  command_.SetResourceState(backbuffer, D3D12_RESOURCE_STATE_PRESENT);
+  command_.SetResourceState(backbuffer.Get(), D3D12_RESOURCE_STATE_PRESENT);
 
   if (!feature_.HasFeature()) {
     const unsigned int create_width = use_working_scale ? work_width : width;
@@ -106,9 +96,6 @@ void DlssNrPassSession::OnPresent(
             create_height)) {
       failed_ = true;
       command_.GetCommandList()->Close();
-      backbuffer->Release();
-      swapchain3->Release();
-      device->Release();
       return;
     }
 
@@ -121,9 +108,6 @@ void DlssNrPassSession::OnPresent(
     reshade::log::message(
         reshade::log::level::info,
         "Direct DLSSNR feature created; skipping evaluation this frame");
-    backbuffer->Release();
-    swapchain3->Release();
-    device->Release();
     return;
   }
 
@@ -135,13 +119,10 @@ void DlssNrPassSession::OnPresent(
     debug_codec_ = std::make_unique<DlssNrCodec>();
   }
 
-  if (!debug_codec_->IsInit() && !debug_codec_->Init(device)) {
+  if (!debug_codec_->IsInit() && !debug_codec_->Init(device.Get())) {
     failed_ = true;
     reason_ = "failed to initialize debug codec";
     reshade::log::message(reshade::log::level::error, reason_);
-    backbuffer->Release();
-    swapchain3->Release();
-    device->Release();
     return;
   }
 
@@ -151,8 +132,8 @@ void DlssNrPassSession::OnPresent(
   unsigned int eval_height = height;
 
   if (use_working_scale) {
-    if (model_input == backbuffer) {
-      command_.Transition(command_.GetCommandList(), backbuffer,
+    if (model_input == backbuffer.Get()) {
+      command_.Transition(command_.GetCommandList(), backbuffer.Get(),
                           D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     }
 
@@ -160,7 +141,7 @@ void DlssNrPassSession::OnPresent(
             command_,
             resources_,
             debug_codec_.get(),
-            device,
+            device.Get(),
             model_input,
             &model_color,
             &model_output,
@@ -173,9 +154,6 @@ void DlssNrPassSession::OnPresent(
             true)) {
       failed_ = true;
       reason_ = "failed to prepare working scale input";
-      backbuffer->Release();
-      swapchain3->Release();
-      device->Release();
       return;
     }
   }
@@ -255,7 +233,7 @@ void DlssNrPassSession::OnPresent(
   feature_.MarkEvaluated();
 
   if (!use_working_scale) {
-    command_.Transition(command_.GetCommandList(), backbuffer,
+    command_.Transition(command_.GetCommandList(), backbuffer.Get(),
                         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   }
 
@@ -271,8 +249,8 @@ void DlssNrPassSession::OnPresent(
             command_,
             resources_,
             debug_codec_.get(),
-            device,
-            backbuffer,
+            device.Get(),
+            backbuffer.Get(),
             width,
             height,
             work_width,
@@ -284,9 +262,6 @@ void DlssNrPassSession::OnPresent(
             pass.residual_threshold)) {
       failed_ = true;
       reason_ = "failed to apply working scale";
-      backbuffer->Release();
-      swapchain3->Release();
-      device->Release();
       return;
     }
 
@@ -296,9 +271,6 @@ void DlssNrPassSession::OnPresent(
     command_.WaitGpu(command_queue_);
     guides_->ReleaseRetiredGameResources();
 
-    backbuffer->Release();
-    swapchain3->Release();
-    device->Release();
     return;
   }
 
@@ -306,17 +278,14 @@ void DlssNrPassSession::OnPresent(
           command_,
           resources_,
           debug_codec_.get(),
-          device,
-          backbuffer,
+          device.Get(),
+          backbuffer.Get(),
           width,
           height,
           pass.luma_strength,
           pass.chroma_strength)) {
     failed_ = true;
     reason_ = "failed to apply final composite";
-    backbuffer->Release();
-    swapchain3->Release();
-    device->Release();
     return;
   }
 
@@ -331,10 +300,6 @@ void DlssNrPassSession::OnPresent(
     reason_ = "DLSSNR EvaluateFeature failed";
     reshade::log::message(reshade::log::level::error, reason_);
   }
-
-  backbuffer->Release();
-  swapchain3->Release();
-  device->Release();
 }
 
 void DlssNrPassSession::Shutdown(DlssNrRuntime& runtime) {
