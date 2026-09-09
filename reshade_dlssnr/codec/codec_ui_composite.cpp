@@ -48,7 +48,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 )";
 
   return CreateComputePipelineState(
-      device, composite_shader_source, &composite_pipeline_state_);
+      device, composite_shader_source, composite_pipeline_state_.GetAddressOf());
 }
 
 bool DlssNrCodec::DispatchComposite(
@@ -78,7 +78,7 @@ bool DlssNrCodec::DispatchComposite(
   };
 
   return BindAndDispatch(
-      command_list, composite_pipeline_state_, constants, srvs, uavs);
+      command_list, composite_pipeline_state_.Get(), constants, srvs, uavs);
 }
 
 }  // namespace reshade_dlssnr
