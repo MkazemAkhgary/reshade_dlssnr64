@@ -8,6 +8,7 @@
 
 #include <memory>
 
+#include "dlss_guides.h"
 #include "dlssnr_pass_session.h"
 #include "dlssnr_runtime.h"
 #include "settings.h"
@@ -32,7 +33,9 @@ class DlssNrDirect {
   const char* GetLastError() const;
 
  private:
-  DlssNrDirect() = default;
+  DlssNrDirect()
+      : pass1_(&DlssGuides::Get()),
+        pass2_(&DlssGuides::Get()) {}
   ~DlssNrDirect() = default;
 
   DlssNrDirect(const DlssNrDirect&) = delete;
