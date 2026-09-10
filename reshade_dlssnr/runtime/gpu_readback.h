@@ -44,7 +44,9 @@ class GpuReadback {
   // Returns a mapped read-only pointer to the most recent completed copy
   // since the last successful TryGet, or nullptr if none is ready. The
   // pointer stays valid until the next EnqueueCopy that reuses the slot.
-  // Each completed fence value is returned at most once.
+  // Each completed fence value is returned at most once. `out_bytes`
+  // receives the size of the copy that produced this data (which may be
+  // smaller than the slot capacity).
   const void* TryGet(ID3D12Fence* fence, uint32_t* out_bytes);
 
  private:
@@ -52,6 +54,7 @@ class GpuReadback {
     Microsoft::WRL::ComPtr<ID3D12Resource> buffer;
     void* mapped = nullptr;
     uint64_t fence_value = 0;
+    uint32_t bytes = 0;  // size of the last copy recorded into this slot
     bool valid = false;
   };
 

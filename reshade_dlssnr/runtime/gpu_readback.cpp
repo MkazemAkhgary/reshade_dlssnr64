@@ -43,6 +43,7 @@ bool GpuReadback::Ensure(ID3D12Device* device, size_t bytes_per_slot) {
       return false;
     }
     slots_[i].mapped = mapped;
+    slots_[i].bytes = 0;
     slots_[i].valid = false;
   }
 
@@ -61,6 +62,7 @@ void GpuReadback::Shutdown() {
     slot.mapped = nullptr;
     slot.buffer.Reset();
     slot.fence_value = 0;
+    slot.bytes = 0;
     slot.valid = false;
   }
   device_.Reset();
@@ -95,6 +97,7 @@ bool GpuReadback::EnqueueCopy(
       slot.buffer.Get(), 0, source, 0, source_bytes);
 
   slot.fence_value = fence_value;
+  slot.bytes = source_bytes;
   slot.valid = true;
   return true;
 }
@@ -120,7 +123,7 @@ const void* GpuReadback::TryGet(ID3D12Fence* fence, uint32_t* out_bytes) {
   if (newest == nullptr) return nullptr;
 
   last_consumed_fence_ = newest->fence_value;
-  if (out_bytes) *out_bytes = static_cast<uint32_t>(bytes_per_slot_);
+  if (out_bytes) *out_bytes = newest->bytes;
   return newest->mapped;
 }
 
