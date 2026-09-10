@@ -224,6 +224,7 @@ void DlssGuides::Capture(
   // Clone the DLSS output color for use as model input at Post-DLSS.
   ID3D12Resource* output = GetResource(
       params, NVSDK_NGX_Parameter_Output, "DLSSD.Output");
+  const bool output_fresh = (output != nullptr);
 
   if (output != nullptr) {
     if (dlss_output_clone_ == nullptr ||
@@ -255,7 +256,9 @@ void DlssGuides::Capture(
 
   state_.depth = depth_clone_.Get();
   state_.motion = motion_clone_.Get();
-  state_.dlss_output_color = dlss_output_clone_.Get();
+  // Only advertise the output clone when we actually refreshed it this frame.
+  // Otherwise the Post-DLSS path would run on stale data from a previous frame.
+  state_.dlss_output_color = output_fresh ? dlss_output_clone_.Get() : nullptr;
   state_.guide_width = guide_width;
   state_.guide_height = guide_height;
   state_.output_width = dlss_output_width_;
