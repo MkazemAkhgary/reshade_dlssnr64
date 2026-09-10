@@ -76,6 +76,11 @@ class AddonController {
   // Compute engine used only for the HDR histogram passes.
   ComputeEngine hdr_codec_;
 
+  // Set once after the first successful hdr_.Ensure() + hdr_codec_.Init().
+  // After that, Ensure/Init are not called again — BeginFrame does its own
+  // lightweight polling and dispatch scheduling.
+  bool hdr_initialized_ = false;
+
   // Backbuffer format from the last Present. The debug output is displayed
   // on the backbuffer, so we create it in this format. Cached because a
   // Post-DLSS pass (which runs before Present) needs to know the format

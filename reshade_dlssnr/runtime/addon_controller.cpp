@@ -90,27 +90,31 @@ void AddonController::OnPostDlssEvaluate(
   // HDR measurement: only the first pass in the chain runs it. It uses
   // the captured DLSS output clone as the source, since that is what the
   // model will actually consume.
-  {
+  //
+  // Ensure/Init run exactly once. BeginFrame itself does the per-frame
+  // work: it polls for completed histogram readbacks, updates the
+  // exposure EMA, and schedules new measurements at the configured rate.
+  if (!hdr_initialized_) {
     Microsoft::WRL::ComPtr<ID3D12Device> hdr_device;
     if (SUCCEEDED(command_list->GetDevice(IID_PPV_ARGS(&hdr_device))) &&
         hdr_device != nullptr) {
-      const bool state_ok = hdr_.Ensure(hdr_device.Get());
-      if (state_ok && !hdr_codec_.IsInit()) {
-        hdr_codec_.Init(hdr_device.Get());
+      if (hdr_.Ensure(hdr_device.Get()) && hdr_codec_.Init(hdr_device.Get())) {
+        hdr_initialized_ = true;
       }
+    }
+  }
 
-      const DlssGuideState guides = DlssGuides::Get().GetState();
-      if (state_ok && hdr_codec_.IsInit() &&
-          guides.dlss_output_color != nullptr &&
-          guides.output_width > 0 && guides.output_height > 0) {
-        hdr_.BeginFrame(pass1_command_,
-                        command_list,
-                        guides.dlss_output_color,
-                        guides.output_width,
-                        guides.output_height,
-                        settings,
-                        hdr_codec_);
-      }
+  if (hdr_initialized_) {
+    const DlssGuideState guides = DlssGuides::Get().GetState();
+    if (guides.dlss_output_color != nullptr &&
+        guides.output_width > 0 && guides.output_height > 0) {
+      hdr_.BeginFrame(pass1_command_,
+                      command_list,
+                      guides.dlss_output_color,
+                      guides.output_width,
+                      guides.output_height,
+                      settings,
+                      hdr_codec_);
     }
   }
 
@@ -199,6 +203,7 @@ void AddonController::Shutdown() {
   pass1_command_.Shutdown();
   hdr_codec_.Destroy();
   hdr_.Shutdown();
+  hdr_initialized_ = false;
   frame_debug_.Release();
   runtime_.Shutdown();
 }
