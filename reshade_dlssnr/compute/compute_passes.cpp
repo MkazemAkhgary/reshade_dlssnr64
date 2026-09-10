@@ -75,16 +75,18 @@ float LinearLuma(float3 c)
     }
 }
 
+// Shared-memory histogram, one per workgroup. Declared at global scope:
+// HLSL requires groupshared storage to be declared outside a function.
+groupshared uint gSharedHist[256];
+
 [numthreads(8, 8, 1)]
 void CSMain(uint3 gid : SV_GroupID,
             uint3 gtid : SV_GroupThreadID,
             uint3 dtid : SV_DispatchThreadID)
 {
-    groupshared uint sh[256];
-
     const uint lidx = gtid.x + gtid.y * 8u;
     for (uint i = lidx; i < 256u; i += 64u)
-        sh[i] = 0u;
+        gSharedHist[i] = 0u;
     GroupMemoryBarrierWithGroupSync();
 
     if (dtid.x < gWidth && dtid.y < gHeight) {
@@ -97,14 +99,14 @@ void CSMain(uint3 gid : SV_GroupID,
         float t = saturate((l2 - kLumaMinLog2) / span);
         uint bin = min((uint)(t * 255.0 + 0.5), 255u);
 
-        InterlockedAdd(sh[bin], 1u);
+        InterlockedAdd(gSharedHist[bin], 1u);
     }
 
     GroupMemoryBarrierWithGroupSync();
 
     for (uint i = lidx; i < 256u; i += 64u) {
-        if (sh[i] > 0u)
-            InterlockedAdd(gHistogram[i], sh[i]);
+        if (gSharedHist[i] > 0u)
+            InterlockedAdd(gHistogram[i], gSharedHist[i]);
     }
 }
 )";
