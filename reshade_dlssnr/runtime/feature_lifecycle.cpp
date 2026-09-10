@@ -9,8 +9,8 @@
 
 namespace reshade_dlssnr {
 
-bool DlssNrFeatureLifecycle::EnsureFeature(
-    DlssNrRuntime& runtime,
+bool FeatureLifecycle::EnsureFeature(
+    NgxRuntime& runtime,
     const PassSettings& pass,
     ID3D12GraphicsCommandList* command_list,
     unsigned int width,
@@ -40,7 +40,7 @@ bool DlssNrFeatureLifecycle::EnsureFeature(
     first_evaluate_ = true;
   }
 
-  NgxParameterBlock& parameter_block = const_cast<DlssNrRuntime&>(runtime).Parameters();
+  NgxParameterBlock& parameter_block = const_cast<NgxRuntime&>(runtime).Parameters();
   NVSDK_NGX_Parameter* params = parameter_block.Get();
 
   if (params == nullptr) {
@@ -61,7 +61,7 @@ bool DlssNrFeatureLifecycle::EnsureFeature(
   parameter_block.SetUInt("VisibilityNodeMask", 1u);
   ApplyModelTuningParams(parameter_block, pass);
 
-  const NVSDK_NGX_Result result = const_cast<DlssNrRuntime&>(runtime).CreateFeature(
+  const NVSDK_NGX_Result result = const_cast<NgxRuntime&>(runtime).CreateFeature(
       command_list,
       static_cast<NVSDK_NGX_Feature>(18),
       params,
@@ -91,14 +91,14 @@ bool DlssNrFeatureLifecycle::EnsureFeature(
   return true;
 }
 
-void DlssNrFeatureLifecycle::ReleaseFeature(DlssNrRuntime& runtime) {
+void FeatureLifecycle::ReleaseFeature(NgxRuntime& runtime) {
   if (feature_handle_ != nullptr) {
     runtime.ReleaseFeature(feature_handle_);
     feature_handle_ = nullptr;
   }
 }
 
-void DlssNrFeatureLifecycle::Shutdown(DlssNrRuntime& runtime) {
+void FeatureLifecycle::Shutdown(NgxRuntime& runtime) {
   ReleaseFeature(runtime);
 
   built_width_ = 0;

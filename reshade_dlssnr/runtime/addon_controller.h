@@ -16,9 +16,9 @@
 
 namespace reshade_dlssnr {
 
-class DlssNrDirect {
+class AddonController {
  public:
-  static DlssNrDirect& Get();
+  static AddonController& Get();
 
   void OnPresent(
       ID3D12CommandQueue* command_queue,
@@ -27,19 +27,19 @@ class DlssNrDirect {
   void Shutdown();
 
  private:
-  DlssNrDirect() {
+  AddonController() {
     passes_.reserve(kMaxPasses);
     for (uint32_t i = 0; i < kMaxPasses; ++i) {
       passes_.emplace_back(&DlssGuides::Get());
     }
   }
-  ~DlssNrDirect() = default;
+  ~AddonController() = default;
 
-  DlssNrDirect(const DlssNrDirect&) = delete;
-  DlssNrDirect& operator=(const DlssNrDirect&) = delete;
+  AddonController(const AddonController&) = delete;
+  AddonController& operator=(const AddonController&) = delete;
 
-  DlssNrRuntime runtime_;
-  std::vector<DlssNrPassSession> passes_;
+  NgxRuntime runtime_;
+  std::vector<PassSession> passes_;
 };
 
 }  // namespace reshade_dlssnr

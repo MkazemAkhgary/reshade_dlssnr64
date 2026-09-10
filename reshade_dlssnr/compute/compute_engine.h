@@ -12,7 +12,7 @@
 
 namespace reshade_dlssnr {
 
-struct alignas(256) DlssNrConstants {
+struct alignas(256) ComputeConstants {
   uint32_t Width = 0;
   uint32_t Height = 0;
   uint32_t pad0 = 0;
@@ -22,18 +22,18 @@ struct alignas(256) DlssNrConstants {
   // Must align with HLSL float4 gParams[4] (16-byte boundary).
   float params[16] = {};
 };
-static_assert(sizeof(DlssNrConstants) == 256, "Constants must have a 256-byte CBV allocation size");
+static_assert(sizeof(ComputeConstants) == 256, "Constants must have a 256-byte CBV allocation size");
 
 // Descriptor layout contract for every compute pass.
 //
 // The single root descriptor table (root param 0) exposes, in order:
-//   - kDlssNrSrvCount SRVs   at shader registers t0..t(kDlssNrSrvCount-1)
-//   - kDlssNrUavCount UAVs   at shader registers u0..u(kDlssNrUavCount-1)
-//   - kDlssNrCbvCount CBV    at shader register b0
+//   - kSrvCount SRVs   at shader registers t0..t(kSrvCount-1)
+//   - kUavCount UAVs   at shader registers u0..u(kUavCount-1)
+//   - kCbvCount CBV    at shader register b0
 //   - one static linear-clamp sampler at s0
 //
-// Every Dispatch() call MUST provide exactly kDlssNrSrvCount SRVs and
-// kDlssNrUavCount UAVs. Passing fewer leaves stale descriptors from the
+// Every Dispatch() call MUST provide exactly kSrvCount SRVs and
+// kUavCount UAVs. Passing fewer leaves stale descriptors from the
 // previous dispatch in the unused slots. Shaders that do not declare a
 // register simply ignore that slot, so it is safe (and required) to fill
 // unused slots with any valid resource — typically the same texture or
@@ -43,28 +43,28 @@ static_assert(sizeof(DlssNrConstants) == 256, "Constants must have a 256-byte CB
 // signature, descriptor heap, and BindAndDispatch loop scale with it
 // automatically. Grid size is derived from constants.Width/Height using
 // a fixed 8x8 thread group (see BindAndDispatch).
-constexpr uint32_t kDlssNrHeapCount = 16;
-constexpr uint32_t kDlssNrSrvCount = 3;
-constexpr uint32_t kDlssNrUavCount = 1;
-constexpr uint32_t kDlssNrCbvCount = 1;
-constexpr uint32_t kDlssNrPerDispatchDescriptors = kDlssNrSrvCount + kDlssNrUavCount + kDlssNrCbvCount;
+constexpr uint32_t kDescriptorRingSize = 16;
+constexpr uint32_t kSrvCount = 3;
+constexpr uint32_t kUavCount = 1;
+constexpr uint32_t kCbvCount = 1;
+constexpr uint32_t kDescriptorsPerDispatch = kSrvCount + kUavCount + kCbvCount;
 
-class DlssNrCodec {
+class ComputeEngine {
  public:
   bool Init(ID3D12Device* device);
 
   // Dispatches a registered compute pass by name. The pass is lazily
   // compiled the first time it is used.
   //
-  // `srvs` must point to an array of exactly kDlssNrSrvCount valid
+  // `srvs` must point to an array of exactly kSrvCount valid
   // resources (t0..tN-1). `uavs` must point to an array of exactly
-  // kDlssNrUavCount valid resources (u0..uN-1). Fill unused slots by
+  // kUavCount valid resources (u0..uN-1). Fill unused slots by
   // repeating an already-bound resource. See the descriptor layout
   // contract above for details.
   bool Dispatch(
       const char* pass_name,
       ID3D12GraphicsCommandList* command_list,
-      const DlssNrConstants& constants,
+      const ComputeConstants& constants,
       ID3D12Resource* const* srvs,
       ID3D12Resource* const* uavs);
 
@@ -79,7 +79,7 @@ class DlssNrCodec {
   uint32_t descriptor_size_ = 0;
   uint32_t heap_index_ = 0;
 
-  Microsoft::WRL::ComPtr<ID3D12Resource> constant_buffers_[kDlssNrHeapCount];
+  Microsoft::WRL::ComPtr<ID3D12Resource> constant_buffers_[kDescriptorRingSize];
 
   struct CachedPass {
     Microsoft::WRL::ComPtr<ID3D12PipelineState> pso;
@@ -96,7 +96,7 @@ class DlssNrCodec {
   bool BindAndDispatch(
       ID3D12GraphicsCommandList* command_list,
       ID3D12PipelineState* pipeline_state,
-      const DlssNrConstants& constants,
+      const ComputeConstants& constants,
       ID3D12Resource* const* srvs,
       ID3D12Resource* const* uavs);
 };

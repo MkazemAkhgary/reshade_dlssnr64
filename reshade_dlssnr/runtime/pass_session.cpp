@@ -15,7 +15,7 @@ namespace {
 std::mutex g_session_mutex;
 }
 
-bool DlssNrPassSession::AcquireBackbuffer(
+bool PassSession::AcquireBackbuffer(
     IDXGISwapChain* swapchain,
     ID3D12CommandQueue* command_queue,
     Microsoft::WRL::ComPtr<IDXGISwapChain3>& out_swapchain3,
@@ -43,7 +43,7 @@ bool DlssNrPassSession::AcquireBackbuffer(
   return true;
 }
 
-bool DlssNrPassSession::EnsureFrameResources(
+bool PassSession::EnsureFrameResources(
     ID3D12Device* device,
     const D3D12_RESOURCE_DESC& desc,
     unsigned int work_width,
@@ -64,8 +64,8 @@ bool DlssNrPassSession::EnsureFrameResources(
   return true;
 }
 
-bool DlssNrPassSession::FillEvaluateParams(
-    DlssNrRuntime& runtime,
+bool PassSession::FillEvaluateParams(
+    NgxRuntime& runtime,
     const PassSettings& pass,
     const DlssGuideState& guides,
     ID3D12Resource* model_color,
@@ -130,7 +130,7 @@ bool DlssNrPassSession::FillEvaluateParams(
   return true;
 }
 
-void DlssNrPassSession::SubmitAndWait() {
+void PassSession::SubmitAndWait() {
   command_.GetCommandList()->Close();
   ID3D12CommandList* lists[] = {command_.GetCommandList()};
   command_queue_->ExecuteCommandLists(1, lists);
@@ -138,8 +138,8 @@ void DlssNrPassSession::SubmitAndWait() {
   guides_->ReleaseRetiredGameResources();
 }
 
-void DlssNrPassSession::OnPresent(
-    DlssNrRuntime& runtime,
+void PassSession::OnPresent(
+    NgxRuntime& runtime,
     const PassSettings& pass,
     const Settings& settings,
     ID3D12CommandQueue* command_queue,
@@ -216,7 +216,7 @@ void DlssNrPassSession::OnPresent(
   ID3D12Resource* model_input = backbuffer.Get();
 
   if (codec_ == nullptr) {
-    codec_ = std::make_unique<DlssNrCodec>();
+    codec_ = std::make_unique<ComputeEngine>();
   }
 
   if (!codec_->IsInit() && !codec_->Init(device.Get())) {
@@ -298,7 +298,7 @@ void DlssNrPassSession::OnPresent(
   }
 }
 
-void DlssNrPassSession::Shutdown(DlssNrRuntime& runtime) {
+void PassSession::Shutdown(NgxRuntime& runtime) {
   std::lock_guard<std::mutex> lock(g_session_mutex);
 
   feature_.Shutdown(runtime);

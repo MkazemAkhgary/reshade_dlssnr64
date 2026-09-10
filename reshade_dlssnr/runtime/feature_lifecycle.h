@@ -9,16 +9,16 @@
 
 namespace reshade_dlssnr {
 
-class DlssNrFeatureLifecycle {
+class FeatureLifecycle {
  public:
   bool EnsureFeature(
-      DlssNrRuntime& runtime,
+      NgxRuntime& runtime,
       const PassSettings& pass,
       ID3D12GraphicsCommandList* command_list,
       unsigned int width,
       unsigned int height);
 
-  void ReleaseFeature(DlssNrRuntime& runtime);
+  void ReleaseFeature(NgxRuntime& runtime);
 
   bool HasFeature() const { return feature_handle_ != nullptr; }
   NVSDK_NGX_Handle* FeatureHandle() const { return feature_handle_; }
@@ -27,7 +27,7 @@ class DlssNrFeatureLifecycle {
   void MarkEvaluated() { first_evaluate_ = false; }
   void SetShouldReset(bool value) { first_evaluate_ = value; }
 
-  void Shutdown(DlssNrRuntime& runtime);
+  void Shutdown(NgxRuntime& runtime);
 
   const char* GetLastError() const { return reason_; }
 

@@ -4,7 +4,7 @@
 
 namespace reshade_dlssnr {
 
-bool DlssNrCommandContext::Ensure(ID3D12Device* device) {
+bool CommandContext::Ensure(ID3D12Device* device) {
   if (command_allocator_ != nullptr) return true;
   if (device == nullptr) return false;
 
@@ -46,7 +46,7 @@ bool DlssNrCommandContext::Ensure(ID3D12Device* device) {
   return true;
 }
 
-void DlssNrCommandContext::Reset() {
+void CommandContext::Reset() {
   if (command_allocator_ != nullptr && command_list_ != nullptr) {
     command_allocator_->Reset();
     command_list_->Reset(command_allocator_.Get(), nullptr);
@@ -55,7 +55,7 @@ void DlssNrCommandContext::Reset() {
   resource_states_.clear();
 }
 
-void DlssNrCommandContext::CloseAndSubmit(ID3D12CommandQueue* command_queue) {
+void CommandContext::CloseAndSubmit(ID3D12CommandQueue* command_queue) {
   if (command_list_ == nullptr || command_queue == nullptr) return;
 
   command_list_->Close();
@@ -63,7 +63,7 @@ void DlssNrCommandContext::CloseAndSubmit(ID3D12CommandQueue* command_queue) {
   command_queue->ExecuteCommandLists(1, lists);
 }
 
-void DlssNrCommandContext::WaitGpu(ID3D12CommandQueue* command_queue) {
+void CommandContext::WaitGpu(ID3D12CommandQueue* command_queue) {
   if (command_queue == nullptr || fence_ == nullptr) return;
 
   const UINT64 value = ++fence_value_;
@@ -75,7 +75,7 @@ void DlssNrCommandContext::WaitGpu(ID3D12CommandQueue* command_queue) {
   }
 }
 
-void DlssNrCommandContext::Transition(
+void CommandContext::Transition(
     ID3D12GraphicsCommandList* command_list,
     ID3D12Resource* resource,
     D3D12_RESOURCE_STATES after) {
@@ -101,14 +101,14 @@ void DlssNrCommandContext::Transition(
   resource_states_[resource] = after;
 }
 
-void DlssNrCommandContext::SetResourceState(
+void CommandContext::SetResourceState(
     ID3D12Resource* resource,
     D3D12_RESOURCE_STATES state) {
   if (resource == nullptr) return;
   resource_states_[resource] = state;
 }
 
-void DlssNrCommandContext::CopyResourceToBackbuffer(
+void CommandContext::CopyResourceToBackbuffer(
     ID3D12GraphicsCommandList* command_list,
     ID3D12Resource* source,
     ID3D12Resource* backbuffer) {
@@ -121,7 +121,7 @@ void DlssNrCommandContext::CopyResourceToBackbuffer(
   Transition(command_list, source, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
 
-void DlssNrCommandContext::Shutdown() {
+void CommandContext::Shutdown() {
   if (fence_event_ != INVALID_HANDLE_VALUE) {
     CloseHandle(fence_event_);
     fence_event_ = INVALID_HANDLE_VALUE;

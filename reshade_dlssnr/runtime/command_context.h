@@ -9,7 +9,7 @@
 
 namespace reshade_dlssnr {
 
-class DlssNrCommandContext {
+class CommandContext {
  public:
   bool Ensure(ID3D12Device* device);
 

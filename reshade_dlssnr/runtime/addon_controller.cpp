@@ -10,12 +10,12 @@ namespace {
 std::mutex g_direct_mutex;
 }
 
-DlssNrDirect& DlssNrDirect::Get() {
-  static DlssNrDirect direct;
+AddonController& AddonController::Get() {
+  static AddonController direct;
   return direct;
 }
 
-void DlssNrDirect::OnPresent(
+void AddonController::OnPresent(
     ID3D12CommandQueue* command_queue,
     IDXGISwapChain* swapchain) {
   std::lock_guard<std::mutex> lock(g_direct_mutex);
@@ -35,7 +35,7 @@ void DlssNrDirect::OnPresent(
   }
 }
 
-void DlssNrDirect::Shutdown() {
+void AddonController::Shutdown() {
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
   for (auto& pass : passes_) {

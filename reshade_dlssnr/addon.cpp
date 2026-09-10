@@ -59,7 +59,7 @@ void OnPresent(
   auto* native_command_queue = reinterpret_cast<ID3D12CommandQueue*>(command_queue->get_native());
   auto* native_swapchain = reinterpret_cast<IDXGISwapChain*>(swapchain->get_native());
 
-  reshade_dlssnr::DlssNrDirect::Get().OnPresent(
+  reshade_dlssnr::AddonController::Get().OnPresent(
       native_command_queue,
       native_swapchain);
 }
@@ -104,7 +104,7 @@ void Detach() {
     g_nvngx_dlss_module = nullptr;
   }
 
-  reshade_dlssnr::DlssNrDirect::Get().Shutdown();
+  reshade_dlssnr::AddonController::Get().Shutdown();
   reshade_dlssnr::DlssGuides::Get().Clear();
   reshade_dlssnr::SaveSettings();
   g_initialized = false;

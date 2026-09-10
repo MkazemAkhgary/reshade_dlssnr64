@@ -18,19 +18,19 @@
 
 namespace reshade_dlssnr {
 
-class DlssNrPassSession {
+class PassSession {
  public:
-  explicit DlssNrPassSession(DlssGuides* guides)
+  explicit PassSession(DlssGuides* guides)
       : guides_(guides) {}
 
   void OnPresent(
-      DlssNrRuntime& runtime,
+      NgxRuntime& runtime,
       const PassSettings& pass,
       const Settings& settings,
       ID3D12CommandQueue* command_queue,
       IDXGISwapChain* swapchain);
 
-  void Shutdown(DlssNrRuntime& runtime);
+  void Shutdown(NgxRuntime& runtime);
 
  private:
   // Acquires the backbuffer and its descriptor for the current frame.
@@ -54,7 +54,7 @@ class DlssNrPassSession {
   // Fills the real NGX parameter block with tuning values, resources, and
   // subrects for the current evaluation.
   bool FillEvaluateParams(
-      DlssNrRuntime& runtime,
+      NgxRuntime& runtime,
       const PassSettings& pass,
       const DlssGuideState& guides,
       ID3D12Resource* model_color,
@@ -68,14 +68,14 @@ class DlssNrPassSession {
   // retired game resources.
   void SubmitAndWait();
 
-  DlssNrCommandContext command_;
-  DlssNrPassResources resources_;
-  DlssNrFeatureLifecycle feature_;
+  CommandContext command_;
+  PassResources resources_;
+  FeatureLifecycle feature_;
 
   DlssGuides* guides_ = nullptr;
 
   ID3D12CommandQueue* command_queue_ = nullptr;
-  std::unique_ptr<DlssNrCodec> codec_;
+  std::unique_ptr<ComputeEngine> codec_;
 
   bool failed_ = false;
   const char* reason_ = "";

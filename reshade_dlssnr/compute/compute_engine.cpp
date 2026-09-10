@@ -6,7 +6,7 @@
 
 namespace reshade_dlssnr {
 
-DXGI_FORMAT DlssNrCodec::TypedFormat(DXGI_FORMAT format) const {
+DXGI_FORMAT ComputeEngine::TypedFormat(DXGI_FORMAT format) const {
   switch (format) {
     case DXGI_FORMAT_R16G16B16A16_TYPELESS:
       return DXGI_FORMAT_R16G16B16A16_FLOAT;
@@ -37,7 +37,7 @@ DXGI_FORMAT DlssNrCodec::TypedFormat(DXGI_FORMAT format) const {
   }
 }
 
-void DlssNrCodec::CreateShaderResourceView(ID3D12Resource* resource, D3D12_CPU_DESCRIPTOR_HANDLE handle) {
+void ComputeEngine::CreateShaderResourceView(ID3D12Resource* resource, D3D12_CPU_DESCRIPTOR_HANDLE handle) {
   D3D12_SHADER_RESOURCE_VIEW_DESC desc = {};
   desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
   desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -49,7 +49,7 @@ void DlssNrCodec::CreateShaderResourceView(ID3D12Resource* resource, D3D12_CPU_D
   device_->CreateShaderResourceView(resource, &desc, handle);
 }
 
-void DlssNrCodec::CreateUnorderedAccessView(ID3D12Resource* resource, D3D12_CPU_DESCRIPTOR_HANDLE handle) {
+void ComputeEngine::CreateUnorderedAccessView(ID3D12Resource* resource, D3D12_CPU_DESCRIPTOR_HANDLE handle) {
   D3D12_UNORDERED_ACCESS_VIEW_DESC desc = {};
   desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
   desc.Format = TypedFormat(resource->GetDesc().Format);
@@ -58,7 +58,7 @@ void DlssNrCodec::CreateUnorderedAccessView(ID3D12Resource* resource, D3D12_CPU_
   device_->CreateUnorderedAccessView(resource, nullptr, &desc, handle);
 }
 
-void DlssNrCodec::CreateConstantBufferView(ID3D12Resource* resource, const void* data, size_t size, D3D12_CPU_DESCRIPTOR_HANDLE handle) {
+void ComputeEngine::CreateConstantBufferView(ID3D12Resource* resource, const void* data, size_t size, D3D12_CPU_DESCRIPTOR_HANDLE handle) {
   void* mapped = nullptr;
   D3D12_RANGE read_range = {};
   if (SUCCEEDED(resource->Map(0, &read_range, &mapped))) {
@@ -73,10 +73,10 @@ void DlssNrCodec::CreateConstantBufferView(ID3D12Resource* resource, const void*
   device_->CreateConstantBufferView(&desc, handle);
 }
 
-bool DlssNrCodec::BindAndDispatch(
+bool ComputeEngine::BindAndDispatch(
     ID3D12GraphicsCommandList* command_list,
     ID3D12PipelineState* pipeline_state,
-    const DlssNrConstants& constants,
+    const ComputeConstants& constants,
     ID3D12Resource* const* srvs,
     ID3D12Resource* const* uavs) {
   if (command_list == nullptr || pipeline_state == nullptr ||
@@ -85,32 +85,32 @@ bool DlssNrCodec::BindAndDispatch(
   }
 
   const uint32_t slot = heap_index_;
-  heap_index_ = (heap_index_ + 1) % kDlssNrHeapCount;
+  heap_index_ = (heap_index_ + 1) % kDescriptorRingSize;
 
   D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle =
       descriptor_heap_->GetCPUDescriptorHandleForHeapStart();
   cpu_handle.ptr += static_cast<SIZE_T>(slot) *
-                    kDlssNrPerDispatchDescriptors * descriptor_size_;
+                    kDescriptorsPerDispatch * descriptor_size_;
   D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle =
       descriptor_heap_->GetGPUDescriptorHandleForHeapStart();
   gpu_handle.ptr += static_cast<UINT64>(slot) *
-                    kDlssNrPerDispatchDescriptors * descriptor_size_;
+                    kDescriptorsPerDispatch * descriptor_size_;
 
-  for (uint32_t i = 0; i < kDlssNrSrvCount; ++i) {
+  for (uint32_t i = 0; i < kSrvCount; ++i) {
     D3D12_CPU_DESCRIPTOR_HANDLE handle = cpu_handle;
     handle.ptr += static_cast<SIZE_T>(i) * descriptor_size_;
     CreateShaderResourceView(srvs[i], handle);
   }
 
-  for (uint32_t i = 0; i < kDlssNrUavCount; ++i) {
+  for (uint32_t i = 0; i < kUavCount; ++i) {
     D3D12_CPU_DESCRIPTOR_HANDLE handle = cpu_handle;
-    handle.ptr += static_cast<SIZE_T>(kDlssNrSrvCount + i) *
+    handle.ptr += static_cast<SIZE_T>(kSrvCount + i) *
                   descriptor_size_;
     CreateUnorderedAccessView(uavs[i], handle);
   }
 
   D3D12_CPU_DESCRIPTOR_HANDLE cbv_handle = cpu_handle;
-  cbv_handle.ptr += static_cast<SIZE_T>(kDlssNrSrvCount + kDlssNrUavCount) *
+  cbv_handle.ptr += static_cast<SIZE_T>(kSrvCount + kUavCount) *
                     descriptor_size_;
   CreateConstantBufferView(
       constant_buffers_[slot].Get(), &constants, sizeof(constants), cbv_handle);
@@ -128,20 +128,20 @@ bool DlssNrCodec::BindAndDispatch(
   return true;
 }
 
-bool DlssNrCodec::CreateRootSignature(ID3D12Device* device) {
+bool ComputeEngine::CreateRootSignature(ID3D12Device* device) {
   D3D12_DESCRIPTOR_RANGE ranges[3] = {};
   ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-  ranges[0].NumDescriptors = kDlssNrSrvCount;
+  ranges[0].NumDescriptors = kSrvCount;
   ranges[0].BaseShaderRegister = 0;
   ranges[0].RegisterSpace = 0;
   ranges[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
   ranges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
-  ranges[1].NumDescriptors = kDlssNrUavCount;
+  ranges[1].NumDescriptors = kUavCount;
   ranges[1].BaseShaderRegister = 0;
   ranges[1].RegisterSpace = 0;
   ranges[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
   ranges[2].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-  ranges[2].NumDescriptors = kDlssNrCbvCount;
+  ranges[2].NumDescriptors = kCbvCount;
   ranges[2].BaseShaderRegister = 0;
   ranges[2].RegisterSpace = 0;
   ranges[2].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
@@ -200,7 +200,7 @@ bool DlssNrCodec::CreateRootSignature(ID3D12Device* device) {
   return true;
 }
 
-bool DlssNrCodec::CompilePipeline(
+bool ComputeEngine::CompilePipeline(
     const char* hlsl,
     ID3D12PipelineState** out_pso) {
   if (device_ == nullptr || hlsl == nullptr || out_pso == nullptr) {
@@ -250,10 +250,10 @@ bool DlssNrCodec::CompilePipeline(
   return SUCCEEDED(hr);
 }
 
-bool DlssNrCodec::Dispatch(
+bool ComputeEngine::Dispatch(
     const char* pass_name,
     ID3D12GraphicsCommandList* command_list,
-    const DlssNrConstants& constants,
+    const ComputeConstants& constants,
     ID3D12Resource* const* srvs,
     ID3D12Resource* const* uavs) {
   if (device_ == nullptr || pass_name == nullptr ||
@@ -281,7 +281,7 @@ bool DlssNrCodec::Dispatch(
       command_list, it->second.pso.Get(), constants, srvs, uavs);
 }
 
-bool DlssNrCodec::Init(ID3D12Device* device) {
+bool ComputeEngine::Init(ID3D12Device* device) {
   if (device_ != nullptr) return true;
   if (device == nullptr) return false;
 
@@ -291,7 +291,7 @@ bool DlssNrCodec::Init(ID3D12Device* device) {
 
   D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {};
   heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-  heap_desc.NumDescriptors = kDlssNrHeapCount * kDlssNrPerDispatchDescriptors;
+  heap_desc.NumDescriptors = kDescriptorRingSize * kDescriptorsPerDispatch;
   heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
   heap_desc.NodeMask = 0;
 
@@ -312,7 +312,7 @@ bool DlssNrCodec::Init(ID3D12Device* device) {
   D3D12_RESOURCE_DESC buffer_desc = {};
   buffer_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
   buffer_desc.Alignment = 0;
-  buffer_desc.Width = sizeof(DlssNrConstants);
+  buffer_desc.Width = sizeof(ComputeConstants);
   buffer_desc.Height = 1;
   buffer_desc.DepthOrArraySize = 1;
   buffer_desc.MipLevels = 1;
@@ -321,7 +321,7 @@ bool DlssNrCodec::Init(ID3D12Device* device) {
   buffer_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
   buffer_desc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
-  for (uint32_t i = 0; i < kDlssNrHeapCount; ++i) {
+  for (uint32_t i = 0; i < kDescriptorRingSize; ++i) {
     if (FAILED(device->CreateCommittedResource(
             &heap_props,
             D3D12_HEAP_FLAG_NONE,
@@ -337,7 +337,7 @@ bool DlssNrCodec::Init(ID3D12Device* device) {
   return true;
 }
 
-void DlssNrCodec::Destroy() {
+void ComputeEngine::Destroy() {
   for (auto& buffer : constant_buffers_) {
     buffer.Reset();
   }

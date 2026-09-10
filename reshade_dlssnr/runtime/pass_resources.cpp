@@ -2,7 +2,7 @@
 
 namespace reshade_dlssnr {
 
-bool DlssNrPassResources::CreateUavTexture(
+bool PassResources::CreateUavTexture(
     ID3D12Device* device,
     const D3D12_RESOURCE_DESC& desc,
     ID3D12Resource** out_resource) {
@@ -21,7 +21,7 @@ bool DlssNrPassResources::CreateUavTexture(
       IID_PPV_ARGS(out_resource)));
 }
 
-bool DlssNrPassResources::EnsureOutput(
+bool PassResources::EnsureOutput(
     ID3D12Device* device,
     const D3D12_RESOURCE_DESC& desc) {
   if (output != nullptr &&
@@ -44,7 +44,7 @@ bool DlssNrPassResources::EnsureOutput(
   return true;
 }
 
-bool DlssNrPassResources::EnsureCompositeOutput(
+bool PassResources::EnsureCompositeOutput(
     ID3D12Device* device,
     const D3D12_RESOURCE_DESC& desc) {
   if (composite_output != nullptr &&
@@ -68,7 +68,7 @@ bool DlssNrPassResources::EnsureCompositeOutput(
   return true;
 }
 
-bool DlssNrPassResources::EnsureWorkingResources(
+bool PassResources::EnsureWorkingResources(
     ID3D12Device* device,
     const D3D12_RESOURCE_DESC& desc,
     unsigned int work_width,
@@ -106,7 +106,7 @@ bool DlssNrPassResources::EnsureWorkingResources(
   return true;
 }
 
-bool DlssNrPassResources::EnsureScratch(
+bool PassResources::EnsureScratch(
     ID3D12Device* device,
     const D3D12_RESOURCE_DESC& desc,
     unsigned int width,
@@ -139,7 +139,7 @@ bool DlssNrPassResources::EnsureScratch(
   return true;
 }
 
-void DlssNrPassResources::Shutdown() {
+void PassResources::Shutdown() {
   output.Reset();
   composite_output.Reset();
   working_input.Reset();

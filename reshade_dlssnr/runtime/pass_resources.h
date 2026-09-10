@@ -13,7 +13,7 @@ namespace reshade_dlssnr {
 // is requested and reused across frames until the requested size changes.
 constexpr uint32_t kScratchCount = 4;
 
-class DlssNrPassResources {
+class PassResources {
  public:
   Microsoft::WRL::ComPtr<ID3D12Resource> output;
   unsigned int output_width = 0;

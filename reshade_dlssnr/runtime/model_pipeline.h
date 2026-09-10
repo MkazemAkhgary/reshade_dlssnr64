@@ -9,9 +9,9 @@
 namespace reshade_dlssnr::dlssnr_stages_working_scale {
 
 bool PrepareInput(
-    DlssNrCommandContext& command,
-    DlssNrPassResources& resources,
-    DlssNrCodec* codec,
+    CommandContext& command,
+    PassResources& resources,
+    ComputeEngine* codec,
     ID3D12Resource* full_input,
     ID3D12Resource** out_model_color,
     ID3D12Resource** out_model_output,
@@ -24,9 +24,9 @@ bool PrepareInput(
     bool use_working_scale);
 
 bool Apply(
-    DlssNrCommandContext& command,
-    DlssNrPassResources& resources,
-    DlssNrCodec* codec,
+    CommandContext& command,
+    PassResources& resources,
+    ComputeEngine* codec,
     ID3D12Resource* backbuffer,
     ID3D12Resource* low_input,
     ID3D12Resource* low_enhanced,
