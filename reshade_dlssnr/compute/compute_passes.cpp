@@ -245,10 +245,10 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float2 uv = (float2(id.xy) + 0.5) / float2(gWidth, gHeight);
     float4 src = gSource.SampleLevel(s0, uv, 0);
 
-    float3 linear = DecodeToLinear(src.rgb);
-    linear *= kExposure;
+    float3 lin = DecodeToLinear(src.rgb);
+    lin *= kExposure;
 
-    float3 sdr = ReinhardForward(linear, kWhitePoint);
+    float3 sdr = ReinhardForward(lin, kWhitePoint);
     float3 out_rgb = LinearToSrgb(sdr);
 
     gOutput[id.xy] = float4(out_rgb, src.a);
