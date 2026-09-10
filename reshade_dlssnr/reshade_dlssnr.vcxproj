@@ -48,7 +48,7 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <ErrorLog>$(IntDir)$(MSBuildProjectName).error.log;%(ErrorLog)</ErrorLog>
-<AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)..\..\reshade\include;$(SolutionDir)..\..\reshade;$(SolutionDir)..\..\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\nvngx_dlss_sdk;$(ProjectDir)third_party\d3dx;$(ProjectDir)third_party\detours;$(ProjectDir)codec;$(ProjectDir)runtime;$(ProjectDir)stages;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)shaders;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+<AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)..\..\reshade\include;$(SolutionDir)..\..\reshade;$(SolutionDir)..\..\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\nvngx_dlss_sdk;$(ProjectDir)third_party\d3dx;$(ProjectDir)third_party\detours;$(ProjectDir)compute;$(ProjectDir)runtime;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)shaders;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -62,41 +62,42 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="addon.cpp" />
-    <ClCompile Include="codec\codec.cpp" />
-    <ClCompile Include="codec\compute_passes.cpp" />
+    <ClCompile Include="compute\compute_engine.cpp" />
+    <ClCompile Include="compute\compute_passes.cpp" />
     <ClCompile Include="hooks\d3d12_hooks.cpp" />
     <ClCompile Include="hooks\d3d12_state.cpp" />
     <ClCompile Include="hooks\dlss_guides.cpp" />
-    <ClCompile Include="runtime\dlssnr_command_context.cpp" />
-    <ClCompile Include="runtime\dlssnr_direct.cpp" />
-    <ClCompile Include="runtime\dlssnr_feature_lifecycle.cpp" />
-    <ClCompile Include="runtime\dlssnr_pass_resources.cpp" />
-    <ClCompile Include="runtime\dlssnr_pass_session.cpp" />
-    <ClCompile Include="runtime\dlssnr_runtime.cpp" />
+    <ClCompile Include="runtime\addon_controller.cpp" />
+    <ClCompile Include="runtime\command_context.cpp" />
+    <ClCompile Include="runtime\feature_lifecycle.cpp" />
+    <ClCompile Include="runtime\model_pipeline.cpp" />
     <ClCompile Include="runtime\ngx_model_params.cpp" />
     <ClCompile Include="runtime\ngx_parameter_block.cpp" />
-    <ClCompile Include="stages\dlssnr_stages_working_scale.cpp" />
+    <ClCompile Include="runtime\pass_resources.cpp" />
+    <ClCompile Include="runtime\pass_session.cpp" />
+    <ClCompile Include="runtime\runtime.cpp" />
     <ClCompile Include="state\settings.cpp" />
     <ClCompile Include="ui\ui.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="codec\codec.h" />
-    <ClInclude Include="codec\compute_passes.h" />
+    <ClInclude Include="compute\compute_engine.h" />
+    <ClInclude Include="compute\compute_passes.h" />
+    <ClInclude Include="compute\shader_params.h" />
     <ClInclude Include="hooks\d3d12_hooks.h" />
     <ClInclude Include="hooks\d3d12_state.h" />
     <ClInclude Include="hooks\dlss_guides.h" />
     <ClInclude Include="hooks\local_vtable.h" />
     <ClInclude Include="hooks\nvngx_hook_compat.h" />
+    <ClInclude Include="runtime\addon_controller.h" />
+    <ClInclude Include="runtime\command_context.h" />
     <ClInclude Include="runtime\d3d12_utils.h" />
-    <ClInclude Include="runtime\dlssnr_command_context.h" />
-    <ClInclude Include="runtime\dlssnr_direct.h" />
-    <ClInclude Include="runtime\dlssnr_feature_lifecycle.h" />
-    <ClInclude Include="runtime\dlssnr_pass_resources.h" />
-    <ClInclude Include="runtime\dlssnr_pass_session.h" />
-    <ClInclude Include="runtime\dlssnr_runtime.h" />
+    <ClInclude Include="runtime\feature_lifecycle.h" />
+    <ClInclude Include="runtime\model_pipeline.h" />
     <ClInclude Include="runtime\ngx_model_params.h" />
     <ClInclude Include="runtime\ngx_parameter_block.h" />
-    <ClInclude Include="stages\dlssnr_stages_working_scale.h" />
+    <ClInclude Include="runtime\pass_resources.h" />
+    <ClInclude Include="runtime\pass_session.h" />
+    <ClInclude Include="runtime\runtime.h" />
     <ClInclude Include="state\settings.h" />
     <ClInclude Include="state\version.h" />
     <ClInclude Include="ui\ui.h" />
