@@ -44,7 +44,7 @@ static_assert(sizeof(ComputeConstants) == 256, "Constants must have a 256-byte C
 // automatically. Grid size is derived from constants.Width/Height using
 // a fixed 8x8 thread group (see BindAndDispatch).
 constexpr uint32_t kDescriptorRingSize = 16;
-constexpr uint32_t kSrvCount = 3;
+constexpr uint32_t kSrvCount = 4;
 constexpr uint32_t kUavCount = 1;
 constexpr uint32_t kCbvCount = 1;
 constexpr uint32_t kDescriptorsPerDispatch = kSrvCount + kUavCount + kCbvCount;
