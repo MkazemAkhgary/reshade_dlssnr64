@@ -79,6 +79,7 @@
     <ClCompile Include="runtime\pass_resources.cpp" />
     <ClCompile Include="runtime\pass_session.cpp" />
     <ClCompile Include="runtime\runtime.cpp" />
+    <ClCompile Include="runtime\status.cpp" />
     <ClCompile Include="state\settings.cpp" />
     <ClCompile Include="ui\ui.cpp" />
   </ItemGroup>
@@ -102,6 +103,7 @@
     <ClInclude Include="runtime\model_pipeline.h" />
     <ClInclude Include="runtime\ngx_model_params.h" />
     <ClInclude Include="runtime\ngx_parameter_block.h" />
+    <ClInclude Include="runtime\status.h" />
     <ClInclude Include="runtime\pass_resources.h" />
     <ClInclude Include="runtime\pass_session.h" />
     <ClInclude Include="runtime\runtime.h" />

@@ -1,6 +1,7 @@
 #include "pass_session.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <mutex>
 
 #include <reshade.hpp>
@@ -305,10 +306,12 @@ void PassSession::OnPresent(
     return;
   }
 
-  if (!runtime.Initialize(device.Get()) || !command_.Ensure(device.Get())) {
-    failed_ = true;
-    reason_ = runtime.GetLastError();
-    reshade::log::message(reshade::log::level::error, reason_);
+  if (!runtime.Initialize(device.Get())) {
+    Fail(runtime.GetLastError());
+    return;
+  }
+  if (!command_.Ensure(device.Get())) {
+    Fail("failed to create DLSSNR command list");
     return;
   }
 
@@ -333,7 +336,9 @@ void PassSession::OnPresent(
   resources_.SetRetireCallback(&PassSession::RetireResourceCallback, guides_);
 
   if (!EnsureFrameResources(device.Get(), desc, work_width, work_height)) {
-    failed_ = true;
+    Fail(reason_ != nullptr && reason_[0] != '\0'
+             ? reason_
+             : "failed to create pass resources");
     return;
   }
 
@@ -351,7 +356,7 @@ void PassSession::OnPresent(
           command_.GetCommandList(),
           width,
           height)) {
-    failed_ = true;
+    Fail(feature_.GetLastError());
     command_.GetCommandList()->Close();
     return;
   }
@@ -385,9 +390,7 @@ void PassSession::OnPresent(
   }
 
   if (!codec_->IsInit() && !codec_->Init(device.Get())) {
-    failed_ = true;
-    reason_ = "failed to initialize codec";
-    reshade::log::message(reshade::log::level::error, reason_);
+    Fail("failed to initialize compute engine");
     return;
   }
 
@@ -415,14 +418,16 @@ void PassSession::OnPresent(
           height,
           work_width,
           work_height)) {
-    failed_ = true;
-    reason_ = "failed to prepare model input";
+    Fail("failed to prepare model input");
     return;
   }
   (void)use_working_scale;
 
   if (!FillEvaluateParams(runtime, pass, guides, model_color, model_output,
                           eval_width, eval_height, width, height)) {
+    Fail(reason_ != nullptr && reason_[0] != '\0'
+             ? reason_
+             : "failed to fill NGX evaluation parameters");
     return;
   }
 
@@ -449,8 +454,7 @@ void PassSession::OnPresent(
           width,
           height,
           pass.params)) {
-    failed_ = true;
-    reason_ = "failed to compose model output";
+    Fail("failed to compose model output");
     return;
   }
 
@@ -494,9 +498,7 @@ void PassSession::OnPresent(
   SubmitAndWait();
 
   if (result != NVSDK_NGX_Result_Success) {
-    failed_ = true;
-    reason_ = "DLSSNR EvaluateFeature failed";
-    reshade::log::message(reshade::log::level::error, reason_);
+    Fail("DLSSNR EvaluateFeature failed");
   }
 }
 
@@ -515,18 +517,28 @@ void PassSession::OnPostDlssEvaluate(
   Microsoft::WRL::ComPtr<ID3D12Device> device;
   if (FAILED(command_list->GetDevice(IID_PPV_ARGS(&device))) ||
       device == nullptr) {
+    // Transient: don't fail the pass permanently. This can happen on
+    // frames where ReShade hasn't fully wired up the command list yet.
     return;
   }
 
-  if (!runtime.Initialize(device.Get())) return;
+  if (!runtime.Initialize(device.Get())) {
+    // Not fatal here either — the game may not have loaded the DLSS
+    // model yet this frame. Log once and keep trying.
+    if (runtime.GetLastError() != nullptr &&
+        runtime.GetLastError()[0] != '\0') {
+      reshade::log::message(reshade::log::level::warning,
+                            runtime.GetLastError());
+    }
+    return;
+  }
 
   if (codec_ == nullptr) {
     codec_ = std::make_unique<ComputeEngine>();
   }
 
   if (!codec_->IsInit() && !codec_->Init(device.Get())) {
-    failed_ = true;
-    reason_ = "failed to initialize compute engine";
+    Fail("failed to initialize compute engine");
     return;
   }
 
@@ -551,7 +563,9 @@ void PassSession::OnPostDlssEvaluate(
   resources_.SetRetireCallback(&PassSession::RetireResourceCallback, guides_);
 
   if (!EnsureFrameResources(device.Get(), desc, work_width, work_height)) {
-    failed_ = true;
+    Fail(reason_ != nullptr && reason_[0] != '\0'
+             ? reason_
+             : "failed to create pass resources");
     return;
   }
 
@@ -601,6 +615,7 @@ void PassSession::OnPostDlssEvaluate(
   // Build at full frame resolution; working scale is applied per-evaluation
   // via FillEvaluateParams. Matches the Present path.
   if (!feature_.EnsureFeature(runtime, pass, command_list, width, height)) {
+    Fail(feature_.GetLastError());
     return;
   }
   if (feature_.ConsumeJustRebuilt()) {
@@ -655,12 +670,16 @@ void PassSession::OnPostDlssEvaluate(
           work_width,
           work_height,
           hdr_ptr)) {
+    Fail("failed to prepare model input");
     return;
   }
   (void)use_working_scale;
 
   if (!FillEvaluateParams(runtime, pass, guides, model_color, model_output,
                           eval_width, eval_height, width, height)) {
+    Fail(reason_ != nullptr && reason_[0] != '\0'
+             ? reason_
+             : "failed to fill NGX evaluation parameters");
     return;
   }
 
@@ -686,6 +705,7 @@ void PassSession::OnPostDlssEvaluate(
           height,
           pass.params,
           hdr_ptr)) {
+    Fail("failed to compose model output");
     return;
   }
 
