@@ -40,12 +40,12 @@ class PassResources {
   unsigned int working_height = 0;
   DXGI_FORMAT working_format = DXGI_FORMAT_UNKNOWN;
 
-  // When set, replaced resources are handed to this callback instead of
+  // Resources replaced by Ensure*() are handed to this callback rather than
   // being released immediately. The callback takes ownership of the
-  // reference (which is not AddRef'd). This is required for resources that
-  // may still be read by in-flight GPU work — e.g. anything resized during
-  // the Post-DLSS pass, which runs on the game's command list and cannot
-  // submit/wait synchronously.
+  // reference (which is not AddRef'd). This must always be set — a resource
+  // replaced this frame may still be read by in-flight GPU work on the
+  // game's queue, and immediate release causes a use-after-free (which
+  // manifests as DXGI_ERROR_DEVICE_HUNG).
   void SetRetireCallback(RetireCallback cb, void* user_data) {
     retire_cb_ = cb;
     retire_user_data_ = user_data;

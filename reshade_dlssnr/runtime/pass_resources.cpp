@@ -1,5 +1,7 @@
 #include "pass_resources.h"
 
+#include <reshade.hpp>
+
 namespace reshade_dlssnr {
 
 void PassResources::Dispose(Microsoft::WRL::ComPtr<ID3D12Resource>& resource) {
@@ -9,6 +11,15 @@ void PassResources::Dispose(Microsoft::WRL::ComPtr<ID3D12Resource>& resource) {
     // Transfer the reference; the callback releases it later.
     retire_cb_(resource.Detach(), retire_user_data_);
   } else {
+    // No retire callback means we may be about to release a resource the GPU
+    // is still using. Whether that actually faults depends on timing — if the
+    // resource was bound by in-flight GPU work, releasing it will hang the
+    // device. This path should never run; if it does, log it so the cause is
+    // visible rather than manifesting as an unexplained hang.
+    reshade::log::message(
+        reshade::log::level::error,
+        "PassResources::Dispose called without a retire callback; "
+        "releasing synchronously (unsafe)");
     resource.Reset();
   }
 }
@@ -154,8 +165,8 @@ bool PassResources::EnsureScratch(
 }
 
 void PassResources::Shutdown() {
-  // Shutdown implies the GPU is idle or the device is gone, so direct
-  // release is fine — no need to go through the retire path here.
+  // Shutdown is only called after the GPU has been synchronized (or the
+  // device is gone), so direct release is safe here.
   retire_cb_ = nullptr;
   retire_user_data_ = nullptr;
 

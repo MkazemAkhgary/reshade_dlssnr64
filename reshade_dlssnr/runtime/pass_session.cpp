@@ -298,9 +298,12 @@ void PassSession::OnPresent(
   const bool use_working_scale =
       work_width != width || work_height != height;
 
-  // Present path submits and waits each frame, so resources can be released
-  // synchronously when replaced.
-  resources_.SetRetireCallback(nullptr, nullptr);
+  // Always retire replaced resources rather than releasing them immediately.
+  // Even in Present mode, a resource replaced this frame might still be read
+  // by the game's queue from a previous DLSS-mode frame (the game's present
+  // is queued, not necessarily flushed). Retiring hands ownership to a
+  // deferred queue that is drained only after we synchronize with the GPU.
+  resources_.SetRetireCallback(&PassSession::RetireResourceCallback, guides_);
 
   if (!EnsureFrameResources(device.Get(), desc, work_width, work_height)) {
     failed_ = true;
