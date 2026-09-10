@@ -75,18 +75,17 @@ struct DebugViewDef {
 extern const DebugViewDef kDebugViews[];
 extern const uint32_t kDebugViewCount;
 
-// Renders the selected debug view into a scratch resource sized to
-// `target_width × target_height` (which should match the final output).
-// `debug_view` follows the settings convention: 0 = off, N = kDebugViews[N-1].
-// Returns the scratch resource on success, or nullptr on failure so the
-// caller can fall back to the normal composed output.
-ID3D12Resource* DisplayDebugView(
+// Renders the selected debug view into `target`, which the caller owns and
+// must have sized to `target_width × target_height`. `debug_view` follows
+// the settings convention: 0 = off, N = kDebugViews[N-1].
+// Returns true on success.
+bool RenderDebugView(
     CommandContext& state,
     ComputeEngine& codec,
     ID3D12GraphicsCommandList* command_list,
-    PassResources& resources,
     const DebugSnapshot& snapshot,
     int debug_view,
+    ID3D12Resource* target,
     unsigned int target_width,
     unsigned int target_height);
 

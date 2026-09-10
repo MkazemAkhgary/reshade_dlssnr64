@@ -47,6 +47,10 @@ struct Settings {
   // Pass 0 is always enabled; the remaining entries are user-toggleable.
   bool pass_enabled[kMaxPasses] = {true, false, false};
   PassSettings passes[kMaxPasses];
+
+  // UI state: which pass tab is currently open. Determines whose debug view
+  // is rendered. Transient (not persisted).
+  int active_pass = 0;
 };
 
 Settings& GetSettings();

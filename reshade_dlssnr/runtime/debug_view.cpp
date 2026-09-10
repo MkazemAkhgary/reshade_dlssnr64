@@ -6,10 +6,6 @@ namespace reshade_dlssnr {
 
 namespace {
 
-// Scratch slot reserved for debug rendering. Slot 0 is used by the
-// Post-DLSS multi-pass snapshot; we deliberately keep them separate.
-constexpr uint32_t kDebugScratchSlot = 1;
-
 ID3D12Resource* SelectSource(const DebugSnapshot& s,
                              unsigned int* w, unsigned int* h) {
   *w = s.source_width;
@@ -66,61 +62,36 @@ const DebugViewDef kDebugViews[] = {
 const uint32_t kDebugViewCount =
     sizeof(kDebugViews) / sizeof(kDebugViews[0]);
 
-ID3D12Resource* DisplayDebugView(
+bool RenderDebugView(
     CommandContext& state,
     ComputeEngine& codec,
     ID3D12GraphicsCommandList* command_list,
-    PassResources& resources,
     const DebugSnapshot& snapshot,
     int debug_view,
+    ID3D12Resource* target,
     unsigned int target_width,
     unsigned int target_height) {
-  if (debug_view <= 0 || command_list == nullptr ||
+  if (debug_view <= 0 || command_list == nullptr || target == nullptr ||
       target_width == 0 || target_height == 0) {
-    return nullptr;
+    return false;
   }
 
   const uint32_t index = static_cast<uint32_t>(debug_view) - 1;
-  if (index >= kDebugViewCount) return nullptr;
+  if (index >= kDebugViewCount) return false;
 
   unsigned int content_w = 0;
   unsigned int content_h = 0;
   ID3D12Resource* source =
       kDebugViews[index].select(snapshot, &content_w, &content_h);
   if (source == nullptr || content_w == 0 || content_h == 0) {
-    return nullptr;
+    return false;
   }
-
-  Microsoft::WRL::ComPtr<ID3D12Device> device;
-  if (FAILED(command_list->GetDevice(IID_PPV_ARGS(&device))) ||
-      device == nullptr) {
-    return nullptr;
-  }
-
-  // Match the composite output's format so the caller's CopyResource to the
-  // backbuffer (or to the DLSS output) is always format-compatible.
-  ID3D12Resource* composite = resources.GetCompositeOutput();
-  if (composite == nullptr) return nullptr;
-
-  D3D12_RESOURCE_DESC target_desc = composite->GetDesc();
-  target_desc.Width = target_width;
-  target_desc.Height = target_height;
-  target_desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-
-  if (!resources.EnsureScratch(device.Get(), target_desc, target_width,
-                               target_height, kDebugScratchSlot)) {
-    return nullptr;
-  }
-
-  ID3D12Resource* target = resources.GetScratch(kDebugScratchSlot);
-  if (target == nullptr) return nullptr;
 
   const D3D12_RESOURCE_DESC source_desc = source->GetDesc();
-  const D3D12_RESOURCE_DESC actual_target_desc = target->GetDesc();
 
   ComputeConstants constants = {};
-  constants.Width = static_cast<unsigned int>(actual_target_desc.Width);
-  constants.Height = static_cast<unsigned int>(actual_target_desc.Height);
+  constants.Width = target_width;
+  constants.Height = target_height;
   constants.params[0] = static_cast<float>(
       static_cast<uint32_t>(kDebugViews[index].display_mode));
   constants.params[1] = static_cast<float>(content_w);
@@ -138,11 +109,7 @@ ID3D12Resource* DisplayDebugView(
   ID3D12Resource* srvs[kSrvCount] = {source, source, source, source};
   ID3D12Resource* uavs[kUavCount] = {target};
 
-  if (!codec.Dispatch("DebugDisplay", command_list, constants, srvs, uavs)) {
-    return nullptr;
-  }
-
-  return target;
+  return codec.Dispatch("DebugDisplay", command_list, constants, srvs, uavs);
 }
 
 }  // namespace reshade_dlssnr

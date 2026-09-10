@@ -168,12 +168,78 @@ void PassSession::SubmitAndWait() {
   guides_->ReleaseRetiredGameResources();
 }
 
+bool PassSession::MaybeRenderDebug(
+    const PassSettings& pass,
+    const Settings& settings,
+    ID3D12GraphicsCommandList* command_list,
+    FrameDebugContext& frame_debug,
+    const DebugSnapshot& snapshot,
+    unsigned int width,
+    unsigned int height,
+    DXGI_FORMAT format) {
+  if (pass.debug_view == 0) return false;
+  if (static_cast<int>(pass_index_) != settings.active_pass) return false;
+  if (command_list == nullptr || codec_ == nullptr) return false;
+
+  // Lazily (re)create the shared debug output when its shape changes.
+  const bool needs_recreate =
+      frame_debug.output == nullptr ||
+      frame_debug.width != width ||
+      frame_debug.height != height ||
+      frame_debug.format != format;
+
+  if (needs_recreate) {
+    Microsoft::WRL::ComPtr<ID3D12Device> device;
+    if (FAILED(command_list->GetDevice(IID_PPV_ARGS(&device))) ||
+        device == nullptr) {
+      return false;
+    }
+
+    D3D12_HEAP_PROPERTIES heap = {};
+    heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+    D3D12_RESOURCE_DESC desc = {};
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    desc.Width = width;
+    desc.Height = height;
+    desc.DepthOrArraySize = 1;
+    desc.MipLevels = 1;
+    desc.Format = format;
+    desc.SampleDesc.Count = 1;
+    desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+    frame_debug.output.Reset();
+    if (FAILED(device->CreateCommittedResource(
+            &heap, D3D12_HEAP_FLAG_NONE, &desc,
+            D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr,
+            IID_PPV_ARGS(frame_debug.output.GetAddressOf())))) {
+      return false;
+    }
+
+    frame_debug.width = width;
+    frame_debug.height = height;
+    frame_debug.format = format;
+  }
+
+  if (!RenderDebugView(command_, *codec_, command_list, snapshot,
+                       pass.debug_view, frame_debug.output.Get(),
+                       width, height)) {
+    return false;
+  }
+
+  frame_debug.valid = true;
+  return true;
+}
+
 void PassSession::OnPresent(
     NgxRuntime& runtime,
     const PassSettings& pass,
     const Settings& settings,
     ID3D12CommandQueue* command_queue,
-    IDXGISwapChain* swapchain) {
+    IDXGISwapChain* swapchain,
+    FrameDebugContext& frame_debug,
+    bool is_last_in_chain) {
   std::lock_guard<std::mutex> lock(g_session_mutex);
 
   if (!settings.enabled) return;
@@ -332,35 +398,36 @@ void PassSession::OnPresent(
     return;
   }
 
+  DebugSnapshot debug;
+  debug.source = model_input;
+  debug.source_width = width;
+  debug.source_height = height;
+  debug.prepared_input = model_color;
+  debug.prepared_input_width = eval_width;
+  debug.prepared_input_height = eval_height;
+  debug.model_output = model_output;
+  debug.model_output_width = eval_width;
+  debug.model_output_height = eval_height;
+  debug.composed_output = resources_.GetCompositeOutput();
+  debug.composed_output_width = width;
+  debug.composed_output_height = height;
+  if (guides.valid) {
+    debug.motion = guides.motion;
+    debug.motion_width = guides.guide_width;
+    debug.motion_height = guides.guide_height;
+    debug.depth = guides.depth;
+    debug.depth_width = guides.guide_width;
+    debug.depth_height = guides.guide_height;
+  }
+
+  MaybeRenderDebug(pass, settings, command_.GetCommandList(), frame_debug,
+                   debug, width, height, desc.Format);
+
+  // The last pass in the chain applies the debug output if one was
+  // rendered this frame; otherwise it writes its own composed output.
   ID3D12Resource* final_output = resources_.GetCompositeOutput();
-
-  if (pass.debug_view != 0) {
-    DebugSnapshot debug;
-    debug.source = model_input;
-    debug.source_width = width;
-    debug.source_height = height;
-    debug.prepared_input = model_color;
-    debug.prepared_input_width = eval_width;
-    debug.prepared_input_height = eval_height;
-    debug.model_output = model_output;
-    debug.model_output_width = eval_width;
-    debug.model_output_height = eval_height;
-    debug.composed_output = resources_.GetCompositeOutput();
-    debug.composed_output_width = width;
-    debug.composed_output_height = height;
-    if (guides.valid) {
-      debug.motion = guides.motion;
-      debug.motion_width = guides.guide_width;
-      debug.motion_height = guides.guide_height;
-      debug.depth = guides.depth;
-      debug.depth_width = guides.guide_width;
-      debug.depth_height = guides.guide_height;
-    }
-
-    ID3D12Resource* debug_out = DisplayDebugView(
-        command_, *codec_, command_.GetCommandList(), resources_, debug,
-        pass.debug_view, width, height);
-    if (debug_out != nullptr) final_output = debug_out;
+  if (is_last_in_chain && frame_debug.valid) {
+    final_output = frame_debug.output.Get();
   }
 
   command_.CopyResourceToBackbuffer(
@@ -384,7 +451,9 @@ void PassSession::OnPostDlssEvaluate(
     const Settings& settings,
     ID3D12GraphicsCommandList* command_list,
     ID3D12Resource* output_resource,
-    bool is_first_pass) {
+    bool is_first_pass,
+    FrameDebugContext& frame_debug,
+    bool is_last_in_chain) {
   if (!settings.enabled) return;
   if (failed_ || command_list == nullptr || output_resource == nullptr) return;
 
@@ -524,35 +593,34 @@ void PassSession::OnPostDlssEvaluate(
     return;
   }
 
+  DebugSnapshot debug;
+  debug.source = model_input;
+  debug.source_width = width;
+  debug.source_height = height;
+  debug.prepared_input = model_color;
+  debug.prepared_input_width = eval_width;
+  debug.prepared_input_height = eval_height;
+  debug.model_output = model_output;
+  debug.model_output_width = eval_width;
+  debug.model_output_height = eval_height;
+  debug.composed_output = resources_.GetCompositeOutput();
+  debug.composed_output_width = width;
+  debug.composed_output_height = height;
+  if (guides.valid) {
+    debug.motion = guides.motion;
+    debug.motion_width = guides.guide_width;
+    debug.motion_height = guides.guide_height;
+    debug.depth = guides.depth;
+    debug.depth_width = guides.guide_width;
+    debug.depth_height = guides.guide_height;
+  }
+
+  MaybeRenderDebug(pass, settings, command_list, frame_debug,
+                   debug, width, height, desc.Format);
+
   ID3D12Resource* final_output = resources_.GetCompositeOutput();
-
-  if (pass.debug_view != 0) {
-    DebugSnapshot debug;
-    debug.source = model_input;
-    debug.source_width = width;
-    debug.source_height = height;
-    debug.prepared_input = model_color;
-    debug.prepared_input_width = eval_width;
-    debug.prepared_input_height = eval_height;
-    debug.model_output = model_output;
-    debug.model_output_width = eval_width;
-    debug.model_output_height = eval_height;
-    debug.composed_output = resources_.GetCompositeOutput();
-    debug.composed_output_width = width;
-    debug.composed_output_height = height;
-    if (guides.valid) {
-      debug.motion = guides.motion;
-      debug.motion_width = guides.guide_width;
-      debug.motion_height = guides.guide_height;
-      debug.depth = guides.depth;
-      debug.depth_width = guides.guide_width;
-      debug.depth_height = guides.guide_height;
-    }
-
-    ID3D12Resource* debug_out = DisplayDebugView(
-        command_, *codec_, command_list, resources_, debug,
-        pass.debug_view, width, height);
-    if (debug_out != nullptr) final_output = debug_out;
+  if (is_last_in_chain && frame_debug.valid) {
+    final_output = frame_debug.output.Get();
   }
 
   command_.Transition(command_list, final_output,

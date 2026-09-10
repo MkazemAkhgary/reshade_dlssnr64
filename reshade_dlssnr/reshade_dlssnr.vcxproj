@@ -93,6 +93,7 @@
     <ClInclude Include="runtime\command_context.h" />
     <ClInclude Include="runtime\debug_view.h" />
     <ClInclude Include="runtime\d3d12_utils.h" />
+    <ClInclude Include="runtime\frame_debug_context.h" />
     <ClInclude Include="runtime\feature_lifecycle.h" />
     <ClInclude Include="runtime\model_pipeline.h" />
     <ClInclude Include="runtime\ngx_model_params.h" />

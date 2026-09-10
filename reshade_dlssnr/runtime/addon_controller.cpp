@@ -24,15 +24,31 @@ void AddonController::OnPresent(
   if (!settings.enabled) return;
   if (command_queue == nullptr || swapchain == nullptr) return;
 
+  frame_debug_.Reset();
+
+  // Find the last enabled pass whose target is the backbuffer; that pass
+  // is the one that applies the debug output if one was rendered.
+  int last_present_pass = -1;
+  for (int i = static_cast<int>(kMaxPasses) - 1; i >= 0; --i) {
+    if (settings.pass_enabled[i] &&
+        settings.passes[i].injection_stage == InjectionStage::Present) {
+      last_present_pass = i;
+      break;
+    }
+  }
+
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
     if (!settings.pass_enabled[i]) continue;
     if (settings.passes[i].injection_stage != InjectionStage::Present) continue;
+    const bool is_last = (static_cast<int>(i) == last_present_pass);
     passes_[i].OnPresent(
         runtime_,
         settings.passes[i],
         settings,
         command_queue,
-        swapchain);
+        swapchain,
+        frame_debug_,
+        is_last);
   }
 }
 
@@ -45,6 +61,19 @@ void AddonController::OnPostDlssEvaluate(
   if (!settings.enabled) return;
   if (command_list == nullptr || output_resource == nullptr) return;
 
+  frame_debug_.Reset();
+
+  // Find the last enabled Post-DLSS pass; that pass applies the debug
+  // output if one was rendered.
+  int last_post_dlss_pass = -1;
+  for (int i = static_cast<int>(kMaxPasses) - 1; i >= 0; --i) {
+    if (settings.pass_enabled[i] &&
+        settings.passes[i].injection_stage == InjectionStage::PostDLSS) {
+      last_post_dlss_pass = i;
+      break;
+    }
+  }
+
   // Run every enabled pass whose hook is Post-DLSS, in order. The first
   // such pass reads the captured DLSS output; each subsequent pass reads
   // a snapshot of the previous pass's result. The last write goes back
@@ -53,13 +82,16 @@ void AddonController::OnPostDlssEvaluate(
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
     if (!settings.pass_enabled[i]) continue;
     if (settings.passes[i].injection_stage != InjectionStage::PostDLSS) continue;
+    const bool is_last = (static_cast<int>(i) == last_post_dlss_pass);
     passes_[i].OnPostDlssEvaluate(
         runtime_,
         settings.passes[i],
         settings,
         command_list,
         output_resource,
-        is_first);
+        is_first,
+        frame_debug_,
+        is_last);
     is_first = false;
   }
 }

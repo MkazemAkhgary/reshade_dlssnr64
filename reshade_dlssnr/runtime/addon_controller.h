@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "dlss_guides.h"
+#include "frame_debug_context.h"
 #include "pass_session.h"
 #include "runtime.h"
 #include "settings.h"
@@ -36,7 +37,7 @@ class AddonController {
   AddonController() {
     passes_.reserve(kMaxPasses);
     for (uint32_t i = 0; i < kMaxPasses; ++i) {
-      passes_.emplace_back(&DlssGuides::Get());
+      passes_.emplace_back(&DlssGuides::Get(), i);
     }
   }
   ~AddonController() = default;
@@ -46,6 +47,7 @@ class AddonController {
 
   NgxRuntime runtime_;
   std::vector<PassSession> passes_;
+  FrameDebugContext frame_debug_;
 };
 
 }  // namespace reshade_dlssnr

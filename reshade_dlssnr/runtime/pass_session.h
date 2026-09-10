@@ -13,6 +13,7 @@
 #include "debug_view.h"
 #include "dlss_guides.h"
 #include "feature_lifecycle.h"
+#include "frame_debug_context.h"
 #include "pass_resources.h"
 #include "runtime.h"
 #include "settings.h"
@@ -21,15 +22,17 @@ namespace reshade_dlssnr {
 
 class PassSession {
  public:
-  explicit PassSession(DlssGuides* guides)
-      : guides_(guides) {}
+  PassSession(DlssGuides* guides, uint32_t pass_index)
+      : guides_(guides), pass_index_(pass_index) {}
 
   void OnPresent(
       NgxRuntime& runtime,
       const PassSettings& pass,
       const Settings& settings,
       ID3D12CommandQueue* command_queue,
-      IDXGISwapChain* swapchain);
+      IDXGISwapChain* swapchain,
+      FrameDebugContext& frame_debug,
+      bool is_last_in_chain);
 
   // Runs the model pipeline inline on the game's command list, right after
   // the DLSS pass. Writes the composed result back into `output_resource`.
@@ -44,7 +47,9 @@ class PassSession {
       const Settings& settings,
       ID3D12GraphicsCommandList* command_list,
       ID3D12Resource* output_resource,
-      bool is_first_pass);
+      bool is_first_pass,
+      FrameDebugContext& frame_debug,
+      bool is_last_in_chain);
 
   void Shutdown(NgxRuntime& runtime);
 
@@ -94,11 +99,25 @@ class PassSession {
   // retired game resources.
   void SubmitAndWait();
 
+  // Renders the selected debug view into `frame_debug.output` if this pass
+  // is the active one (matching Settings::active_pass) and has a debug view
+  // selected. Safe to call when no debug is configured — it's a no-op.
+  bool MaybeRenderDebug(
+      const PassSettings& pass,
+      const Settings& settings,
+      ID3D12GraphicsCommandList* command_list,
+      FrameDebugContext& frame_debug,
+      const DebugSnapshot& snapshot,
+      unsigned int width,
+      unsigned int height,
+      DXGI_FORMAT format);
+
   CommandContext command_;
   PassResources resources_;
   FeatureLifecycle feature_;
 
   DlssGuides* guides_ = nullptr;
+  uint32_t pass_index_ = 0;
 
   ID3D12CommandQueue* command_queue_ = nullptr;
   std::unique_ptr<ComputeEngine> codec_;

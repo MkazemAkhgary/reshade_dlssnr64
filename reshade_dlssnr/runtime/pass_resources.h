@@ -11,7 +11,11 @@ namespace reshade_dlssnr {
 // Generic scratch texture pool for intermediate stages (pre-exposure,
 // blend helpers, etc.). Slots are created lazily at whatever size/format
 // is requested and reused across frames until the requested size changes.
+//
+// Slot 0 is reserved for the Post-DLSS multi-pass input snapshot.
+// Slot 1 is reserved for the frame debug output.
 constexpr uint32_t kScratchCount = 4;
+constexpr uint32_t kInputSnapshotSlot = 0;
 
 // The per-frame white point reduction uses a kWhitePointGridSize² tile grid.
 constexpr uint32_t kWhitePointGridSize = 8;

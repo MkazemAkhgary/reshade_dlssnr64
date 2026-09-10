@@ -75,14 +75,12 @@ void DrawHookSelector(
   if (at_present) ImGui::PopStyleColor();
 }
 
-void DrawPassSettings(
+void DrawPassSettingsBody(
     uint32_t pass_index,
-    const char* tab_label,
     Settings& settings,
     bool enabled,
     bool& changed) {
   PassSettings& pass = settings.passes[pass_index];
-  if (!ImGui::BeginTabItem(tab_label)) return;
 
   ImGui::PushID(static_cast<int>(pass_index));
 
@@ -270,7 +268,6 @@ void DrawPassSettings(
   }
 
   ImGui::PopID();
-  ImGui::EndTabItem();
 }
 
 }  // namespace
@@ -300,8 +297,12 @@ void DrawOverlay(reshade::api::effect_runtime*) {
     for (uint32_t i = 0; i < kMaxPasses; ++i) {
       char label[32];
       std::snprintf(label, sizeof(label), "Pass %u", i + 1);
-      DrawPassSettings(i, label, settings,
-                       settings.pass_enabled[i], changed);
+      if (ImGui::BeginTabItem(label)) {
+        // The open tab determines which pass's debug view is rendered.
+        settings.active_pass = static_cast<int>(i);
+        DrawPassSettingsBody(i, settings, settings.pass_enabled[i], changed);
+        ImGui::EndTabItem();
+      }
     }
     ImGui::EndTabBar();
   }
