@@ -27,20 +27,6 @@ void AddonController::OnPresent(
     return;
   }
 
-  // Cache the backbuffer format for the Post-DLSS debug capture path.
-  {
-    Microsoft::WRL::ComPtr<IDXGISwapChain3> sc3;
-    if (SUCCEEDED(swapchain->QueryInterface(IID_PPV_ARGS(&sc3))) &&
-        sc3 != nullptr) {
-      Microsoft::WRL::ComPtr<ID3D12Resource> bb;
-      const UINT idx = sc3->GetCurrentBackBufferIndex();
-      if (SUCCEEDED(sc3->GetBuffer(idx, IID_PPV_ARGS(&bb))) &&
-          bb != nullptr) {
-        backbuffer_format_ = bb->GetDesc().Format;
-      }
-    }
-  }
-
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
     if (!settings.pass_enabled[i]) continue;
     if (settings.passes[i].injection_stage != InjectionStage::Present) continue;
@@ -50,8 +36,7 @@ void AddonController::OnPresent(
         settings,
         command_queue,
         swapchain,
-        frame_debug_,
-        /*is_last_in_chain=*/false);
+        frame_debug_);
   }
 
   // If a debug snapshot was captured (by a Present pass or earlier by a
@@ -89,8 +74,7 @@ void AddonController::OnPostDlssEvaluate(
         command_list,
         output_resource,
         is_first,
-        frame_debug_,
-        /*is_last_in_chain=*/false);
+        frame_debug_);
     is_first = false;
   }
 }

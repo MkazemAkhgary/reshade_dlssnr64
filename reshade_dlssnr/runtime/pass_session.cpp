@@ -174,8 +174,7 @@ void PassSession::OnPresent(
     const Settings& settings,
     ID3D12CommandQueue* command_queue,
     IDXGISwapChain* swapchain,
-    FrameDebugContext& frame_debug,
-    bool is_last_in_chain) {
+    FrameDebugContext& frame_debug) {
   std::lock_guard<std::mutex> lock(g_session_mutex);
 
   if (!settings.enabled) return;
@@ -386,8 +385,6 @@ void PassSession::OnPresent(
   CleanupFrameState(command_.GetCommandList());
   SubmitAndWait();
 
-  (void)is_last_in_chain;
-
   if (result != NVSDK_NGX_Result_Success) {
     failed_ = true;
     reason_ = "DLSSNR EvaluateFeature failed";
@@ -402,8 +399,7 @@ void PassSession::OnPostDlssEvaluate(
     ID3D12GraphicsCommandList* command_list,
     ID3D12Resource* output_resource,
     bool is_first_pass,
-    FrameDebugContext& frame_debug,
-    bool is_last_in_chain) {
+    FrameDebugContext& frame_debug) {
   if (!settings.enabled) return;
   if (failed_ || command_list == nullptr || output_resource == nullptr) return;
 
@@ -601,8 +597,6 @@ void PassSession::OnPostDlssEvaluate(
 
   // Leave pass-owned resources in the state SeedFrameState() expects.
   CleanupFrameState(command_list);
-
-  (void)is_last_in_chain;
 }
 
 void PassSession::Shutdown(NgxRuntime& runtime) {

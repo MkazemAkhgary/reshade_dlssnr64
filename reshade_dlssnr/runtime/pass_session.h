@@ -31,8 +31,7 @@ class PassSession {
       const Settings& settings,
       ID3D12CommandQueue* command_queue,
       IDXGISwapChain* swapchain,
-      FrameDebugContext& frame_debug,
-      bool is_last_in_chain);
+      FrameDebugContext& frame_debug);
 
   // Runs the model pipeline inline on the game's command list, right after
   // the DLSS pass. Writes the composed result back into `output_resource`.
@@ -48,8 +47,7 @@ class PassSession {
       ID3D12GraphicsCommandList* command_list,
       ID3D12Resource* output_resource,
       bool is_first_pass,
-      FrameDebugContext& frame_debug,
-      bool is_last_in_chain);
+      FrameDebugContext& frame_debug);
 
   void Shutdown(NgxRuntime& runtime);
 

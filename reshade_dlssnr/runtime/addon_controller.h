@@ -64,10 +64,6 @@ class AddonController {
   CommandContext debug_command_;
   ComputeEngine debug_codec_;
   Microsoft::WRL::ComPtr<ID3D12Resource> debug_output_;
-
-  // Cached from the last Present call. Used by Post-DLSS debug capture so
-  // the debug output buffer is created at the backbuffer's format.
-  DXGI_FORMAT backbuffer_format_ = DXGI_FORMAT_UNKNOWN;
 };
 
 }  // namespace reshade_dlssnr
