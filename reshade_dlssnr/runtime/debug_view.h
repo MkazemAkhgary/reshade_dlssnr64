@@ -26,31 +26,37 @@ struct DebugSnapshot {
   ID3D12Resource* source = nullptr;
   unsigned int source_width = 0;
   unsigned int source_height = 0;
+  D3D12_RESOURCE_STATES source_state = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
 
   // Model input after HDR normalization and optional resize — what the
   // model actually sees.
   ID3D12Resource* prepared_input = nullptr;
   unsigned int prepared_input_width = 0;
   unsigned int prepared_input_height = 0;
+  D3D12_RESOURCE_STATES prepared_input_state = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
 
   // Model output as returned by NGX, before composition.
   ID3D12Resource* model_output = nullptr;
   unsigned int model_output_width = 0;
   unsigned int model_output_height = 0;
+  D3D12_RESOURCE_STATES model_output_state = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 
   // Model output after composition (residual, strength, HDR remap).
   ID3D12Resource* composed_output = nullptr;
   unsigned int composed_output_width = 0;
   unsigned int composed_output_height = 0;
+  D3D12_RESOURCE_STATES composed_output_state = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 
   // DLSS guides captured from the game.
   ID3D12Resource* motion = nullptr;
   unsigned int motion_width = 0;
   unsigned int motion_height = 0;
+  D3D12_RESOURCE_STATES motion_state = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
 
   ID3D12Resource* depth = nullptr;
   unsigned int depth_width = 0;
   unsigned int depth_height = 0;
+  D3D12_RESOURCE_STATES depth_state = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
 };
 
 // How the display shader should interpret the selected resource.
@@ -63,13 +69,15 @@ enum class DebugDisplayMode : uint32_t {
 struct DebugViewDef {
   const char* name;
   DebugDisplayMode display_mode;
-  // Returns the selected resource and its content size. Return nullptr if
-  // the resource is unavailable this frame. The resource may be larger than
-  // the content (e.g. NGX writes into the top-left corner of its output);
-  // the display shader accounts for that.
+  // Returns the selected resource and its content size, plus the resource's
+  // current state so the display path can transition it correctly. Returns
+  // nullptr if the resource is unavailable this frame. The resource may be
+  // larger than the content (e.g. NGX writes into the top-left corner of its
+  // output); the display shader accounts for that.
   ID3D12Resource* (*select)(const DebugSnapshot& snapshot,
                             unsigned int* out_content_width,
-                            unsigned int* out_content_height);
+                            unsigned int* out_content_height,
+                            D3D12_RESOURCE_STATES* out_state);
 };
 
 extern const DebugViewDef kDebugViews[];

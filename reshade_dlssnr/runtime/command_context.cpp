@@ -110,6 +110,14 @@ void CommandContext::SetResourceState(
   resource_states_[resource] = state;
 }
 
+D3D12_RESOURCE_STATES CommandContext::GetResourceState(
+    ID3D12Resource* resource) const {
+  if (resource == nullptr) return D3D12_RESOURCE_STATE_COMMON;
+  auto it = resource_states_.find(resource);
+  return it != resource_states_.end() ? it->second
+                                       : D3D12_RESOURCE_STATE_COMMON;
+}
+
 void CommandContext::CopyResourceToBackbuffer(
     ID3D12GraphicsCommandList* command_list,
     ID3D12Resource* source,

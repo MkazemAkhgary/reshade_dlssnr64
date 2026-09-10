@@ -362,6 +362,14 @@ void PassSession::OnPresent(
   // so the debug image never interferes with the game's own rendering.
   if (pass.debug_view != 0 &&
       static_cast<int>(pass_index_) == settings.active_pass) {
+    debug.source_state = command_.GetResourceState(debug.source);
+    debug.prepared_input_state = command_.GetResourceState(debug.prepared_input);
+    debug.model_output_state = command_.GetResourceState(debug.model_output);
+    debug.composed_output_state =
+        command_.GetResourceState(debug.composed_output);
+    debug.motion_state = command_.GetResourceState(debug.motion);
+    debug.depth_state = command_.GetResourceState(debug.depth);
+
     frame_debug.snapshot = debug;
     frame_debug.debug_view = pass.debug_view;
     frame_debug.valid = true;
@@ -566,6 +574,14 @@ void PassSession::OnPostDlssEvaluate(
   // view selected. The actual rendering is deferred to the Present event.
   if (pass.debug_view != 0 &&
       static_cast<int>(pass_index_) == settings.active_pass) {
+    debug.source_state = command_.GetResourceState(debug.source);
+    debug.prepared_input_state = command_.GetResourceState(debug.prepared_input);
+    debug.model_output_state = command_.GetResourceState(debug.model_output);
+    debug.composed_output_state =
+        command_.GetResourceState(debug.composed_output);
+    debug.motion_state = command_.GetResourceState(debug.motion);
+    debug.depth_state = command_.GetResourceState(debug.depth);
+
     frame_debug.snapshot = debug;
     frame_debug.debug_view = pass.debug_view;
     frame_debug.valid = true;
