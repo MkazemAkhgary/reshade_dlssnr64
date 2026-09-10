@@ -226,9 +226,13 @@ float3 DecodeToLinear(float3 c)
     }
 }
 
-// Extended Reinhard, per channel. Monotonic, preserves details. With
-// W = 1 this is classic x / (1 + x).
-float ReinhardForward(float x, float W)
+// Extended Reinhard, applied componentwise to a color. Monotonic in each
+// channel, so details survive. With W = 1 this is classic x / (1 + x).
+//
+// The signature must be float3 -> float3: HLSL silently truncates a float3
+// argument to a scalar by taking .x, and then broadcasts the scalar result
+// back to float3, which produces greyscale output.
+float3 ReinhardForward(float3 x, float W)
 {
     float W2 = max(W * W, 1e-6);
     return x * (1.0 + x / W2) / (1.0 + x);
