@@ -33,6 +33,22 @@ void WithDisabled(bool disabled, Fn&& fn) {
   if (disabled) ImGui::EndDisabled();
 }
 
+// A TreeNode whose open/closed state lives in a user setting, so the
+// section stays as the user left it across sessions. `open_setting` is
+// both the source of truth and the destination: seeded from the config on
+// load, updated on user toggle, and persisted on save. Returns true when
+// the section is open.
+bool PersistentHeader(const char* label, bool& open_setting, bool& changed) {
+  ImGui::SetNextItemOpen(open_setting, ImGuiCond_Always);
+  const bool open =
+      ImGui::TreeNodeEx(label, ImGuiTreeNodeFlags_CollapsingHeader);
+  if (open != open_setting) {
+    open_setting = open;
+    changed = true;
+  }
+  return open;
+}
+
 // A float slider row: label at the control column, slider filling the
 // remaining width, reset button at the far right, and (for passes > 0) an
 // inherit toggle after reset. When inheriting, the slider is disabled and
@@ -378,9 +394,7 @@ void DrawModelSection(uint32_t pass_index,
   PassSettings& pass = settings.passes[pass_index];
   const PassSettings& resolved = GetResolvedPass(pass_index);
 
-  if (!ImGui::TreeNodeEx("Model",
-                         ImGuiTreeNodeFlags_CollapsingHeader |
-                             ImGuiTreeNodeFlags_DefaultOpen)) {
+  if (!PersistentHeader("Model", pass.ui_model_open, changed)) {
     return;
   }
 
@@ -462,6 +476,7 @@ void DrawShaderParamSections(uint32_t pass_index,
   const PassSettings& resolved = GetResolvedPass(pass_index);
 
   uint32_t i = 0;
+  uint32_t category_index = 0;
   while (i < kShaderParamCount) {
     const char* category = kShaderParams[i].category;
 
@@ -472,9 +487,13 @@ void DrawShaderParamSections(uint32_t pass_index,
     }
 
     ImGui::Separator();
-    const bool open = ImGui::TreeNodeEx(
-        category, ImGuiTreeNodeFlags_CollapsingHeader |
-                      ImGuiTreeNodeFlags_DefaultOpen);
+    // Category order is stable in kShaderParams, so the per-category UI
+    // state stays mapped correctly. If the table is reordered, entries
+    // past kShaderParamCount are ignored and new ones default to open.
+    bool& category_open =
+        pass.ui_category_open[category_index < 16 ? category_index : 15];
+    const bool open = PersistentHeader(category, category_open, changed);
+    category_index++;
 
     if (open) {
       for (uint32_t j = i; j < next; ++j) {
@@ -518,7 +537,7 @@ void DrawShaderParamSections(uint32_t pass_index,
 // ---------------------------------------------------------------------------
 
 void DrawAdvancedSection(PassSettings& pass, bool& changed) {
-  if (!ImGui::TreeNodeEx("Advanced", ImGuiTreeNodeFlags_CollapsingHeader)) {
+  if (!PersistentHeader("Advanced", pass.ui_advanced_open, changed)) {
     return;
   }
 
@@ -591,8 +610,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   DrawSharedDebugView(settings, changed);
 
   // --- HDR section (shared across passes) ---
-  if (ImGui::TreeNodeEx("HDR",
-                        ImGuiTreeNodeFlags_CollapsingHeader)) {
+  if (PersistentHeader("HDR", settings.ui_hdr_open, changed)) {
     changed |= ImGui::Checkbox("Enable HDR Handling",
                                &settings.hdr_enable);
     if (ImGui::IsItemHovered()) {
@@ -712,8 +730,8 @@ void DrawOverlay(reshade::api::effect_runtime*) {
     // Diagnostics: raw measurement values, for scenes where the exposure
     // converges somewhere unexpected. Everything below is read-only.
     if (hdr_on) {
-      if (ImGui::TreeNodeEx("Diagnostics",
-                            ImGuiTreeNodeFlags_CollapsingHeader)) {
+      if (PersistentHeader("Diagnostics", settings.ui_hdr_diagnostics_open,
+                           changed)) {
         const HdrSnapshot snap = AddonController::Get().GetHdrSnapshot();
 
         if (!snap.has_histogram) {
