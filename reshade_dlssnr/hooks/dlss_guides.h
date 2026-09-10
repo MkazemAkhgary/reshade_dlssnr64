@@ -14,8 +14,13 @@ namespace reshade_dlssnr {
 struct DlssGuideState {
   ID3D12Resource* depth = nullptr;
   ID3D12Resource* motion = nullptr;
+  // Clone of the DLSS output color, used as model input in the
+  // Post-DLSS injection stage. nullptr until the first capture.
+  ID3D12Resource* dlss_output_color = nullptr;
   unsigned int guide_width = 0;
   unsigned int guide_height = 0;
+  unsigned int output_width = 0;
+  unsigned int output_height = 0;
   float mv_scale_x = 1.0f;
   float mv_scale_y = 1.0f;
   bool depth_inverted = false;
@@ -52,6 +57,7 @@ class DlssGuides {
 
   Microsoft::WRL::ComPtr<ID3D12Resource> depth_clone_;
   Microsoft::WRL::ComPtr<ID3D12Resource> motion_clone_;
+  Microsoft::WRL::ComPtr<ID3D12Resource> dlss_output_clone_;
 
   unsigned int depth_width_ = 0;
   unsigned int depth_height_ = 0;
@@ -60,6 +66,10 @@ class DlssGuides {
   unsigned int motion_width_ = 0;
   unsigned int motion_height_ = 0;
   DXGI_FORMAT motion_format_ = DXGI_FORMAT_UNKNOWN;
+
+  unsigned int dlss_output_width_ = 0;
+  unsigned int dlss_output_height_ = 0;
+  DXGI_FORMAT dlss_output_format_ = DXGI_FORMAT_UNKNOWN;
 
   std::vector<ID3D12Resource*> retired_resources_;
   std::vector<ID3D12Resource*> retired_game_resources_;

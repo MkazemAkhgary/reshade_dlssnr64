@@ -5,6 +5,7 @@
 
 #include <reshade.hpp>
 
+#include "d3d12_utils.h"
 #include "dlss_guides.h"
 #include "model_pipeline.h"
 #include "ngx_model_params.h"
@@ -239,6 +240,7 @@ void PassSession::OnPresent(
 
     if (!model_pipeline::PrepareInput(
             command_,
+            command_.GetCommandList(),
             resources_,
             codec_.get(),
             model_input,
@@ -296,6 +298,126 @@ void PassSession::OnPresent(
     reason_ = "DLSSNR EvaluateFeature failed";
     reshade::log::message(reshade::log::level::error, reason_);
   }
+}
+
+void PassSession::OnPostDlssEvaluate(
+    NgxRuntime& runtime,
+    const PassSettings& pass,
+    const Settings& settings,
+    ID3D12GraphicsCommandList* command_list,
+    ID3D12Resource* output_resource) {
+  if (!settings.enabled) return;
+  if (failed_ || command_list == nullptr || output_resource == nullptr) return;
+
+  Microsoft::WRL::ComPtr<ID3D12Device> device;
+  if (FAILED(command_list->GetDevice(IID_PPV_ARGS(&device))) ||
+      device == nullptr) {
+    return;
+  }
+
+  if (!runtime.Initialize(device.Get())) return;
+
+  if (codec_ == nullptr) {
+    codec_ = std::make_unique<ComputeEngine>();
+  }
+
+  if (!codec_->IsInit() && !codec_->Init(device.Get())) {
+    failed_ = true;
+    reason_ = "failed to initialize compute engine";
+    return;
+  }
+
+  const DlssGuideState guides = guides_->GetState();
+  ID3D12Resource* model_input = guides.dlss_output_color;
+  if (model_input == nullptr) return;
+
+  const D3D12_RESOURCE_DESC desc = output_resource->GetDesc();
+  const unsigned int width = static_cast<unsigned int>(desc.Width);
+  const unsigned int height = static_cast<unsigned int>(desc.Height);
+
+  const float working_scale = std::clamp(pass.working_scale, 0.25f, 1.0f);
+  const unsigned int work_width =
+      std::max(1u, static_cast<unsigned int>(width * working_scale + 0.5f));
+  const unsigned int work_height =
+      std::max(1u, static_cast<unsigned int>(height * working_scale + 0.5f));
+  const bool use_working_scale =
+      work_width != width || work_height != height;
+
+  if (!EnsureFrameResources(device.Get(), desc, work_width, work_height,
+                            use_working_scale)) {
+    failed_ = true;
+    return;
+  }
+
+  command_.SetResourceState(model_input,
+                            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+  if (!feature_.HasFeature()) {
+    const unsigned int create_width = use_working_scale ? work_width : width;
+    const unsigned int create_height = use_working_scale ? work_height : height;
+    feature_.EnsureFeature(runtime, pass, command_list, create_width, create_height);
+    return;
+  }
+
+  ID3D12Resource* model_color = model_input;
+  ID3D12Resource* model_output = resources_.GetOutput();
+  unsigned int eval_width = width;
+  unsigned int eval_height = height;
+
+  if (use_working_scale) {
+    if (!model_pipeline::PrepareInput(
+            command_,
+            command_list,
+            resources_,
+            codec_.get(),
+            model_input,
+            &model_color,
+            &model_output,
+            &eval_width,
+            &eval_height,
+            width,
+            height,
+            work_width,
+            work_height,
+            true)) {
+      return;
+    }
+  }
+
+  if (!FillEvaluateParams(runtime, pass, guides, model_color, model_output,
+                          eval_width, eval_height, width, height)) {
+    return;
+  }
+
+  runtime.EvaluateFeature(
+      command_list,
+      feature_.FeatureHandle(),
+      runtime.Parameters().Get(),
+      nullptr);
+
+  if (!model_pipeline::ComposeOutput(
+          command_,
+          command_list,
+          resources_,
+          codec_.get(),
+          model_input,
+          model_color,
+          model_output,
+          width,
+          height,
+          pass.params)) {
+    return;
+  }
+
+  command_.Transition(command_list, resources_.GetCompositeOutput(),
+                      D3D12_RESOURCE_STATE_COPY_SOURCE);
+  const D3D12_RESOURCE_STATES out_state = InferResourceState(output_resource);
+  command_.Transition(command_list, output_resource,
+                      D3D12_RESOURCE_STATE_COPY_DEST);
+  command_list->CopyResource(output_resource, resources_.GetCompositeOutput());
+  command_.Transition(command_list, output_resource, out_state);
+  command_.Transition(command_list, resources_.GetCompositeOutput(),
+                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
 
 void PassSession::Shutdown(NgxRuntime& runtime) {

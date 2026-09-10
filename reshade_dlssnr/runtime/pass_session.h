@@ -30,6 +30,16 @@ class PassSession {
       ID3D12CommandQueue* command_queue,
       IDXGISwapChain* swapchain);
 
+  // Runs the model pipeline inline on the game's command list, right after
+  // the DLSS pass. Writes the composed result back into `output_resource`.
+  // Does not close, submit, or wait on the command list.
+  void OnPostDlssEvaluate(
+      NgxRuntime& runtime,
+      const PassSettings& pass,
+      const Settings& settings,
+      ID3D12GraphicsCommandList* command_list,
+      ID3D12Resource* output_resource);
+
   void Shutdown(NgxRuntime& runtime);
 
  private:

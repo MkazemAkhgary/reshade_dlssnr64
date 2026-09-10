@@ -221,10 +221,45 @@ void DlssGuides::Capture(
   Barrier(command_list, motion, D3D12_RESOURCE_STATE_COPY_SOURCE, motion_state);
   Barrier(command_list, motion_clone_.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
+  // Clone the DLSS output color for use as model input at Post-DLSS.
+  ID3D12Resource* output = GetResource(
+      params, NVSDK_NGX_Parameter_Output, "DLSSD.Output");
+
+  if (output != nullptr) {
+    if (dlss_output_clone_ == nullptr ||
+        dlss_output_width_ != static_cast<unsigned int>(output->GetDesc().Width) ||
+        dlss_output_height_ != static_cast<unsigned int>(output->GetDesc().Height) ||
+        dlss_output_format_ != (IsTypelessFormat(output->GetDesc().Format)
+                                    ? TypedGuideFormat(output->GetDesc().Format)
+                                    : output->GetDesc().Format)) {
+      RetireResource(dlss_output_clone_);
+      dlss_output_clone_.Attach(CreateGuideClone(
+          device, output, &dlss_output_width_, &dlss_output_height_,
+          &dlss_output_format_));
+    }
+
+    if (dlss_output_clone_ != nullptr) {
+      const D3D12_RESOURCE_STATES output_state =
+          reshade_dlssnr::InferResourceState(output);
+      Barrier(command_list, output, output_state, D3D12_RESOURCE_STATE_COPY_SOURCE);
+      Barrier(command_list, dlss_output_clone_.Get(),
+              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+              D3D12_RESOURCE_STATE_COPY_DEST);
+      command_list->CopyResource(dlss_output_clone_.Get(), output);
+      Barrier(command_list, output, D3D12_RESOURCE_STATE_COPY_SOURCE, output_state);
+      Barrier(command_list, dlss_output_clone_.Get(),
+              D3D12_RESOURCE_STATE_COPY_DEST,
+              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    }
+  }
+
   state_.depth = depth_clone_.Get();
   state_.motion = motion_clone_.Get();
+  state_.dlss_output_color = dlss_output_clone_.Get();
   state_.guide_width = guide_width;
   state_.guide_height = guide_height;
+  state_.output_width = dlss_output_width_;
+  state_.output_height = dlss_output_height_;
   state_.mv_scale_x = mv_scale_x;
   state_.mv_scale_y = mv_scale_y;
   state_.depth_inverted = (create_flags & NVSDK_NGX_DLSS_Feature_Flags_DepthInverted) != 0;
@@ -285,6 +320,7 @@ void DlssGuides::Clear() {
 
   depth_clone_.Reset();
   motion_clone_.Reset();
+  dlss_output_clone_.Reset();
 
   ReleaseRetiredResourcesLocked();
   ReleaseRetiredGameResourcesLocked();
@@ -296,6 +332,9 @@ void DlssGuides::Clear() {
   motion_width_ = 0;
   motion_height_ = 0;
   motion_format_ = DXGI_FORMAT_UNKNOWN;
+  dlss_output_width_ = 0;
+  dlss_output_height_ = 0;
+  dlss_output_format_ = DXGI_FORMAT_UNKNOWN;
 }
 
 }  // namespace reshade_dlssnr

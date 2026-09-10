@@ -14,6 +14,9 @@ class CommandContext {
   bool Ensure(ID3D12Device* device);
 
   void Reset();
+  // Clears tracked resource states. Call when resources are recreated or
+  // when the tracked state may no longer reflect the GPU's actual state.
+  void ClearState();
   void CloseAndSubmit(ID3D12CommandQueue* command_queue);
   void WaitGpu(ID3D12CommandQueue* command_queue);
 

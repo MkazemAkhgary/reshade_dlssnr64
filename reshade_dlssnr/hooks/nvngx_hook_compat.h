@@ -14,9 +14,11 @@
 
 #include <detours.h>
 
+#include "addon_controller.h"
 #include "d3d12_hooks.h"
 #include "dlss_guides.h"
 #include "local_vtable.h"
+#include "settings.h"
 
 namespace reshade_dlssnr::ngx_hook_compat {
 
@@ -65,6 +67,17 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
 
     if (feature_id == NVSDK_NGX_Feature_SuperSampling) {
       DlssGuides::Get().Capture(command_list, parameters, feature_id);
+
+      const Settings& settings = GetSettings();
+      if (settings.enabled &&
+          settings.injection_stage == InjectionStage::PostDLSS) {
+        ID3D12Resource* output = nullptr;
+        if (parameters->Get(NVSDK_NGX_Parameter_Output, &output) ==
+                NVSDK_NGX_Result_Success &&
+            output != nullptr) {
+          AddonController::Get().OnPostDlssEvaluate(command_list, output);
+        }
+      }
     }
   }
 

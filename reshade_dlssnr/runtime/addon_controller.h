@@ -24,6 +24,12 @@ class AddonController {
       ID3D12CommandQueue* command_queue,
       IDXGISwapChain* swapchain);
 
+  // Runs the first enabled pass inline on the game's command list, right
+  // after the DLSS pass. Only active when InjectionStage == PostDLSS.
+  void OnPostDlssEvaluate(
+      ID3D12GraphicsCommandList* command_list,
+      ID3D12Resource* output_resource);
+
   void Shutdown();
 
  private:

@@ -9,6 +9,11 @@ namespace reshade_dlssnr {
 
 constexpr uint32_t kMaxPasses = 3;
 
+enum class InjectionStage : int {
+  PostDLSS = 0,
+  Present = 1,
+};
+
 struct PassSettings {
   int preset = 1;
 
@@ -30,6 +35,9 @@ struct PassSettings {
 struct Settings {
   bool enabled = true;
   bool only_super_sampling = true;
+
+  // Where in the frame the model pipeline runs.
+  InjectionStage injection_stage = InjectionStage::Present;
 
   // Pass 0 is always enabled; the remaining entries are user-toggleable.
   bool pass_enabled[kMaxPasses] = {true, false, false};

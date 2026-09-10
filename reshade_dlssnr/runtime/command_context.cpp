@@ -51,7 +51,9 @@ void CommandContext::Reset() {
     command_allocator_->Reset();
     command_list_->Reset(command_allocator_.Get(), nullptr);
   }
+}
 
+void CommandContext::ClearState() {
   resource_states_.clear();
 }
 
@@ -130,6 +132,7 @@ void CommandContext::Shutdown() {
   fence_.Reset();
   command_list_.Reset();
   command_allocator_.Reset();
+  resource_states_.clear();
 
   fence_value_ = 0;
 }
