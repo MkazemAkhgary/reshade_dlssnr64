@@ -24,8 +24,10 @@ void PassSession::Fail(const char* reason) {
 }
 
 PassStatus PassSession::GetStatus() const {
+  // Only the runtime-owned fields are populated here. `enabled` and `stage`
+  // are setting-owned and are filled in by AddonController::RefreshStatus,
+  // which has access to the current settings.
   PassStatus s;
-  s.enabled = !failed_;
   s.running = !failed_ && feature_.HasFeature();
   s.failed = failed_;
   s.has_feature = feature_.HasFeature();

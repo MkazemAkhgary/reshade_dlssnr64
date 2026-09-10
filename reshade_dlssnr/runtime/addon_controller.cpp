@@ -223,7 +223,12 @@ void AddonController::RefreshStatus(const Settings& settings) {
 
   status_.pass_count = kMaxPasses;
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
+    // Take the runtime-owned part of the status from the session (failed,
+    // has_feature, reason), then fill in the setting-owned parts from the
+    // current configuration, which the session does not have access to.
     status_.passes[i] = passes_[i].GetStatus();
+    status_.passes[i].enabled = settings.pass_enabled[i];
+    status_.passes[i].stage = settings.passes[i].injection_stage;
   }
 }
 
