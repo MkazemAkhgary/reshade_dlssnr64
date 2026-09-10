@@ -303,6 +303,7 @@ cbuffer Params : register(b0)
 #define kWhitePoint      gParams[2].y
 #define kFormat          gParams[2].z
 #define kEditStrength    gParams[2].w
+#define kChromaMode      gParams[3].x
 
 Texture2D<float4> gOriginal    : register(t0);
 Texture2D<float4> gLowInput    : register(t1);
@@ -465,19 +466,9 @@ float3 BlendYCbCr(float3 original, float3 edited,
     return result;
 }
 
-[numthreads(8, 8, 1)]
-void CSMain(uint3 id : SV_DispatchThreadID)
-{
-    if (id.x >= gWidth || id.y >= gHeight)
-        return;
-
-    float2 uv = (float2(id.xy) + 0.5) / float2(gWidth, gHeight);
-
-    float4 orig_hdr = gOriginal.SampleLevel(s0, uv, 0);
-    float3 low_in  = gLowInput.SampleLevel(s0, uv, 0).rgb;    // sRGB
-    float3 low_out = gLowEnhanced.SampleLevel(s0, uv, 0).rgb; // sRGB
-
-    // Model edit, computed exactly as in the SDR path (in sRGB space).
+// Additive mode: the model's edit is an RGB delta in sRGB. Applied to the
+// reconstructed full-res SDR, then inverse-tonemapped back to HDR.
+float3 ComposeAdditive(float3 src_lin, float3 low_in, float3 low_out) {
     float3 residual;
     if (kSoftCompression != 0) {
         float in_luma  = max(dot(low_in, kLuma709), 1e-6);
@@ -508,18 +499,59 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     }
     residual *= kEditStrength;
 
-    // Rebuild the full-res SDR the original would have tonemapped to.
-    // This is the same pipeline as TonemapForward, applied to the full-res
-    // source instead of the working-scale input.
-    float3 src_lin = DecodeToLinear(orig_hdr.rgb);
-    float3 sdr_orig_lin = ReinhardForward(src_lin * kExposure, kWhitePoint);
-    float3 sdr_orig = LinearToSrgb(sdr_orig_lin);
-
-    // Apply the residual in sRGB space, then inverse-tonemap back to HDR.
+    float3 sdr_orig = LinearToSrgb(
+        ReinhardForward(src_lin * kExposure, kWhitePoint));
     float3 edited_sdr = saturate(sdr_orig + residual);
     float3 edited_sdr_lin = SrgbToLinear(edited_sdr);
-    float3 edited_src_lin =
-        ReinhardInverse(edited_sdr_lin, kWhitePoint) / kExposure;
+    return ReinhardInverse(edited_sdr_lin, kWhitePoint) / kExposure;
+}
+
+// Ratio mode: the model's edit is a per-channel multiplicative ratio in
+// linear SDR. Applied directly to the HDR linear. Soft compression (when
+// enabled) clamps the ratio delta per channel. This preserves relative
+// brightness changes exactly but can amplify noise where the SDR input is
+// near zero.
+float3 ComposeRatio(float3 src_lin, float3 low_in, float3 low_out) {
+    float3 sdr_in_lin = SrgbToLinear(low_in);
+    float3 sdr_out_lin = SrgbToLinear(low_out);
+
+    const float eps = 1e-4;
+    float3 ratio = (sdr_out_lin + eps) / (sdr_in_lin + eps);
+    float3 ratio_delta = ratio - 1.0;
+
+    if (kSoftCompression != 0) {
+        ratio_delta.r = SoftCompress(
+            ratio_delta.r, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
+        ratio_delta.g = SoftCompress(
+            ratio_delta.g, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
+        ratio_delta.b = SoftCompress(
+            ratio_delta.b, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
+    }
+
+    ratio_delta *= kEditStrength;
+    return max(src_lin, 0.0) * (1.0 + ratio_delta);
+}
+
+[numthreads(8, 8, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= gWidth || id.y >= gHeight)
+        return;
+
+    float2 uv = (float2(id.xy) + 0.5) / float2(gWidth, gHeight);
+
+    float4 orig_hdr = gOriginal.SampleLevel(s0, uv, 0);
+    float3 low_in  = gLowInput.SampleLevel(s0, uv, 0).rgb;    // sRGB
+    float3 low_out = gLowEnhanced.SampleLevel(s0, uv, 0).rgb; // sRGB
+
+    float3 src_lin = DecodeToLinear(orig_hdr.rgb);
+
+    float3 edited_src_lin;
+    if (kChromaMode < 0.5) {
+        edited_src_lin = ComposeAdditive(src_lin, low_in, low_out);
+    } else {
+        edited_src_lin = ComposeRatio(src_lin, low_in, low_out);
+    }
 
     // Blend original and edited in linear space using luma / chroma
     // strengths. Chroma is interpolated in normalized space so that

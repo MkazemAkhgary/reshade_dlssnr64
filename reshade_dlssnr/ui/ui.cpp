@@ -650,10 +650,12 @@ void DrawOverlay(reshade::api::effect_runtime*) {
       {
         static const char* kChromaNames[] = {"Additive", "Ratio"};
         static const char* kChromaTips[] = {
-            "Add the model's chroma delta to the source (predictable, "
-            "strict hue preservation).",
-            "Match the model's chroma direction and rescale the source. "
-            "More model-native, can saturate near-grey pixels."};
+            "Apply the model's edit as an RGB delta in the SDR intermediate, "
+            "then inverse-tonemap back to HDR. Predictable; the edit's "
+            "magnitude is bounded by the SDR delta. Default.",
+            "Apply the model's edit as a per-channel multiplicative ratio "
+            "in linear space. Preserves relative brightness changes exactly, "
+            "but can amplify noise where the source is near zero."};
         int mode = static_cast<int>(settings.hdr_chroma_mode);
         changed |= DrawComboRow(
             "hdr_chroma_mode", "Chroma Edit",

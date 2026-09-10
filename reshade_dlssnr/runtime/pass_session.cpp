@@ -596,6 +596,8 @@ void PassSession::OnPostDlssEvaluate(
     hdr_uniforms.white_point =
         hdr->WhitePoint() * std::max(settings.hdr_curve_white, 0.01f);
     hdr_uniforms.edit_strength = settings.hdr_edit_strength;
+    hdr_uniforms.chroma_mode =
+        static_cast<uint32_t>(settings.hdr_chroma_mode);
     switch (hdr->ResolvedFormat()) {
       case HdrFormat::ScRgb: hdr_uniforms.format = 1; break;
       case HdrFormat::Hdr10: hdr_uniforms.format = 2; break;

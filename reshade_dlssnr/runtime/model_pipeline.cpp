@@ -89,6 +89,7 @@ bool ComposeOutput(
     constants.params[9]  = hdr->white_point;
     constants.params[10] = static_cast<float>(hdr->format);
     constants.params[11] = hdr->edit_strength;
+    constants.params[12] = static_cast<float>(hdr->chroma_mode);
   }
 
   state.Transition(command_list, original,

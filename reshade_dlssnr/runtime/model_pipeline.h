@@ -19,6 +19,11 @@ struct HdrUniforms {
   float white_point = 4.0f;
   uint32_t format = 0;
   float edit_strength = 1.0f;
+  // How the model's edit is transferred back to HDR:
+  //   0 = additive (RGB delta in SDR, then inverse-tonemapped)
+  //   1 = ratio (multiplicative per-channel in linear SDR, applied
+  //       directly to the HDR linear)
+  uint32_t chroma_mode = 0;
 };
 
 // Prepares the model input. With `hdr == nullptr`, resamples `full_input`

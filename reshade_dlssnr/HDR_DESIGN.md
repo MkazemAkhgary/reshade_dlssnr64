@@ -415,10 +415,19 @@ ID3D12Resource* GetHistogram() const;
    significantly, pass 3 reads the modified image as its `hdrOrig` while
    using the exposure measured on the original. Acceptable for now.
 
-7. **Chroma edit modes.** `Additive` is more predictable and preserves hue
-   strictly. `Ratio` matches the model's chroma direction more closely but
-   can amplify saturation in near-grey pixels. Ship both, default to
-   Additive, iterate with real content.
+7. **Chroma edit modes.**
+   - `Additive` (default): the model's edit is expressed as an RGB delta in
+     SDR sRGB space, applied to the reconstructed full-res SDR, then
+     inverse-tonemapped back to HDR. Predictable; the edit's magnitude is
+     bounded by the SDR delta. Safe everywhere.
+   - `Ratio`: the model's edit is expressed as a per-channel multiplicative
+     ratio in linear SDR, applied directly to the HDR linear. Preserves
+     relative brightness changes exactly, at the cost of amplifying noise
+     where the SDR input is near zero.
+
+   Both modes flow through the same soft compression (when enabled) and the
+   same luma/chroma strength blend. Ship both, default to Additive, iterate
+   with real content.
 
 ## Implementation phases
 
