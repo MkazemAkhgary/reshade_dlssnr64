@@ -69,13 +69,23 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
       DlssGuides::Get().Capture(command_list, parameters, feature_id);
 
       const Settings& settings = GetSettings();
-      if (settings.enabled &&
-          settings.injection_stage == InjectionStage::PostDLSS) {
-        ID3D12Resource* output = nullptr;
-        if (parameters->Get(NVSDK_NGX_Parameter_Output, &output) ==
-                NVSDK_NGX_Result_Success &&
-            output != nullptr) {
-          AddonController::Get().OnPostDlssEvaluate(command_list, output);
+      if (settings.enabled) {
+        bool any_post_dlss = false;
+        for (uint32_t i = 0; i < kMaxPasses; ++i) {
+          if (settings.pass_enabled[i] &&
+              settings.passes[i].injection_stage == InjectionStage::PostDLSS) {
+            any_post_dlss = true;
+            break;
+          }
+        }
+
+        if (any_post_dlss) {
+          ID3D12Resource* output = nullptr;
+          if (parameters->Get(NVSDK_NGX_Parameter_Output, &output) ==
+                  NVSDK_NGX_Result_Success &&
+              output != nullptr) {
+            AddonController::Get().OnPostDlssEvaluate(command_list, output);
+          }
         }
       }
     }

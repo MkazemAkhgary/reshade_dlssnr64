@@ -63,11 +63,69 @@ void DrawToggle(const char* label, const char* tooltip,
   ImGui::PopID();
 }
 
+void DrawHookSelector(
+    Settings& settings,
+    uint32_t pass_index,
+    bool& changed) {
+  PassSettings& pass = settings.passes[pass_index];
+
+  // A pass can be At DLSS only if every earlier pass is also At DLSS.
+  bool can_be_at_dlss = true;
+  for (uint32_t j = 0; j < pass_index; ++j) {
+    if (settings.passes[j].injection_stage == InjectionStage::Present) {
+      can_be_at_dlss = false;
+      break;
+    }
+  }
+
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted("Hook");
+  ImGui::SameLine(kControlLabelWidth);
+
+  const float hook_button_width =
+      (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) /
+      2.0f;
+
+  const bool at_dlss = pass.injection_stage == InjectionStage::PostDLSS;
+  if (!can_be_at_dlss) ImGui::BeginDisabled();
+  if (at_dlss) {
+    ImGui::PushStyleColor(ImGuiCol_Button,
+                          ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+  }
+  if (ImGui::Button("At DLSS", ImVec2(hook_button_width, 0.0f)) &&
+      can_be_at_dlss && !at_dlss) {
+    pass.injection_stage = InjectionStage::PostDLSS;
+    changed = true;
+  }
+  if (at_dlss) ImGui::PopStyleColor();
+  if (!can_be_at_dlss) ImGui::EndDisabled();
+
+  ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
+
+  const bool at_present = pass.injection_stage == InjectionStage::Present;
+  if (at_present) {
+    ImGui::PushStyleColor(ImGuiCol_Button,
+                          ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+  }
+  if (ImGui::Button("At Present", ImVec2(hook_button_width, 0.0f)) &&
+      !at_present) {
+    pass.injection_stage = InjectionStage::Present;
+    // Force all later passes to Present as well.
+    for (uint32_t j = pass_index + 1; j < kMaxPasses; ++j) {
+      settings.passes[j].injection_stage = InjectionStage::Present;
+    }
+    changed = true;
+  }
+  if (at_present) ImGui::PopStyleColor();
+}
+
 void DrawPassSettings(
+    uint32_t pass_index,
     const char* tab_label,
-    PassSettings& pass,
+    Settings& settings,
     bool enabled,
     bool& changed) {
+  PassSettings& pass = settings.passes[pass_index];
   if (!ImGui::BeginTabItem(tab_label)) return;
 
   ImGui::PushID(tab_label);
@@ -75,6 +133,10 @@ void DrawPassSettings(
   if (!enabled) {
     ImGui::BeginDisabled();
   }
+
+  DrawHookSelector(settings, pass_index, changed);
+
+  ImGui::Separator();
 
   const float button_width =
       (ImGui::GetContentRegionAvail().x - kControlLabelWidth) / 3.0f -
@@ -202,46 +264,6 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   changed |= ImGui::Checkbox("Only run on SuperSampling",
                              &settings.only_super_sampling);
 
-  {
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Hook");
-    ImGui::SameLine(kControlLabelWidth);
-
-    const float hook_button_width =
-        (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) /
-        2.0f;
-    const bool at_dlss =
-        settings.injection_stage == InjectionStage::PostDLSS;
-    const bool at_present =
-        settings.injection_stage == InjectionStage::Present;
-
-    if (at_dlss) {
-      ImGui::PushStyleColor(ImGuiCol_Button,
-                            ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-    }
-    if (ImGui::Button("At DLSS", ImVec2(hook_button_width, 0.0f))) {
-      settings.injection_stage = InjectionStage::PostDLSS;
-      changed = true;
-    }
-    if (at_dlss) {
-      ImGui::PopStyleColor();
-    }
-
-    ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
-
-    if (at_present) {
-      ImGui::PushStyleColor(ImGuiCol_Button,
-                            ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-    }
-    if (ImGui::Button("At Present", ImVec2(hook_button_width, 0.0f))) {
-      settings.injection_stage = InjectionStage::Present;
-      changed = true;
-    }
-    if (at_present) {
-      ImGui::PopStyleColor();
-    }
-  }
-
   if (settings.enabled) {
     for (uint32_t i = 1; i < kMaxPasses; ++i) {
       char label[32];
@@ -256,7 +278,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
     for (uint32_t i = 0; i < kMaxPasses; ++i) {
       char label[32];
       std::snprintf(label, sizeof(label), "Pass %u", i + 1);
-      DrawPassSettings(label, settings.passes[i],
+      DrawPassSettings(i, label, settings,
                        settings.pass_enabled[i], changed);
     }
     ImGui::EndTabBar();

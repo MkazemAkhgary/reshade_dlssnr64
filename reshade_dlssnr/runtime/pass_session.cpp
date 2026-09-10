@@ -306,7 +306,8 @@ void PassSession::OnPostDlssEvaluate(
     const PassSettings& pass,
     const Settings& settings,
     ID3D12GraphicsCommandList* command_list,
-    ID3D12Resource* output_resource) {
+    ID3D12Resource* output_resource,
+    bool is_first_pass) {
   if (!settings.enabled) return;
   if (failed_ || command_list == nullptr || output_resource == nullptr) return;
 
@@ -329,8 +330,6 @@ void PassSession::OnPostDlssEvaluate(
   }
 
   const DlssGuideState guides = guides_->GetState();
-  ID3D12Resource* model_input = guides.dlss_output_color;
-  if (model_input == nullptr) return;
 
   const D3D12_RESOURCE_DESC desc = output_resource->GetDesc();
   const unsigned int width = static_cast<unsigned int>(desc.Width);
@@ -350,11 +349,35 @@ void PassSession::OnPostDlssEvaluate(
     return;
   }
 
-  // State is tracked per frame; clear any stale entries from the previous
-  // frame before registering this frame's known initial states.
+  // Fresh state tracking per pass: no cross-pass aliasing to rely on.
   command_.ClearState();
-  command_.SetResourceState(model_input,
-                            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  command_.SetResourceState(output_resource, InferResourceState(output_resource));
+
+  // Determine input: first pass reads the captured DLSS output; subsequent
+  // passes snapshot the previous result into scratch slot 0.
+  ID3D12Resource* model_input = nullptr;
+  if (is_first_pass) {
+    if (guides.dlss_output_color == nullptr) return;
+    model_input = guides.dlss_output_color;
+    command_.SetResourceState(model_input,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  } else {
+    constexpr uint32_t kInputSnapshotSlot = 0;
+    if (!resources_.EnsureScratch(device.Get(), desc, width, height,
+                                  kInputSnapshotSlot)) {
+      failed_ = true;
+      return;
+    }
+    ID3D12Resource* scratch = resources_.GetScratch(kInputSnapshotSlot);
+    command_.Transition(command_list, output_resource,
+                        D3D12_RESOURCE_STATE_COPY_SOURCE);
+    command_.Transition(command_list, scratch,
+                        D3D12_RESOURCE_STATE_COPY_DEST);
+    command_list->CopyResource(scratch, output_resource);
+    command_.Transition(command_list, scratch,
+                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    model_input = scratch;
+  }
 
   if (!feature_.HasFeature()) {
     const unsigned int create_width = use_working_scale ? work_width : width;

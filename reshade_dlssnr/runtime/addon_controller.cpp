@@ -22,11 +22,11 @@ void AddonController::OnPresent(
 
   const Settings& settings = GetSettings();
   if (!settings.enabled) return;
-  if (settings.injection_stage != InjectionStage::Present) return;
   if (command_queue == nullptr || swapchain == nullptr) return;
 
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
     if (!settings.pass_enabled[i]) continue;
+    if (settings.passes[i].injection_stage != InjectionStage::Present) continue;
     passes_[i].OnPresent(
         runtime_,
         settings.passes[i],
@@ -43,20 +43,24 @@ void AddonController::OnPostDlssEvaluate(
 
   const Settings& settings = GetSettings();
   if (!settings.enabled) return;
-  if (settings.injection_stage != InjectionStage::PostDLSS) return;
   if (command_list == nullptr || output_resource == nullptr) return;
 
-  // Only the first enabled pass runs at Post-DLSS; subsequent passes are
-  // ignored because they would chain into a resource we don't own.
+  // Run every enabled pass whose hook is Post-DLSS, in order. The first
+  // such pass reads the captured DLSS output; each subsequent pass reads
+  // a snapshot of the previous pass's result. The last write goes back
+  // into `output_resource`.
+  bool is_first = true;
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
     if (!settings.pass_enabled[i]) continue;
+    if (settings.passes[i].injection_stage != InjectionStage::PostDLSS) continue;
     passes_[i].OnPostDlssEvaluate(
         runtime_,
         settings.passes[i],
         settings,
         command_list,
-        output_resource);
-    break;
+        output_resource,
+        is_first);
+    is_first = false;
   }
 }
 

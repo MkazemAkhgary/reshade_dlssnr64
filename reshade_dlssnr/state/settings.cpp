@@ -38,6 +38,12 @@ void LoadPassSettings(const char* prefix, PassSettings& pass) {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             (pref + "WorkingScale").c_str(), pass.working_scale);
 
+  int injection_stage = static_cast<int>(pass.injection_stage);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (pref + "InjectionStage").c_str(), injection_stage);
+  if (injection_stage < 0 || injection_stage > 1) injection_stage = 1;
+  pass.injection_stage = static_cast<InjectionStage>(injection_stage);
+
   for (uint32_t i = 0; i < kShaderParamCount; ++i) {
     float v = kShaderParams[i].default_value;
     reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
@@ -65,6 +71,10 @@ void SavePassSettings(const char* prefix, const PassSettings& pass) {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             (pref + "WorkingScale").c_str(), pass.working_scale);
 
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (pref + "InjectionStage").c_str(),
+                            static_cast<int>(pass.injection_stage));
+
   for (uint32_t i = 0; i < kShaderParamCount; ++i) {
     reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                               (pref + kShaderParams[i].name).c_str(),
@@ -86,11 +96,6 @@ void LoadSettings() {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Enabled", g_settings.enabled);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "OnlySuperSampling", g_settings.only_super_sampling);
 
-  int injection_stage = static_cast<int>(g_settings.injection_stage);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "InjectionStage", injection_stage);
-  if (injection_stage < 0 || injection_stage > 1) injection_stage = 1;
-  g_settings.injection_stage = static_cast<InjectionStage>(injection_stage);
-
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
     const std::string key = PassEnabledKey(i);
     reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
@@ -98,13 +103,18 @@ void LoadSettings() {
     LoadPassSettings(PassPrefix(i).c_str(), g_settings.passes[i]);
   }
   g_settings.pass_enabled[0] = true;
+
+  // Enforce constraint: once a pass is at Present, all subsequent are too.
+  for (uint32_t i = 1; i < kMaxPasses; ++i) {
+    if (g_settings.passes[i - 1].injection_stage == InjectionStage::Present) {
+      g_settings.passes[i].injection_stage = InjectionStage::Present;
+    }
+  }
 }
 
 void SaveSettings() {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Enabled", g_settings.enabled);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "OnlySuperSampling", g_settings.only_super_sampling);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "InjectionStage",
-                            static_cast<int>(g_settings.injection_stage));
 
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
     const std::string key = PassEnabledKey(i);

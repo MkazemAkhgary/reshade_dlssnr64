@@ -28,6 +28,10 @@ struct PassSettings {
 
   float working_scale = 1.0f;
 
+  // Where this pass runs. Constraint: if any earlier pass runs at Present,
+  // this pass must also run at Present. Enforced at load time and in the UI.
+  InjectionStage injection_stage = InjectionStage::Present;
+
   // Dynamic shader parameter values, indexed by kShaderParams order.
   float params[16] = {};
 };
@@ -35,9 +39,6 @@ struct PassSettings {
 struct Settings {
   bool enabled = true;
   bool only_super_sampling = true;
-
-  // Where in the frame the model pipeline runs.
-  InjectionStage injection_stage = InjectionStage::Present;
 
   // Pass 0 is always enabled; the remaining entries are user-toggleable.
   bool pass_enabled[kMaxPasses] = {true, false, false};

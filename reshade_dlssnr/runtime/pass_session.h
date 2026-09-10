@@ -33,12 +33,17 @@ class PassSession {
   // Runs the model pipeline inline on the game's command list, right after
   // the DLSS pass. Writes the composed result back into `output_resource`.
   // Does not close, submit, or wait on the command list.
+  //
+  // `is_first_pass` is true for the first Post-DLSS pass in the chain: its
+  // input is the captured DLSS output clone. Subsequent passes read a
+  // snapshot of the previous pass's result from `output_resource`.
   void OnPostDlssEvaluate(
       NgxRuntime& runtime,
       const PassSettings& pass,
       const Settings& settings,
       ID3D12GraphicsCommandList* command_list,
-      ID3D12Resource* output_resource);
+      ID3D12Resource* output_resource,
+      bool is_first_pass);
 
   void Shutdown(NgxRuntime& runtime);
 
