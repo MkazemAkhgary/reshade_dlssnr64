@@ -34,7 +34,7 @@ void DrawHookSelector(
   }
 
   ImGui::AlignTextToFramePadding();
-  ImGui::TextUnformatted("Run at");
+  ImGui::TextUnformatted("Target");
   ImGui::SameLine(kControlLabelWidth);
 
   const float hook_button_width =
@@ -47,7 +47,7 @@ void DrawHookSelector(
     ImGui::PushStyleColor(ImGuiCol_Button,
                           ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
   }
-  if (ImGui::Button("DLSS", ImVec2(hook_button_width, 0.0f)) &&
+  if (ImGui::Button("DLSS Output", ImVec2(hook_button_width, 0.0f)) &&
       can_be_at_dlss && !at_dlss) {
     pass.injection_stage = InjectionStage::PostDLSS;
     changed = true;
@@ -62,7 +62,7 @@ void DrawHookSelector(
     ImGui::PushStyleColor(ImGuiCol_Button,
                           ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
   }
-  if (ImGui::Button("Present", ImVec2(hook_button_width, 0.0f)) &&
+  if (ImGui::Button("Backbuffer", ImVec2(hook_button_width, 0.0f)) &&
       !at_present) {
     pass.injection_stage = InjectionStage::Present;
     // Force all later passes to Present as well.
