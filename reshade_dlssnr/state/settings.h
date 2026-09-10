@@ -118,6 +118,7 @@ struct Settings {
   float hdr_edit_strength = 1.0f;
 
   // UI state: which shared sections are open. Persisted.
+  bool ui_status_open = false;
   bool ui_hdr_open = false;
   bool ui_hdr_diagnostics_open = false;
 };

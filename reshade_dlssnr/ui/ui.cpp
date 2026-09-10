@@ -12,6 +12,7 @@
 #include "debug_view.h"
 #include "dlss_guides.h"
 #include "settings.h"
+#include "status.h"
 #include "version.h"
 
 namespace reshade_dlssnr {
@@ -365,6 +366,117 @@ void DrawPipelineSection(uint32_t pass_index,
 }
 
 // ---------------------------------------------------------------------------
+// Section: Status
+// ---------------------------------------------------------------------------
+
+// Describes what a pass is doing right now, in one line.
+void FormatPassStatus(const PassStatus& pass, char* out, size_t out_size) {
+  const char* stage_name =
+      pass.stage == InjectionStage::PostDLSS ? "DLSS Output" : "Backbuffer";
+
+  if (!pass.enabled) {
+    std::snprintf(out, out_size, "Disabled");
+    return;
+  }
+  if (pass.failed) {
+    std::snprintf(out, out_size, "%s · FAILED: %s",
+                  stage_name,
+                  pass.reason[0] != '\0' ? pass.reason : "unknown error");
+    return;
+  }
+  if (!pass.has_feature) {
+    std::snprintf(out, out_size, "%s · initializing", stage_name);
+    return;
+  }
+  std::snprintf(out, out_size, "%s · running", stage_name);
+}
+
+void DrawStatusSection(Settings& settings, bool& changed) {
+  if (!PersistentHeader("Status", settings.ui_status_open, changed)) {
+    return;
+  }
+
+  const StatusSnapshot snap = AddonController::Get().GetStatus();
+
+  auto bullet = [](bool good) {
+    if (good) {
+      ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.4f, 1.0f), "\xe2\x97\x8f");
+    } else {
+      ImGui::TextColored(ImVec4(0.9f, 0.4f, 0.4f, 1.0f), "\xe2\x97\x8f");
+    }
+    ImGui::SameLine();
+  };
+
+  auto row = [&](const char* label, const char* value) {
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(label);
+    ImGui::SameLine(kControlLabelWidth);
+    ImGui::TextUnformatted(value);
+  };
+
+  // Master.
+  {
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), "%s", snap.enabled ? "Enabled" : "Off");
+    bullet(snap.enabled);
+    row("DLSSNR", buf);
+  }
+
+  // Runtime.
+  {
+    char buf[kStatusTextLength + 32];
+    if (snap.runtime_initialized) {
+      std::snprintf(buf, sizeof(buf), "Initialized");
+    } else if (snap.runtime_reason[0] != '\0') {
+      std::snprintf(buf, sizeof(buf), "Not initialized — %s",
+                    snap.runtime_reason);
+    } else {
+      std::snprintf(buf, sizeof(buf), "Not initialized");
+    }
+    bullet(snap.runtime_initialized);
+    row("NGX runtime", buf);
+  }
+
+  // Guides.
+  {
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), "%s",
+                  snap.guides_valid ? "Valid (depth + motion)" : "Not seen");
+    bullet(snap.guides_valid);
+    row("DLSS guides", buf);
+  }
+
+  // HDR, only when enabled.
+  if (snap.hdr_enabled) {
+    char buf[128];
+    if (snap.hdr_ready) {
+      std::snprintf(buf, sizeof(buf),
+                    "Active · exposure %.3f · white %.3f",
+                    snap.hdr_exposure, snap.hdr_white_point);
+    } else {
+      std::snprintf(buf, sizeof(buf), "Warming up (no measurement yet)");
+    }
+    bullet(snap.hdr_ready);
+    row("HDR", buf);
+  }
+
+  ImGui::Separator();
+
+  // Per-pass summary.
+  for (uint32_t i = 0; i < snap.pass_count; ++i) {
+    char buf[kStatusTextLength];
+    FormatPassStatus(snap.passes[i], buf, sizeof(buf));
+
+    char label[32];
+    std::snprintf(label, sizeof(label), "Pass %u", i + 1);
+
+    const bool ok = snap.passes[i].enabled && !snap.passes[i].failed;
+    bullet(ok);
+    row(label, buf);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Section: Debug view (shared across passes)
 // ---------------------------------------------------------------------------
 
@@ -690,6 +802,9 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   }
 
   ImGui::Separator();
+
+  // --- Status (shared across passes) ---
+  DrawStatusSection(settings, changed);
 
   // --- Debug view (shared across passes) ---
   DrawSharedDebugView(settings, changed);

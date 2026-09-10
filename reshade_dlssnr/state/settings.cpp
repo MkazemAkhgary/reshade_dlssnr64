@@ -242,6 +242,8 @@ void LoadSettings() {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.EditStrength",
                             g_settings.hdr_edit_strength);
 
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.StatusOpen",
+                            g_settings.ui_status_open);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.HdrOpen",
                             g_settings.ui_hdr_open);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.HdrDiagnosticsOpen",
@@ -305,6 +307,8 @@ void SaveSettings() {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.EditStrength",
                             g_settings.hdr_edit_strength);
 
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.StatusOpen",
+                            g_settings.ui_status_open);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.HdrOpen",
                             g_settings.ui_hdr_open);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.HdrDiagnosticsOpen",
