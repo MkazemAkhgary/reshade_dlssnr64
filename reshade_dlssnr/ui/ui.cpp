@@ -183,10 +183,10 @@ void DrawPassSettingsBody(
     draw_slider("local_structure", "Local Structure", nullptr,
                 &pass.local_structure, 0.0f, 2.0f, 1.0f);
 
-    // Skin Structure: checkbox on the label column, slider to its right.
+    // Skin Structure: checkbox on a fresh line, caption and slider to its
+    // right. The checkbox is emitted first (naturally on its own line), then
+    // SameLine() lays out the rest of the row.
     ImGui::AlignTextToFramePadding();
-    ImGui::SameLine(kControlLabelWidth - ImGui::GetFrameHeight() -
-                    ImGui::GetStyle().ItemInnerSpacing.x);
     changed |= ImGui::Checkbox("##skin_structure_enabled", &pass.auto_mask);
     if (ImGui::IsItemHovered()) {
       ImGui::SetTooltip(
