@@ -110,7 +110,7 @@ bool RenderDebugView(
   state.Transition(command_list, target,
                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-  ID3D12Resource* srvs[kSrvCount] = {source, source, source, source};
+  ID3D12Resource* srvs[kSrvCount] = {source, source, source};
   ID3D12Resource* uavs[kUavCount] = {target};
 
   return codec.Dispatch("DebugDisplay", command_list, constants, srvs, uavs);

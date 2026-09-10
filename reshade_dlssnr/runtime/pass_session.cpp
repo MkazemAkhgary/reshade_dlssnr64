@@ -67,8 +67,7 @@ bool PassSession::EnsureFrameResources(
     unsigned int work_width,
     unsigned int work_height) {
   if (!resources_.EnsureOutput(device, desc) ||
-      !resources_.EnsureCompositeOutput(device, desc) ||
-      !resources_.EnsureWhitePointBuffer(device)) {
+      !resources_.EnsureCompositeOutput(device, desc)) {
     reason_ = "failed to create DLSSNR pass resources";
     return false;
   }
@@ -159,8 +158,6 @@ void PassSession::SeedFrameState(ID3D12Resource* backbuffer) {
                             D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   command_.SetResourceState(resources_.GetWorkingOutput(),
                             D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  command_.SetResourceState(resources_.GetWhitePointBuffer(),
-                            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
 
 void PassSession::CleanupFrameState(ID3D12GraphicsCommandList* command_list) {
@@ -172,8 +169,6 @@ void PassSession::CleanupFrameState(ID3D12GraphicsCommandList* command_list) {
   command_.Transition(command_list, resources_.GetWorkingInput(),
                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   command_.Transition(command_list, resources_.GetWorkingOutput(),
-                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  command_.Transition(command_list, resources_.GetWhitePointBuffer(),
                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
 
@@ -370,24 +365,6 @@ void PassSession::OnPresent(
     command_.Transition(command_.GetCommandList(), backbuffer.Get(),
                         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   }
-
-  // Measure the frame's white point once. The result is shared by
-  // PrepareInput (HDR -> SDR) and ComposeOutput (SDR -> HDR).
-  if (!model_pipeline::MeasureWhitePoint(
-          command_,
-          command_.GetCommandList(),
-          resources_,
-          codec_.get(),
-          model_input,
-          width,
-          height)) {
-    failed_ = true;
-    reason_ = "failed to measure white point";
-    return;
-  }
-  command_.Transition(command_.GetCommandList(),
-                      resources_.GetWhitePointBuffer(),
-                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
   ID3D12Resource* model_color = model_input;
   ID3D12Resource* model_output = resources_.GetOutput();
@@ -599,19 +576,6 @@ void PassSession::OnPostDlssEvaluate(
     // Skip evaluation this frame; the feature was just created/rebuilt.
     return;
   }
-
-  if (!model_pipeline::MeasureWhitePoint(
-          command_,
-          command_list,
-          resources_,
-          codec_.get(),
-          model_input,
-          width,
-          height)) {
-    return;
-  }
-  command_.Transition(command_list, resources_.GetWhitePointBuffer(),
-                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
   ID3D12Resource* model_color = model_input;
   ID3D12Resource* model_output = resources_.GetOutput();

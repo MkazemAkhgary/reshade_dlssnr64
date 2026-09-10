@@ -57,75 +57,16 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 }
 )";
 
-constexpr const char* kMeasureWhitePoint = R"(
-cbuffer Params : register(b0)
-{
-    uint  gWidth;
-    uint  gHeight;
-    float4 gParams[4];
-};
-
-Texture2D<float4> gSource : register(t0);
-RWTexture2D<float> gWhitePoint : register(u0);
-
-// 8x8 dispatch: each thread reduces one tile of the frame and writes that
-// tile's maximum luma. The consumer takes the max across the 64 tiles.
-[numthreads(8, 8, 1)]
-void CSMain(uint3 id : SV_DispatchThreadID)
-{
-    if (id.x >= 8 || id.y >= 8)
-        return;
-
-    uint tileW = max((gWidth + 7u) / 8u, 1u);
-    uint tileH = max((gHeight + 7u) / 8u, 1u);
-    uint x0 = id.x * tileW;
-    uint y0 = id.y * tileH;
-    uint x1 = min(x0 + tileW, gWidth);
-    uint y1 = min(y0 + tileH, gHeight);
-
-    // Cap the sample count per tile so the pass scales to any resolution.
-    uint stepX = max(1u, (x1 - x0) / 32u);
-    uint stepY = max(1u, (y1 - y0) / 32u);
-
-    float maxLuma = 0.0;
-    for (uint y = y0; y < y1; y += stepY) {
-        for (uint x = x0; x < x1; x += stepX) {
-            float3 c = gSource.Load(int3(x, y, 0)).rgb;
-            maxLuma = max(maxLuma, dot(c, float3(0.2126, 0.7152, 0.0722)));
-        }
-    }
-
-    gWhitePoint[id.xy] = maxLuma;
-}
-)";
-
 constexpr const char* kPrepareModelInput = R"(
 cbuffer Params : register(b0)
 {
     uint  gWidth;
     uint  gHeight;
-    float4 gParams[4];
 };
 
 Texture2D<float4> gSource : register(t0);
-Texture2D<float>  gWhitePoint : register(t3);
 RWTexture2D<float4> gOutput : register(u0);
 SamplerState s0 : register(s0);
-
-// Reduce the 8x8 tile buffer to a single scalar. The max is taken as-is;
-// callers wrap with max(., 1.0) so SDR content is left untouched.
-float WhitePoint()
-{
-    uint w = 0, h = 0;
-    gWhitePoint.GetDimensions(w, h);
-    float W = 0.0;
-    for (uint y = 0; y < h; ++y) {
-        for (uint x = 0; x < w; ++x) {
-            W = max(W, gWhitePoint.Load(int3(x, y, 0)));
-        }
-    }
-    return W;
-}
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)
@@ -133,11 +74,9 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     if (id.x >= gWidth || id.y >= gHeight)
         return;
 
-    float W = max(WhitePoint(), 1.0);
-
     float2 uv = (float2(id.xy) + 0.5) / float2(gWidth, gHeight);
     float4 color = gSource.SampleLevel(s0, uv, 0);
-    gOutput[id.xy] = float4(color.rgb / W, color.a);
+    gOutput[id.xy] = color;
 }
 )";
 
@@ -160,22 +99,8 @@ cbuffer Params : register(b0)
 Texture2D<float4> gOriginal : register(t0);
 Texture2D<float4> gLowInput : register(t1);
 Texture2D<float4> gLowEnhanced : register(t2);
-Texture2D<float>  gWhitePoint : register(t3);
 RWTexture2D<float4> gOutput : register(u0);
 SamplerState s0 : register(s0);
-
-float WhitePoint()
-{
-    uint w = 0, h = 0;
-    gWhitePoint.GetDimensions(w, h);
-    float W = 0.0;
-    for (uint y = 0; y < h; ++y) {
-        for (uint x = 0; x < w; ++x) {
-            W = max(W, gWhitePoint.Load(int3(x, y, 0)));
-        }
-    }
-    return W;
-}
 
 float SoftCompress(float x, float max_pos, float max_neg, float knee)
 {
@@ -206,12 +131,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     float2 uv = (float2(id.xy) + 0.5) / float2(gWidth, gHeight);
 
-    // The white point maps the HDR source into [0, 1] for the model. It is
-    // clamped to >= 1.0 so SDR content is left byte-for-byte unchanged.
-    float W = max(WhitePoint(), 1.0);
-
-    float4 originalHdr = gOriginal.SampleLevel(s0, uv, 0);
-    float4 original = float4(originalHdr.rgb / W, originalHdr.a);
+    float4 original = gOriginal.SampleLevel(s0, uv, 0);
     float4 low_input = gLowInput.SampleLevel(s0, uv, 0);
     float4 low_enhanced = gLowEnhanced.SampleLevel(s0, uv, 0);
 
@@ -268,18 +188,13 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     final_rgb = 0.5 * (final_rgb + sqrt(final_rgb * final_rgb + 1e-6));
 
-    // Map back to HDR. When the model left the frame untouched this is the
-    // exact inverse of the normalization above.
-    float3 final_hdr = final_rgb * W;
-
-    gOutput[id.xy] = float4(final_hdr, original.a);
+    gOutput[id.xy] = float4(final_rgb, original.a);
 }
 )";
 
 }  // namespace
 
 const ComputePassDef kComputePasses[] = {
-    {"MeasureWhitePoint",  kMeasureWhitePoint},
     {"PrepareModelInput",  kPrepareModelInput},
     {"ComposeModelOutput", kComposeModelOutput},
     {"DebugDisplay",       kDebugDisplay},

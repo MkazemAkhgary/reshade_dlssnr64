@@ -23,9 +23,6 @@ using RetireCallback = void (*)(ID3D12Resource* resource, void* user_data);
 constexpr uint32_t kScratchCount = 4;
 constexpr uint32_t kInputSnapshotSlot = 0;
 
-// The per-frame white point reduction uses a kWhitePointGridSize² tile grid.
-constexpr uint32_t kWhitePointGridSize = 8;
-
 class PassResources {
  public:
   Microsoft::WRL::ComPtr<ID3D12Resource> output;
@@ -70,9 +67,6 @@ class PassResources {
       unsigned int height,
       uint32_t index);
 
-  // Lazily creates the small R32_FLOAT white point reduction buffer.
-  bool EnsureWhitePointBuffer(ID3D12Device* device);
-
   void Shutdown();
 
   ID3D12Resource* GetOutput() const { return output.Get(); }
@@ -82,17 +76,12 @@ class PassResources {
   ID3D12Resource* GetScratch(uint32_t index) const {
     return index < kScratchCount ? scratch_[index].Get() : nullptr;
   }
-  ID3D12Resource* GetWhitePointBuffer() const {
-    return white_point_buffer.Get();
-  }
 
  private:
   Microsoft::WRL::ComPtr<ID3D12Resource> scratch_[kScratchCount];
   unsigned int scratch_width_[kScratchCount] = {};
   unsigned int scratch_height_[kScratchCount] = {};
   DXGI_FORMAT scratch_format_[kScratchCount] = {};
-
-  Microsoft::WRL::ComPtr<ID3D12Resource> white_point_buffer;
 
   RetireCallback retire_cb_ = nullptr;
   void* retire_user_data_ = nullptr;

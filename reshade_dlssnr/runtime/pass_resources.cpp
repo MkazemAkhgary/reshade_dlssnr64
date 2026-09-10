@@ -153,38 +153,6 @@ bool PassResources::EnsureScratch(
   return true;
 }
 
-bool PassResources::EnsureWhitePointBuffer(ID3D12Device* device) {
-  if (white_point_buffer != nullptr) return true;
-  if (device == nullptr) return false;
-
-  D3D12_HEAP_PROPERTIES heap = {};
-  heap.Type = D3D12_HEAP_TYPE_DEFAULT;
-
-  D3D12_RESOURCE_DESC desc = {};
-  desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-  desc.Alignment = 0;
-  desc.Width = kWhitePointGridSize;
-  desc.Height = kWhitePointGridSize;
-  desc.DepthOrArraySize = 1;
-  desc.MipLevels = 1;
-  desc.Format = DXGI_FORMAT_R32_FLOAT;
-  desc.SampleDesc.Count = 1;
-  desc.SampleDesc.Quality = 0;
-  desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-  desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-
-  // Created in UAV to match what InferResourceState derives from the flags.
-  // All pass-owned UAV resources must be left in UAV at frame boundaries
-  // (see PassSession) so per-frame ClearState + inference stays correct.
-  return SUCCEEDED(device->CreateCommittedResource(
-      &heap,
-      D3D12_HEAP_FLAG_NONE,
-      &desc,
-      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-      nullptr,
-      IID_PPV_ARGS(white_point_buffer.GetAddressOf())));
-}
-
 void PassResources::Shutdown() {
   // Shutdown implies the GPU is idle or the device is gone, so direct
   // release is fine — no need to go through the retire path here.
@@ -195,7 +163,6 @@ void PassResources::Shutdown() {
   composite_output.Reset();
   working_input.Reset();
   working_output.Reset();
-  white_point_buffer.Reset();
 
   for (uint32_t i = 0; i < kScratchCount; ++i) {
     scratch_[i].Reset();
