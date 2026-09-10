@@ -23,10 +23,25 @@ HdrFormat DetectFormatFromResource(ID3D12Resource* resource,
 
   const DXGI_FORMAT fmt = resource->GetDesc().Format;
   switch (fmt) {
+    // Linear float formats — unambiguously HDR.
     case DXGI_FORMAT_R16G16B16A16_FLOAT:
-    case DXGI_FORMAT_R16G16B16A16_UNORM:
+    case DXGI_FORMAT_R11G11B10_FLOAT:
       return HdrFormat::ScRgb;
-    // R10G10B10A2_UNORM is ambiguous (HDR10 or 10-bit SDR). Default SDR.
+
+    // 10-bit UNORM. Historically treated as ambiguous (HDR10 vs 10-bit
+    // SDR), but true 10-bit SDR is essentially unused in games. When this
+    // format appears as a DLSS output, it is HDR10 in practice. Users
+    // with a genuine 10-bit SDR setup can override to SDR.
+    case DXGI_FORMAT_R10G10B10A2_UNORM:
+      return HdrFormat::Hdr10;
+
+    // 8-bit formats are SDR.
+    case DXGI_FORMAT_R8G8B8A8_UNORM:
+    case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+    case DXGI_FORMAT_B8G8R8A8_UNORM:
+    case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
+      return HdrFormat::Sdr;
+
     default:
       return HdrFormat::Sdr;
   }
@@ -135,6 +150,7 @@ void HdrState::Shutdown() {
   frames_since_log_ = 0;
   frames_since_measure_ = 0;
   prev_enabled_ = false;
+  have_logged_format_ = false;
 }
 
 HdrSnapshot HdrState::GetSnapshot() const {
@@ -185,7 +201,21 @@ void HdrState::BeginFrame(CommandContext& cmd,
   PollReadback(fence_.Get(), settings);
 
   // Resolve format for this frame.
+  const HdrFormat prev_format = resolved_format_;
   resolved_format_ = DetectFormatFromResource(source, settings.hdr_format);
+
+  // Log the raw DXGI format the first time we see it (or whenever it
+  // changes). Makes format-detection issues easy to diagnose.
+  if (resolved_format_ != prev_format || !have_logged_format_) {
+    const DXGI_FORMAT raw_fmt = source->GetDesc().Format;
+    char msg[160];
+    std::snprintf(
+        msg, sizeof(msg),
+        "HDR: DLSS output format=%d detected=%d (0=SDR,1=scRGB,2=HDR10)",
+        static_cast<int>(raw_fmt), static_cast<int>(resolved_format_));
+    reshade::log::message(reshade::log::level::info, msg);
+    have_logged_format_ = true;
+  }
 
   // If a measurement is already in flight, don't enqueue another.
   if (pending_measurement_) {
