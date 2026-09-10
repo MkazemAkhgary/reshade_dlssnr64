@@ -78,6 +78,17 @@ class PassSession {
       unsigned int width,
       unsigned int height);
 
+  // Registers the known frame-boundary state of every pass-owned resource.
+  // Called after ClearState() so inference never has to guess for resources
+  // we own. Requires that CleanupFrameState() was called at the end of the
+  // previous frame.
+  void SeedFrameState(ID3D12Resource* backbuffer);
+
+  // Returns every pass-owned resource to UNORDERED_ACCESS so the next frame's
+  // SeedFrameState() is truthful. Called at the very end of each pass, before
+  // SubmitAndWait().
+  void CleanupFrameState(ID3D12GraphicsCommandList* command_list);
+
   // Closes the command list, submits it, waits for the GPU, and releases
   // retired game resources.
   void SubmitAndWait();

@@ -130,6 +130,36 @@ bool PassSession::FillEvaluateParams(
   return true;
 }
 
+void PassSession::SeedFrameState(ID3D12Resource* backbuffer) {
+  if (backbuffer != nullptr) {
+    command_.SetResourceState(backbuffer, D3D12_RESOURCE_STATE_PRESENT);
+  }
+  command_.SetResourceState(resources_.GetOutput(),
+                            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  command_.SetResourceState(resources_.GetCompositeOutput(),
+                            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  command_.SetResourceState(resources_.GetWorkingInput(),
+                            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  command_.SetResourceState(resources_.GetWorkingOutput(),
+                            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  command_.SetResourceState(resources_.GetWhitePointBuffer(),
+                            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+}
+
+void PassSession::CleanupFrameState(ID3D12GraphicsCommandList* command_list) {
+  if (command_list == nullptr) return;
+  command_.Transition(command_list, resources_.GetOutput(),
+                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  command_.Transition(command_list, resources_.GetCompositeOutput(),
+                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  command_.Transition(command_list, resources_.GetWorkingInput(),
+                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  command_.Transition(command_list, resources_.GetWorkingOutput(),
+                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  command_.Transition(command_list, resources_.GetWhitePointBuffer(),
+                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+}
+
 void PassSession::SubmitAndWait() {
   command_.GetCommandList()->Close();
   ID3D12CommandList* lists[] = {command_.GetCommandList()};
@@ -186,7 +216,7 @@ void PassSession::OnPresent(
 
   command_.Reset();
   command_.ClearState();
-  command_.SetResourceState(backbuffer.Get(), D3D12_RESOURCE_STATE_PRESENT);
+  SeedFrameState(backbuffer.Get());
 
   if (!feature_.HasFeature()) {
     const unsigned int create_width = use_working_scale ? work_width : width;
@@ -301,6 +331,7 @@ void PassSession::OnPresent(
     return;
   }
 
+  CleanupFrameState(command_.GetCommandList());
   SubmitAndWait();
 
   if (result != NVSDK_NGX_Result_Success) {
@@ -359,6 +390,7 @@ void PassSession::OnPostDlssEvaluate(
 
   // Fresh state tracking per pass: no cross-pass aliasing to rely on.
   command_.ClearState();
+  SeedFrameState(nullptr);
   command_.SetResourceState(output_resource, InferResourceState(output_resource));
 
   // Determine input: first pass reads the captured DLSS output; subsequent
@@ -464,6 +496,9 @@ void PassSession::OnPostDlssEvaluate(
   command_.Transition(command_list, output_resource, out_state);
   command_.Transition(command_list, resources_.GetCompositeOutput(),
                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+  // Leave pass-owned resources in the state SeedFrameState() expects.
+  CleanupFrameState(command_list);
 }
 
 void PassSession::Shutdown(NgxRuntime& runtime) {

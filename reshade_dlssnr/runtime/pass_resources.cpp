@@ -159,11 +159,14 @@ bool PassResources::EnsureWhitePointBuffer(ID3D12Device* device) {
   desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
   desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 
+  // Created in UAV to match what InferResourceState derives from the flags.
+  // All pass-owned UAV resources must be left in UAV at frame boundaries
+  // (see PassSession) so per-frame ClearState + inference stays correct.
   return SUCCEEDED(device->CreateCommittedResource(
       &heap,
       D3D12_HEAP_FLAG_NONE,
       &desc,
-      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
       nullptr,
       IID_PPV_ARGS(white_point_buffer.GetAddressOf())));
 }
