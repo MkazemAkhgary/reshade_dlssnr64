@@ -181,7 +181,6 @@ void PassSession::SubmitAndWait() {
 }
 
 bool PassSession::MaybeRenderDebug(
-    const PassSettings& pass,
     const Settings& settings,
     ID3D12GraphicsCommandList* command_list,
     FrameDebugContext& frame_debug,
@@ -189,7 +188,8 @@ bool PassSession::MaybeRenderDebug(
     unsigned int width,
     unsigned int height,
     DXGI_FORMAT format) {
-  if (pass.debug_view == 0) return false;
+  // Debug view is a shared setting; only the active pass renders it.
+  if (settings.debug_view == 0) return false;
   if (static_cast<int>(pass_index_) != settings.active_pass) return false;
   if (command_list == nullptr || codec_ == nullptr) return false;
 
@@ -247,7 +247,7 @@ bool PassSession::MaybeRenderDebug(
                             D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
   if (!RenderDebugView(command_, *codec_, command_list, snapshot,
-                       pass.debug_view, frame_debug.output.Get(),
+                       settings.debug_view, frame_debug.output.Get(),
                        width, height)) {
     return false;
   }
@@ -452,7 +452,7 @@ void PassSession::OnPresent(
   // If this is the active pass, render the debug view now — while the
   // source resources are in the states this pass left them in. It goes
   // into our own resource (frame_debug.output), never the backbuffer.
-  MaybeRenderDebug(pass, settings, command_.GetCommandList(), frame_debug,
+  MaybeRenderDebug(settings, command_.GetCommandList(), frame_debug,
                    debug, width, height, desc.Format);
 
   // Always write the real composed output; the debug override happens at
@@ -657,7 +657,7 @@ void PassSession::OnPostDlssEvaluate(
   // If this is the active pass, render the debug view now — while the
   // source resources are in the states this pass left them in. It goes
   // into our own resource, never the game's.
-  MaybeRenderDebug(pass, settings, command_list, frame_debug,
+  MaybeRenderDebug(settings, command_list, frame_debug,
                    debug, width, height, desc.Format);
 
   // Always write the real composed output to the game's resource. The debug

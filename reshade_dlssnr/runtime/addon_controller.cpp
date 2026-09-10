@@ -45,9 +45,11 @@ void AddonController::OnPresent(
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
     if (!settings.pass_enabled[i]) continue;
     if (settings.passes[i].injection_stage != InjectionStage::Present) continue;
+    // Resolve inherited values from earlier passes before running.
+    const PassSettings resolved = ResolvePassSettings(i);
     passes_[i].OnPresent(
         runtime_,
-        settings.passes[i],
+        resolved,
         settings,
         command_queue,
         swapchain,
@@ -84,9 +86,10 @@ void AddonController::OnPostDlssEvaluate(
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
     if (!settings.pass_enabled[i]) continue;
     if (settings.passes[i].injection_stage != InjectionStage::PostDLSS) continue;
+    const PassSettings resolved = ResolvePassSettings(i);
     passes_[i].OnPostDlssEvaluate(
         runtime_,
-        settings.passes[i],
+        resolved,
         settings,
         command_list,
         output_resource,

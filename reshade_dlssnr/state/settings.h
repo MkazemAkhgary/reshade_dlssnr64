@@ -32,9 +32,15 @@ struct PassSettings {
   // this pass must also run at Present. Enforced at load time and in the UI.
   InjectionStage injection_stage = InjectionStage::Present;
 
-  // Debug view selection for this pass. 0 = off; N (1-based) selects
-  // kDebugViews[N-1] in runtime/debug_view.h.
-  int debug_view = 0;
+  // Inheritance flags. Only meaningful for pass index > 0; the root pass
+  // ignores them. A true flag makes the corresponding slider use the
+  // resolved value from the previous pass instead of its own raw value.
+  bool inherit_working_scale = false;
+  bool inherit_intensity = false;
+  bool inherit_local_tone = false;
+  bool inherit_local_structure = false;
+  bool inherit_skin_structure = false;
+  bool inherit_params[16] = {};
 
   // Dynamic shader parameter values, indexed by kShaderParams order.
   float params[16] = {};
@@ -43,6 +49,11 @@ struct PassSettings {
 struct Settings {
   bool enabled = true;
   bool only_super_sampling = true;
+
+  // Debug view selection, shared across all passes. 0 = off; N (1-based)
+  // selects kDebugViews[N-1] in runtime/debug_view.h. The active pass
+  // renders the selected view; switching tabs keeps the selection.
+  int debug_view = 0;
 
   // Pass 0 is always enabled; the remaining entries are user-toggleable.
   bool pass_enabled[kMaxPasses] = {true, false, false};
@@ -54,6 +65,11 @@ struct Settings {
 };
 
 Settings& GetSettings();
+
+// Returns pass `index` with inherited values resolved from the chain of
+// earlier passes. For index 0, returns the settings unchanged.
+PassSettings ResolvePassSettings(uint32_t index);
+
 void LoadSettings();
 void SaveSettings();
 
