@@ -18,51 +18,6 @@ namespace {
 
 constexpr float kControlLabelWidth = 220.0f;
 
-void DrawToggle(const char* label, const char* tooltip,
-                bool* value, bool& changed) {
-  const float input_button_width =
-      (ImGui::GetContentRegionAvail().x - kControlLabelWidth) / 2.0f -
-      ImGui::GetStyle().ItemSpacing.x;
-
-  ImGui::AlignTextToFramePadding();
-  ImGui::TextUnformatted(label);
-  if (tooltip != nullptr && ImGui::IsItemHovered()) {
-    ImGui::SetTooltip("%s", tooltip);
-  }
-  ImGui::SameLine(kControlLabelWidth);
-
-  ImGui::PushID(label);
-
-  const bool on = *value;
-
-  if (!on) {
-    ImGui::PushStyleColor(ImGuiCol_Button,
-                          ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-  }
-  if (ImGui::Button("OFF", ImVec2(input_button_width, 0.0f))) {
-    *value = false;
-    changed = true;
-  }
-  if (!on) {
-    ImGui::PopStyleColor();
-  }
-
-  ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
-  if (on) {
-    ImGui::PushStyleColor(ImGuiCol_Button,
-                          ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-  }
-  if (ImGui::Button("ON", ImVec2(input_button_width, 0.0f))) {
-    *value = true;
-    changed = true;
-  }
-  if (on) {
-    ImGui::PopStyleColor();
-  }
-
-  ImGui::PopID();
-}
-
 void DrawHookSelector(
     Settings& settings,
     uint32_t pass_index,
@@ -92,7 +47,7 @@ void DrawHookSelector(
     ImGui::PushStyleColor(ImGuiCol_Button,
                           ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
   }
-  if (ImGui::Button("At DLSS", ImVec2(hook_button_width, 0.0f)) &&
+  if (ImGui::Button("DLSS", ImVec2(hook_button_width, 0.0f)) &&
       can_be_at_dlss && !at_dlss) {
     pass.injection_stage = InjectionStage::PostDLSS;
     changed = true;
@@ -107,7 +62,7 @@ void DrawHookSelector(
     ImGui::PushStyleColor(ImGuiCol_Button,
                           ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
   }
-  if (ImGui::Button("At Present", ImVec2(hook_button_width, 0.0f)) &&
+  if (ImGui::Button("Present", ImVec2(hook_button_width, 0.0f)) &&
       !at_present) {
     pass.injection_stage = InjectionStage::Present;
     // Force all later passes to Present as well.
@@ -211,13 +166,17 @@ void DrawPassSettings(
     draw_slider("local_structure", "Local Structure", nullptr,
                 &pass.local_structure, 0.0f, 2.0f, 1.0f);
 
-    // Skin Structure: checkbox + slider on one line.
+    // Skin Structure: checkbox on the label column, slider to its right.
     ImGui::AlignTextToFramePadding();
-    changed |= ImGui::Checkbox("Skin Structure", &pass.auto_mask);
+    ImGui::SameLine(kControlLabelWidth - ImGui::GetFrameHeight() -
+                    ImGui::GetStyle().ItemInnerSpacing.x);
+    changed |= ImGui::Checkbox("##skin_structure_enabled", &pass.auto_mask);
     if (ImGui::IsItemHovered()) {
       ImGui::SetTooltip(
           "Enables the model's character skin mask and adjusts its strength.");
     }
+    ImGui::SameLine();
+    ImGui::TextUnformatted("Skin Structure");
     ImGui::SameLine(kControlLabelWidth);
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
     if (!pass.auto_mask) ImGui::BeginDisabled();
