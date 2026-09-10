@@ -38,23 +38,52 @@ DXGI_FORMAT ComputeEngine::TypedFormat(DXGI_FORMAT format) const {
 }
 
 void ComputeEngine::CreateShaderResourceView(ID3D12Resource* resource, D3D12_CPU_DESCRIPTOR_HANDLE handle) {
+  const D3D12_RESOURCE_DESC res_desc = resource->GetDesc();
   D3D12_SHADER_RESOURCE_VIEW_DESC desc = {};
-  desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
   desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-  desc.Format = TypedFormat(resource->GetDesc().Format);
-  desc.Texture2D.MipLevels = 1;
-  desc.Texture2D.MostDetailedMip = 0;
-  desc.Texture2D.PlaneSlice = 0;
-  desc.Texture2D.ResourceMinLODClamp = 0.0f;
+
+  if (res_desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER) {
+    // Typed R32_UINT buffer. HLSL: `Buffer<uint>`. NumElements is in
+    // 32-bit elements, so the byte size is divided by 4.
+    desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+    desc.Format = DXGI_FORMAT_R32_UINT;
+    desc.Buffer.FirstElement = 0;
+    desc.Buffer.NumElements = static_cast<UINT>(res_desc.Width / 4);
+    desc.Buffer.StructureByteStride = 0;
+    desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+  } else {
+    desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    desc.Format = TypedFormat(res_desc.Format);
+    desc.Texture2D.MipLevels = 1;
+    desc.Texture2D.MostDetailedMip = 0;
+    desc.Texture2D.PlaneSlice = 0;
+    desc.Texture2D.ResourceMinLODClamp = 0.0f;
+  }
+
   device_->CreateShaderResourceView(resource, &desc, handle);
 }
 
 void ComputeEngine::CreateUnorderedAccessView(ID3D12Resource* resource, D3D12_CPU_DESCRIPTOR_HANDLE handle) {
+  const D3D12_RESOURCE_DESC res_desc = resource->GetDesc();
   D3D12_UNORDERED_ACCESS_VIEW_DESC desc = {};
-  desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-  desc.Format = TypedFormat(resource->GetDesc().Format);
-  desc.Texture2D.MipSlice = 0;
-  desc.Texture2D.PlaneSlice = 0;
+
+  if (res_desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER) {
+    // Typed R32_UINT buffer. HLSL: `RWBuffer<uint>`. Supports atomics via
+    // `InterlockedAdd`. NumElements is in 32-bit elements.
+    desc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+    desc.Format = DXGI_FORMAT_R32_UINT;
+    desc.Buffer.FirstElement = 0;
+    desc.Buffer.NumElements = static_cast<UINT>(res_desc.Width / 4);
+    desc.Buffer.StructureByteStride = 0;
+    desc.Buffer.CounterOffsetInBytes = 0;
+    desc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
+  } else {
+    desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+    desc.Format = TypedFormat(res_desc.Format);
+    desc.Texture2D.MipSlice = 0;
+    desc.Texture2D.PlaneSlice = 0;
+  }
+
   device_->CreateUnorderedAccessView(resource, nullptr, &desc, handle);
 }
 

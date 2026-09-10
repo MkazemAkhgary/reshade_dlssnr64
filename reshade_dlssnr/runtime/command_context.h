@@ -49,6 +49,15 @@ class CommandContext {
       ID3D12GraphicsCommandList* command_list,
       ID3D12Resource* resource);
 
+  // The internal fence used by WaitGpu. Only valid after Ensure(). Readback
+  // primitives that need to know when a copy has completed use this fence.
+  ID3D12Fence* GetFence() const { return fence_.Get(); }
+
+  // The fence value that the next WaitGpu() call will signal. Enqueue any
+  // GPU-side operation that must be guaranteed complete by the time WaitGpu
+  // returns against this value; WaitGpu will signal exactly it.
+  uint64_t GetNextFenceValue() const { return fence_value_ + 1; }
+
   void Shutdown();
 
  private:

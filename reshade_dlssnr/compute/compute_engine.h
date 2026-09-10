@@ -19,10 +19,13 @@ struct alignas(256) ComputeConstants {
   uint32_t pad1 = 0;
 
   // Dynamic shader parameters, indexed by kShaderParams order.
-  // Must align with HLSL float4 gParams[4] (16-byte boundary).
-  float params[16] = {};
+  // Must align with HLSL `float4 gParams[12]` (16-byte boundary). Each
+  // parameter occupies one float; four parameters fill one float4. 48
+  // floats leaves headroom for future effects without ever hitting the
+  // 256-byte CBV ceiling (16-byte header + 48*4 = 208 bytes used).
+  float params[48] = {};
 };
-static_assert(sizeof(ComputeConstants) == 256, "Constants must have a 256-byte CBV allocation size");
+static_assert(sizeof(ComputeConstants) <= 256, "Constants must fit in a 256-byte CBV");
 
 // Descriptor layout contract for every compute pass.
 //
@@ -38,6 +41,11 @@ static_assert(sizeof(ComputeConstants) == 256, "Constants must have a 256-byte C
 // register simply ignore that slot, so it is safe (and required) to fill
 // unused slots with any valid resource — typically the same texture or
 // output resource repeated.
+//
+// Resources may be 2D textures or buffers. Buffer views are created as
+// typed R32_UINT (HLSL `Buffer<uint>` / `RWBuffer<uint>`), so a buffer of
+// N 32-bit elements has `Width = N*4` in bytes. This lets a pass use
+// atomics (`InterlockedAdd`) for accumulation — e.g. histograms.
 //
 // If a pass needs more bindings, increase the count here; the root
 // signature, descriptor heap, and BindAndDispatch loop scale with it
