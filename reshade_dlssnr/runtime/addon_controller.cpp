@@ -123,7 +123,7 @@ void AddonController::PresentDebugOutput(
 
   debug_command_.GetCommandList()->Close();
   ID3D12CommandList* lists[] = {debug_command_.GetCommandList()};
-  command_queue->ExecuteCommandsLists(1, lists);
+  command_queue->ExecuteCommandLists(1, lists);
   debug_command_.WaitGpu(command_queue);
 }
 
