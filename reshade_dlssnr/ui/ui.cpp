@@ -687,7 +687,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           0.90f, 0.999f, 0.99f);
 
       changed |= DrawFloatRow(
-          0, "hdr_curve_white", "Curve White",
+          0, "hdr_curve_white", "Highlight Headroom",
           "Multiplier on the auto-detected white point. 1.0 uses the "
           "histogram's own value and clips the top 1% of pixels, which "
           "flattens highlights on the round trip. 8.0 (default) gives "
@@ -702,6 +702,53 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           &settings.hdr_edit_strength, nullptr, 0.0f,
           0.0f, 2.0f, 1.0f);
     });
+
+    // Diagnostics: raw measurement values, for scenes where the exposure
+    // converges somewhere unexpected. Everything below is read-only.
+    if (hdr_on) {
+      if (ImGui::TreeNodeEx("Diagnostics",
+                            ImGuiTreeNodeFlags_CollapsingHeader)) {
+        const HdrSnapshot snap = AddonController::Get().GetHdrSnapshot();
+
+        if (!snap.has_histogram) {
+          ImGui::TextDisabled("Waiting for first histogram measurement...");
+        } else {
+          ImGui::Text("Samples: %u", snap.samples);
+          ImGui::Text("Scene median (P50): %.4f", snap.p50_luma);
+          ImGui::Text("White point source (P%.1f): %.4f",
+                      settings.hdr_white_percentile * 100.0f,
+                      snap.p_hi_luma);
+          ImGui::Text("Target exposure: %.3f   Current: %.3f",
+                      snap.target_exposure, snap.exposure);
+          ImGui::Text("White point (post-headroom): %.3f",
+                      snap.white_point *
+                          std::max(settings.hdr_curve_white, 0.01f));
+          ImGui::Text("Frames since last measurement: %u",
+                      snap.frames_since_measure);
+
+          ImGui::Separator();
+          ImGui::TextUnformatted("Histogram (log2 luminance)");
+          if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip(
+                "Log2 luminance distribution of the measured source. "
+                "Left = dark, right = bright. The scene's exposure is set "
+                "so the median lands at the Midtone Target; the white "
+                "point comes from the selected percentile.");
+          }
+
+          float bins_float[256];
+          float peak = 1.0f;
+          for (int i = 0; i < 256; ++i) {
+            bins_float[i] = static_cast<float>(snap.histogram[i]);
+            if (bins_float[i] > peak) peak = bins_float[i];
+          }
+
+          ImGui::PlotHistogram("##hdr_histogram", bins_float, 256,
+                               0, nullptr, 0.0f, peak,
+                               ImVec2(-1.0f, 80.0f));
+        }
+      }
+    }
   }
 
   ImGui::Separator();

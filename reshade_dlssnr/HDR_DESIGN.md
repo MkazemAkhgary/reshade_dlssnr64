@@ -356,8 +356,12 @@ Shared section above the pass tabs (HDR is not per-pass):
    Responsiveness     [====●====]  R
    Midtone Target     [====●====]  R
    White Percentile   [====●====]  R
-   Curve White        [====●====]  R
+   Highlight Headroom [====●====]  R
    Edit Strength      [====●====]  R
+
+   ▼ Diagnostics
+       Samples, scene median, white point source, target vs current
+       exposure, and a plot of the last measured histogram.
 ```
 
 All controls below the checkbox are disabled (greyed) when HDR is off.
@@ -373,7 +377,7 @@ Defaults:
 | Responsiveness    | 0.50    | 0.00 – 1.00    | Slow + cheap ↔ fast + costly     |
 | Midtone Target    | 0.18    | 0.05 – 0.50    | 18% grey                         |
 | White Percentile  | 0.99    | 0.90 – 0.999   |                                  |
-| Curve White       | 8.00    | 0.25 – 16.00   | Multiplier on detected white point |
+| Highlight Headroom| 8.00    | 0.25 – 16.00   | Multiplier on detected white point |
 | Edit Strength     | 1.00    | 0.00 – 2.00    | Scales model edit before remap   |
 
 ## `PassResources` additions

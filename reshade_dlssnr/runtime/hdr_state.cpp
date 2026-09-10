@@ -151,6 +151,13 @@ void HdrState::Shutdown() {
   frames_since_measure_ = 0;
   prev_enabled_ = false;
   have_logged_format_ = false;
+
+  have_histogram_ = false;
+  for (uint32_t i = 0; i < kHistogramBins; ++i) last_histogram_[i] = 0;
+  p50_luma_ = 0.0f;
+  p_hi_luma_ = 0.0f;
+  target_exposure_ = 1.0f;
+  last_samples_ = 0;
 }
 
 HdrSnapshot HdrState::GetSnapshot() const {
@@ -161,6 +168,17 @@ HdrSnapshot HdrState::GetSnapshot() const {
   s.exposure = exposure_ema_;
   s.white_point = white_point_ema_;
   s.frames_since_measure = frames_since_measure_;
+
+  s.has_histogram = have_histogram_;
+  if (have_histogram_) {
+    for (uint32_t i = 0; i < kHistogramBins; ++i) {
+      s.histogram[i] = last_histogram_[i];
+    }
+  }
+  s.p50_luma = p50_luma_;
+  s.p_hi_luma = p_hi_luma_;
+  s.target_exposure = target_exposure_;
+  s.samples = last_samples_;
   return s;
 }
 
@@ -319,6 +337,11 @@ void HdrState::PollReadback(ID3D12Fence* fence, const Settings& settings) {
 
   UpdateExposure(bins, total, settings);
 
+  // Copy the raw histogram into our diagnostics buffer.
+  for (uint32_t i = 0; i < kHistogramBins; ++i) last_histogram_[i] = bins[i];
+  have_histogram_ = true;
+  last_samples_ = total;
+
   frames_since_measure_ = 0;
 
   // Log every readback during Phase A so the values are visible immediately.
@@ -346,6 +369,11 @@ void HdrState::UpdateExposure(const uint32_t* bins, uint32_t total,
       (luma_mid > 1e-6f)
           ? std::clamp(settings.hdr_midtone / luma_mid, 0.01f, 128.0f)
           : exposure_ema_;
+
+  // Publish to the diagnostics fields.
+  p50_luma_ = luma_mid;
+  p_hi_luma_ = luma_hi;
+  target_exposure_ = target;
 
   // Warm-up: converge quickly for the first ~30 measurements, then use
   // the user's responsiveness setting.

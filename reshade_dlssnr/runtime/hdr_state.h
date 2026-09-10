@@ -34,6 +34,15 @@ struct HdrSnapshot {
   float exposure = 1.0f;
   float white_point = 1.0f;
   uint32_t frames_since_measure = 0;  // frames since last histogram arrived
+
+  // Raw measurement, for the diagnostics UI. Populated whenever a fresh
+  // histogram has been consumed. `has_histogram` is false until then.
+  bool has_histogram = false;
+  uint32_t histogram[256] = {};
+  float p50_luma = 0.0f;         // scene median, before exposure
+  float p_hi_luma = 0.0f;        // white-point percentile, before exposure
+  float target_exposure = 1.0f;  // value the EMA is chasing
+  uint32_t samples = 0;          // total pixels sampled in the last histogram
 };
 
 class HdrState {
@@ -92,6 +101,14 @@ class HdrState {
   uint32_t frames_since_measure_ = 0;
   bool prev_enabled_ = false;
   bool have_logged_format_ = false;
+
+  // Diagnostics: last measured histogram and the values derived from it.
+  bool have_histogram_ = false;
+  uint32_t last_histogram_[256] = {};
+  float p50_luma_ = 0.0f;
+  float p_hi_luma_ = 0.0f;
+  float target_exposure_ = 1.0f;
+  uint32_t last_samples_ = 0;
 };
 
 }  // namespace reshade_dlssnr
