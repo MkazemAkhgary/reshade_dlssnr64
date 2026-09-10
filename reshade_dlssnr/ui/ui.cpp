@@ -79,7 +79,7 @@ void DrawHookSelector(
   }
 
   ImGui::AlignTextToFramePadding();
-  ImGui::TextUnformatted("Hook");
+  ImGui::TextUnformatted("Run at");
   ImGui::SameLine(kControlLabelWidth);
 
   const float hook_button_width =
@@ -128,47 +128,19 @@ void DrawPassSettings(
   PassSettings& pass = settings.passes[pass_index];
   if (!ImGui::BeginTabItem(tab_label)) return;
 
-  ImGui::PushID(tab_label);
+  ImGui::PushID(static_cast<int>(pass_index));
 
   if (!enabled) {
     ImGui::BeginDisabled();
   }
 
+  // --- Structural: where and at what resolution the pass runs ---
   DrawHookSelector(settings, pass_index, changed);
 
-  ImGui::Separator();
-
-  const float button_width =
-      (ImGui::GetContentRegionAvail().x - kControlLabelWidth) / 3.0f -
-      ImGui::GetStyle().ItemSpacing.x;
-
-  ImGui::AlignTextToFramePadding();
-  ImGui::TextUnformatted("Model");
-  ImGui::SameLine(kControlLabelWidth);
-
-  static const char* model_short_names[] = {"A", "B", "C"};
-  for (int i = 0; i < 3; ++i) {
-    if (i > 0) ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
-
-    const bool selected = pass.preset == i;
-    if (selected) {
-      ImGui::PushStyleColor(ImGuiCol_Button,
-                            ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-    }
-    if (ImGui::Button(model_short_names[i], ImVec2(button_width, 0.0f)) &&
-        pass.preset != i) {
-      pass.preset = i;
-      changed = true;
-    }
-    if (selected) {
-      ImGui::PopStyleColor();
-    }
-  }
-
-  auto draw_slider = [&](const char* label, const char* tooltip,
-                         float* value,
+  auto draw_slider = [&](const char* id, const char* label,
+                         const char* tooltip, float* value,
                          float min_value, float max_value,
-                         float reset_value, const char* format) {
+                         float reset_value) {
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(label);
     if (tooltip != nullptr && ImGui::IsItemHovered()) {
@@ -176,70 +148,143 @@ void DrawPassSettings(
     }
     ImGui::SameLine(kControlLabelWidth);
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
-    const std::string slider_id = "##" + std::string(label);
-    const std::string reset_id = "R##" + std::string(label);
+    const std::string slider_id = std::string("##") + id;
     changed |= ImGui::SliderFloat(slider_id.c_str(), value,
-                                  min_value, max_value, format);
+                                  min_value, max_value, "%.2f");
     if (tooltip != nullptr && ImGui::IsItemHovered()) {
       ImGui::SetTooltip("%s", tooltip);
     }
     ImGui::SameLine();
-    if (ImGui::Button(reset_id.c_str(), ImVec2(24.0f, 0.0f))) {
+    ImGui::PushID(id);
+    if (ImGui::Button("R", ImVec2(24.0f, 0.0f))) {
       *value = reset_value;
       changed = true;
     }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Reset to default");
+    }
+    ImGui::PopID();
   };
 
-  draw_slider("Intensity", nullptr, &pass.intensity, 0.0f, 2.0f, 1.0f, "%.2f");
-  draw_slider("Local Tone", nullptr, &pass.local_tone, 0.0f, 2.0f, 1.0f, "%.2f");
-
-  DrawToggle("UI Correction", nullptr, &pass.ui_correction, changed);
-
-  ImGui::Separator();
-
-  draw_slider("Local Structure", nullptr, &pass.local_structure,
-              0.0f, 2.0f, 1.0f, "%.2f");
-
-  DrawToggle("Character Mask", nullptr, &pass.auto_mask, changed);
-
-  if (!pass.auto_mask) {
-    ImGui::BeginDisabled();
-  }
-  draw_slider("Skin Structure", nullptr, &pass.skin_structure,
-              0.0f, 1.0f, 0.0f, "%.2f");
-  if (!pass.auto_mask) {
-    ImGui::EndDisabled();
-  }
+  draw_slider("working_scale", "Working Scale",
+              "Model evaluation resolution as a fraction of the frame. "
+              "1.0 runs the model at full resolution.",
+              &pass.working_scale, 0.25f, 1.0f, 1.0f);
 
   ImGui::Separator();
 
-  draw_slider("Working Scale", nullptr, &pass.working_scale,
-              0.25f, 1.0f, 1.0f, "%.2f");
+  // --- Model tuning section ---
+  if (ImGui::TreeNodeEx("Model",
+                        ImGuiTreeNodeFlags_CollapsingHeader |
+                        ImGuiTreeNodeFlags_DefaultOpen)) {
+    const float button_width =
+        (ImGui::GetContentRegionAvail().x - kControlLabelWidth) / 3.0f -
+        ImGui::GetStyle().ItemSpacing.x;
 
-  ImGui::Separator();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Preset");
+    ImGui::SameLine(kControlLabelWidth);
 
-  // Group dynamic shader params by category.
-  const char* last_category = nullptr;
-  for (uint32_t i = 0; i < kShaderParamCount; ++i) {
-    const auto& param = kShaderParams[i];
-    if (last_category == nullptr ||
-        strcmp(last_category, param.category) != 0) {
-      if (last_category != nullptr) ImGui::Separator();
-      ImGui::TextUnformatted(param.category);
-      last_category = param.category;
+    static const char* model_short_names[] = {"A", "B", "C"};
+    for (int i = 0; i < 3; ++i) {
+      if (i > 0) ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
+
+      const bool selected = pass.preset == i;
+      if (selected) {
+        ImGui::PushStyleColor(ImGuiCol_Button,
+                              ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+      }
+      if (ImGui::Button(model_short_names[i], ImVec2(button_width, 0.0f)) &&
+          pass.preset != i) {
+        pass.preset = i;
+        changed = true;
+      }
+      if (selected) {
+        ImGui::PopStyleColor();
+      }
     }
 
-    if (param.is_checkbox) {
-      bool checked = pass.params[i] > 0.5f;
-      changed |= ImGui::Checkbox(param.name, &checked);
-      if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", param.tooltip);
+    draw_slider("intensity", "Intensity", nullptr,
+                &pass.intensity, 0.0f, 2.0f, 1.0f);
+    draw_slider("local_tone", "Local Tone", nullptr,
+                &pass.local_tone, 0.0f, 2.0f, 1.0f);
+    draw_slider("local_structure", "Local Structure", nullptr,
+                &pass.local_structure, 0.0f, 2.0f, 1.0f);
+
+    // Skin Structure: checkbox + slider on one line.
+    ImGui::AlignTextToFramePadding();
+    changed |= ImGui::Checkbox("Skin Structure", &pass.auto_mask);
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip(
+          "Enables the model's character skin mask and adjusts its strength.");
+    }
+    ImGui::SameLine(kControlLabelWidth);
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
+    if (!pass.auto_mask) ImGui::BeginDisabled();
+    changed |= ImGui::SliderFloat("##skin_structure", &pass.skin_structure,
+                                  0.0f, 1.0f, "%.2f");
+    if (!pass.auto_mask) ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (!pass.auto_mask) ImGui::BeginDisabled();
+    if (ImGui::Button("R##skin_structure", ImVec2(24.0f, 0.0f))) {
+      pass.skin_structure = 1.0f;
+      changed = true;
+    }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Reset to default");
+    if (!pass.auto_mask) ImGui::EndDisabled();
+  }
+
+  // --- Dynamic shader param sections (one per category) ---
+  uint32_t i = 0;
+  while (i < kShaderParamCount) {
+    const char* category = kShaderParams[i].category;
+
+    uint32_t next = i;
+    while (next < kShaderParamCount &&
+           strcmp(kShaderParams[next].category, category) == 0) {
+      ++next;
+    }
+
+    ImGui::Separator();
+    const bool open = ImGui::TreeNodeEx(
+        category,
+        ImGuiTreeNodeFlags_CollapsingHeader |
+        ImGuiTreeNodeFlags_DefaultOpen);
+
+    if (open) {
+      for (uint32_t j = i; j < next; ++j) {
+        const auto& param = kShaderParams[j];
+        const std::string id =
+            std::string(category) + "_" + param.name;
+
+        if (param.is_checkbox) {
+          bool checked = pass.params[j] > 0.5f;
+          const std::string cb_label =
+              std::string(param.name) + "###param_" + std::to_string(j);
+          changed |= ImGui::Checkbox(cb_label.c_str(), &checked);
+          if (ImGui::IsItemHovered() && param.tooltip != nullptr) {
+            ImGui::SetTooltip("%s", param.tooltip);
+          }
+          pass.params[j] = checked ? 1.0f : 0.0f;
+        } else {
+          draw_slider(id.c_str(), param.name, param.tooltip,
+                      &pass.params[j], param.min_value,
+                      param.max_value, param.default_value);
+        }
       }
-      pass.params[i] = checked ? 1.0f : 0.0f;
-    } else {
-      draw_slider(param.name, param.tooltip, &pass.params[i],
-                  param.min_value, param.max_value,
-                  param.default_value, "%.2f");
+    }
+
+    i = next;
+  }
+
+  // --- Advanced ---
+  ImGui::Separator();
+  if (ImGui::TreeNodeEx("Advanced",
+                        ImGuiTreeNodeFlags_CollapsingHeader)) {
+    ImGui::AlignTextToFramePadding();
+    changed |= ImGui::Checkbox("UI Correction", &pass.ui_correction);
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Experimental. Enables the model's UI correction pass.");
     }
   }
 
@@ -261,7 +306,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   ImGui::Separator();
 
   changed |= ImGui::Checkbox("Enable DLSSNR", &settings.enabled);
-  changed |= ImGui::Checkbox("Only run on SuperSampling",
+  changed |= ImGui::Checkbox("Require DLSS",
                              &settings.only_super_sampling);
 
   if (settings.enabled) {
