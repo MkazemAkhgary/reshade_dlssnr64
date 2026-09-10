@@ -8,12 +8,12 @@
 
 #include <memory>
 
-#include "codec.h"
+#include "command_context.h"
+#include "compute_engine.h"
 #include "dlss_guides.h"
-#include "dlssnr_command_context.h"
-#include "dlssnr_feature_lifecycle.h"
-#include "dlssnr_pass_resources.h"
-#include "dlssnr_runtime.h"
+#include "feature_lifecycle.h"
+#include "pass_resources.h"
+#include "runtime.h"
 #include "settings.h"
 
 namespace reshade_dlssnr {

@@ -1,4 +1,4 @@
-#include "dlssnr_pass_session.h"
+#include "pass_session.h"
 
 #include <algorithm>
 #include <mutex>
@@ -6,7 +6,7 @@
 #include <reshade.hpp>
 
 #include "dlss_guides.h"
-#include "dlssnr_stages_working_scale.h"
+#include "model_pipeline.h"
 #include "ngx_model_params.h"
 
 namespace reshade_dlssnr {
@@ -237,7 +237,7 @@ void PassSession::OnPresent(
                           D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     }
 
-    if (!dlssnr_stages_working_scale::PrepareInput(
+    if (!model_pipeline::PrepareInput(
             command_,
             resources_,
             codec_.get(),
@@ -274,7 +274,7 @@ void PassSession::OnPresent(
           runtime.Parameters().Get(),
           nullptr);
 
-  if (!dlssnr_stages_working_scale::Apply(
+  if (!model_pipeline::Apply(
           command_,
           resources_,
           codec_.get(),

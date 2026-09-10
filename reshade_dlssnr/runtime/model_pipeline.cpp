@@ -1,10 +1,10 @@
-#include "dlssnr_stages_working_scale.h"
+#include "model_pipeline.h"
 
 #include <cstring>
 
 #include "shader_params.h"
 
-namespace reshade_dlssnr::dlssnr_stages_working_scale {
+namespace reshade_dlssnr::model_pipeline {
 
 bool PrepareInput(
     CommandContext& command,
@@ -34,8 +34,8 @@ bool PrepareInput(
   constants.Width = work_width;
   constants.Height = work_height;
 
-  ID3D12Resource* srvs[kDlssNrSrvCount] = {full_input, full_input, full_input};
-  ID3D12Resource* uavs[kDlssNrUavCount] = {resources.GetWorkingInput()};
+  ID3D12Resource* srvs[kSrvCount] = {full_input, full_input, full_input};
+  ID3D12Resource* uavs[kUavCount] = {resources.GetWorkingInput()};
 
   codec->Dispatch(
       "PrepareModelInput", command.GetCommandList(), constants, srvs, uavs);
@@ -77,8 +77,8 @@ bool Apply(
   command.Transition(command.GetCommandList(), low_enhanced,
                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-  ID3D12Resource* srvs[kDlssNrSrvCount] = {backbuffer, low_input, low_enhanced};
-  ID3D12Resource* uavs[kDlssNrUavCount] = {resources.GetCompositeOutput()};
+  ID3D12Resource* srvs[kSrvCount] = {backbuffer, low_input, low_enhanced};
+  ID3D12Resource* uavs[kUavCount] = {resources.GetCompositeOutput()};
 
   codec->Dispatch(
       "ComposeModelOutput", command.GetCommandList(), constants, srvs, uavs);
@@ -91,4 +91,4 @@ bool Apply(
   return true;
 }
 
-}  // namespace reshade_dlssnr::dlssnr_stages_working_scale
+}  // namespace reshade_dlssnr::model_pipeline

@@ -4,7 +4,7 @@
 
 #include <string>
 
-#include "shader_params.h"
+#include "compute/shader_params.h"
 
 namespace reshade_dlssnr {
 

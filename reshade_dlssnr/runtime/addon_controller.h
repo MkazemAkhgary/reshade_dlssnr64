@@ -10,8 +10,8 @@
 #include <vector>
 
 #include "dlss_guides.h"
-#include "dlssnr_pass_session.h"
-#include "dlssnr_runtime.h"
+#include "pass_session.h"
+#include "runtime.h"
 #include "settings.h"
 
 namespace reshade_dlssnr {

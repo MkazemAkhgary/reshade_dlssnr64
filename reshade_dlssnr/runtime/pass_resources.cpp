@@ -1,4 +1,4 @@
-#include "dlssnr_pass_resources.h"
+#include "pass_resources.h"
 
 namespace reshade_dlssnr {
 

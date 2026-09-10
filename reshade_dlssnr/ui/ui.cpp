@@ -7,10 +7,9 @@
 #include <string>
 #include <vector>
 
+#include "compute/shader_params.h"
 #include "dlss_guides.h"
-#include "dlssnr_direct.h"
 #include "settings.h"
-#include "shader_params.h"
 #include "version.h"
 
 namespace reshade_dlssnr {

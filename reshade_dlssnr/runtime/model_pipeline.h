@@ -2,11 +2,11 @@
 
 #include <d3d12.h>
 
-#include "codec.h"
-#include "dlssnr_command_context.h"
-#include "dlssnr_pass_resources.h"
+#include "command_context.h"
+#include "compute_engine.h"
+#include "pass_resources.h"
 
-namespace reshade_dlssnr::dlssnr_stages_working_scale {
+namespace reshade_dlssnr::model_pipeline {
 
 bool PrepareInput(
     CommandContext& command,
@@ -34,4 +34,4 @@ bool Apply(
     unsigned int full_height,
     const float* params);
 
-}  // namespace reshade_dlssnr::dlssnr_stages_working_scale
+}  // namespace reshade_dlssnr::model_pipeline

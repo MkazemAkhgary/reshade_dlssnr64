@@ -1,4 +1,4 @@
-#include "dlssnr_runtime.h"
+#include "runtime.h"
 
 #include <reshade.hpp>
 

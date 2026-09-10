@@ -8,9 +8,9 @@
 #include <unordered_map>
 #include <vector>
 
+#include "addon_controller.h"
 #include "d3d12_hooks.h"
 #include "dlss_guides.h"
-#include "dlssnr_direct.h"
 #include "nvngx_hook_compat.h"
 #include "settings.h"
 #include "ui.h"

@@ -4,7 +4,7 @@
 #include <d3d12.h>
 #include <nvsdk_ngx.h>
 
-#include "dlssnr_runtime.h"
+#include "runtime.h"
 #include "settings.h"
 
 namespace reshade_dlssnr {
