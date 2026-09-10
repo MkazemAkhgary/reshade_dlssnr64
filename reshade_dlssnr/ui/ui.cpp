@@ -190,6 +190,100 @@ bool DrawComboRow(const char* id,
   return changed;
 }
 
+// A horizontal group of mutually-exclusive selection buttons. Each button
+// takes an equal share of the available width; the currently-selected entry
+// is highlighted. Returns the index of the button that was clicked, or -1
+// if none was.
+//
+// `labels` and `tooltips` are arrays of `count` entries (tooltips may be
+// nullptr for individual items). `disabled` may be nullptr, or an array of
+// `count` flags to disable specific buttons while still showing them.
+int DrawGroupButtons(const char* id,
+                     const char* const* labels,
+                     const char* const* tooltips,
+                     int count,
+                     int selected,
+                     const bool* disabled) {
+  if (count <= 0 || labels == nullptr) return -1;
+
+  ImGui::PushID(id);
+
+  const float spacing = ImGui::GetStyle().ItemSpacing.x;
+  const float avail = ImGui::GetContentRegionAvail().x;
+  const float total_spacing = spacing * static_cast<float>(count - 1);
+  const float button_width = (avail - total_spacing) /
+                             static_cast<float>(count);
+
+  int clicked = -1;
+
+  for (int i = 0; i < count; ++i) {
+    if (i > 0) ImGui::SameLine(0.0f, spacing);
+
+    const bool is_selected = (i == selected);
+    const bool is_disabled = (disabled != nullptr && disabled[i]);
+
+    if (is_disabled) ImGui::BeginDisabled();
+
+    // Highlight the selected entry with the accent color across all three
+    // button states, so the "chosen" appearance is stable regardless of
+    // hover or click.
+    const int pushed = is_selected ? 3 : 0;
+    if (is_selected) {
+      const ImVec4 accent =
+          ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive);
+      ImGui::PushStyleColor(ImGuiCol_Button, accent);
+      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, accent);
+      ImGui::PushStyleColor(ImGuiCol_ButtonActive, accent);
+    }
+
+    if (ImGui::Button(labels[i], ImVec2(button_width, 0.0f)) &&
+        !is_selected && !is_disabled) {
+      clicked = i;
+    }
+
+    if (pushed > 0) ImGui::PopStyleColor(pushed);
+
+    if (tooltips != nullptr && tooltips[i] != nullptr &&
+        ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      ImGui::SetTooltip("%s", tooltips[i]);
+    }
+
+    if (is_disabled) ImGui::EndDisabled();
+  }
+
+  ImGui::PopID();
+  return clicked;
+}
+
+// A labelled group-button row: label at the control column, group filling
+// the rest of the row. Updates `*value` and returns true if the selection
+// changed.
+bool DrawGroupRow(const char* id,
+                  const char* label,
+                  const char* tooltip,
+                  const char* const* labels,
+                  const char* const* item_tooltips,
+                  int count,
+                  int* value,
+                  const bool* disabled) {
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted(label);
+  if (tooltip != nullptr && ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("%s", tooltip);
+  }
+
+  ImGui::SameLine(kControlLabelWidth);
+
+  const int current = (*value >= 0 && *value < count) ? *value : -1;
+  const int clicked = DrawGroupButtons(id, labels, item_tooltips, count,
+                                       current, disabled);
+  if (clicked >= 0) {
+    *value = clicked;
+    return true;
+  }
+  return false;
+}
+
 // ---------------------------------------------------------------------------
 // Section: Target
 // ---------------------------------------------------------------------------
@@ -207,6 +301,19 @@ void DrawTargetSection(Settings& settings, uint32_t pass_index,
     }
   }
 
+  static const char* kTargetLabels[] = {"DLSS Output", "Backbuffer"};
+  static const char* kTargetTips[] = {
+      "Run this pass on the DLSS upscaled image, before the game applies "
+      "UI and tone mapping.\n"
+      "Unavailable when an earlier pass targets the Backbuffer, because "
+      "passes run in order and later stages cannot reach back to earlier "
+      "ones.",
+      "Run this pass on the final frame, after every other effect "
+      "including UI and post-processing.\n"
+      "Selecting this forces all later passes to Backbuffer as well, "
+      "because they cannot run earlier than this one."};
+  const bool kTargetDisabled[] = {!can_be_at_dlss, false};
+
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("Target");
   if (ImGui::IsItemHovered()) {
@@ -220,55 +327,21 @@ void DrawTargetSection(Settings& settings, uint32_t pass_index,
   }
   ImGui::SameLine(kControlLabelWidth);
 
-  const float button_width =
-      (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) /
-      2.0f;
+  const int selected =
+      pass.injection_stage == InjectionStage::PostDLSS ? 0 : 1;
+  const int clicked = DrawGroupButtons("target", kTargetLabels, kTargetTips,
+                                       2, selected, kTargetDisabled);
 
-  const bool at_dlss = pass.injection_stage == InjectionStage::PostDLSS;
-  const bool at_present = pass.injection_stage == InjectionStage::Present;
-
-  WithDisabled(!can_be_at_dlss, [&] {
-    if (at_dlss) {
-      ImGui::PushStyleColor(ImGuiCol_Button,
-                            ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-    }
-    if (ImGui::Button("DLSS Output", ImVec2(button_width, 0.0f)) &&
-        can_be_at_dlss && !at_dlss) {
-      pass.injection_stage = InjectionStage::PostDLSS;
-      changed = true;
-    }
-    if (at_dlss) ImGui::PopStyleColor();
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip(
-          "Run this pass on the DLSS upscaled image, before the game "
-          "applies UI and tone mapping.\n"
-          "Unavailable when an earlier pass targets the Backbuffer, "
-          "because passes run in order and later stages cannot reach "
-          "back to earlier ones.");
-    }
-  });
-
-  ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
-
-  if (at_present) {
-    ImGui::PushStyleColor(ImGuiCol_Button,
-                          ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-  }
-  if (ImGui::Button("Backbuffer", ImVec2(button_width, 0.0f)) && !at_present) {
+  if (clicked == 0) {
+    pass.injection_stage = InjectionStage::PostDLSS;
+    changed = true;
+  } else if (clicked == 1) {
     pass.injection_stage = InjectionStage::Present;
     // Once a pass targets the backbuffer, all later passes must too.
     for (uint32_t j = pass_index + 1; j < kMaxPasses; ++j) {
       settings.passes[j].injection_stage = InjectionStage::Present;
     }
     changed = true;
-  }
-  if (at_present) ImGui::PopStyleColor();
-  if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip(
-        "Run this pass on the final frame, after every other effect "
-        "including UI and post-processing.\n"
-        "Selecting this forces all later passes to Backbuffer as well, "
-        "because they cannot run earlier than this one.");
   }
 }
 
@@ -413,9 +486,15 @@ void DrawModelSection(uint32_t pass_index,
 
   // Preset row.
   {
-    const float button_width =
-        (ImGui::GetContentRegionAvail().x - kControlLabelWidth) / 3.0f -
-        ImGui::GetStyle().ItemSpacing.x;
+    static const char* kPresetNames[] = {"A", "B", "C"};
+    static const char* kPresetTooltips[] = {
+        "Model preset A. Typically the most conservative; preserves the "
+        "original image most closely.",
+        "Model preset B. Balanced default; a middle ground between "
+        "preservation and the model's edit.",
+        "Model preset C. The most aggressive preset; applies the model's "
+        "edit most strongly.",
+    };
 
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Preset");
@@ -426,32 +505,11 @@ void DrawModelSection(uint32_t pass_index,
     }
     ImGui::SameLine(kControlLabelWidth);
 
-    static const char* kPresetNames[] = {"A", "B", "C"};
-    static const char* kPresetTooltips[] = {
-        "Model preset A. Typically the most conservative; preserves the "
-        "original image most closely.",
-        "Model preset B. Balanced default; a middle ground between "
-        "preservation and the model's edit.",
-        "Model preset C. The most aggressive preset; applies the model's "
-        "edit most strongly.",
-    };
-    for (int i = 0; i < 3; ++i) {
-      if (i > 0) ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
-
-      const bool selected = pass.preset == i;
-      if (selected) {
-        ImGui::PushStyleColor(ImGuiCol_Button,
-                              ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-      }
-      if (ImGui::Button(kPresetNames[i], ImVec2(button_width, 0.0f)) &&
-          pass.preset != i) {
-        pass.preset = i;
-        changed = true;
-      }
-      if (selected) ImGui::PopStyleColor();
-      if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", kPresetTooltips[i]);
-      }
+    const int clicked = DrawGroupButtons(
+        "preset", kPresetNames, kPresetTooltips, 3, pass.preset, nullptr);
+    if (clicked >= 0) {
+      pass.preset = clicked;
+      changed = true;
     }
   }
 
@@ -688,26 +746,29 @@ void DrawOverlay(reshade::api::effect_runtime*) {
     }
 
     WithDisabled(!hdr_on, [&] {
-      // Format combo.
+      // Format group.
       {
         static const char* kFormatNames[] = {
             "Auto", "SDR", "scRGB", "HDR10"};
         static const char* kFormatTips[] = {
-            "Detect from the DLSS output's DXGI format.",
-            "Force SDR sRGB interpretation.",
-            "Force linear scRGB (1.0 = 80 nits).",
-            "Force HDR10 (PQ ST.2084)."};
+            "Detect the format automatically from the DLSS output.",
+            "Treat the source as SDR sRGB. Use only if detection is "
+            "wrong on a genuinely SDR source.",
+            "Treat the source as linear scRGB (1.0 = 80 nits). Common "
+            "for Windows HDR and modern games.",
+            "Treat the source as HDR10 PQ (ST.2084). Common for HDR "
+            "games on consoles and PC."};
         int fmt = static_cast<int>(settings.hdr_format);
-        changed |= DrawComboRow("hdr_format", "Format",
-                                "How the source image is encoded. Auto "
-                                "detects the format from the DLSS output; "
-                                "override it if the automatic choice looks "
-                                "wrong.",
-                                &fmt, kFormatNames, kFormatTips, 4);
+        changed |= DrawGroupRow(
+            "hdr_format", "Format",
+            "How the source image is encoded.\n"
+            "Auto detects from the DLSS output's DXGI format; override "
+            "it only if the automatic choice looks wrong on your system.",
+            kFormatNames, kFormatTips, 4, &fmt, nullptr);
         settings.hdr_format = static_cast<HdrFormat>(fmt);
       }
 
-      // Chroma edit combo.
+      // Chroma edit group.
       {
         static const char* kChromaNames[] = {"Additive", "Ratio"};
         static const char* kChromaTips[] = {
@@ -716,13 +777,13 @@ void DrawOverlay(reshade::api::effect_runtime*) {
             "how far apart the two images are in SDR.",
             "Treat the model's output as a brightness ratio applied to the "
             "source. More faithful to the model's relative changes, but "
-            "can look noisy in very dark areas where the ratio has a small "
-            "denominator."};
+            "can look noisy in very dark areas where the ratio has a "
+            "small denominator."};
         int mode = static_cast<int>(settings.hdr_chroma_mode);
-        changed |= DrawComboRow(
+        changed |= DrawGroupRow(
             "hdr_chroma_mode", "Chroma Edit",
             "How the model's colour changes are carried back to HDR.",
-            &mode, kChromaNames, kChromaTips, 2);
+            kChromaNames, kChromaTips, 2, &mode, nullptr);
         settings.hdr_chroma_mode = static_cast<ChromaEditMode>(mode);
       }
 
