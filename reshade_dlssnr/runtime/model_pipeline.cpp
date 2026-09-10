@@ -32,8 +32,14 @@ bool MeasureWhitePoint(
       full_input, full_input, full_input, full_input};
   ID3D12Resource* uavs[kUavCount] = {resources.GetWhitePointBuffer()};
 
+  // The white-point reduction produces an 8×8 tile buffer regardless of
+  // frame size, so its grid is fixed at 1×1×1 (the shader's 8×8 thread
+  // group is exactly that buffer). Without this override the dispatch
+  // would launch one group per 8×8 tile of the frame — tens of thousands
+  // of idle groups for 4K content.
   return codec->Dispatch(
-      "MeasureWhitePoint", command_list, constants, srvs, uavs);
+      "MeasureWhitePoint", command_list, constants, srvs, uavs,
+      /*threads_x=*/1, /*threads_y=*/1, /*threads_z=*/1);
 }
 
 bool PrepareInput(

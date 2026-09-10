@@ -61,12 +61,20 @@ class ComputeEngine {
   // kUavCount valid resources (u0..uN-1). Fill unused slots by
   // repeating an already-bound resource. See the descriptor layout
   // contract above for details.
+  //
+  // By default the thread-group grid is derived from constants.Width/Height
+  // assuming an 8×8 thread group (matches the built-in passes). Pass
+  // non-zero `threads_x`/`threads_y` to override — useful for passes that
+  // only need a fixed grid regardless of frame size (e.g. a reduction).
   bool Dispatch(
       const char* pass_name,
       ID3D12GraphicsCommandList* command_list,
       const ComputeConstants& constants,
       ID3D12Resource* const* srvs,
-      ID3D12Resource* const* uavs);
+      ID3D12Resource* const* uavs,
+      uint32_t threads_x = 0,
+      uint32_t threads_y = 0,
+      uint32_t threads_z = 0);
 
   void Destroy();
 
@@ -98,7 +106,10 @@ class ComputeEngine {
       ID3D12PipelineState* pipeline_state,
       const ComputeConstants& constants,
       ID3D12Resource* const* srvs,
-      ID3D12Resource* const* uavs);
+      ID3D12Resource* const* uavs,
+      uint32_t threads_x,
+      uint32_t threads_y,
+      uint32_t threads_z);
 };
 
 }  // namespace reshade_dlssnr

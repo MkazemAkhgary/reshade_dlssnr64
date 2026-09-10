@@ -78,7 +78,10 @@ bool ComputeEngine::BindAndDispatch(
     ID3D12PipelineState* pipeline_state,
     const ComputeConstants& constants,
     ID3D12Resource* const* srvs,
-    ID3D12Resource* const* uavs) {
+    ID3D12Resource* const* uavs,
+    uint32_t threads_x,
+    uint32_t threads_y,
+    uint32_t threads_z) {
   if (command_list == nullptr || pipeline_state == nullptr ||
       srvs == nullptr || uavs == nullptr) {
     return false;
@@ -115,15 +118,20 @@ bool ComputeEngine::BindAndDispatch(
   CreateConstantBufferView(
       constant_buffers_[slot].Get(), &constants, sizeof(constants), cbv_handle);
 
+  // Thread-group grid. Callers can override for passes whose grid is not
+  // tied to the frame size; the built-in 8×8 group passes use the default.
+  const uint32_t grid_x =
+      threads_x != 0 ? threads_x : (constants.Width + 7) / 8;
+  const uint32_t grid_y =
+      threads_y != 0 ? threads_y : (constants.Height + 7) / 8;
+  const uint32_t grid_z = threads_z != 0 ? threads_z : 1;
+
   ID3D12DescriptorHeap* heaps[] = {descriptor_heap_.Get()};
   command_list->SetDescriptorHeaps(1, heaps);
   command_list->SetComputeRootSignature(root_signature_.Get());
   command_list->SetPipelineState(pipeline_state);
   command_list->SetComputeRootDescriptorTable(0, gpu_handle);
-  command_list->Dispatch(
-      (constants.Width + 7) / 8,
-      (constants.Height + 7) / 8,
-      1);
+  command_list->Dispatch(grid_x, grid_y, grid_z);
 
   return true;
 }
@@ -255,7 +263,10 @@ bool ComputeEngine::Dispatch(
     ID3D12GraphicsCommandList* command_list,
     const ComputeConstants& constants,
     ID3D12Resource* const* srvs,
-    ID3D12Resource* const* uavs) {
+    ID3D12Resource* const* uavs,
+    uint32_t threads_x,
+    uint32_t threads_y,
+    uint32_t threads_z) {
   if (device_ == nullptr || pass_name == nullptr ||
       command_list == nullptr || srvs == nullptr || uavs == nullptr) {
     return false;
@@ -278,7 +289,8 @@ bool ComputeEngine::Dispatch(
   }
 
   return BindAndDispatch(
-      command_list, it->second.pso.Get(), constants, srvs, uavs);
+      command_list, it->second.pso.Get(), constants, srvs, uavs,
+      threads_x, threads_y, threads_z);
 }
 
 bool ComputeEngine::Init(ID3D12Device* device) {
