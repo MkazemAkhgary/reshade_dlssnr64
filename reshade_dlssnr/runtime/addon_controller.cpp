@@ -126,7 +126,8 @@ void AddonController::OnPostDlssEvaluate(
         command_list,
         output_resource,
         is_first,
-        frame_debug_);
+        frame_debug_,
+        &hdr_);
     is_first = false;
   }
 }

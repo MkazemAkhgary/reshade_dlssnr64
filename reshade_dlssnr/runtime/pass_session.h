@@ -14,6 +14,8 @@
 #include "dlss_guides.h"
 #include "feature_lifecycle.h"
 #include "frame_debug_context.h"
+#include "hdr_state.h"
+#include "model_pipeline.h"
 #include "pass_resources.h"
 #include "runtime.h"
 #include "settings.h"
@@ -47,7 +49,8 @@ class PassSession {
       ID3D12GraphicsCommandList* command_list,
       ID3D12Resource* output_resource,
       bool is_first_pass,
-      FrameDebugContext& frame_debug);
+      FrameDebugContext& frame_debug,
+      HdrState* hdr);
 
   void Shutdown(NgxRuntime& runtime);
 

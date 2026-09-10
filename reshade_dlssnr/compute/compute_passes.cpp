@@ -162,6 +162,99 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 }
 )";
 
+constexpr const char* kTonemapForward = R"(
+cbuffer Params : register(b0)
+{
+    uint  gWidth;
+    uint  gHeight;
+    float4 gParams[4];
+};
+
+// gParams[0].x = exposure
+// gParams[0].y = white point (Extended Reinhard W, in exposure-adjusted space)
+// gParams[0].z = format (0 SDR sRGB, 1 scRGB linear, 2 HDR10 PQ)
+#define kExposure   gParams[0].x
+#define kWhitePoint gParams[0].y
+#define kFormat     gParams[0].z
+
+Texture2D<float4> gSource : register(t0);
+RWTexture2D<float4> gOutput : register(u0);
+SamplerState s0 : register(s0);
+
+float3 SrgbToLinear(float3 v)
+{
+    v = saturate(v);
+    return lerp(v / 12.92, pow((v + 0.055) / 1.055, 2.4),
+                step(0.04045, v));
+}
+
+float3 LinearToSrgb(float3 v)
+{
+    v = saturate(v);
+    return lerp(v * 12.92, 1.055 * pow(max(v, 1e-8), 1.0 / 2.4) - 0.055,
+                step(0.0031308, v));
+}
+
+// ST.2084 (PQ) EOTF. Returns nits.
+float3 PqToNits(float3 v)
+{
+    v = saturate(v);
+    const float m1 = 0.1593017578125;
+    const float m2 = 78.84375;
+    const float c1 = 0.8359375;
+    const float c2 = 18.8515625;
+    const float c3 = 18.6875;
+    float3 p = pow(max(v, 0.0), 1.0 / m2);
+    float3 num = max(p - c1, 0.0);
+    float3 den = c2 - c3 * p;
+    return 10000.0 * pow(num / max(den, 1e-6), 1.0 / m1);
+}
+
+// Decode to a common linear space where 1.0 == scRGB white (80 nits).
+float3 DecodeToLinear(float3 c)
+{
+    int fmt = (int)(kFormat + 0.5);
+    if (fmt == 1) {
+        // scRGB: already linear
+        return max(c, 0.0);
+    } else if (fmt == 2) {
+        // HDR10 PQ: decode to nits, then to scRGB units
+        return max(PqToNits(c), 0.0) / 80.0;
+    } else {
+        // SDR sRGB
+        return SrgbToLinear(c);
+    }
+}
+
+// Extended Reinhard, per channel. Monotonic, preserves details. With
+// W = 1 this is classic x / (1 + x).
+float ReinhardForward(float x, float W)
+{
+    float W2 = max(W * W, 1e-6);
+    return x * (1.0 + x / W2) / (1.0 + x);
+}
+
+[numthreads(8, 8, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= gWidth || id.y >= gHeight)
+        return;
+
+    // The tonemap doubles as the resize: sampling at target UVs with a
+    // bilinear filter gives us the working-scale image directly.
+    float2 uv = (float2(id.xy) + 0.5) / float2(gWidth, gHeight);
+    float4 src = gSource.SampleLevel(s0, uv, 0);
+
+    float3 linear = DecodeToLinear(src.rgb);
+    linear *= kExposure;
+
+    float3 sdr = ReinhardForward(linear, kWhitePoint);
+    float3 out_rgb = LinearToSrgb(sdr);
+
+    gOutput[id.xy] = float4(out_rgb, src.a);
+}
+)";
+
 constexpr const char* kPrepareModelInput = R"(
 cbuffer Params : register(b0)
 {
@@ -302,6 +395,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 const ComputePassDef kComputePasses[] = {
     {"ZeroHistogram",      kZeroHistogram},
     {"BuildHistogram",     kBuildHistogram},
+    {"TonemapForward",     kTonemapForward},
     {"PrepareModelInput",  kPrepareModelInput},
     {"ComposeModelOutput", kComposeModelOutput},
     {"DebugDisplay",       kDebugDisplay},

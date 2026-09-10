@@ -480,7 +480,8 @@ void PassSession::OnPostDlssEvaluate(
     ID3D12GraphicsCommandList* command_list,
     ID3D12Resource* output_resource,
     bool is_first_pass,
-    FrameDebugContext& frame_debug) {
+    FrameDebugContext& frame_debug,
+    HdrState* hdr) {
   if (!settings.enabled) return;
   if (failed_ || command_list == nullptr || output_resource == nullptr) return;
 
@@ -580,6 +581,25 @@ void PassSession::OnPostDlssEvaluate(
     return;
   }
 
+  // Build HDR tonemap uniforms if HDR is enabled. The tonemap shader
+  // doubles as the resize into working scale, so passing these uniforms
+  // is all that's needed to switch from a plain resample to a full
+  // HDR → SDR normalize.
+  model_pipeline::HdrUniforms hdr_uniforms;
+  const model_pipeline::HdrUniforms* hdr_ptr = nullptr;
+  if (hdr != nullptr && hdr->Enabled()) {
+    hdr_uniforms.exposure = hdr->Exposure();
+    hdr_uniforms.white_point = hdr->WhitePoint();
+    switch (hdr->ResolvedFormat()) {
+      case HdrFormat::ScRgb: hdr_uniforms.format = 1; break;
+      case HdrFormat::Hdr10: hdr_uniforms.format = 2; break;
+      case HdrFormat::Sdr:
+      case HdrFormat::Auto:
+      default:               hdr_uniforms.format = 0; break;
+    }
+    hdr_ptr = &hdr_uniforms;
+  }
+
   ID3D12Resource* model_color = model_input;
   ID3D12Resource* model_output = resources_.GetOutput();
   unsigned int eval_width = width;
@@ -598,7 +618,8 @@ void PassSession::OnPostDlssEvaluate(
           width,
           height,
           work_width,
-          work_height)) {
+          work_height,
+          hdr_ptr)) {
     return;
   }
   (void)use_working_scale;

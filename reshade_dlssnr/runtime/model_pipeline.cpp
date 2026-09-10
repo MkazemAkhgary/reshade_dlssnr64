@@ -19,7 +19,8 @@ bool PrepareInput(
     unsigned int full_width,
     unsigned int full_height,
     unsigned int work_width,
-    unsigned int work_height) {
+    unsigned int work_height,
+    const HdrUniforms* hdr) {
   if (out_model_color == nullptr || out_model_output == nullptr ||
       codec == nullptr || command_list == nullptr || full_input == nullptr) {
     return false;
@@ -31,13 +32,21 @@ bool PrepareInput(
   (void)full_width;
   (void)full_height;
 
+  const char* pass_name = "PrepareModelInput";
+  if (hdr != nullptr) {
+    pass_name = "TonemapForward";
+    constants.params[0] = hdr->exposure;
+    constants.params[1] = hdr->white_point;
+    constants.params[2] = static_cast<float>(hdr->format);
+  }
+
   state.Transition(command_list, full_input,
                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
   ID3D12Resource* srvs[kSrvCount] = {full_input, full_input, full_input};
   ID3D12Resource* uavs[kUavCount] = {resources.GetWorkingInput()};
 
-  codec->Dispatch("PrepareModelInput", command_list, constants, srvs, uavs);
+  codec->Dispatch(pass_name, command_list, constants, srvs, uavs);
 
   state.Transition(command_list, resources.GetWorkingInput(),
                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
