@@ -7,6 +7,7 @@
 
 #include "dlss_guides.h"
 #include "dlssnr_stages_working_scale.h"
+#include "ngx_model_params.h"
 
 namespace reshade_dlssnr {
 
@@ -168,33 +169,13 @@ void DlssNrPassSession::OnPresent(
 
   parameter_block.SetResource("DLSSNR.Color", model_color);
   parameter_block.SetResource("DLSSNR.Output", model_output);
-  parameter_block.SetUInt("DLSSNR.Enabled", 1u);
   parameter_block.SetUInt("DLSSNR.Width", eval_width);
   parameter_block.SetUInt("DLSSNR.Height", eval_height);
   parameter_block.SetUInt("DLSSNR.InputWidth", width);
   parameter_block.SetUInt("DLSSNR.InputHeight", height);
   parameter_block.SetUInt("DLSSNR.OutputWidth", eval_width);
   parameter_block.SetUInt("DLSSNR.OutputHeight", eval_height);
-  parameter_block.SetUInt("DLSSNR.Upscaling", 1u);
-  parameter_block.SetFloat("DLSSNR.ScalingRatio", 1.0f);
-  parameter_block.SetFloat("DLSSNR.Scale", 1.0f);
-  parameter_block.SetUInt(
-      "DLSSNR.Hint.Render.Preset",
-      static_cast<unsigned int>(std::clamp(pass.preset, 0, 2)) + 1u);
-  parameter_block.SetFloat("DLSSNR.Intensity", pass.intensity);
-  parameter_block.SetUInt(
-      "DLSSNR.Style",
-      static_cast<unsigned int>(std::clamp(pass.preset, 0, 2)));
-  parameter_block.SetFloat(
-      "DLSSNR.LocalStructureStrength", pass.local_structure);
-  parameter_block.SetFloat("DLSSNR.LocalToneStrength", pass.local_tone);
-  parameter_block.SetFloat(
-      "DLSSNR.SkinStructureStrength",
-      pass.auto_mask ? pass.skin_structure : -1.0f);
-  parameter_block.SetUInt(
-      "DLSSNR.UseAutoMask", pass.auto_mask ? 1u : 0u);
-  parameter_block.SetUInt(
-      "DLSSNR.UICorrection", pass.ui_correction ? 1u : 0u);
+  ApplyModelTuningParams(parameter_block, pass);
 
   // UI mask capability is intentionally unused for now. The model supports:
   //   parameter_block.SetResource("DLSSNR.UIAlpha", <ui_mask_resource>);

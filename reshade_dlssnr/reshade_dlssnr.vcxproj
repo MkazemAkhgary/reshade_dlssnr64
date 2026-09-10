@@ -73,6 +73,7 @@
     <ClCompile Include="runtime\dlssnr_pass_resources.cpp" />
     <ClCompile Include="runtime\dlssnr_pass_session.cpp" />
     <ClCompile Include="runtime\dlssnr_runtime.cpp" />
+    <ClCompile Include="runtime\ngx_model_params.cpp" />
     <ClCompile Include="runtime\ngx_parameter_block.cpp" />
     <ClCompile Include="stages\dlssnr_stages_working_scale.cpp" />
     <ClCompile Include="state\settings.cpp" />
@@ -93,6 +94,7 @@
     <ClInclude Include="runtime\dlssnr_pass_resources.h" />
     <ClInclude Include="runtime\dlssnr_pass_session.h" />
     <ClInclude Include="runtime\dlssnr_runtime.h" />
+    <ClInclude Include="runtime\ngx_model_params.h" />
     <ClInclude Include="runtime\ngx_parameter_block.h" />
     <ClInclude Include="stages\dlssnr_stages_working_scale.h" />
     <ClInclude Include="state\settings.h" />

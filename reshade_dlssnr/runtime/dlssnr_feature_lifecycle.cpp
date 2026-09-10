@@ -5,6 +5,8 @@
 
 #include <reshade.hpp>
 
+#include "ngx_model_params.h"
+
 namespace reshade_dlssnr {
 
 bool DlssNrFeatureLifecycle::EnsureFeature(
@@ -48,32 +50,16 @@ bool DlssNrFeatureLifecycle::EnsureFeature(
 
   params->Reset();
 
-  parameter_block.SetUInt("DLSSNR.Enabled", 1u);
   parameter_block.SetUInt("DLSSNR.Width", width);
   parameter_block.SetUInt("DLSSNR.Height", height);
   parameter_block.SetUInt("DLSSNR.InputWidth", width);
   parameter_block.SetUInt("DLSSNR.InputHeight", height);
   parameter_block.SetUInt("DLSSNR.OutputWidth", width);
   parameter_block.SetUInt("DLSSNR.OutputHeight", height);
-  parameter_block.SetUInt("DLSSNR.Upscaling", 1u);
-  parameter_block.SetFloat("DLSSNR.ScalingRatio", 1.0f);
-  parameter_block.SetFloat("DLSSNR.Scale", 1.0f);
-  parameter_block.SetUInt("DLSSNR.Hint.Render.Preset", model_value + 1u);
   parameter_block.SetUInt(NVSDK_NGX_Parameter_PerfQualityValue, 2u);
-  parameter_block.SetFloat("DLSSNR.Intensity", pass.intensity);
-  parameter_block.SetUInt("DLSSNR.Style", model_value);
-  parameter_block.SetFloat(
-      "DLSSNR.LocalStructureStrength", pass.local_structure);
-  parameter_block.SetFloat("DLSSNR.LocalToneStrength", pass.local_tone);
-  parameter_block.SetFloat(
-      "DLSSNR.SkinStructureStrength",
-      pass.auto_mask ? pass.skin_structure : -1.0f);
-  parameter_block.SetUInt(
-      "DLSSNR.UseAutoMask", pass.auto_mask ? 1u : 0u);
-  parameter_block.SetUInt(
-      "DLSSNR.UICorrection", pass.ui_correction ? 1u : 0u);
   parameter_block.SetUInt("CreationNodeMask", 1u);
   parameter_block.SetUInt("VisibilityNodeMask", 1u);
+  ApplyModelTuningParams(parameter_block, pass);
 
   const NVSDK_NGX_Result result = const_cast<DlssNrRuntime&>(runtime).CreateFeature(
       command_list,

@@ -7,6 +7,7 @@
 #include <windows.h>
 
 #include <memory>
+#include <vector>
 
 #include "dlss_guides.h"
 #include "dlssnr_pass_session.h"
@@ -26,19 +27,19 @@ class DlssNrDirect {
   void Shutdown();
 
  private:
-  DlssNrDirect()
-      : pass1_(&DlssGuides::Get()),
-        pass2_(&DlssGuides::Get()),
-        pass3_(&DlssGuides::Get()) {}
+  DlssNrDirect() {
+    passes_.reserve(kMaxPasses);
+    for (uint32_t i = 0; i < kMaxPasses; ++i) {
+      passes_.emplace_back(&DlssGuides::Get());
+    }
+  }
   ~DlssNrDirect() = default;
 
   DlssNrDirect(const DlssNrDirect&) = delete;
   DlssNrDirect& operator=(const DlssNrDirect&) = delete;
 
   DlssNrRuntime runtime_;
-  DlssNrPassSession pass1_;
-  DlssNrPassSession pass2_;
-  DlssNrPassSession pass3_;
+  std::vector<DlssNrPassSession> passes_;
 };
 
 }  // namespace reshade_dlssnr

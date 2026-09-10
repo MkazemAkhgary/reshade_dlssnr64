@@ -2,6 +2,7 @@
 
 #include "ui.h"
 
+#include <cstdio>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -17,6 +18,51 @@ namespace reshade_dlssnr {
 namespace {
 
 constexpr float kControlLabelWidth = 220.0f;
+
+void DrawToggle(const char* label, const char* tooltip,
+                bool* value, bool& changed) {
+  const float input_button_width =
+      (ImGui::GetContentRegionAvail().x - kControlLabelWidth) / 2.0f -
+      ImGui::GetStyle().ItemSpacing.x;
+
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted(label);
+  if (tooltip != nullptr && ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("%s", tooltip);
+  }
+  ImGui::SameLine(kControlLabelWidth);
+
+  ImGui::PushID(label);
+
+  const bool on = *value;
+
+  if (!on) {
+    ImGui::PushStyleColor(ImGuiCol_Button,
+                          ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+  }
+  if (ImGui::Button("OFF", ImVec2(input_button_width, 0.0f))) {
+    *value = false;
+    changed = true;
+  }
+  if (!on) {
+    ImGui::PopStyleColor();
+  }
+
+  ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
+  if (on) {
+    ImGui::PushStyleColor(ImGuiCol_Button,
+                          ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+  }
+  if (ImGui::Button("ON", ImVec2(input_button_width, 0.0f))) {
+    *value = true;
+    changed = true;
+  }
+  if (on) {
+    ImGui::PopStyleColor();
+  }
+
+  ImGui::PopID();
+}
 
 void DrawPassSettings(
     const char* tab_label,
@@ -86,94 +132,14 @@ void DrawPassSettings(
   draw_slider("Intensity", nullptr, &pass.intensity, 0.0f, 2.0f, 1.0f, "%.2f");
   draw_slider("Local Tone", nullptr, &pass.local_tone, 0.0f, 2.0f, 1.0f, "%.2f");
 
-  {
-    const float input_button_width =
-        (ImGui::GetContentRegionAvail().x - kControlLabelWidth) / 2.0f -
-        ImGui::GetStyle().ItemSpacing.x;
-
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("UI Correction");
-    ImGui::SameLine(kControlLabelWidth);
-
-    ImGui::PushID("UI Correction");
-
-    const bool on = pass.ui_correction;
-    const bool off = !pass.ui_correction;
-
-    if (off) {
-      ImGui::PushStyleColor(ImGuiCol_Button,
-                            ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-    }
-    if (ImGui::Button("OFF", ImVec2(input_button_width, 0.0f))) {
-      pass.ui_correction = false;
-      changed = true;
-    }
-    if (off) {
-      ImGui::PopStyleColor();
-    }
-
-    ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
-    if (on) {
-      ImGui::PushStyleColor(ImGuiCol_Button,
-                            ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-    }
-    if (ImGui::Button("ON", ImVec2(input_button_width, 0.0f))) {
-      pass.ui_correction = true;
-      changed = true;
-    }
-    if (on) {
-      ImGui::PopStyleColor();
-    }
-
-    ImGui::PopID();
-  }
+  DrawToggle("UI Correction", nullptr, &pass.ui_correction, changed);
 
   ImGui::Separator();
 
   draw_slider("Local Structure", nullptr, &pass.local_structure,
               0.0f, 2.0f, 1.0f, "%.2f");
 
-  {
-    const float input_button_width =
-        (ImGui::GetContentRegionAvail().x - kControlLabelWidth) / 2.0f -
-        ImGui::GetStyle().ItemSpacing.x;
-
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Character Mask");
-    ImGui::SameLine(kControlLabelWidth);
-
-    ImGui::PushID("Character Mask");
-
-    const bool on = pass.auto_mask;
-    const bool off = !pass.auto_mask;
-
-    if (off) {
-      ImGui::PushStyleColor(ImGuiCol_Button,
-                            ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-    }
-    if (ImGui::Button("OFF", ImVec2(input_button_width, 0.0f))) {
-      pass.auto_mask = false;
-      changed = true;
-    }
-    if (off) {
-      ImGui::PopStyleColor();
-    }
-
-    ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
-    if (on) {
-      ImGui::PushStyleColor(ImGuiCol_Button,
-                            ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-    }
-    if (ImGui::Button("ON", ImVec2(input_button_width, 0.0f))) {
-      pass.auto_mask = true;
-      changed = true;
-    }
-    if (on) {
-      ImGui::PopStyleColor();
-    }
-
-    ImGui::PopID();
-  }
+  DrawToggle("Character Mask", nullptr, &pass.auto_mask, changed);
 
   if (!pass.auto_mask) {
     ImGui::BeginDisabled();
@@ -238,20 +204,22 @@ void DrawOverlay(reshade::api::effect_runtime*) {
                              &settings.only_super_sampling);
 
   if (settings.enabled) {
-    changed |= ImGui::Checkbox("Enable Second Pass",
-                               &settings.second_pass_enabled);
-    changed |= ImGui::Checkbox("Enable Third Pass",
-                               &settings.third_pass_enabled);
+    for (uint32_t i = 1; i < kMaxPasses; ++i) {
+      char label[32];
+      std::snprintf(label, sizeof(label), "Enable Pass %u", i + 1);
+      changed |= ImGui::Checkbox(label, &settings.pass_enabled[i]);
+    }
   }
 
   ImGui::Separator();
 
   if (ImGui::BeginTabBar("PassTabs")) {
-    DrawPassSettings("Pass 1", settings.pass1, true, changed);
-    DrawPassSettings("Pass 2", settings.pass2,
-                     settings.second_pass_enabled, changed);
-    DrawPassSettings("Pass 3", settings.pass3,
-                     settings.third_pass_enabled, changed);
+    for (uint32_t i = 0; i < kMaxPasses; ++i) {
+      char label[32];
+      std::snprintf(label, sizeof(label), "Pass %u", i + 1);
+      DrawPassSettings(label, settings.passes[i],
+                       settings.pass_enabled[i], changed);
+    }
     ImGui::EndTabBar();
   }
 

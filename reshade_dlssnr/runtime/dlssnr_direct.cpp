@@ -24,26 +24,11 @@ void DlssNrDirect::OnPresent(
   if (!settings.enabled) return;
   if (command_queue == nullptr || swapchain == nullptr) return;
 
-  pass1_.OnPresent(
-      runtime_,
-      settings.pass1,
-      settings,
-      command_queue,
-      swapchain);
-
-  if (settings.second_pass_enabled) {
-    pass2_.OnPresent(
+  for (uint32_t i = 0; i < kMaxPasses; ++i) {
+    if (!settings.pass_enabled[i]) continue;
+    passes_[i].OnPresent(
         runtime_,
-        settings.pass2,
-        settings,
-        command_queue,
-        swapchain);
-  }
-
-  if (settings.third_pass_enabled) {
-    pass3_.OnPresent(
-        runtime_,
-        settings.pass3,
+        settings.passes[i],
         settings,
         command_queue,
         swapchain);
@@ -53,9 +38,9 @@ void DlssNrDirect::OnPresent(
 void DlssNrDirect::Shutdown() {
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
-  pass1_.Shutdown(runtime_);
-  pass2_.Shutdown(runtime_);
-  pass3_.Shutdown(runtime_);
+  for (auto& pass : passes_) {
+    pass.Shutdown(runtime_);
+  }
   runtime_.Shutdown();
 }
 

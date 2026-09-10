@@ -222,7 +222,16 @@ bool DlssNrCodec::CompilePipeline(
           0,
           &shader_blob,
           &error_blob))) {
-    if (error_blob != nullptr) error_blob->Release();
+    if (error_blob != nullptr) {
+      reshade::log::message(
+          reshade::log::level::error,
+          static_cast<const char*>(error_blob->GetBufferPointer()));
+      error_blob->Release();
+    } else {
+      reshade::log::message(
+          reshade::log::level::error,
+          "D3DCompile failed without an error blob");
+    }
     return false;
   }
 
@@ -258,7 +267,12 @@ bool DlssNrCodec::Dispatch(
     if (source == nullptr) return false;
 
     CachedPass pass;
-    if (!CompilePipeline(source, pass.pso.GetAddressOf())) return false;
+    if (!CompilePipeline(source, pass.pso.GetAddressOf())) {
+      std::string msg = "Failed to compile compute pass: ";
+      msg += pass_name;
+      reshade::log::message(reshade::log::level::error, msg.c_str());
+      return false;
+    }
 
     it = passes_.emplace(pass_name, std::move(pass)).first;
   }

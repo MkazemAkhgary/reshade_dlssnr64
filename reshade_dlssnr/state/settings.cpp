@@ -72,28 +72,39 @@ void SavePassSettings(const char* prefix, const PassSettings& pass) {
   }
 }
 
+std::string PassPrefix(uint32_t index) {
+  return "Pass" + std::to_string(index + 1);
+}
+
+std::string PassEnabledKey(uint32_t index) {
+  return "Pass" + std::to_string(index + 1) + "Enabled";
+}
+
 }  // namespace
 
 void LoadSettings() {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Enabled", g_settings.enabled);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "OnlySuperSampling", g_settings.only_super_sampling);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "SecondPassEnabled", g_settings.second_pass_enabled);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "ThirdPassEnabled", g_settings.third_pass_enabled);
 
-  LoadPassSettings("Pass1", g_settings.pass1);
-  LoadPassSettings("Pass2", g_settings.pass2);
-  LoadPassSettings("Pass3", g_settings.pass3);
+  for (uint32_t i = 0; i < kMaxPasses; ++i) {
+    const std::string key = PassEnabledKey(i);
+    reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                              key.c_str(), g_settings.pass_enabled[i]);
+    LoadPassSettings(PassPrefix(i).c_str(), g_settings.passes[i]);
+  }
+  g_settings.pass_enabled[0] = true;
 }
 
 void SaveSettings() {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Enabled", g_settings.enabled);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "OnlySuperSampling", g_settings.only_super_sampling);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "SecondPassEnabled", g_settings.second_pass_enabled);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "ThirdPassEnabled", g_settings.third_pass_enabled);
 
-  SavePassSettings("Pass1", g_settings.pass1);
-  SavePassSettings("Pass2", g_settings.pass2);
-  SavePassSettings("Pass3", g_settings.pass3);
+  for (uint32_t i = 0; i < kMaxPasses; ++i) {
+    const std::string key = PassEnabledKey(i);
+    reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                              key.c_str(), g_settings.pass_enabled[i]);
+    SavePassSettings(PassPrefix(i).c_str(), g_settings.passes[i]);
+  }
 }
 
 }  // namespace reshade_dlssnr

@@ -1,9 +1,13 @@
 // Persistent user settings for model passes, UI masking, and debug views.
 #pragma once
 
+#include <cstdint>
+
 #include <reshade.hpp>
 
 namespace reshade_dlssnr {
+
+constexpr uint32_t kMaxPasses = 3;
 
 struct PassSettings {
   int preset = 1;
@@ -26,12 +30,10 @@ struct PassSettings {
 struct Settings {
   bool enabled = true;
   bool only_super_sampling = true;
-  bool second_pass_enabled = false;
-  bool third_pass_enabled = false;
 
-  PassSettings pass1;
-  PassSettings pass2;
-  PassSettings pass3;
+  // Pass 0 is always enabled; the remaining entries are user-toggleable.
+  bool pass_enabled[kMaxPasses] = {true, false, false};
+  PassSettings passes[kMaxPasses];
 };
 
 Settings& GetSettings();
