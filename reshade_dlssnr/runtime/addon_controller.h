@@ -17,6 +17,7 @@
 #include "pass_session.h"
 #include "runtime.h"
 #include "settings.h"
+#include "status.h"
 
 namespace reshade_dlssnr {
 
@@ -41,6 +42,9 @@ class AddonController {
   // Thread-safe snapshot of the HDR measurement state, for the UI.
   HdrSnapshot GetHdrSnapshot() const;
 
+  // Thread-safe snapshot of the addon's current health, for the UI.
+  StatusSnapshot GetStatus() const;
+
  private:
   AddonController() {
     passes_.reserve(kMaxPasses);
@@ -60,6 +64,10 @@ class AddonController {
       ID3D12CommandQueue* command_queue,
       IDXGISwapChain* swapchain,
       const FrameDebugContext& debug);
+
+  // Refresh status_ from the current state. Called at the end of every
+  // OnPresent and OnPostDlssEvaluate.
+  void RefreshStatus(const Settings& settings);
 
   NgxRuntime runtime_;
   std::vector<PassSession> passes_;
@@ -86,6 +94,10 @@ class AddonController {
   // Post-DLSS pass (which runs before Present) needs to know the format
   // before we get a chance to query the backbuffer this frame.
   DXGI_FORMAT backbuffer_format_ = DXGI_FORMAT_UNKNOWN;
+
+  // Latest status snapshot, refreshed each frame. Guarded by the same
+  // mutex that guards every other controller entry point.
+  StatusSnapshot status_;
 };
 
 }  // namespace reshade_dlssnr

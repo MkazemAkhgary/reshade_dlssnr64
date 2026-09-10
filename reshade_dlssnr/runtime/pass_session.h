@@ -19,6 +19,7 @@
 #include "pass_resources.h"
 #include "runtime.h"
 #include "settings.h"
+#include "status.h"
 
 namespace reshade_dlssnr {
 
@@ -54,7 +55,15 @@ class PassSession {
 
   void Shutdown(NgxRuntime& runtime);
 
+  // Snapshot of this pass's current state, for the controller's status UI.
+  PassStatus GetStatus() const;
+
  private:
+  // Sets failed_ and reason_, and logs the failure once. Use in place of
+  // the `failed_ = true; reason_ = "...";` pattern so every failure has a
+  // single visible log entry.
+  void Fail(const char* reason);
+
   // Acquires the backbuffer and its descriptor for the current frame.
   bool AcquireBackbuffer(
       IDXGISwapChain* swapchain,

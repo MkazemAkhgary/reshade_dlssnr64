@@ -1,5 +1,6 @@
 #include "addon_controller.h"
 
+#include <cstdio>
 #include <mutex>
 
 #include "dlss_guides.h"
@@ -67,6 +68,7 @@ void AddonController::OnPresent(
   // pending histogram copy has completed.
   hdr_.SignalAtPresent(command_queue);
 
+  RefreshStatus(settings);
   frame_debug_.Reset();
 }
 
@@ -131,6 +133,8 @@ void AddonController::OnPostDlssEvaluate(
         &hdr_);
     is_first = false;
   }
+
+  RefreshStatus(settings);
 }
 
 void AddonController::PresentDebugOutput(
@@ -188,6 +192,39 @@ void AddonController::PresentDebugOutput(
 HdrSnapshot AddonController::GetHdrSnapshot() const {
   std::lock_guard<std::mutex> lock(g_direct_mutex);
   return hdr_.GetSnapshot();
+}
+
+StatusSnapshot AddonController::GetStatus() const {
+  std::lock_guard<std::mutex> lock(g_direct_mutex);
+  return status_;
+}
+
+void AddonController::RefreshStatus(const Settings& settings) {
+  status_ = StatusSnapshot{};
+
+  status_.enabled = settings.enabled;
+  status_.runtime_initialized = runtime_.IsInitialized();
+  if (!status_.runtime_initialized) {
+    const char* err = runtime_.GetLastError();
+    if (err != nullptr && err[0] != '\0') {
+      std::snprintf(status_.runtime_reason, sizeof(status_.runtime_reason),
+                    "%s", err);
+    }
+  }
+
+  const DlssGuideState guides = DlssGuides::Get().GetState();
+  status_.guides_valid = guides.valid;
+
+  const HdrSnapshot hdr = hdr_.GetSnapshot();
+  status_.hdr_enabled = hdr.enabled;
+  status_.hdr_ready = hdr.ready;
+  status_.hdr_exposure = hdr.exposure;
+  status_.hdr_white_point = hdr.white_point;
+
+  status_.pass_count = kMaxPasses;
+  for (uint32_t i = 0; i < kMaxPasses; ++i) {
+    status_.passes[i] = passes_[i].GetStatus();
+  }
 }
 
 void AddonController::Shutdown() {

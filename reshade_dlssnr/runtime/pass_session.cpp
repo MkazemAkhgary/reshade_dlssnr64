@@ -16,6 +16,24 @@ namespace {
 std::mutex g_session_mutex;
 }
 
+void PassSession::Fail(const char* reason) {
+  failed_ = true;
+  reason_ = reason;
+  reshade::log::message(reshade::log::level::error, reason);
+}
+
+PassStatus PassSession::GetStatus() const {
+  PassStatus s;
+  s.enabled = !failed_;
+  s.running = !failed_ && feature_.HasFeature();
+  s.failed = failed_;
+  s.has_feature = feature_.HasFeature();
+  if (reason_ != nullptr && reason_[0] != '\0') {
+    std::snprintf(s.reason, sizeof(s.reason), "%s", reason_);
+  }
+  return s;
+}
+
 bool PassSession::AcquireBackbuffer(
     IDXGISwapChain* swapchain,
     ID3D12CommandQueue* command_queue,
@@ -25,11 +43,17 @@ bool PassSession::AcquireBackbuffer(
     D3D12_RESOURCE_DESC& out_desc) {
   if (FAILED(swapchain->QueryInterface(IID_PPV_ARGS(&out_swapchain3))) ||
       out_swapchain3 == nullptr) {
+    reshade::log::message(
+        reshade::log::level::error,
+        "DLSSNR pass: swapchain is not an IDXGISwapChain3");
     return false;
   }
 
   if (FAILED(command_queue->GetDevice(IID_PPV_ARGS(&out_device))) ||
       out_device == nullptr) {
+    reshade::log::message(
+        reshade::log::level::error,
+        "DLSSNR pass: could not retrieve device from command queue");
     return false;
   }
 
@@ -37,6 +61,9 @@ bool PassSession::AcquireBackbuffer(
   if (FAILED(out_swapchain3->GetBuffer(
           back_buffer_index, IID_PPV_ARGS(&out_backbuffer))) ||
       out_backbuffer == nullptr) {
+    reshade::log::message(
+        reshade::log::level::error,
+        "DLSSNR pass: could not retrieve swapchain backbuffer");
     return false;
   }
 
