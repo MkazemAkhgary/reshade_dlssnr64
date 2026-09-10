@@ -15,22 +15,14 @@ bool FeatureLifecycle::EnsureFeature(
     ID3D12GraphicsCommandList* command_list,
     unsigned int width,
     unsigned int height) {
-  const unsigned int model_value =
-      static_cast<unsigned int>(std::clamp(pass.preset, 0, 2));
-
-  const bool tuning_changed =
-      built_preset_ != model_value ||
-      built_intensity_ != pass.intensity ||
-      built_local_structure_ != pass.local_structure ||
-      built_local_tone_ != pass.local_tone ||
-      built_skin_structure_ != pass.skin_structure ||
-      built_auto_mask_ != pass.auto_mask ||
-      built_ui_correction_ != pass.ui_correction;
-
+  // Only a size change requires a rebuild. Tuning values (preset, intensity,
+  // structure strengths, etc.) are re-applied at every evaluation via
+  // FillEvaluateParams -> ApplyModelTuningParams, so they never need to
+  // trigger a feature rebuild. Rebuilding on tuning was causing a rebuild on
+  // every slider drag and making the UI sluggish.
   if (feature_handle_ != nullptr &&
       built_width_ == width &&
-      built_height_ == height &&
-      !tuning_changed) {
+      built_height_ == height) {
     return true;
   }
 
@@ -78,13 +70,6 @@ bool FeatureLifecycle::EnsureFeature(
 
   built_width_ = width;
   built_height_ = height;
-  built_preset_ = model_value;
-  built_intensity_ = pass.intensity;
-  built_local_structure_ = pass.local_structure;
-  built_local_tone_ = pass.local_tone;
-  built_skin_structure_ = pass.skin_structure;
-  built_auto_mask_ = pass.auto_mask;
-  built_ui_correction_ = pass.ui_correction;
 
   std::string msg = "Direct DLSSNR feature created at ";
   msg += std::to_string(width) + "x" + std::to_string(height);
@@ -105,13 +90,6 @@ void FeatureLifecycle::Shutdown(NgxRuntime& runtime) {
 
   built_width_ = 0;
   built_height_ = 0;
-  built_preset_ = 0xFFFFFFFFu;
-  built_intensity_ = -1.0f;
-  built_local_structure_ = -1.0f;
-  built_local_tone_ = -1.0f;
-  built_skin_structure_ = -1.0f;
-  built_auto_mask_ = false;
-  built_ui_correction_ = false;
   first_evaluate_ = true;
   just_rebuilt_ = false;
 }

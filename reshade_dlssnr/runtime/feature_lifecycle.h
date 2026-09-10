@@ -48,13 +48,6 @@ class FeatureLifecycle {
 
   unsigned int built_width_ = 0;
   unsigned int built_height_ = 0;
-  unsigned int built_preset_ = 0xFFFFFFFFu;
-  float built_intensity_ = -1.0f;
-  float built_local_structure_ = -1.0f;
-  float built_local_tone_ = -1.0f;
-  float built_skin_structure_ = -1.0f;
-  bool built_auto_mask_ = false;
-  bool built_ui_correction_ = false;
 };
 
 }  // namespace reshade_dlssnr
