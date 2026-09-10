@@ -214,6 +214,20 @@ void HdrState::BeginFrame(CommandContext& cmd,
   constants.params[1] = kLumaMinLog2;
   constants.params[2] = kLumaMaxLog2;
 
+  // Seed the state tracker with the actual current states. Without this,
+  // inference would guess from the resource descriptor, which is wrong for
+  // these two (the buffer would be read as GENERIC_READ, the source as
+  // COMMON), and the first transition would issue an invalid barrier.
+  //
+  // Both resources are owned by us, and their states across frames are
+  // deterministic:
+  //   - `source` is the DLSS output clone, left in SRV by DlssGuides.
+  //   - `histogram_` is left in UAV at the end of every BeginFrame.
+  cmd.SetResourceState(source,
+                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  cmd.SetResourceState(histogram_.Get(),
+                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
   ID3D12Resource* srvs[kSrvCount] = {source, source, source};
   ID3D12Resource* uavs[kUavCount] = {histogram_.Get()};
 
