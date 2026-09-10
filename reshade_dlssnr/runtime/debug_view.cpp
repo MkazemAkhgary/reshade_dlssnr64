@@ -7,56 +7,44 @@ namespace reshade_dlssnr {
 namespace {
 
 ID3D12Resource* SelectSource(const DebugSnapshot& s,
-                             unsigned int* w, unsigned int* h,
-                             D3D12_RESOURCE_STATES* st) {
+                             unsigned int* w, unsigned int* h) {
   *w = s.source_width;
   *h = s.source_height;
-  *st = s.source_state;
   return s.source;
 }
 
 ID3D12Resource* SelectPreparedInput(const DebugSnapshot& s,
-                                    unsigned int* w, unsigned int* h,
-                                    D3D12_RESOURCE_STATES* st) {
+                                    unsigned int* w, unsigned int* h) {
   *w = s.prepared_input_width;
   *h = s.prepared_input_height;
-  *st = s.prepared_input_state;
   return s.prepared_input;
 }
 
 ID3D12Resource* SelectModelOutput(const DebugSnapshot& s,
-                                  unsigned int* w, unsigned int* h,
-                                  D3D12_RESOURCE_STATES* st) {
+                                  unsigned int* w, unsigned int* h) {
   *w = s.model_output_width;
   *h = s.model_output_height;
-  *st = s.model_output_state;
   return s.model_output;
 }
 
 ID3D12Resource* SelectComposedOutput(const DebugSnapshot& s,
-                                     unsigned int* w, unsigned int* h,
-                                     D3D12_RESOURCE_STATES* st) {
+                                     unsigned int* w, unsigned int* h) {
   *w = s.composed_output_width;
   *h = s.composed_output_height;
-  *st = s.composed_output_state;
   return s.composed_output;
 }
 
 ID3D12Resource* SelectMotion(const DebugSnapshot& s,
-                             unsigned int* w, unsigned int* h,
-                             D3D12_RESOURCE_STATES* st) {
+                             unsigned int* w, unsigned int* h) {
   *w = s.motion_width;
   *h = s.motion_height;
-  *st = s.motion_state;
   return s.motion;
 }
 
 ID3D12Resource* SelectDepth(const DebugSnapshot& s,
-                            unsigned int* w, unsigned int* h,
-                            D3D12_RESOURCE_STATES* st) {
+                            unsigned int* w, unsigned int* h) {
   *w = s.depth_width;
   *h = s.depth_height;
-  *st = s.depth_state;
   return s.depth;
 }
 
@@ -97,10 +85,8 @@ bool RenderDebugView(
 
   unsigned int content_w = 0;
   unsigned int content_h = 0;
-  D3D12_RESOURCE_STATES source_state =
-      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-  ID3D12Resource* source = kDebugViews[index].select(
-      snapshot, &content_w, &content_h, &source_state);
+  ID3D12Resource* source =
+      kDebugViews[index].select(snapshot, &content_w, &content_h);
   if (source == nullptr || content_w == 0 || content_h == 0) {
     return false;
   }
@@ -119,10 +105,6 @@ bool RenderDebugView(
   constants.params[4] = static_cast<float>(
       static_cast<unsigned int>(source_desc.Height));
 
-  // The caller's tracker may not know the source's state (fresh context).
-  // Seed it, then transition to SRV. Restore afterwards so the source's
-  // tracked state stays truthful for whatever runs next.
-  state.SetResourceState(source, source_state);
   state.Transition(command_list, source,
                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   state.Transition(command_list, target,
@@ -131,11 +113,7 @@ bool RenderDebugView(
   ID3D12Resource* srvs[kSrvCount] = {source, source, source, source};
   ID3D12Resource* uavs[kUavCount] = {target};
 
-  const bool ok =
-      codec.Dispatch("DebugDisplay", command_list, constants, srvs, uavs);
-
-  state.Transition(command_list, source, source_state);
-  return ok;
+  return codec.Dispatch("DebugDisplay", command_list, constants, srvs, uavs);
 }
 
 }  // namespace reshade_dlssnr

@@ -118,6 +118,16 @@ D3D12_RESOURCE_STATES CommandContext::GetResourceState(
                                        : D3D12_RESOURCE_STATE_COMMON;
 }
 
+void CommandContext::UavBarrier(
+    ID3D12GraphicsCommandList* command_list,
+    ID3D12Resource* resource) {
+  if (command_list == nullptr || resource == nullptr) return;
+  D3D12_RESOURCE_BARRIER barrier = {};
+  barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+  barrier.UAV.pResource = resource;
+  command_list->ResourceBarrier(1, &barrier);
+}
+
 void CommandContext::CopyResourceToBackbuffer(
     ID3D12GraphicsCommandList* command_list,
     ID3D12Resource* source,

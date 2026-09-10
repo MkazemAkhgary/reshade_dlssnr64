@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "command_context.h"
-#include "compute_engine.h"
 #include "dlss_guides.h"
 #include "frame_debug_context.h"
 #include "pass_session.h"
@@ -28,8 +27,10 @@ class AddonController {
       ID3D12CommandQueue* command_queue,
       IDXGISwapChain* swapchain);
 
-  // Runs the first enabled pass inline on the game's command list, right
-  // after the DLSS pass. Only active when InjectionStage == PostDLSS.
+  // Runs the enabled Post-DLSS passes inline on the game's command list,
+  // right after the DLSS pass. Each pass writes its composed result back
+  // into `output_resource`. The active pass (if it is a Post-DLSS pass)
+  // also captures its debug view.
   void OnPostDlssEvaluate(
       ID3D12GraphicsCommandList* command_list,
       ID3D12Resource* output_resource);
@@ -48,10 +49,10 @@ class AddonController {
   AddonController(const AddonController&) = delete;
   AddonController& operator=(const AddonController&) = delete;
 
-  // Renders the pending debug snapshot into the backbuffer. Uses its own
-  // command context and compute engine so the pass sessions' resources are
-  // untouched.
-  void PresentPendingDebug(
+  // Copies frame_debug.output to the swapchain backbuffer. The debug image
+  // was already rendered (at pass time) into a resource we own; this is
+  // purely a present-time override so the game's rendering is unaffected.
+  void PresentDebugOutput(
       ID3D12CommandQueue* command_queue,
       IDXGISwapChain* swapchain,
       const FrameDebugContext& debug);
@@ -60,10 +61,8 @@ class AddonController {
   std::vector<PassSession> passes_;
   FrameDebugContext frame_debug_;
 
-  // Debug-present infrastructure (lazily initialized).
+  // Command context used only for the final debug-present copy.
   CommandContext debug_command_;
-  ComputeEngine debug_codec_;
-  Microsoft::WRL::ComPtr<ID3D12Resource> debug_output_;
 };
 
 }  // namespace reshade_dlssnr

@@ -39,8 +39,15 @@ class CommandContext {
   void SetResourceState(ID3D12Resource* resource, D3D12_RESOURCE_STATES state);
 
   // Returns the tracked state of a resource, or COMMON if untracked.
-  // Used by the debug view to keep its own tracker in sync.
   D3D12_RESOURCE_STATES GetResourceState(ID3D12Resource* resource) const;
+
+  // Inserts an explicit UAV barrier on `resource`. Use after external code
+  // (e.g. NVSDK_NGX EvaluateFeature) may have written to a resource we own
+  // through a UAV, before we read it. A state transition alone is not
+  // guaranteed to synchronize UAV writes.
+  void UavBarrier(
+      ID3D12GraphicsCommandList* command_list,
+      ID3D12Resource* resource);
 
   void Shutdown();
 

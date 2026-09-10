@@ -168,6 +168,74 @@ void PassSession::SubmitAndWait() {
   guides_->ReleaseRetiredGameResources();
 }
 
+bool PassSession::MaybeRenderDebug(
+    const PassSettings& pass,
+    const Settings& settings,
+    ID3D12GraphicsCommandList* command_list,
+    FrameDebugContext& frame_debug,
+    const DebugSnapshot& snapshot,
+    unsigned int width,
+    unsigned int height,
+    DXGI_FORMAT format) {
+  if (pass.debug_view == 0) return false;
+  if (static_cast<int>(pass_index_) != settings.active_pass) return false;
+  if (command_list == nullptr || codec_ == nullptr) return false;
+
+  // (Re)create the shared debug output when its shape changes. The output
+  // is owned by FrameDebugContext and lives across frames.
+  if (frame_debug.output == nullptr ||
+      frame_debug.width != width ||
+      frame_debug.height != height ||
+      frame_debug.format != format) {
+    Microsoft::WRL::ComPtr<ID3D12Device> device;
+    if (FAILED(command_list->GetDevice(IID_PPV_ARGS(&device))) ||
+        device == nullptr) {
+      return false;
+    }
+
+    D3D12_HEAP_PROPERTIES heap = {};
+    heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+    D3D12_RESOURCE_DESC desc = {};
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    desc.Width = width;
+    desc.Height = height;
+    desc.DepthOrArraySize = 1;
+    desc.MipLevels = 1;
+    desc.Format = format;
+    desc.SampleDesc.Count = 1;
+    desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+    Microsoft::WRL::ComPtr<ID3D12Resource> new_output;
+    if (FAILED(device->CreateCommittedResource(
+            &heap, D3D12_HEAP_FLAG_NONE, &desc,
+            D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr,
+            IID_PPV_ARGS(&new_output)))) {
+      return false;
+    }
+
+    frame_debug.output = std::move(new_output);
+    frame_debug.width = width;
+    frame_debug.height = height;
+    frame_debug.format = format;
+  }
+
+  // Seed the pass tracker: at this point the debug output is always UAV
+  // (it was left UAV by the previous frame's copy, or just created UAV).
+  command_.SetResourceState(frame_debug.output.Get(),
+                            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+  if (!RenderDebugView(command_, *codec_, command_list, snapshot,
+                       pass.debug_view, frame_debug.output.Get(),
+                       width, height)) {
+    return false;
+  }
+
+  frame_debug.valid = true;
+  return true;
+}
+
 void PassSession::OnPresent(
     NgxRuntime& runtime,
     const PassSettings& pass,
@@ -318,6 +386,11 @@ void PassSession::OnPresent(
           runtime.Parameters().Get(),
           nullptr);
 
+  // NGX writes to the model output through a UAV. A state transition alone
+  // does not guarantee those writes are visible to the subsequent reads, so
+  // insert an explicit UAV barrier before ComposeOutput reads it back.
+  command_.UavBarrier(command_.GetCommandList(), model_output);
+
   if (!model_pipeline::ComposeOutput(
           command_,
           command_.GetCommandList(),
@@ -356,23 +429,11 @@ void PassSession::OnPresent(
     debug.depth_height = guides.guide_height;
   }
 
-  // Capture debug snapshot if this pass is the active one and has a debug
-  // view selected. The actual rendering is deferred to the Present event
-  // so the debug image never interferes with the game's own rendering.
-  if (pass.debug_view != 0 &&
-      static_cast<int>(pass_index_) == settings.active_pass) {
-    debug.source_state = command_.GetResourceState(debug.source);
-    debug.prepared_input_state = command_.GetResourceState(debug.prepared_input);
-    debug.model_output_state = command_.GetResourceState(debug.model_output);
-    debug.composed_output_state =
-        command_.GetResourceState(debug.composed_output);
-    debug.motion_state = command_.GetResourceState(debug.motion);
-    debug.depth_state = command_.GetResourceState(debug.depth);
-
-    frame_debug.snapshot = debug;
-    frame_debug.debug_view = pass.debug_view;
-    frame_debug.valid = true;
-  }
+  // If this is the active pass, render the debug view now — while the
+  // source resources are in the states this pass left them in. It goes
+  // into our own resource (frame_debug.output), never the backbuffer.
+  MaybeRenderDebug(pass, settings, command_.GetCommandList(), frame_debug,
+                   debug, width, height, desc.Format);
 
   // Always write the real composed output; the debug override happens at
   // Present and does not affect the game's resources.
@@ -530,6 +591,10 @@ void PassSession::OnPostDlssEvaluate(
       runtime.Parameters().Get(),
       nullptr);
 
+  // NGX writes to the model output through a UAV; barrier it before we
+  // read it back (a state transition alone does not synchronize UAVs).
+  command_.UavBarrier(command_list, model_output);
+
   if (!model_pipeline::ComposeOutput(
           command_,
           command_list,
@@ -566,25 +631,14 @@ void PassSession::OnPostDlssEvaluate(
     debug.depth_height = guides.guide_height;
   }
 
-  // Capture debug snapshot if this pass is the active one and has a debug
-  // view selected. The actual rendering is deferred to the Present event.
-  if (pass.debug_view != 0 &&
-      static_cast<int>(pass_index_) == settings.active_pass) {
-    debug.source_state = command_.GetResourceState(debug.source);
-    debug.prepared_input_state = command_.GetResourceState(debug.prepared_input);
-    debug.model_output_state = command_.GetResourceState(debug.model_output);
-    debug.composed_output_state =
-        command_.GetResourceState(debug.composed_output);
-    debug.motion_state = command_.GetResourceState(debug.motion);
-    debug.depth_state = command_.GetResourceState(debug.depth);
-
-    frame_debug.snapshot = debug;
-    frame_debug.debug_view = pass.debug_view;
-    frame_debug.valid = true;
-  }
+  // If this is the active pass, render the debug view now — while the
+  // source resources are in the states this pass left them in. It goes
+  // into our own resource, never the game's.
+  MaybeRenderDebug(pass, settings, command_list, frame_debug,
+                   debug, width, height, desc.Format);
 
   // Always write the real composed output to the game's resource. The debug
-  // image is kept in the frame debug context and applied at Present only.
+  // image is applied to the backbuffer at Present only.
   command_.Transition(command_list, resources_.GetCompositeOutput(),
                       D3D12_RESOURCE_STATE_COPY_SOURCE);
   const D3D12_RESOURCE_STATES out_state = InferResourceState(output_resource);
