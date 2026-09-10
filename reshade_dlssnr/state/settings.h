@@ -97,10 +97,10 @@ struct Settings {
 
   // Multiplier on the auto-detected white point. 1.0 uses the histogram's
   // own value (P99 by default), which clips the top 1% of pixels and
-  // flattens highlights on the round trip. The default 2.0 gives headroom
-  // without visibly darkening midtones. Larger values push the compression
-  // knee higher still, at the cost of a softer overall response.
-  float hdr_curve_white = 2.0f;
+  // flattens highlights on the round trip. The default 8.0 gives generous
+  // headroom so highlights survive the round trip intact, at the cost of a
+  // slightly flatter overall response.
+  float hdr_curve_white = 8.0f;
 
   // Global multiplier on the model's edit before HDR remap.
   float hdr_edit_strength = 1.0f;

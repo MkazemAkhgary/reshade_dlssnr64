@@ -688,11 +688,11 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           0, "hdr_curve_white", "Curve White",
           "Multiplier on the auto-detected white point. 1.0 uses the "
           "histogram's own value and clips the top 1% of pixels, which "
-          "flattens highlights on the round trip. 2.0 (default) gives "
-          "headroom without visibly darkening midtones. Higher values add "
-          "more highlight headroom at the cost of a softer response.",
+          "flattens highlights on the round trip. 8.0 (default) gives "
+          "generous headroom so highlights survive intact. Lower values "
+          "compress the highlights harder.",
           &settings.hdr_curve_white, nullptr, 0.0f,
-          0.25f, 16.0f, 2.0f);
+          0.25f, 16.0f, 8.0f);
 
       changed |= DrawFloatRow(
           0, "hdr_edit_strength", "Edit Strength",

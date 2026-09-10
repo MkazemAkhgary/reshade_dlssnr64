@@ -177,12 +177,11 @@ void LoadSettings() {
                             g_settings.hdr_white_percentile);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.CurveWhite",
                             g_settings.hdr_curve_white);
-  // Clamp to the slider's range. Values above 16.0 (outside the UI range)
-  // are almost certainly from an earlier build before this slider was
-  // wired up; snap to the current default.
+  // Clamp to the slider's range. Values outside it are almost certainly
+  // from an earlier build; snap to the current default.
   if (g_settings.hdr_curve_white > 16.0f ||
       g_settings.hdr_curve_white < 0.25f) {
-    g_settings.hdr_curve_white = 2.0f;
+    g_settings.hdr_curve_white = 8.0f;
   }
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.EditStrength",
                             g_settings.hdr_edit_strength);
