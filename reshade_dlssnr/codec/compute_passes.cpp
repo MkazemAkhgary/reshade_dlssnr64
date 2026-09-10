@@ -6,7 +6,7 @@ namespace reshade_dlssnr {
 
 namespace {
 
-constexpr const char* kDownsample = R"(
+constexpr const char* kPrepareModelInput = R"(
 cbuffer Params : register(b0)
 {
     uint  gWidth;
@@ -29,7 +29,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 }
 )";
 
-constexpr const char* kUpsampleResidual = R"(
+constexpr const char* kComposeModelOutput = R"(
 cbuffer Params : register(b0)
 {
     uint  gWidth;
@@ -144,10 +144,10 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 }  // namespace
 
 const ComputePassDef kComputePasses[] = {
-    {"Downsample",       kDownsample},
-    {"UpsampleResidual", kUpsampleResidual},
+    {"PrepareModelInput",  kPrepareModelInput},
+    {"ComposeModelOutput", kComposeModelOutput},
     // Add new passes here, e.g.:
-    // {"PreExposure",   kPreExposure},
+    // {"PreExposure",     kPreExposure},
 };
 
 const uint32_t kComputePassCount =

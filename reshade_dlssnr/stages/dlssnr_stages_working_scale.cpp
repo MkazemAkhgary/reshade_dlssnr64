@@ -38,7 +38,7 @@ bool PrepareInput(
   ID3D12Resource* uavs[kDlssNrUavCount] = {resources.GetWorkingInput()};
 
   codec->Dispatch(
-      "Downsample", command.GetCommandList(), constants, srvs, uavs);
+      "PrepareModelInput", command.GetCommandList(), constants, srvs, uavs);
 
   command.Transition(command.GetCommandList(), resources.GetWorkingInput(),
                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -81,7 +81,7 @@ bool Apply(
   ID3D12Resource* uavs[kDlssNrUavCount] = {resources.GetCompositeOutput()};
 
   codec->Dispatch(
-      "UpsampleResidual", command.GetCommandList(), constants, srvs, uavs);
+      "ComposeModelOutput", command.GetCommandList(), constants, srvs, uavs);
 
   command.CopyResourceToBackbuffer(
       command.GetCommandList(), resources.GetCompositeOutput(), backbuffer);
