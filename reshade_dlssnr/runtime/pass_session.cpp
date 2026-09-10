@@ -44,6 +44,23 @@ bool PassSession::AcquireBackbuffer(
   return true;
 }
 
+void PassSession::RetireResourceCallback(ID3D12Resource* resource,
+                                         void* user_data) {
+  if (resource == nullptr) return;
+  auto* guides = static_cast<DlssGuides*>(user_data);
+  if (guides != nullptr) {
+    // DlssGuides::RetireGameResource adds a reference and queues the
+    // resource for release after the next GPU wait. We already own a
+    // reference here, so AddRef first so the queue's eventual Release()
+    // balances out.
+    resource->AddRef();
+    guides->RetireGameResource(resource);
+    resource->Release();
+  } else {
+    resource->Release();
+  }
+}
+
 bool PassSession::EnsureFrameResources(
     ID3D12Device* device,
     const D3D12_RESOURCE_DESC& desc,
@@ -286,6 +303,10 @@ void PassSession::OnPresent(
   const bool use_working_scale =
       work_width != width || work_height != height;
 
+  // Present path submits and waits each frame, so resources can be released
+  // synchronously when replaced.
+  resources_.SetRetireCallback(nullptr, nullptr);
+
   if (!EnsureFrameResources(device.Get(), desc, work_width, work_height)) {
     failed_ = true;
     return;
@@ -514,6 +535,12 @@ void PassSession::OnPostDlssEvaluate(
       std::max(1u, static_cast<unsigned int>(height * working_scale + 0.5f));
   const bool use_working_scale =
       work_width != width || work_height != height;
+
+  // Post-DLSS runs on the game's command list and does not submit or wait.
+  // Resources replaced mid-frame (e.g. when the working-scale slider is
+  // dragged) may still be read by in-flight GPU work, so hand them to the
+  // retire queue instead of releasing them immediately.
+  resources_.SetRetireCallback(&PassSession::RetireResourceCallback, guides_);
 
   if (!EnsureFrameResources(device.Get(), desc, work_width, work_height)) {
     failed_ = true;

@@ -2,6 +2,17 @@
 
 namespace reshade_dlssnr {
 
+void PassResources::Dispose(Microsoft::WRL::ComPtr<ID3D12Resource>& resource) {
+  if (resource == nullptr) return;
+
+  if (retire_cb_ != nullptr) {
+    // Transfer the reference; the callback releases it later.
+    retire_cb_(resource.Detach(), retire_user_data_);
+  } else {
+    resource.Reset();
+  }
+}
+
 bool PassResources::CreateUavTexture(
     ID3D12Device* device,
     const D3D12_RESOURCE_DESC& desc,
@@ -31,7 +42,7 @@ bool PassResources::EnsureOutput(
     return true;
   }
 
-  output.Reset();
+  Dispose(output);
 
   ID3D12Resource* raw = nullptr;
   if (!CreateUavTexture(device, desc, &raw)) {
@@ -54,7 +65,7 @@ bool PassResources::EnsureCompositeOutput(
     return true;
   }
 
-  composite_output.Reset();
+  Dispose(composite_output);
 
   ID3D12Resource* raw = nullptr;
   if (!CreateUavTexture(device, desc, &raw)) {
@@ -80,8 +91,11 @@ bool PassResources::EnsureWorkingResources(
     return true;
   }
 
-  working_input.Reset();
-  working_output.Reset();
+  // These are the resources most likely to be replaced on every slider
+  // drag, so they must go through the retire path rather than being
+  // released immediately (the GPU may still be reading them).
+  Dispose(working_input);
+  Dispose(working_output);
 
   D3D12_RESOURCE_DESC working_desc = desc;
   working_desc.Width = work_width;
@@ -95,7 +109,7 @@ bool PassResources::EnsureWorkingResources(
 
   ID3D12Resource* raw_output = nullptr;
   if (!CreateUavTexture(device, working_desc, &raw_output)) {
-    working_input.Reset();
+    Dispose(working_input);
     return false;
   }
   working_output.Attach(raw_output);
@@ -121,7 +135,7 @@ bool PassResources::EnsureScratch(
     return true;
   }
 
-  scratch_[index].Reset();
+  Dispose(scratch_[index]);
 
   D3D12_RESOURCE_DESC scratch_desc = desc;
   scratch_desc.Width = width;
@@ -172,6 +186,11 @@ bool PassResources::EnsureWhitePointBuffer(ID3D12Device* device) {
 }
 
 void PassResources::Shutdown() {
+  // Shutdown implies the GPU is idle or the device is gone, so direct
+  // release is fine — no need to go through the retire path here.
+  retire_cb_ = nullptr;
+  retire_user_data_ = nullptr;
+
   output.Reset();
   composite_output.Reset();
   working_input.Reset();

@@ -5,8 +5,14 @@
 #include <wrl/client.h>
 
 #include <cstdint>
+#include <vector>
 
 namespace reshade_dlssnr {
+
+// A callback invoked when a resource is about to be replaced. The callback
+// owns the transferred reference and must release it only when the GPU is
+// known to be done with the resource.
+using RetireCallback = void (*)(ID3D12Resource* resource, void* user_data);
 
 // Generic scratch texture pool for intermediate stages (pre-exposure,
 // blend helpers, etc.). Slots are created lazily at whatever size/format
@@ -36,6 +42,17 @@ class PassResources {
   unsigned int working_width = 0;
   unsigned int working_height = 0;
   DXGI_FORMAT working_format = DXGI_FORMAT_UNKNOWN;
+
+  // When set, replaced resources are handed to this callback instead of
+  // being released immediately. The callback takes ownership of the
+  // reference (which is not AddRef'd). This is required for resources that
+  // may still be read by in-flight GPU work — e.g. anything resized during
+  // the Post-DLSS pass, which runs on the game's command list and cannot
+  // submit/wait synchronously.
+  void SetRetireCallback(RetireCallback cb, void* user_data) {
+    retire_cb_ = cb;
+    retire_user_data_ = user_data;
+  }
 
   bool EnsureOutput(ID3D12Device* device, const D3D12_RESOURCE_DESC& desc);
   bool EnsureCompositeOutput(ID3D12Device* device, const D3D12_RESOURCE_DESC& desc);
@@ -76,6 +93,14 @@ class PassResources {
   DXGI_FORMAT scratch_format_[kScratchCount] = {};
 
   Microsoft::WRL::ComPtr<ID3D12Resource> white_point_buffer;
+
+  RetireCallback retire_cb_ = nullptr;
+  void* retire_user_data_ = nullptr;
+
+  // Releases a ComPtr, either immediately or via the retire callback.
+  // Call this in place of `.Reset()` for any resource that might still be
+  // in use by in-flight GPU work.
+  void Dispose(Microsoft::WRL::ComPtr<ID3D12Resource>& resource);
 
   static bool CreateUavTexture(
       ID3D12Device* device,
