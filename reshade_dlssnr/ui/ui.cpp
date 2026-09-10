@@ -249,7 +249,7 @@ void DrawTargetSection(Settings& settings, uint32_t pass_index,
 }
 
 // ---------------------------------------------------------------------------
-// Section: Pipeline (Working Scale + Debug View)
+// Section: Pipeline (Working Scale)
 // ---------------------------------------------------------------------------
 
 void DrawPipelineSection(uint32_t pass_index,
@@ -264,30 +264,33 @@ void DrawPipelineSection(uint32_t pass_index,
       "1.0 runs the model at full resolution.",
       &pass.working_scale, &pass.inherit_working_scale,
       resolved.working_scale, 0.25f, 1.0f, 1.0f);
+}
 
-  // Debug view is shared across passes.
-  {
-    std::vector<const char*> names;
-    std::vector<const char*> tips;
-    names.reserve(8);
-    tips.reserve(8);
+// ---------------------------------------------------------------------------
+// Section: Debug view (shared across passes)
+// ---------------------------------------------------------------------------
 
-    names.push_back("Off");
-    tips.push_back(
-        "Disable the debug view and show the normal composed output.");
+void DrawSharedDebugView(Settings& settings, bool& changed) {
+  std::vector<const char*> names;
+  std::vector<const char*> tips;
+  names.reserve(8);
+  tips.reserve(8);
 
-    for (uint32_t i = 0; kDebugViews[i].name != nullptr; ++i) {
-      names.push_back(kDebugViews[i].name);
-      tips.push_back(kDebugViews[i].tooltip);
-    }
+  names.push_back("Off");
+  tips.push_back(
+      "Disable the debug view and show the normal composed output.");
 
-    changed |= DrawComboRow(
-        "debug_view", "Debug View",
-        "Display a pipeline resource instead of the final image. "
-        "Shared across all passes; the active pass renders it.",
-        &settings.debug_view, names.data(), tips.data(),
-        static_cast<int>(names.size()));
+  for (uint32_t i = 0; kDebugViews[i].name != nullptr; ++i) {
+    names.push_back(kDebugViews[i].name);
+    tips.push_back(kDebugViews[i].tooltip);
   }
+
+  changed |= DrawComboRow(
+      "debug_view", "Debug View",
+      "Display a pipeline resource instead of the final image. "
+      "Shared across all passes; the currently open pass tab renders it.",
+      &settings.debug_view, names.data(), tips.data(),
+      static_cast<int>(names.size()));
 }
 
 // ---------------------------------------------------------------------------
@@ -583,6 +586,9 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   }
 
   ImGui::Separator();
+
+  // --- Debug view (shared across passes) ---
+  DrawSharedDebugView(settings, changed);
 
   // --- HDR section (shared across passes) ---
   if (ImGui::TreeNodeEx("HDR",
