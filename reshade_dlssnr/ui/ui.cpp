@@ -289,6 +289,11 @@ bool DrawSkinStructureRow(uint32_t pass_index,
       pass.skin_structure = display_value;
       changed = true;
     }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip(
+          "Strength of the model's character skin structure. "
+          "Disabled while Character Mask is off.");
+    }
   });
 
   ImGui::SameLine();
