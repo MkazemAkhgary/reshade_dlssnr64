@@ -94,10 +94,14 @@ void AddonController::OnPostDlssEvaluate(
     Microsoft::WRL::ComPtr<ID3D12Device> hdr_device;
     if (SUCCEEDED(command_list->GetDevice(IID_PPV_ARGS(&hdr_device))) &&
         hdr_device != nullptr) {
-      hdr_.Ensure(hdr_device.Get());
+      const bool state_ok = hdr_.Ensure(hdr_device.Get());
+      if (state_ok && !hdr_codec_.IsInit()) {
+        hdr_codec_.Init(hdr_device.Get());
+      }
 
       const DlssGuideState guides = DlssGuides::Get().GetState();
-      if (guides.dlss_output_color != nullptr &&
+      if (state_ok && hdr_codec_.IsInit() &&
+          guides.dlss_output_color != nullptr &&
           guides.output_width > 0 && guides.output_height > 0) {
         hdr_.BeginFrame(pass1_command_,
                         command_list,
