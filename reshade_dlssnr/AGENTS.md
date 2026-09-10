@@ -22,21 +22,22 @@ reshade_dlssnr/
   AGENTS.md                      // this guide
   TODO.md                        // current feature plan
 
-  codec/
-    codec.h/.cpp                 // root signature, descriptor heap, shared helpers
-    codec_working_scale.cpp      // downsample + upsample-residual shaders
+  compute/
+    compute_engine.h/.cpp        // root signature, descriptor heap, generic dispatch
+    compute_passes.h/.cpp        // HLSL pass registry
+    shader_params.h              // dynamic shader parameter table
 
   runtime/
-    dlssnr_direct.h/.cpp         // controller facade, owns runtime + two sessions
-    dlssnr_runtime.h/.cpp        // shared model loading, patching, NGX init, parameter block
-    dlssnr_command_context.h/.cpp // command allocator/list/fence/barrier helpers
-    dlssnr_feature_lifecycle.h/.cpp // feature creation/rebuild/tuning state
-    dlssnr_pass_resources.h/.cpp   // per-pass output/mask/working textures
-    dlssnr_pass_session.h/.cpp     // per-pass orchestrator
-    ngx_parameter_block.h/.cpp     // real driver NGX parameter block vtable access
-
-  stages/
-    dlssnr_stages_working_scale.h/.cpp
+    addon_controller.h/.cpp      // controller facade, owns runtime + pass sessions
+    runtime.h/.cpp               // shared model loading, patching, NGX init, parameter block
+    command_context.h/.cpp       // command allocator/list/fence/barrier helpers
+    feature_lifecycle.h/.cpp     // feature creation/rebuild/tuning state
+    model_pipeline.h/.cpp        // prepare model input + compose model output
+    pass_resources.h/.cpp        // per-pass output/composite/working/scratch textures
+    pass_session.h/.cpp          // per-pass orchestrator
+    ngx_model_params.h/.cpp      // shared NGX tuning parameter application
+    ngx_parameter_block.h/.cpp   // real driver NGX parameter block vtable access
+    d3d12_utils.h                // resource-state inference helpers
 
   hooks/
     d3d12_hooks.h/.cpp           // early D3D12 command-list state hooking
@@ -64,16 +65,16 @@ reshade_dlssnr/
 
 ```text
 ReShade present
-  -> DlssNrDirect::Get().OnPresent
+  -> AddonController::Get().OnPresent
       -> runtime_.Initialize(device)
       -> pass1_.OnPresent(runtime_, settings.pass1, ...)
       -> if enabled pass2_.OnPresent(runtime_, settings.pass2, ...)
 ```
 
-Each `DlssNrPassSession::OnPresent`:
+Each `PassSession::OnPresent`:
 
 1. Ensures D3D12 command context and pass resources.
-2. Creates/rebuilds DLSSNR feature through `DlssNrFeatureLifecycle`.
+2. Creates/rebuilds DLSSNR feature through `FeatureLifecycle`.
 3. Gets DLSS guide state (depth/motion) from `DlssGuides`.
 4. Handles working-scale debug views.
 5. Prepares working-scale input if enabled.
@@ -96,7 +97,7 @@ Each `DlssNrPassSession::OnPresent`:
 ### Feature lifecycle
 
 - Tuning values are set at **feature creation**; most changes require a feature rebuild.
-- `DlssNrFeatureLifecycle` tracks built tuning and only rebuilds when width/height/tuning change.
+- `FeatureLifecycle` tracks built tuning and only rebuilds when width/height/tuning change.
 - Do **not** evaluate a newly created feature on the same frame; skip evaluation on creation frame.
 
 ### Model controls
@@ -115,7 +116,7 @@ The real model selectors are:
 ### UI mask (intentionally unused)
 
 - The model supports `DLSSNR.UIAlpha` and `DLSSNR.Backbuffer` resources for UI masking.
-- These are intentionally not bound for now. See the comment in `dlssnr_pass_session.cpp`.
+- These are intentionally not bound for now. See the comment in `pass_session.cpp`.
 
 ### White point and passthrough
 
