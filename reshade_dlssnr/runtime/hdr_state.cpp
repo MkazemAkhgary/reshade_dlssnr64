@@ -78,8 +78,6 @@ bool HdrState::Ensure(ID3D12Device* device) {
 
   Shutdown();
 
-  if (!codec_.Init(device)) return false;
-
   // Histogram buffer: 256 R32_UINT, UAV + COPY_SOURCE.
   D3D12_HEAP_PROPERTIES heap = {};
   heap.Type = D3D12_HEAP_TYPE_DEFAULT;
@@ -125,7 +123,6 @@ void HdrState::Shutdown() {
   fence_value_ = 0;
   pending_fence_value_ = 0;
   pending_measurement_ = false;
-  codec_.Destroy();
   device_.Reset();
 
   enabled_ = false;

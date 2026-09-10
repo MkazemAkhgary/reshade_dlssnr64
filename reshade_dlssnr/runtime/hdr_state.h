@@ -18,6 +18,7 @@
 
 #include <cstdint>
 
+#include "command_context.h"
 #include "compute_engine.h"
 #include "gpu_readback.h"
 #include "settings.h"
@@ -58,7 +59,6 @@ class HdrState {
                       const Settings& settings);
 
   Microsoft::WRL::ComPtr<ID3D12Device> device_;
-  ComputeEngine codec_;
   Microsoft::WRL::ComPtr<ID3D12Resource> histogram_;
   Microsoft::WRL::ComPtr<ID3D12Fence> fence_;
   uint64_t fence_value_ = 0;
