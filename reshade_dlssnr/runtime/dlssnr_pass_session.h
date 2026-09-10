@@ -33,6 +33,41 @@ class DlssNrPassSession {
   void Shutdown(DlssNrRuntime& runtime);
 
  private:
+  // Acquires the backbuffer and its descriptor for the current frame.
+  bool AcquireBackbuffer(
+      IDXGISwapChain* swapchain,
+      ID3D12CommandQueue* command_queue,
+      Microsoft::WRL::ComPtr<IDXGISwapChain3>& out_swapchain3,
+      Microsoft::WRL::ComPtr<ID3D12Device>& out_device,
+      Microsoft::WRL::ComPtr<ID3D12Resource>& out_backbuffer,
+      D3D12_RESOURCE_DESC& out_desc);
+
+  // Creates/resizes the per-pass output, composite, working, and scratch
+  // resources required by the current frame.
+  bool EnsureFrameResources(
+      ID3D12Device* device,
+      const D3D12_RESOURCE_DESC& desc,
+      unsigned int work_width,
+      unsigned int work_height,
+      bool use_working_scale);
+
+  // Fills the real NGX parameter block with tuning values, resources, and
+  // subrects for the current evaluation.
+  bool FillEvaluateParams(
+      DlssNrRuntime& runtime,
+      const PassSettings& pass,
+      const DlssGuideState& guides,
+      ID3D12Resource* model_color,
+      ID3D12Resource* model_output,
+      unsigned int eval_width,
+      unsigned int eval_height,
+      unsigned int width,
+      unsigned int height);
+
+  // Closes the command list, submits it, waits for the GPU, and releases
+  // retired game resources.
+  void SubmitAndWait();
+
   DlssNrCommandContext command_;
   DlssNrPassResources resources_;
   DlssNrFeatureLifecycle feature_;
@@ -40,7 +75,7 @@ class DlssNrPassSession {
   DlssGuides* guides_ = nullptr;
 
   ID3D12CommandQueue* command_queue_ = nullptr;
-  std::unique_ptr<DlssNrCodec> debug_codec_;
+  std::unique_ptr<DlssNrCodec> codec_;
 
   bool failed_ = false;
   const char* reason_ = "";

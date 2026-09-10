@@ -106,11 +106,51 @@ bool DlssNrPassResources::EnsureWorkingResources(
   return true;
 }
 
+bool DlssNrPassResources::EnsureScratch(
+    ID3D12Device* device,
+    const D3D12_RESOURCE_DESC& desc,
+    unsigned int width,
+    unsigned int height,
+    uint32_t index) {
+  if (index >= kScratchCount) return false;
+
+  if (scratch_[index] != nullptr &&
+      scratch_width_[index] == width &&
+      scratch_height_[index] == height &&
+      scratch_format_[index] == desc.Format) {
+    return true;
+  }
+
+  scratch_[index].Reset();
+
+  D3D12_RESOURCE_DESC scratch_desc = desc;
+  scratch_desc.Width = width;
+  scratch_desc.Height = height;
+
+  ID3D12Resource* raw = nullptr;
+  if (!CreateUavTexture(device, scratch_desc, &raw)) {
+    return false;
+  }
+  scratch_[index].Attach(raw);
+
+  scratch_width_[index] = width;
+  scratch_height_[index] = height;
+  scratch_format_[index] = desc.Format;
+  return true;
+}
+
 void DlssNrPassResources::Shutdown() {
   output.Reset();
   composite_output.Reset();
   working_input.Reset();
   working_output.Reset();
+
+  for (uint32_t i = 0; i < kScratchCount; ++i) {
+    scratch_[i].Reset();
+    scratch_width_[i] = 0;
+    scratch_height_[i] = 0;
+    scratch_format_[i] = DXGI_FORMAT_UNKNOWN;
+  }
 
   output_width = 0;
   output_height = 0;
