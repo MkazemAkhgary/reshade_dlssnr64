@@ -4,7 +4,7 @@ namespace reshade_dlssnr {
 
 bool GpuReadback::Ensure(ID3D12Device* device, size_t bytes_per_slot) {
   if (device == nullptr || bytes_per_slot == 0) return false;
-  if (device_ == device && bytes_per_slot_ == bytes_per_slot) return true;
+  if (device_.Get() == device && bytes_per_slot_ == bytes_per_slot) return true;
 
   Shutdown();
 
