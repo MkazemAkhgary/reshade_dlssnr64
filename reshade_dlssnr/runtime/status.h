@@ -16,11 +16,18 @@ namespace reshade_dlssnr {
 
 constexpr uint32_t kStatusTextLength = 160;
 
+// Per-pass status. Split by ownership:
+//   - `enabled` is setting-owned. Populated by AddonController::RefreshStatus
+//     from the current settings; the session itself has no access to them.
+//   - The rest are runtime-owned, populated by PassSession::GetStatus.
+//
+// The pass's injection stage (DLSS Output / Backbuffer) is deliberately not
+// duplicated here — it is a setting, and the UI reads it directly from
+// Settings when formatting the row.
 struct PassStatus {
-  bool enabled = false;                          // user toggle
-  bool running = false;                          // ran this frame
+  bool enabled = false;                          // user toggle (setting)
+  bool running = false;                          // ran the last frame
   bool failed = false;                           // failed at some point
-  InjectionStage stage = InjectionStage::Present;
   bool has_feature = false;                      // NGX feature handle exists
   char reason[kStatusTextLength] = {};           // failure reason, or ""
 };

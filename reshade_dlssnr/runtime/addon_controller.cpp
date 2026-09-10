@@ -199,6 +199,18 @@ StatusSnapshot AddonController::GetStatus() const {
   return status_;
 }
 
+void AddonController::RetryPass(uint32_t index) {
+  if (index >= kMaxPasses) return;
+
+  std::lock_guard<std::mutex> lock(g_direct_mutex);
+  passes_[index].Retry(runtime_);
+
+  // Refresh so the UI sees the cleared failure on its next read. If we
+  // skip this, the pass would still show as failed for one frame after the
+  // user clicks Retry.
+  RefreshStatus(GetSettings());
+}
+
 void AddonController::RefreshStatus(const Settings& settings) {
   status_ = StatusSnapshot{};
 
@@ -223,12 +235,11 @@ void AddonController::RefreshStatus(const Settings& settings) {
 
   status_.pass_count = kMaxPasses;
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
-    // Take the runtime-owned part of the status from the session (failed,
-    // has_feature, reason), then fill in the setting-owned parts from the
-    // current configuration, which the session does not have access to.
+    // Take the runtime-owned part of the status from the session, then fill
+    // in the setting-owned part. The injection stage is not stored here —
+    // it is a setting, and the UI reads it directly from Settings.
     status_.passes[i] = passes_[i].GetStatus();
     status_.passes[i].enabled = settings.pass_enabled[i];
-    status_.passes[i].stage = settings.passes[i].injection_stage;
   }
 }
 

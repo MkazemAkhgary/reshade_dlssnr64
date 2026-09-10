@@ -23,10 +23,29 @@ void PassSession::Fail(const char* reason) {
   reshade::log::message(reshade::log::level::error, reason);
 }
 
+void PassSession::Retry(NgxRuntime& runtime) {
+  std::lock_guard<std::mutex> lock(g_session_mutex);
+
+  // Only meaningful on a failed pass. Calling this on a working pass would
+  // release a good feature for no reason.
+  if (!failed_) return;
+
+  // Release the feature so EnsureFeature rebuilds it on the next run. This
+  // makes the retry robust against a feature handle that got into a bad
+  // state (e.g. after an EvaluateFeature failure) without us needing to
+  // know what specifically went wrong.
+  feature_.ReleaseFeature(runtime);
+
+  failed_ = false;
+  reason_ = "";
+
+  reshade::log::message(reshade::log::level::info,
+                        "DLSSNR pass: retrying after failure");
+}
+
 PassStatus PassSession::GetStatus() const {
-  // Only the runtime-owned fields are populated here. `enabled` and `stage`
-  // are setting-owned and are filled in by AddonController::RefreshStatus,
-  // which has access to the current settings.
+  // Only the runtime-owned fields are populated here. `enabled` is
+  // setting-owned and is filled in by AddonController::RefreshStatus.
   PassStatus s;
   s.running = !failed_ && feature_.HasFeature();
   s.failed = failed_;

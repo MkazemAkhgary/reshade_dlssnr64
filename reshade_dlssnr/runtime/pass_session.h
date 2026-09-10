@@ -55,6 +55,12 @@ class PassSession {
 
   void Shutdown(NgxRuntime& runtime);
 
+  // Clears a previous failure and re-arms the pass for the next frame.
+  // Releases the NGX feature so the retry starts from a clean handle,
+  // regardless of what specifically went wrong. No-op if the pass has not
+  // failed, so it is safe to call defensively.
+  void Retry(NgxRuntime& runtime);
+
   // Snapshot of this pass's current state, for the controller's status UI.
   PassStatus GetStatus() const;
 

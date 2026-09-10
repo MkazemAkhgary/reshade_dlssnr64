@@ -369,10 +369,14 @@ void DrawPipelineSection(uint32_t pass_index,
 // Section: Status
 // ---------------------------------------------------------------------------
 
-// Describes what a pass is doing right now, in one line.
-void FormatPassStatus(const PassStatus& pass, char* out, size_t out_size) {
+// Describes what a pass is doing right now, in one line. The injection
+// stage is passed in separately because it is a setting, not part of the
+// runtime status.
+void FormatPassStatus(const PassStatus& pass,
+                      InjectionStage stage,
+                      char* out, size_t out_size) {
   const char* stage_name =
-      pass.stage == InjectionStage::PostDLSS ? "DLSS Output" : "Backbuffer";
+      stage == InjectionStage::PostDLSS ? "DLSS Output" : "Backbuffer";
 
   if (!pass.enabled) {
     std::snprintf(out, out_size, "Disabled");
@@ -465,14 +469,39 @@ void DrawStatusSection(Settings& settings, bool& changed) {
   // Per-pass summary.
   for (uint32_t i = 0; i < snap.pass_count; ++i) {
     char buf[kStatusTextLength];
-    FormatPassStatus(snap.passes[i], buf, sizeof(buf));
+    FormatPassStatus(snap.passes[i], settings.passes[i].injection_stage,
+                     buf, sizeof(buf));
 
     char label[32];
     std::snprintf(label, sizeof(label), "Pass %u", i + 1);
 
-    const bool ok = snap.passes[i].enabled && !snap.passes[i].failed;
+    const bool failed = snap.passes[i].failed;
+    const bool ok = snap.passes[i].enabled && !failed;
+
+    // Bullet + label, with an optional Retry button placed between the
+    // label and the status text. The button is only shown when the pass
+    // has actually failed.
     bullet(ok);
-    row(label, buf);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(label);
+
+    if (failed) {
+      ImGui::SameLine();
+      ImGui::PushID(static_cast<int>(i));
+      if (ImGui::SmallButton("Retry")) {
+        AddonController::Get().RetryPass(i);
+      }
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip(
+            "Clear this pass's failure and try again on the next frame.\n"
+            "The model will be recreated from scratch, so this also "
+            "recovers from a feature handle that got into a bad state.");
+      }
+      ImGui::PopID();
+    }
+
+    ImGui::SameLine(kControlLabelWidth);
+    ImGui::TextUnformatted(buf);
   }
 }
 
