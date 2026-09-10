@@ -14,6 +14,20 @@ enum class InjectionStage : int {
   Present = 1,
 };
 
+// How the source image is encoded. Auto means detect from DXGI format.
+enum class HdrFormat : int {
+  Auto  = 0,
+  Sdr   = 1,   // sRGB-encoded, [0,1]
+  ScRgb = 2,   // linear, 1.0 == 80 nits
+  Hdr10 = 3,   // PQ (ST.2084)
+};
+
+// How the model's chroma edit is transferred back to HDR.
+enum class ChromaEditMode : int {
+  Additive = 0,   // YCbCr delta (predictable, strict hue preservation)
+  Ratio    = 1,   // per-channel chroma ratio (matches model's direction)
+};
+
 struct PassSettings {
   int preset = 1;
 
@@ -62,6 +76,30 @@ struct Settings {
   // UI state: which pass tab is currently open. Determines whose debug view
   // is rendered. Transient (not persisted).
   int active_pass = 0;
+
+  // ---------------------------------------------------------------------
+  // HDR handling. Shared across passes; only the Post-DLSS path uses it.
+  // See HDR_DESIGN.md for the pipeline and the meaning of each control.
+  // ---------------------------------------------------------------------
+  bool hdr_enable = false;
+  HdrFormat hdr_format = HdrFormat::Auto;
+  ChromaEditMode hdr_chroma_mode = ChromaEditMode::Additive;
+
+  // Responsiveness: 0 = slow + cheap (measure rarely, blend slowly),
+  // 1 = fast + expensive (measure every frame, blend quickly).
+  float hdr_responsiveness = 0.50f;
+
+  // Scene key target in SDR (midtones land here).
+  float hdr_midtone = 0.18f;
+
+  // Which percentile of the histogram defines the white point.
+  float hdr_white_percentile = 0.99f;
+
+  // Extended Reinhard W. Larger = preserves more linear range.
+  float hdr_curve_white = 4.0f;
+
+  // Global multiplier on the model's edit before HDR remap.
+  float hdr_edit_strength = 1.0f;
 };
 
 Settings& GetSettings();

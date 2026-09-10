@@ -155,6 +155,31 @@ void LoadSettings() {
                             g_settings.debug_view);
   if (g_settings.debug_view < 0) g_settings.debug_view = 0;
 
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Enable",
+                            g_settings.hdr_enable);
+  int hdr_format = static_cast<int>(g_settings.hdr_format);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Format",
+                            hdr_format);
+  if (hdr_format < 0 || hdr_format > 3) hdr_format = 0;
+  g_settings.hdr_format = static_cast<HdrFormat>(hdr_format);
+
+  int chroma_mode = static_cast<int>(g_settings.hdr_chroma_mode);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.ChromaMode",
+                            chroma_mode);
+  if (chroma_mode < 0 || chroma_mode > 1) chroma_mode = 0;
+  g_settings.hdr_chroma_mode = static_cast<ChromaEditMode>(chroma_mode);
+
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Responsiveness",
+                            g_settings.hdr_responsiveness);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Midtone",
+                            g_settings.hdr_midtone);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.WhitePercentile",
+                            g_settings.hdr_white_percentile);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.CurveWhite",
+                            g_settings.hdr_curve_white);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.EditStrength",
+                            g_settings.hdr_edit_strength);
+
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
     const std::string key = PassEnabledKey(i);
     reshade::get_config_value(nullptr, "RESHADE_DLSSNR", key.c_str(),
@@ -188,6 +213,23 @@ void SaveSettings() {
                             g_settings.only_super_sampling);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "DebugView",
                             g_settings.debug_view);
+
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Enable",
+                            g_settings.hdr_enable);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Format",
+                            static_cast<int>(g_settings.hdr_format));
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.ChromaMode",
+                            static_cast<int>(g_settings.hdr_chroma_mode));
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Responsiveness",
+                            g_settings.hdr_responsiveness);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Midtone",
+                            g_settings.hdr_midtone);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.WhitePercentile",
+                            g_settings.hdr_white_percentile);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.CurveWhite",
+                            g_settings.hdr_curve_white);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.EditStrength",
+                            g_settings.hdr_edit_strength);
 
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
     const std::string key = PassEnabledKey(i);

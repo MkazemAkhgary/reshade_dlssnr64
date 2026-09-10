@@ -72,6 +72,7 @@
     <ClCompile Include="runtime\debug_view.cpp" />
     <ClCompile Include="runtime\feature_lifecycle.cpp" />
     <ClCompile Include="runtime\gpu_readback.cpp" />
+    <ClCompile Include="runtime\hdr_state.cpp" />
     <ClCompile Include="runtime\model_pipeline.cpp" />
     <ClCompile Include="runtime\ngx_model_params.cpp" />
     <ClCompile Include="runtime\ngx_parameter_block.cpp" />
@@ -97,6 +98,7 @@
     <ClInclude Include="runtime\frame_debug_context.h" />
     <ClInclude Include="runtime\feature_lifecycle.h" />
     <ClInclude Include="runtime\gpu_readback.h" />
+    <ClInclude Include="runtime\hdr_state.h" />
     <ClInclude Include="runtime\model_pipeline.h" />
     <ClInclude Include="runtime\ngx_model_params.h" />
     <ClInclude Include="runtime\ngx_parameter_block.h" />

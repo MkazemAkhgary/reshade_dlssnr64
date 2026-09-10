@@ -64,6 +64,11 @@ void AddonController::OnPresent(
     PresentDebugOutput(command_queue, swapchain, frame_debug_);
   }
 
+  // Signal the HDR fence on the game's queue. The game has already
+  // submitted its command list, so this marks the point at which any
+  // pending histogram copy has completed.
+  hdr_.SignalAtPresent(command_queue);
+
   frame_debug_.Reset();
 }
 
@@ -81,6 +86,29 @@ void AddonController::OnPostDlssEvaluate(
   // because that's what it will eventually be copied into.
   frame_debug_.Reset();
   frame_debug_.preferred_format = backbuffer_format_;
+
+  // HDR measurement: only the first pass in the chain runs it. It uses
+  // the captured DLSS output clone as the source, since that is what the
+  // model will actually consume.
+  {
+    Microsoft::WRL::ComPtr<ID3D12Device> hdr_device;
+    if (SUCCEEDED(command_list->GetDevice(IID_PPV_ARGS(&hdr_device))) &&
+        hdr_device != nullptr) {
+      hdr_.Ensure(hdr_device.Get());
+
+      const DlssGuideState guides = DlssGuides::Get().GetState();
+      if (guides.dlss_output_color != nullptr &&
+          guides.output_width > 0 && guides.output_height > 0) {
+        hdr_.BeginFrame(pass1_command_,
+                        command_list,
+                        guides.dlss_output_color,
+                        guides.output_width,
+                        guides.output_height,
+                        settings,
+                        hdr_codec_);
+      }
+    }
+  }
 
   bool is_first = true;
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
@@ -158,6 +186,9 @@ void AddonController::Shutdown() {
     pass.Shutdown(runtime_);
   }
   debug_command_.Shutdown();
+  pass1_command_.Shutdown();
+  hdr_codec_.Destroy();
+  hdr_.Shutdown();
   frame_debug_.Release();
   runtime_.Shutdown();
 }

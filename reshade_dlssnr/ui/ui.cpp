@@ -583,6 +583,92 @@ void DrawOverlay(reshade::api::effect_runtime*) {
 
   ImGui::Separator();
 
+  // --- HDR section (shared across passes) ---
+  if (ImGui::TreeNodeEx("HDR",
+                        ImGuiTreeNodeFlags_CollapsingHeader)) {
+    changed |= ImGui::Checkbox("Enable HDR Handling",
+                               &settings.hdr_enable);
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip(
+          "Normalize HDR input for the model. Only affects passes running "
+          "at DLSS Output. The backbuffer path is already display-referred.");
+    }
+
+    const bool hdr_on = settings.hdr_enable;
+
+    WithDisabled(!hdr_on, [&] {
+      // Format combo.
+      {
+        static const char* kFormatNames[] = {
+            "Auto", "SDR", "scRGB", "HDR10"};
+        static const char* kFormatTips[] = {
+            "Detect from the DLSS output's DXGI format.",
+            "Force SDR sRGB interpretation.",
+            "Force linear scRGB (1.0 = 80 nits).",
+            "Force HDR10 (PQ ST.2084)."};
+        int fmt = static_cast<int>(settings.hdr_format);
+        changed |= DrawComboRow("hdr_format", "Format",
+                                "How the source image is encoded. "
+                                "Auto detects from the DXGI format.",
+                                &fmt, kFormatNames, kFormatTips, 4);
+        settings.hdr_format = static_cast<HdrFormat>(fmt);
+      }
+
+      // Chroma edit combo.
+      {
+        static const char* kChromaNames[] = {"Additive", "Ratio"};
+        static const char* kChromaTips[] = {
+            "Add the model's chroma delta to the source (predictable, "
+            "strict hue preservation).",
+            "Match the model's chroma direction and rescale the source. "
+            "More model-native, can saturate near-grey pixels."};
+        int mode = static_cast<int>(settings.hdr_chroma_mode);
+        changed |= DrawComboRow(
+            "hdr_chroma_mode", "Chroma Edit",
+            "How the model's chroma edit is transferred back to HDR.",
+            &mode, kChromaNames, kChromaTips, 2);
+        settings.hdr_chroma_mode = static_cast<ChromaEditMode>(mode);
+      }
+
+      changed |= DrawFloatRow(
+          0, "hdr_responsiveness", "Responsiveness",
+          "How quickly the exposure follows scene changes. "
+          "Lower = slower and cheaper (measures less often); "
+          "higher = faster and more expensive (measures every frame).",
+          &settings.hdr_responsiveness, nullptr, 0.0f,
+          0.0f, 1.0f, 0.50f);
+
+      changed |= DrawFloatRow(
+          0, "hdr_midtone", "Midtone Target",
+          "Where the scene's median luminance lands in SDR. "
+          "18% grey is the classic choice.",
+          &settings.hdr_midtone, nullptr, 0.0f,
+          0.05f, 0.50f, 0.18f);
+
+      changed |= DrawFloatRow(
+          0, "hdr_white_percentile", "White Percentile",
+          "Histogram percentile used as the white point. Higher values "
+          "preserve more highlight headroom; lower values roll off sooner.",
+          &settings.hdr_white_percentile, nullptr, 0.0f,
+          0.90f, 0.999f, 0.99f);
+
+      changed |= DrawFloatRow(
+          0, "hdr_curve_white", "Curve White",
+          "Extended Reinhard W. Larger values keep more of the range "
+          "linear; smaller values compress highlights harder.",
+          &settings.hdr_curve_white, nullptr, 0.0f,
+          1.0f, 16.0f, 4.0f);
+
+      changed |= DrawFloatRow(
+          0, "hdr_edit_strength", "Edit Strength",
+          "Global multiplier on the model's edit before HDR remap.",
+          &settings.hdr_edit_strength, nullptr, 0.0f,
+          0.0f, 2.0f, 1.0f);
+    });
+  }
+
+  ImGui::Separator();
+
   if (ImGui::BeginTabBar("PassTabs")) {
     for (uint32_t i = 0; i < kMaxPasses; ++i) {
       char label[32];

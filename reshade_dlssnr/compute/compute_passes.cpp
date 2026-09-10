@@ -6,6 +6,109 @@ namespace reshade_dlssnr {
 
 namespace {
 
+constexpr const char* kZeroHistogram = R"(
+RWBuffer<uint> gHistogram : register(u0);
+
+[numthreads(256, 1, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x < 256u)
+        gHistogram[id.x] = 0u;
+}
+)";
+
+constexpr const char* kBuildHistogram = R"(
+cbuffer Params : register(b0)
+{
+    uint  gWidth;
+    uint  gHeight;
+    float4 gParams[4];
+};
+
+// gParams[0].x = encoding format (0 = SDR sRGB, 1 = scRGB linear, 2 = HDR10 PQ)
+// gParams[0].y = luma min log2 (histogram range low edge)
+// gParams[0].z = luma max log2 (histogram range high edge)
+#define kFormat       gParams[0].x
+#define kLumaMinLog2  gParams[0].y
+#define kLumaMaxLog2  gParams[0].z
+
+Texture2D<float4> gSource : register(t0);
+RWBuffer<uint>    gHistogram : register(u0);
+
+static const float3 kLuma709 = float3(0.2126, 0.7152, 0.0722);
+
+float3 SrgbToLinear(float3 v)
+{
+    v = saturate(v);
+    return lerp(v / 12.92, pow((v + 0.055) / 1.055, 2.4),
+                step(0.04045, v));
+}
+
+// ST.2084 (PQ) EOTF. Returns nits.
+float3 PqToNits(float3 v)
+{
+    v = saturate(v);
+    const float m1 = 0.1593017578125;
+    const float m2 = 78.84375;
+    const float c1 = 0.8359375;
+    const float c2 = 18.8515625;
+    const float c3 = 18.6875;
+    float3 p = pow(max(v, 0.0), 1.0 / m2);
+    float3 num = max(p - c1, 0.0);
+    float3 den = c2 - c3 * p;
+    return 10000.0 * pow(num / max(den, 1e-6), 1.0 / m1);
+}
+
+float LinearLuma(float3 c)
+{
+    int fmt = (int)(kFormat + 0.5);
+    if (fmt == 1) {
+        // scRGB: already linear
+        return dot(max(c, 0.0), kLuma709);
+    } else if (fmt == 2) {
+        // HDR10 PQ: decode to nits, normalize to scRGB units (1.0 == 80 nits)
+        float3 nits = PqToNits(c);
+        return dot(max(nits, 0.0), kLuma709) / 80.0;
+    } else {
+        // SDR: sRGB-encoded
+        return dot(SrgbToLinear(c), kLuma709);
+    }
+}
+
+[numthreads(8, 8, 1)]
+void CSMain(uint3 gid : SV_GroupID,
+            uint3 gtid : SV_GroupThreadID,
+            uint3 dtid : SV_DispatchThreadID)
+{
+    groupshared uint sh[256];
+
+    const uint lidx = gtid.x + gtid.y * 8u;
+    for (uint i = lidx; i < 256u; i += 64u)
+        sh[i] = 0u;
+    GroupMemoryBarrierWithGroupSync();
+
+    if (dtid.x < gWidth && dtid.y < gHeight) {
+        float3 c = gSource.Load(int3(dtid.xy, 0)).rgb;
+        float luma = LinearLuma(c);
+
+        // Bin by log2 luminance.
+        float l2 = log2(max(luma, 1e-8));
+        float span = max(kLumaMaxLog2 - kLumaMinLog2, 1e-4);
+        float t = saturate((l2 - kLumaMinLog2) / span);
+        uint bin = min((uint)(t * 255.0 + 0.5), 255u);
+
+        InterlockedAdd(sh[bin], 1u);
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    for (uint i = lidx; i < 256u; i += 64u) {
+        if (sh[i] > 0u)
+            InterlockedAdd(gHistogram[i], sh[i]);
+    }
+}
+)";
+
 constexpr const char* kDebugDisplay = R"(
 cbuffer Params : register(b0)
 {
@@ -195,11 +298,11 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 }  // namespace
 
 const ComputePassDef kComputePasses[] = {
+    {"ZeroHistogram",      kZeroHistogram},
+    {"BuildHistogram",     kBuildHistogram},
     {"PrepareModelInput",  kPrepareModelInput},
     {"ComposeModelOutput", kComposeModelOutput},
     {"DebugDisplay",       kDebugDisplay},
-    // Add new passes here, e.g.:
-    // {"PreExposure",     kPreExposure},
 };
 
 const uint32_t kComputePassCount =

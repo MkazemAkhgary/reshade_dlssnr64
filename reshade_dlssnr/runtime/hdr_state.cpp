@@ -1,0 +1,299 @@
+#include "hdr_state.h"
+
+#include <algorithm>
+#include <cmath>
+
+#include <reshade.hpp>
+
+#include "d3d12_utils.h"
+
+namespace reshade_dlssnr {
+
+namespace {
+
+constexpr uint32_t kHistogramBins = 256;
+constexpr uint32_t kHistogramBytes = kHistogramBins * sizeof(uint32_t);
+constexpr float kLumaMinLog2 = -12.0f;
+constexpr float kLumaMaxLog2 = 12.0f;
+
+HdrFormat DetectFormatFromResource(ID3D12Resource* resource,
+                                   HdrFormat override) {
+  if (override != HdrFormat::Auto) return override;
+  if (resource == nullptr) return HdrFormat::Sdr;
+
+  const DXGI_FORMAT fmt = resource->GetDesc().Format;
+  switch (fmt) {
+    case DXGI_FORMAT_R16G16B16A16_FLOAT:
+    case DXGI_FORMAT_R16G16B16A16_UNORM:
+      return HdrFormat::ScRgb;
+    // R10G10B10A2_UNORM is ambiguous (HDR10 or 10-bit SDR). Default SDR.
+    default:
+      return HdrFormat::Sdr;
+  }
+}
+
+float FormatToShaderValue(HdrFormat format) {
+  switch (format) {
+    case HdrFormat::ScRgb: return 1.0f;
+    case HdrFormat::Hdr10: return 2.0f;
+    case HdrFormat::Sdr:
+    case HdrFormat::Auto:
+    default:               return 0.0f;
+  }
+}
+
+// Returns the bin index below which `fraction` of samples lie.
+// `bins` is a 256-entry histogram; `total` is the sum of all bins.
+float PercentileBin(const uint32_t* bins, uint32_t total, float fraction) {
+  if (total == 0) return 0.0f;
+  const uint32_t target =
+      static_cast<uint32_t>(fraction * static_cast<float>(total));
+  uint32_t cum = 0;
+  for (uint32_t i = 0; i < kHistogramBins; ++i) {
+    cum += bins[i];
+    if (cum >= target) return static_cast<float>(i);
+  }
+  return static_cast<float>(kHistogramBins - 1);
+}
+
+// Maps a bin index to a linear luminance value (the value at the low edge
+// of the bin).
+float BinToLinear(float bin) {
+  const float t = bin / 255.0f;
+  const float l2 = kLumaMinLog2 + t * (kLumaMaxLog2 - kLumaMinLog2);
+  return std::pow(2.0f, l2);
+}
+
+float Lerp(float a, float b, float t) {
+  return a + (b - a) * t;
+}
+
+}  // namespace
+
+bool HdrState::Ensure(ID3D12Device* device) {
+  if (device == nullptr) return false;
+  if (device_.Get() == device && histogram_ != nullptr && fence_ != nullptr) {
+    return true;
+  }
+
+  Shutdown();
+
+  if (!codec_.Init(device)) return false;
+
+  // Histogram buffer: 256 R32_UINT, UAV + COPY_SOURCE.
+  D3D12_HEAP_PROPERTIES heap = {};
+  heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+  D3D12_RESOURCE_DESC desc = {};
+  desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+  desc.Width = kHistogramBytes;
+  desc.Height = 1;
+  desc.DepthOrArraySize = 1;
+  desc.MipLevels = 1;
+  desc.Format = DXGI_FORMAT_UNKNOWN;
+  desc.SampleDesc.Count = 1;
+  desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+  desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+  if (FAILED(device->CreateCommittedResource(
+          &heap, D3D12_HEAP_FLAG_NONE, &desc,
+          D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr,
+          IID_PPV_ARGS(histogram_.GetAddressOf())))) {
+    Shutdown();
+    return false;
+  }
+
+  if (FAILED(device->CreateFence(0, D3D12_FENCE_FLAG_NONE,
+                                 IID_PPV_ARGS(fence_.GetAddressOf())))) {
+    Shutdown();
+    return false;
+  }
+
+  if (!readback_.Ensure(device, kHistogramBytes)) {
+    Shutdown();
+    return false;
+  }
+
+  device_ = device;
+  return true;
+}
+
+void HdrState::Shutdown() {
+  readback_.Shutdown();
+  histogram_.Reset();
+  fence_.Reset();
+  fence_value_ = 0;
+  pending_fence_value_ = 0;
+  pending_measurement_ = false;
+  codec_.Destroy();
+  device_.Reset();
+
+  enabled_ = false;
+  have_measurement_ = false;
+  exposure_ema_ = 1.0f;
+  white_point_ema_ = 1.0f;
+  frame_counter_ = 0;
+  frames_until_measure_ = 0;
+  warmup_frames_ = 0;
+  frames_since_log_ = 0;
+}
+
+void HdrState::BeginFrame(CommandContext& cmd,
+                          ID3D12GraphicsCommandList* command_list,
+                          ID3D12Resource* source,
+                          unsigned int width,
+                          unsigned int height,
+                          const Settings& settings,
+                          ComputeEngine& codec) {
+  enabled_ = settings.hdr_enable;
+  if (!enabled_) {
+    // Keep existing EMA values around so toggling back on doesn't reset.
+    return;
+  }
+
+  if (command_list == nullptr || source == nullptr || width == 0 ||
+      height == 0) {
+    return;
+  }
+
+  // Poll any completed readback first, so this frame's exposure reflects
+  // the latest available data.
+  PollReadback(fence_.Get(), settings);
+
+  // Resolve format for this frame.
+  resolved_format_ = DetectFormatFromResource(source, settings.hdr_format);
+
+  // If a measurement is already in flight, don't enqueue another.
+  if (pending_measurement_) {
+    frame_counter_++;
+    return;
+  }
+
+  // Determine how often to measure.
+  const float resp = std::clamp(settings.hdr_responsiveness, 0.0f, 1.0f);
+  const uint32_t measure_every =
+      static_cast<uint32_t>(std::round(32.0f - 31.0f * resp));
+  const uint32_t capped_every = std::max(measure_every, 1u);
+
+  if (frames_until_measure_ > 0) {
+    frames_until_measure_--;
+    frame_counter_++;
+    return;
+  }
+  frames_until_measure_ = capped_every - 1;
+
+  // Dispatch histogram on the game's command list.
+  ComputeConstants constants = {};
+  constants.Width = width;
+  constants.Height = height;
+  constants.params[0] = FormatToShaderValue(resolved_format_);
+  constants.params[1] = kLumaMinLog2;
+  constants.params[2] = kLumaMaxLog2;
+
+  ID3D12Resource* srvs[kSrvCount] = {source, source, source};
+  ID3D12Resource* uavs[kUavCount] = {histogram_.Get()};
+
+  cmd.Transition(command_list, source,
+                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  cmd.Transition(command_list, histogram_.Get(),
+                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+  // Clear then build.
+  codec.Dispatch("ZeroHistogram", command_list, constants, srvs, uavs,
+                 /*threads_x=*/1, /*threads_y=*/1, /*threads_z=*/1);
+  codec.Dispatch("BuildHistogram", command_list, constants, srvs, uavs);
+
+  // Copy into the readback ring. The fence value is signaled later at
+  // Present, once the game's queue has advanced past this command list.
+  const uint64_t next_value = fence_value_ + 1;
+  cmd.Transition(command_list, histogram_.Get(),
+                 D3D12_RESOURCE_STATE_COPY_SOURCE);
+
+  if (readback_.EnqueueCopy(command_list, histogram_.Get(),
+                            kHistogramBytes, fence_.Get(), next_value)) {
+    pending_fence_value_ = next_value;
+    pending_measurement_ = true;
+  }
+
+  // Leave the histogram in UAV so SeedFrameState / inference matches.
+  cmd.Transition(command_list, histogram_.Get(),
+                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+  frame_counter_++;
+}
+
+void HdrState::SignalAtPresent(ID3D12CommandQueue* queue) {
+  if (!pending_measurement_ || queue == nullptr || fence_ == nullptr) return;
+
+  // Signal the fence with the value we promised to the readback ring. The
+  // game has already submitted its command list (which contained our
+  // histogram + copy), so this signal marks the point at which the copy
+  // is complete.
+  queue->Signal(fence_.Get(), pending_fence_value_);
+  fence_value_ = pending_fence_value_;
+}
+
+void HdrState::PollReadback(ID3D12Fence* fence, const Settings& settings) {
+  if (!pending_measurement_ || fence == nullptr) return;
+
+  if (fence->GetCompletedValue() < pending_fence_value_) return;
+
+  uint32_t bytes = 0;
+  const void* mapped = readback_.TryGet(fence, &bytes);
+  pending_measurement_ = false;
+
+  if (mapped == nullptr || bytes < kHistogramBytes) return;
+
+  const uint32_t* bins = static_cast<const uint32_t*>(mapped);
+  uint32_t total = 0;
+  for (uint32_t i = 0; i < kHistogramBins; ++i) total += bins[i];
+  if (total == 0) return;
+
+  UpdateExposure(bins, total, settings);
+
+  // Log a summary periodically so the values are visible without a UI.
+  frames_since_log_++;
+  if (frames_since_log_ >= 60) {
+    frames_since_log_ = 0;
+    char msg[192];
+    std::snprintf(msg, sizeof(msg),
+                  "HDR: format=%d exposure=%.4f white_point=%.3f "
+                  "samples=%u",
+                  static_cast<int>(resolved_format_), exposure_ema_,
+                  white_point_ema_, total);
+    reshade::log::message(reshade::log::level::info, msg);
+  }
+}
+
+void HdrState::UpdateExposure(const uint32_t* bins, uint32_t total,
+                              const Settings& settings) {
+  const float p_mid_bin = PercentileBin(bins, total, 0.50f);
+  const float p_hi_bin =
+      PercentileBin(bins, total,
+                    std::clamp(settings.hdr_white_percentile, 0.90f, 0.999f));
+
+  const float luma_mid = BinToLinear(p_mid_bin);
+  const float luma_hi = BinToLinear(p_hi_bin);
+
+  const float target =
+      (luma_mid > 1e-6f)
+          ? std::clamp(settings.hdr_midtone / luma_mid, 0.01f, 128.0f)
+          : exposure_ema_;
+
+  // Warm-up: converge quickly for the first ~30 measurements, then use
+  // the user's responsiveness setting.
+  const float resp = std::clamp(settings.hdr_responsiveness, 0.0f, 1.0f);
+  const float alpha = warmup_frames_ < 30
+                          ? 0.5f
+                          : (0.02f + resp * 0.38f);
+
+  exposure_ema_ = Lerp(exposure_ema_, target, alpha);
+
+  const float W_target = std::max(1.0f, luma_hi * exposure_ema_);
+  white_point_ema_ = Lerp(white_point_ema_, W_target, alpha);
+
+  have_measurement_ = true;
+  warmup_frames_++;
+}
+
+}  // namespace reshade_dlssnr

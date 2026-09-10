@@ -13,6 +13,7 @@
 #include "command_context.h"
 #include "dlss_guides.h"
 #include "frame_debug_context.h"
+#include "hdr_state.h"
 #include "pass_session.h"
 #include "runtime.h"
 #include "settings.h"
@@ -60,9 +61,17 @@ class AddonController {
   NgxRuntime runtime_;
   std::vector<PassSession> passes_;
   FrameDebugContext frame_debug_;
+  HdrState hdr_;
 
   // Command context used only for the final debug-present copy.
   CommandContext debug_command_;
+
+  // Command context used only for the HDR histogram dispatch (which does
+  // not submit — it just records state on the game's list).
+  CommandContext pass1_command_;
+
+  // Compute engine used only for the HDR histogram passes.
+  ComputeEngine hdr_codec_;
 
   // Backbuffer format from the last Present. The debug output is displayed
   // on the backbuffer, so we create it in this format. Cached because a
