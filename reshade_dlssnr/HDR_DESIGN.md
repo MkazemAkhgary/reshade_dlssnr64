@@ -97,7 +97,7 @@ struct Settings {
   float    hdr_responsiveness = 0.50f;   // [0,1] — see below
   float    hdr_midtone = 0.18f;          // scene key target
   float    hdr_white_percentile = 0.99f;
-  float    hdr_curve_white = 4.0f;
+  float    hdr_highlight_headroom = 8.0f;
   float    hdr_edit_strength = 1.0f;
 };
 ```

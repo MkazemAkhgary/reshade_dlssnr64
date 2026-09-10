@@ -207,13 +207,12 @@ void LoadSettings() {
                             g_settings.hdr_midtone);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.WhitePercentile",
                             g_settings.hdr_white_percentile);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.CurveWhite",
-                            g_settings.hdr_curve_white);
-  // Clamp to the slider's range. Values outside it are almost certainly
-  // from an earlier build; snap to the current default.
-  if (g_settings.hdr_curve_white > 16.0f ||
-      g_settings.hdr_curve_white < 0.25f) {
-    g_settings.hdr_curve_white = 8.0f;
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.HighlightHeadroom",
+                            g_settings.hdr_highlight_headroom);
+  // Clamp to the slider's range.
+  if (g_settings.hdr_highlight_headroom > 16.0f ||
+      g_settings.hdr_highlight_headroom < 0.25f) {
+    g_settings.hdr_highlight_headroom = 8.0f;
   }
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.EditStrength",
                             g_settings.hdr_edit_strength);
@@ -271,8 +270,8 @@ void SaveSettings() {
                             g_settings.hdr_midtone);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.WhitePercentile",
                             g_settings.hdr_white_percentile);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.CurveWhite",
-                            g_settings.hdr_curve_white);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.HighlightHeadroom",
+                            g_settings.hdr_highlight_headroom);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.EditStrength",
                             g_settings.hdr_edit_strength);
 
