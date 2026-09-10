@@ -291,17 +291,22 @@ Auto-detect from the DLSS output's DXGI format:
 | DXGI format                  | Detected   |
 |------------------------------|------------|
 | R16G16B16A16_FLOAT           | scRGB      |
-| R16G16B16A16_UNORM           | scRGB      |
-| R10G10B10A2_UNORM            | SDR        |
+| R11G11B10_FLOAT              | scRGB      |
+| R10G10B10A2_UNORM            | HDR10      |
 | R8G8B8A8_UNORM / SRGB        | SDR        |
 | B8G8R8A8_UNORM / SRGB        | SDR        |
 | other                        | SDR        |
 
-`R10G10B10A2_UNORM` is ambiguous (could be HDR10 or 10-bit SDR). Defaults
-to SDR; users with true HDR10 content select `HDR10` in the override combo.
+Float formats are unambiguously linear HDR. `R10G10B10A2_UNORM` is
+detected as HDR10 — historically we treated it as ambiguous, but true
+10-bit SDR is essentially unused in games; when this format appears as a
+DLSS output it is HDR10 in practice. Users with a genuine 10-bit SDR setup
+can override to SDR.
 
 The override combo in the UI is always visible so the user can force a
-format when auto-detection guesses wrong.
+format when auto-detection guesses wrong. The raw DXGI format value is
+logged once per change, so any remaining detection issues are easy to
+diagnose.
 
 ## Exposure computation (CPU)
 
