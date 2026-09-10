@@ -10,10 +10,42 @@ namespace reshade_dlssnr {
 
 namespace {
 Settings g_settings;
+
+// Derived from g_settings.passes and the inherit flags. Kept in sync by
+// RecomputeResolved(), which is called from LoadSettings and SaveSettings.
+PassSettings g_resolved[kMaxPasses];
+
+void RecomputeResolved() {
+  g_resolved[0] = g_settings.passes[0];
+  for (uint32_t i = 1; i < kMaxPasses; ++i) {
+    PassSettings r = g_settings.passes[i];
+    const PassSettings& prev = g_resolved[i - 1];
+
+    if (r.inherit_working_scale) r.working_scale = prev.working_scale;
+    if (r.inherit_intensity) r.intensity = prev.intensity;
+    if (r.inherit_local_tone) r.local_tone = prev.local_tone;
+    if (r.inherit_local_structure) r.local_structure = prev.local_structure;
+    if (r.inherit_skin_structure) r.skin_structure = prev.skin_structure;
+    for (uint32_t j = 0; j < kShaderParamCount; ++j) {
+      if (r.inherit_params[j]) r.params[j] = prev.params[j];
+    }
+
+    g_resolved[i] = r;
+  }
 }
+
+}  // namespace
 
 Settings& GetSettings() {
   return g_settings;
+}
+
+const PassSettings& GetResolvedPass(uint32_t index) {
+  if (index >= kMaxPasses) {
+    static const PassSettings kEmpty;
+    return kEmpty;
+  }
+  return g_resolved[index];
 }
 
 namespace {
@@ -210,9 +242,16 @@ void LoadSettings() {
       g_settings.passes[i].injection_stage = InjectionStage::Present;
     }
   }
+
+  // Apply inheritance so g_resolved reflects the loaded state.
+  RecomputeResolved();
 }
 
 void SaveSettings() {
+  // Refresh the resolved view before persisting so any caller that reads
+  // GetResolvedPass() after a save sees the current state.
+  RecomputeResolved();
+
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Enabled",
                             g_settings.enabled);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "OnlySuperSampling",
@@ -243,38 +282,6 @@ void SaveSettings() {
                               g_settings.pass_enabled[i]);
     SavePassSettings(i, g_settings.passes[i]);
   }
-}
-
-PassSettings ResolvePassSettings(uint32_t index) {
-  if (index >= kMaxPasses) return {};
-
-  PassSettings resolved = g_settings.passes[index];
-  if (index == 0) return resolved;
-
-  const PassSettings prev = ResolvePassSettings(index - 1);
-
-  if (resolved.inherit_working_scale) {
-    resolved.working_scale = prev.working_scale;
-  }
-  if (resolved.inherit_intensity) {
-    resolved.intensity = prev.intensity;
-  }
-  if (resolved.inherit_local_tone) {
-    resolved.local_tone = prev.local_tone;
-  }
-  if (resolved.inherit_local_structure) {
-    resolved.local_structure = prev.local_structure;
-  }
-  if (resolved.inherit_skin_structure) {
-    resolved.skin_structure = prev.skin_structure;
-  }
-  for (uint32_t i = 0; i < kShaderParamCount; ++i) {
-    if (resolved.inherit_params[i]) {
-      resolved.params[i] = prev.params[i];
-    }
-  }
-
-  return resolved;
 }
 
 }  // namespace reshade_dlssnr

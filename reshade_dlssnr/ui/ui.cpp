@@ -256,7 +256,7 @@ void DrawPipelineSection(uint32_t pass_index,
                          Settings& settings,
                          bool& changed) {
   PassSettings& pass = settings.passes[pass_index];
-  const PassSettings resolved = ResolvePassSettings(pass_index);
+  const PassSettings& resolved = GetResolvedPass(pass_index);
 
   changed |= DrawFloatRow(
       pass_index, "working_scale", "Working Scale",
@@ -373,7 +373,7 @@ void DrawModelSection(uint32_t pass_index,
                       Settings& settings,
                       bool& changed) {
   PassSettings& pass = settings.passes[pass_index];
-  const PassSettings resolved = ResolvePassSettings(pass_index);
+  const PassSettings& resolved = GetResolvedPass(pass_index);
 
   if (!ImGui::TreeNodeEx("Model",
                          ImGuiTreeNodeFlags_CollapsingHeader |
@@ -456,7 +456,7 @@ void DrawShaderParamSections(uint32_t pass_index,
                              Settings& settings,
                              bool& changed) {
   PassSettings& pass = settings.passes[pass_index];
-  const PassSettings resolved = ResolvePassSettings(pass_index);
+  const PassSettings& resolved = GetResolvedPass(pass_index);
 
   uint32_t i = 0;
   while (i < kShaderParamCount) {

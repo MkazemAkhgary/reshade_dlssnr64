@@ -108,9 +108,15 @@ struct Settings {
 
 Settings& GetSettings();
 
-// Returns pass `index` with inherited values resolved from the chain of
-// earlier passes. For index 0, returns the settings unchanged.
-PassSettings ResolvePassSettings(uint32_t index);
+// Resolved pass settings with inheritance applied. This is derived state,
+// kept in sync by LoadSettings and SaveSettings. The runtime reads it
+// directly, so no per-frame resolution is ever needed. Index 0 is always
+// the raw settings (there is nothing to inherit from).
+//
+// Inheritance is a UI / settings-change concern: the resolved array is
+// recomputed whenever the settings layer changes, and everyone else just
+// reads the result.
+const PassSettings& GetResolvedPass(uint32_t index);
 
 void LoadSettings();
 void SaveSettings();
