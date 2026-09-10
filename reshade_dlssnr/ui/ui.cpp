@@ -128,10 +128,11 @@ void DrawPassSettingsBody(
   // Debug view selector. Auto-populated from the debug view registry, so
   // adding or removing a view is a single-table-edit change.
   {
-    const char* names[kDebugViewCount + 1];
-    names[0] = "Off";
-    for (uint32_t i = 0; i < kDebugViewCount; ++i) {
-      names[i + 1] = kDebugViews[i].name;
+    std::vector<const char*> names;
+    names.reserve(8);
+    names.push_back("Off");
+    for (uint32_t i = 0; kDebugViews[i].name != nullptr; ++i) {
+      names.push_back(kDebugViews[i].name);
     }
 
     ImGui::AlignTextToFramePadding();
@@ -139,7 +140,7 @@ void DrawPassSettingsBody(
     ImGui::SameLine(kControlLabelWidth);
     ImGui::SetNextItemWidth(-1.0f);
     changed |= ImGui::Combo("##debug_view", &pass.debug_view,
-                            names, kDebugViewCount + 1);
+                            names.data(), static_cast<int>(names.size()));
   }
 
   ImGui::Separator();

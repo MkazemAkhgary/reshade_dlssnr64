@@ -57,10 +57,14 @@ const DebugViewDef kDebugViews[] = {
     {"Model Output (composed)", DebugDisplayMode::Color,  SelectComposedOutput},
     {"Motion Vectors",          DebugDisplayMode::Motion, SelectMotion},
     {"Depth",                   DebugDisplayMode::Depth,  SelectDepth},
+    {nullptr,                   DebugDisplayMode::Color,  nullptr},
 };
 
-const uint32_t kDebugViewCount =
-    sizeof(kDebugViews) / sizeof(kDebugViews[0]);
+const uint32_t CountDebugViews() {
+  uint32_t count = 0;
+  while (kDebugViews[count].name != nullptr) ++count;
+  return count;
+}
 
 bool RenderDebugView(
     CommandContext& state,
@@ -77,7 +81,7 @@ bool RenderDebugView(
   }
 
   const uint32_t index = static_cast<uint32_t>(debug_view) - 1;
-  if (index >= kDebugViewCount) return false;
+  if (index >= CountDebugViews()) return false;
 
   unsigned int content_w = 0;
   unsigned int content_h = 0;
