@@ -114,15 +114,9 @@ ReShade present:
 - `DLSSNR.Style` = 0/1/2 selects Model A/B/C.
 - `DLSSNR.Hint.Render.Preset` is a compatibility hint.
 
-### White point
+### Model input
 
-The pipeline normalizes HDR input to SDR for the model and remaps the output back to HDR:
-
-1. `MeasureWhitePoint` reduces the source to an 8×8 tile buffer of per-tile max luma.
-2. `PrepareModelInput` divides the source by `W = max(tiles, 1.0)` — SDR content is unaffected.
-3. `ComposeModelOutput` multiplies the result back by `W`.
-
-With the model as a no-op, this round-trips exactly. Because `W >= max_luma`, the SDR intermediate never clips (no burn-in).
+`PrepareModelInput` resizes the source into the working resolution and feeds it to the model. There is currently no HDR normalization — the model sees the source as-is, and `ComposeModelOutput` composes the residual back without remapping. Automatic HDR handling (tone map, histogram-driven exposure, exact-inverse edit remap) is planned but not yet implemented.
 
 ### Resource and command safety
 
