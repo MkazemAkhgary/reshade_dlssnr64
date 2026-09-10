@@ -686,10 +686,12 @@ void DrawOverlay(reshade::api::effect_runtime*) {
 
       changed |= DrawFloatRow(
           0, "hdr_curve_white", "Curve White",
-          "Extended Reinhard W. Larger values keep more of the range "
-          "linear; smaller values compress highlights harder.",
+          "Multiplier on the auto-detected white point. 1.0 uses the "
+          "histogram's own value; larger values push the compression knee "
+          "higher and give more highlight headroom (at the cost of a "
+          "softer midtone response).",
           &settings.hdr_curve_white, nullptr, 0.0f,
-          1.0f, 16.0f, 4.0f);
+          0.25f, 4.0f, 1.0f);
 
       changed |= DrawFloatRow(
           0, "hdr_edit_strength", "Edit Strength",

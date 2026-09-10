@@ -282,6 +282,234 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 }
 )";
 
+constexpr const char* kComposeModelOutputHdr = R"(
+cbuffer Params : register(b0)
+{
+    uint  gWidth;
+    uint  gHeight;
+    float4 gParams[4];
+};
+
+// User shader params (identical to ComposeModelOutput):
+#define kLumaStrength    gParams[0].x
+#define kChromaStrength  gParams[0].y
+#define kSoftCompression gParams[0].z
+#define kSoftMaxBrighten gParams[0].w
+#define kSoftMaxDarken   gParams[1].x
+#define kSoftMaxChroma   gParams[1].y
+#define kSoftKnee        gParams[1].z
+// HDR uniforms:
+#define kExposure        gParams[2].x
+#define kWhitePoint      gParams[2].y
+#define kFormat          gParams[2].z
+#define kEditStrength    gParams[2].w
+
+Texture2D<float4> gOriginal    : register(t0);
+Texture2D<float4> gLowInput    : register(t1);
+Texture2D<float4> gLowEnhanced : register(t2);
+RWTexture2D<float4> gOutput    : register(u0);
+SamplerState s0 : register(s0);
+
+static const float3 kLuma709 = float3(0.2126, 0.7152, 0.0722);
+
+// --- Decode / encode, matching TonemapForward ---
+
+float3 SrgbToLinear(float3 v)
+{
+    v = saturate(v);
+    return lerp(v / 12.92, pow((v + 0.055) / 1.055, 2.4),
+                step(0.04045, v));
+}
+
+float3 LinearToSrgb(float3 v)
+{
+    v = saturate(v);
+    return lerp(v * 12.92, 1.055 * pow(max(v, 1e-8), 1.0 / 2.4) - 0.055,
+                step(0.0031308, v));
+}
+
+float3 PqToNits(float3 v)
+{
+    v = saturate(v);
+    const float m1 = 0.1593017578125;
+    const float m2 = 78.84375;
+    const float c1 = 0.8359375;
+    const float c2 = 18.8515625;
+    const float c3 = 18.6875;
+    float3 p = pow(max(v, 0.0), 1.0 / m2);
+    float3 num = max(p - c1, 0.0);
+    float3 den = c2 - c3 * p;
+    return 10000.0 * pow(num / max(den, 1e-6), 1.0 / m1);
+}
+
+float3 NitsToPq(float3 nits)
+{
+    const float m1 = 0.1593017578125;
+    const float m2 = 78.84375;
+    const float c1 = 0.8359375;
+    const float c2 = 18.8515625;
+    const float c3 = 18.6875;
+    float3 Y = max(nits / 10000.0, 0.0);
+    float3 Ym1 = pow(Y, m1);
+    float3 num = c1 + c2 * Ym1;
+    float3 den = 1.0 + c3 * Ym1;
+    return pow(num / den, m2);
+}
+
+float3 DecodeToLinear(float3 c)
+{
+    int fmt = (int)(kFormat + 0.5);
+    if (fmt == 1) {
+        return max(c, 0.0);
+    } else if (fmt == 2) {
+        return max(PqToNits(c), 0.0) / 80.0;
+    } else {
+        return SrgbToLinear(c);
+    }
+}
+
+float3 EncodeFromLinear(float3 lin)
+{
+    int fmt = (int)(kFormat + 0.5);
+    if (fmt == 1) {
+        return max(lin, 0.0);
+    } else if (fmt == 2) {
+        return NitsToPq(max(lin, 0.0) * 80.0);
+    } else {
+        return LinearToSrgb(lin);
+    }
+}
+
+// --- Extended Reinhard, forward and exact inverse ---
+
+float3 ReinhardForward(float3 x, float W)
+{
+    float W2 = max(W * W, 1e-6);
+    return x * (1.0 + x / W2) / (1.0 + x);
+}
+
+// Closed-form inverse of ReinhardForward. Solving:
+//   s(1+x) = x + x²/W²
+//   x²/W² + (1-s)x - s = 0
+//   x = [-(1-s)W² + sqrt((1-s)²W⁴ + 4sW²)] / 2
+float3 ReinhardInverse(float3 s, float W)
+{
+    float W2 = max(W * W, 1e-6);
+    s = saturate(s);
+    float3 om = 1.0 - s;
+    float3 disc = om * om * W2 * W2 + 4.0 * s * W2;
+    float3 num = -om * W2 + sqrt(max(disc, 0.0));
+    return num * 0.5;
+}
+
+// --- Soft compression, identical to ComposeModelOutput ---
+
+float SoftCompress(float x, float max_pos, float max_neg, float knee)
+{
+    knee = max(knee, 1e-6);
+    max_pos = max(max_pos, 1e-6);
+    max_neg = max(max_neg, 1e-6);
+    if (x >= 0.0)
+        return max_pos * x / (max_pos + knee * abs(x));
+    else
+        return max_neg * x / (max_neg + knee * abs(x));
+}
+
+float safe_log(float x)
+{
+    return log(max(x, 0.0) + 1e-6);
+}
+
+float3 safe_log3(float3 v)
+{
+    return log(max(v, 0.0) + 1e-6);
+}
+
+[numthreads(8, 8, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= gWidth || id.y >= gHeight)
+        return;
+
+    float2 uv = (float2(id.xy) + 0.5) / float2(gWidth, gHeight);
+
+    float4 orig_hdr = gOriginal.SampleLevel(s0, uv, 0);
+    float3 low_in  = gLowInput.SampleLevel(s0, uv, 0).rgb;    // sRGB
+    float3 low_out = gLowEnhanced.SampleLevel(s0, uv, 0).rgb; // sRGB
+
+    // Model edit, computed exactly as in the SDR path (in sRGB space).
+    float3 residual;
+    if (kSoftCompression != 0) {
+        float in_luma  = max(dot(low_in, kLuma709), 1e-6);
+        float out_luma = max(dot(low_out, kLuma709), 1e-6);
+
+        float residual_luma = safe_log(out_luma) - safe_log(in_luma);
+        float3 residual_chroma =
+            safe_log3(low_out) - safe_log(out_luma) -
+            safe_log3(low_in)  + safe_log(in_luma);
+
+        residual_luma = SoftCompress(
+            residual_luma, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
+        residual_chroma.x = SoftCompress(
+            residual_chroma.x, kSoftMaxChroma, kSoftMaxChroma, kSoftKnee);
+        residual_chroma.y = SoftCompress(
+            residual_chroma.y, kSoftMaxChroma, kSoftMaxChroma, kSoftKnee);
+        residual_chroma.z = SoftCompress(
+            residual_chroma.z, kSoftMaxChroma, kSoftMaxChroma, kSoftKnee);
+
+        float edited_luma = in_luma * exp(residual_luma);
+        float3 edited_chroma =
+            exp(safe_log3(low_in) - safe_log(in_luma) + residual_chroma);
+        float3 edited_rgb = edited_luma * edited_chroma;
+
+        residual = edited_rgb - low_in;
+    } else {
+        residual = low_out - low_in;
+    }
+    residual *= kEditStrength;
+
+    // Rebuild the full-res SDR the original would have tonemapped to.
+    // This is the same pipeline as TonemapForward, applied to the full-res
+    // source instead of the working-scale input.
+    float3 src_lin = DecodeToLinear(orig_hdr.rgb);
+    float3 sdr_orig_lin = ReinhardForward(src_lin * kExposure, kWhitePoint);
+    float3 sdr_orig = LinearToSrgb(sdr_orig_lin);
+
+    // Apply the residual in sRGB space, then inverse-tonemap back to HDR.
+    float3 edited_sdr = saturate(sdr_orig + residual);
+    float3 edited_sdr_lin = SrgbToLinear(edited_sdr);
+    float3 edited_src_lin =
+        ReinhardInverse(edited_sdr_lin, kWhitePoint) / kExposure;
+
+    // Blend original and edited in linear space using luma / chroma
+    // strengths, exactly like the SDR path (but on HDR-scale values).
+    float3 original = src_lin;
+    float3 edited = edited_src_lin;
+
+    float original_y = dot(original, kLuma709);
+    float edited_y   = dot(edited,   kLuma709);
+    float final_y = lerp(original_y, edited_y, kLumaStrength);
+
+    float original_cb = (original.b - original_y) / 1.8556;
+    float original_cr = (original.r - original_y) / 1.5748;
+    float edited_cb   = (edited.b   - edited_y)   / 1.8556;
+    float edited_cr   = (edited.r   - edited_y)   / 1.5748;
+
+    float final_cb = lerp(original_cb, edited_cb, kChromaStrength);
+    float final_cr = lerp(original_cr, edited_cr, kChromaStrength);
+
+    float3 final_lin;
+    final_lin.r = final_y + 1.5748 * final_cr;
+    final_lin.g = final_y - 0.1873 * final_cb - 0.4681 * final_cr;
+    final_lin.b = final_y + 1.8556 * final_cb;
+
+    // Encode back to the source's own format.
+    float3 final_out = EncodeFromLinear(max(final_lin, 0.0));
+
+    gOutput[id.xy] = float4(final_out, orig_hdr.a);
+}
+)";
+
 constexpr const char* kComposeModelOutput = R"(
 cbuffer Params : register(b0)
 {
@@ -397,12 +625,13 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 }  // namespace
 
 const ComputePassDef kComputePasses[] = {
-    {"ZeroHistogram",      kZeroHistogram},
-    {"BuildHistogram",     kBuildHistogram},
-    {"TonemapForward",     kTonemapForward},
-    {"PrepareModelInput",  kPrepareModelInput},
-    {"ComposeModelOutput", kComposeModelOutput},
-    {"DebugDisplay",       kDebugDisplay},
+    {"ZeroHistogram",         kZeroHistogram},
+    {"BuildHistogram",        kBuildHistogram},
+    {"TonemapForward",        kTonemapForward},
+    {"PrepareModelInput",     kPrepareModelInput},
+    {"ComposeModelOutput",    kComposeModelOutput},
+    {"ComposeModelOutputHdr", kComposeModelOutputHdr},
+    {"DebugDisplay",          kDebugDisplay},
 };
 
 const uint32_t kComputePassCount =

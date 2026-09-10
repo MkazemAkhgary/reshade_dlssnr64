@@ -18,6 +18,7 @@ struct HdrUniforms {
   float exposure = 1.0f;
   float white_point = 4.0f;
   uint32_t format = 0;
+  float edit_strength = 1.0f;
 };
 
 // Prepares the model input. With `hdr == nullptr`, resamples `full_input`
@@ -41,7 +42,10 @@ bool PrepareInput(
     const HdrUniforms* hdr = nullptr);
 
 // Composes the model output into PassResources::GetCompositeOutput().
-// Callers then decide where to copy it.
+// Callers then decide where to copy it. With `hdr == nullptr`, dispatches
+// the SDR composition. With `hdr != nullptr`, dispatches the HDR
+// composition, which inverse-tonemaps the model's SDR edit back into the
+// HDR source's own range and encoding.
 bool ComposeOutput(
     CommandContext& state,
     ID3D12GraphicsCommandList* command_list,
@@ -52,6 +56,7 @@ bool ComposeOutput(
     ID3D12Resource* low_enhanced,
     unsigned int full_width,
     unsigned int full_height,
-    const float* params);
+    const float* params,
+    const HdrUniforms* hdr = nullptr);
 
 }  // namespace reshade_dlssnr::model_pipeline

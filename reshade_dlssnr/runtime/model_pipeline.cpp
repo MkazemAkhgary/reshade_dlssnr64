@@ -68,7 +68,8 @@ bool ComposeOutput(
     ID3D12Resource* low_enhanced,
     unsigned int full_width,
     unsigned int full_height,
-    const float* params) {
+    const float* params,
+    const HdrUniforms* hdr) {
   if (codec == nullptr || command_list == nullptr || original == nullptr ||
       low_input == nullptr || low_enhanced == nullptr || params == nullptr) {
     return false;
@@ -81,6 +82,15 @@ bool ComposeOutput(
     constants.params[i] = params[i];
   }
 
+  const char* pass_name = "ComposeModelOutput";
+  if (hdr != nullptr) {
+    pass_name = "ComposeModelOutputHdr";
+    constants.params[8]  = hdr->exposure;
+    constants.params[9]  = hdr->white_point;
+    constants.params[10] = static_cast<float>(hdr->format);
+    constants.params[11] = hdr->edit_strength;
+  }
+
   state.Transition(command_list, original,
                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   state.Transition(command_list, low_input,
@@ -91,8 +101,7 @@ bool ComposeOutput(
   ID3D12Resource* srvs[kSrvCount] = {original, low_input, low_enhanced};
   ID3D12Resource* uavs[kUavCount] = {resources.GetCompositeOutput()};
 
-  return codec->Dispatch(
-      "ComposeModelOutput", command_list, constants, srvs, uavs);
+  return codec->Dispatch(pass_name, command_list, constants, srvs, uavs);
 }
 
 }  // namespace reshade_dlssnr::model_pipeline

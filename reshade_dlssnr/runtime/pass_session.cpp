@@ -585,11 +585,17 @@ void PassSession::OnPostDlssEvaluate(
   // doubles as the resize into working scale, so passing these uniforms
   // is all that's needed to switch from a plain resample to a full
   // HDR → SDR normalize.
+  //
+  // `Curve White` scales the auto-detected white point. Default 1.0 keeps
+  // the detected value; larger values add highlight headroom by pushing
+  // the compression knee higher.
   model_pipeline::HdrUniforms hdr_uniforms;
   const model_pipeline::HdrUniforms* hdr_ptr = nullptr;
   if (hdr != nullptr && hdr->Enabled()) {
     hdr_uniforms.exposure = hdr->Exposure();
-    hdr_uniforms.white_point = hdr->WhitePoint();
+    hdr_uniforms.white_point =
+        hdr->WhitePoint() * std::max(settings.hdr_curve_white, 0.01f);
+    hdr_uniforms.edit_strength = settings.hdr_edit_strength;
     switch (hdr->ResolvedFormat()) {
       case HdrFormat::ScRgb: hdr_uniforms.format = 1; break;
       case HdrFormat::Hdr10: hdr_uniforms.format = 2; break;
@@ -649,7 +655,8 @@ void PassSession::OnPostDlssEvaluate(
           model_output,
           width,
           height,
-          pass.params)) {
+          pass.params,
+          hdr_ptr)) {
     return;
   }
 
