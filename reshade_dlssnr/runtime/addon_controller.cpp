@@ -179,6 +179,11 @@ void AddonController::PresentDebugOutput(
   debug_command_.WaitGpu(command_queue);
 }
 
+HdrSnapshot AddonController::GetHdrSnapshot() const {
+  std::lock_guard<std::mutex> lock(g_direct_mutex);
+  return hdr_.GetSnapshot();
+}
+
 void AddonController::Shutdown() {
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 

@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "addon_controller.h"
 #include "compute/shader_params.h"
 #include "debug_view.h"
 #include "dlss_guides.h"
@@ -595,6 +596,37 @@ void DrawOverlay(reshade::api::effect_runtime*) {
     }
 
     const bool hdr_on = settings.hdr_enable;
+
+    // Live measurement feedback. Without this the HDR stage has no visible
+    // effect during Phase A (measurement only, no tonemapping yet).
+    if (hdr_on) {
+      const HdrSnapshot snap = AddonController::Get().GetHdrSnapshot();
+
+      const char* format_name = "SDR";
+      switch (snap.resolved_format) {
+        case HdrFormat::Auto: format_name = "Auto"; break;
+        case HdrFormat::Sdr:  format_name = "SDR"; break;
+        case HdrFormat::ScRgb: format_name = "scRGB"; break;
+        case HdrFormat::Hdr10: format_name = "HDR10"; break;
+      }
+
+      ImGui::AlignTextToFramePadding();
+      ImGui::TextUnformatted("Status");
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip(
+            "Live state of the HDR measurement. Phase A only measures "
+            "the scene; the exposure and white point will drive the "
+            "tonemap in a later phase.");
+      }
+      ImGui::SameLine(kControlLabelWidth);
+
+      if (!snap.ready) {
+        ImGui::TextDisabled("waiting for first measurement...");
+      } else {
+        ImGui::Text("Format: %s   Exposure: %.3f   White: %.3f",
+                    format_name, snap.exposure, snap.white_point);
+      }
+    }
 
     WithDisabled(!hdr_on, [&] {
       // Format combo.

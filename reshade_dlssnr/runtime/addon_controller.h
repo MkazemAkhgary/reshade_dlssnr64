@@ -38,6 +38,9 @@ class AddonController {
 
   void Shutdown();
 
+  // Thread-safe snapshot of the HDR measurement state, for the UI.
+  HdrSnapshot GetHdrSnapshot() const;
+
  private:
   AddonController() {
     passes_.reserve(kMaxPasses);

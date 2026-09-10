@@ -133,6 +133,19 @@ void HdrState::Shutdown() {
   frames_until_measure_ = 0;
   warmup_frames_ = 0;
   frames_since_log_ = 0;
+  frames_since_measure_ = 0;
+  prev_enabled_ = false;
+}
+
+HdrSnapshot HdrState::GetSnapshot() const {
+  HdrSnapshot s;
+  s.enabled = enabled_;
+  s.ready = have_measurement_;
+  s.resolved_format = resolved_format_;
+  s.exposure = exposure_ema_;
+  s.white_point = white_point_ema_;
+  s.frames_since_measure = frames_since_measure_;
+  return s;
 }
 
 void HdrState::BeginFrame(CommandContext& cmd,
@@ -144,14 +157,28 @@ void HdrState::BeginFrame(CommandContext& cmd,
                           ComputeEngine& codec) {
   enabled_ = settings.hdr_enable;
   if (!enabled_) {
+    if (prev_enabled_) {
+      reshade::log::message(reshade::log::level::info,
+                            "HDR: disabled");
+      prev_enabled_ = false;
+    }
     // Keep existing EMA values around so toggling back on doesn't reset.
     return;
+  }
+
+  if (!prev_enabled_) {
+    reshade::log::message(
+        reshade::log::level::info,
+        "HDR: enabled; waiting for first histogram measurement");
+    prev_enabled_ = true;
   }
 
   if (command_list == nullptr || source == nullptr || width == 0 ||
       height == 0) {
     return;
   }
+
+  frames_since_measure_++;
 
   // Poll any completed readback first, so this frame's exposure reflects
   // the latest available data.
@@ -248,18 +275,17 @@ void HdrState::PollReadback(ID3D12Fence* fence, const Settings& settings) {
 
   UpdateExposure(bins, total, settings);
 
-  // Log a summary periodically so the values are visible without a UI.
+  frames_since_measure_ = 0;
+
+  // Log every readback during Phase A so the values are visible immediately.
+  char msg[192];
+  std::snprintf(msg, sizeof(msg),
+                "HDR: format=%d exposure=%.4f white_point=%.3f samples=%u",
+                static_cast<int>(resolved_format_), exposure_ema_,
+                white_point_ema_, total);
+  reshade::log::message(reshade::log::level::info, msg);
+
   frames_since_log_++;
-  if (frames_since_log_ >= 60) {
-    frames_since_log_ = 0;
-    char msg[192];
-    std::snprintf(msg, sizeof(msg),
-                  "HDR: format=%d exposure=%.4f white_point=%.3f "
-                  "samples=%u",
-                  static_cast<int>(resolved_format_), exposure_ema_,
-                  white_point_ema_, total);
-    reshade::log::message(reshade::log::level::info, msg);
-  }
 }
 
 void HdrState::UpdateExposure(const uint32_t* bins, uint32_t total,

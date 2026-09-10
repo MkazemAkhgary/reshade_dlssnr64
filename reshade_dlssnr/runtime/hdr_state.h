@@ -25,6 +25,17 @@
 
 namespace reshade_dlssnr {
 
+// Read-only snapshot of the current HDR measurement state, safe to copy to
+// the UI thread.
+struct HdrSnapshot {
+  bool enabled = false;
+  bool ready = false;             // has a valid measurement to report
+  HdrFormat resolved_format = HdrFormat::Sdr;
+  float exposure = 1.0f;
+  float white_point = 1.0f;
+  uint32_t frames_since_measure = 0;  // frames since last histogram arrived
+};
+
 class HdrState {
  public:
   bool Ensure(ID3D12Device* device);
@@ -53,6 +64,8 @@ class HdrState {
   float Exposure() const { return exposure_ema_; }
   float WhitePoint() const { return white_point_ema_; }
 
+  HdrSnapshot GetSnapshot() const;
+
  private:
   void PollReadback(ID3D12Fence* fence, const Settings& settings);
   void UpdateExposure(const uint32_t* bins, uint32_t total,
@@ -76,6 +89,8 @@ class HdrState {
   uint32_t frames_until_measure_ = 0;
   uint32_t warmup_frames_ = 0;
   uint32_t frames_since_log_ = 0;
+  uint32_t frames_since_measure_ = 0;
+  bool prev_enabled_ = false;
 };
 
 }  // namespace reshade_dlssnr
