@@ -425,6 +425,46 @@ float3 safe_log3(float3 v)
     return log(max(v, 0.0) + 1e-6);
 }
 
+// Blend original and edited with independent luma and chroma strengths.
+//
+// Chroma is interpolated in *normalized* space (chroma / luma) rather than
+// as absolute color-difference values. Absolute Cb/Cr do not scale with
+// luminance, so blending them independently of luma causes saturation
+// swings: keeping the original's Cb/Cr while adopting the model's luma
+// produces a much more saturated color at the new luminance, and the
+// reverse produces a pale one. Normalized chroma is scale-invariant and
+// preserves perceived hue and saturation.
+float3 BlendYCbCr(float3 original, float3 edited,
+                  float luma_strength, float chroma_strength)
+{
+    const float3 kL = float3(0.2126, 0.7152, 0.0722);
+
+    float orig_y = dot(original, kL);
+    float edit_y = dot(edited, kL);
+    float final_y = lerp(orig_y, edit_y, luma_strength);
+
+    float safe_orig_y = max(orig_y, 1e-4);
+    float safe_edit_y = max(edit_y, 1e-4);
+    float safe_final_y = max(final_y, 1e-4);
+
+    float orig_cbn = (original.b - orig_y) / (1.8556 * safe_orig_y);
+    float orig_crn = (original.r - orig_y) / (1.5748 * safe_orig_y);
+    float edit_cbn = (edited.b - edit_y) / (1.8556 * safe_edit_y);
+    float edit_crn = (edited.r - edit_y) / (1.5748 * safe_edit_y);
+
+    float final_cbn = lerp(orig_cbn, edit_cbn, chroma_strength);
+    float final_crn = lerp(orig_crn, edit_crn, chroma_strength);
+
+    float final_cb = final_cbn * safe_final_y;
+    float final_cr = final_crn * safe_final_y;
+
+    float3 result;
+    result.r = final_y + 1.5748 * final_cr;
+    result.g = final_y - 0.1873 * final_cb - 0.4681 * final_cr;
+    result.b = final_y + 1.8556 * final_cb;
+    return result;
+}
+
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
@@ -482,26 +522,11 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         ReinhardInverse(edited_sdr_lin, kWhitePoint) / kExposure;
 
     // Blend original and edited in linear space using luma / chroma
-    // strengths, exactly like the SDR path (but on HDR-scale values).
-    float3 original = src_lin;
-    float3 edited = edited_src_lin;
-
-    float original_y = dot(original, kLuma709);
-    float edited_y   = dot(edited,   kLuma709);
-    float final_y = lerp(original_y, edited_y, kLumaStrength);
-
-    float original_cb = (original.b - original_y) / 1.8556;
-    float original_cr = (original.r - original_y) / 1.5748;
-    float edited_cb   = (edited.b   - edited_y)   / 1.8556;
-    float edited_cr   = (edited.r   - edited_y)   / 1.5748;
-
-    float final_cb = lerp(original_cb, edited_cb, kChromaStrength);
-    float final_cr = lerp(original_cr, edited_cr, kChromaStrength);
-
-    float3 final_lin;
-    final_lin.r = final_y + 1.5748 * final_cr;
-    final_lin.g = final_y - 0.1873 * final_cb - 0.4681 * final_cr;
-    final_lin.b = final_y + 1.8556 * final_cb;
+    // strengths. Chroma is interpolated in normalized space so that
+    // moving luma alone preserves perceived saturation, and moving
+    // chroma alone preserves brightness.
+    float3 final_lin = BlendYCbCr(src_lin, edited_src_lin,
+                                  kLumaStrength, kChromaStrength);
 
     // Encode back to the source's own format.
     float3 final_out = EncodeFromLinear(max(final_lin, 0.0));
@@ -553,6 +578,39 @@ float3 safe_log3(float3 v)
     return log(max(v, 0.0) + 1e-6);
 }
 
+// Blend original and edited with independent luma and chroma strengths.
+// See the comment on the HDR version for why chroma is normalized.
+float3 BlendYCbCr(float3 original, float3 edited,
+                  float luma_strength, float chroma_strength)
+{
+    const float3 kL = float3(0.2126, 0.7152, 0.0722);
+
+    float orig_y = dot(original, kL);
+    float edit_y = dot(edited, kL);
+    float final_y = lerp(orig_y, edit_y, luma_strength);
+
+    float safe_orig_y = max(orig_y, 1e-4);
+    float safe_edit_y = max(edit_y, 1e-4);
+    float safe_final_y = max(final_y, 1e-4);
+
+    float orig_cbn = (original.b - orig_y) / (1.8556 * safe_orig_y);
+    float orig_crn = (original.r - orig_y) / (1.5748 * safe_orig_y);
+    float edit_cbn = (edited.b - edit_y) / (1.8556 * safe_edit_y);
+    float edit_crn = (edited.r - edit_y) / (1.5748 * safe_edit_y);
+
+    float final_cbn = lerp(orig_cbn, edit_cbn, chroma_strength);
+    float final_crn = lerp(orig_crn, edit_crn, chroma_strength);
+
+    float final_cb = final_cbn * safe_final_y;
+    float final_cr = final_crn * safe_final_y;
+
+    float3 result;
+    result.r = final_y + 1.5748 * final_cr;
+    result.g = final_y - 0.1873 * final_cb - 0.4681 * final_cr;
+    result.b = final_y + 1.8556 * final_cb;
+    return result;
+}
+
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
@@ -599,23 +657,8 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     float3 edited = original.rgb + residual;
 
-    float original_y = dot(original.rgb, float3(0.2126, 0.7152, 0.0722));
-    float edited_y   = dot(edited,   float3(0.2126, 0.7152, 0.0722));
-    float final_y = lerp(original_y, edited_y, kLumaStrength);
-
-    float original_cb = (original.b - original_y) / 1.8556;
-    float original_cr = (original.r - original_y) / 1.5748;
-    float edited_cb   = (edited.b   - edited_y)   / 1.8556;
-    float edited_cr   = (edited.r   - edited_y)   / 1.5748;
-
-    float final_cb = lerp(original_cb, edited_cb, kChromaStrength);
-    float final_cr = lerp(original_cr, edited_cr, kChromaStrength);
-
-    float3 final_rgb;
-    final_rgb.r = final_y + 1.5748 * final_cr;
-    final_rgb.g = final_y - 0.1873 * final_cb - 0.4681 * final_cr;
-    final_rgb.b = final_y + 1.8556 * final_cb;
-
+    float3 final_rgb = BlendYCbCr(original.rgb, edited,
+                                  kLumaStrength, kChromaStrength);
     final_rgb = 0.5 * (final_rgb + sqrt(final_rgb * final_rgb + 1e-6));
 
     gOutput[id.xy] = float4(final_rgb, original.a);

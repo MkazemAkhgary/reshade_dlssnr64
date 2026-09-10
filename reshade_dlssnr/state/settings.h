@@ -95,11 +95,12 @@ struct Settings {
   // Which percentile of the histogram defines the white point.
   float hdr_white_percentile = 0.99f;
 
-  // Multiplier on the auto-detected white point. Default 1.0 uses the
-  // histogram's own value; larger values push the compression knee higher
-  // and give more highlight headroom (at the cost of a softer midtone
-  // response).
-  float hdr_curve_white = 1.0f;
+  // Multiplier on the auto-detected white point. 1.0 uses the histogram's
+  // own value (P99 by default), which clips the top 1% of pixels and
+  // flattens highlights on the round trip. The default 2.0 gives headroom
+  // without visibly darkening midtones. Larger values push the compression
+  // knee higher still, at the cost of a softer overall response.
+  float hdr_curve_white = 2.0f;
 
   // Global multiplier on the model's edit before HDR remap.
   float hdr_edit_strength = 1.0f;

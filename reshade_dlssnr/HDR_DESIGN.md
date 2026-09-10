@@ -373,7 +373,7 @@ Defaults:
 | Responsiveness    | 0.50    | 0.00 – 1.00    | Slow + cheap ↔ fast + costly     |
 | Midtone Target    | 0.18    | 0.05 – 0.50    | 18% grey                         |
 | White Percentile  | 0.99    | 0.90 – 0.999   |                                  |
-| Curve White       | 4.00    | 1.00 – 16.00   | Larger = more linear             |
+| Curve White       | 2.00    | 0.25 – 16.00   | Multiplier on detected white point |
 | Edit Strength     | 1.00    | 0.00 – 2.00    | Scales model edit before remap   |
 
 ## `PassResources` additions
