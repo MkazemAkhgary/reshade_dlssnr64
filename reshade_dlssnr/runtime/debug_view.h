@@ -62,6 +62,7 @@ enum class DebugDisplayMode : uint32_t {
 
 struct DebugViewDef {
   const char* name;
+  const char* tooltip;
   DebugDisplayMode display_mode;
   // Returns the selected resource and its content size. Returns nullptr if
   // the resource is unavailable this frame. The resource may be larger than

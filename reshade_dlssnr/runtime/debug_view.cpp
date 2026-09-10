@@ -51,13 +51,31 @@ ID3D12Resource* SelectDepth(const DebugSnapshot& s,
 }  // namespace
 
 const DebugViewDef kDebugViews[] = {
-    {"Model Input (source)",    DebugDisplayMode::Color,  SelectSource},
-    {"Model Input (prepared)",  DebugDisplayMode::Color,  SelectPreparedInput},
-    {"Model Output (raw)",      DebugDisplayMode::Color,  SelectModelOutput},
-    {"Model Output (composed)", DebugDisplayMode::Color,  SelectComposedOutput},
-    {"Motion Vectors",          DebugDisplayMode::Motion, SelectMotion},
-    {"Depth",                   DebugDisplayMode::Depth,  SelectDepth},
-    {nullptr,                   DebugDisplayMode::Color,  nullptr},
+    {"Model Input (source)",
+     "The frame before any model processing. At DLSS Output this is the "
+     "captured DLSS result as the model sees it, including resolution.",
+     DebugDisplayMode::Color, SelectSource},
+    {"Model Input (prepared)",
+     "What the model actually receives: the source resized to the working "
+     "scale.",
+     DebugDisplayMode::Color, SelectPreparedInput},
+    {"Model Output (raw)",
+     "The model's raw output before composition. Post-processing sliders "
+     "do not affect this view.",
+     DebugDisplayMode::Color, SelectModelOutput},
+    {"Model Output (composed)",
+     "The composed result after residual, soft compression, and luma/chroma "
+     "strength. This is what gets written to the target.",
+     DebugDisplayMode::Color, SelectComposedOutput},
+    {"Motion Vectors",
+     "Motion vectors captured from the game's DLSS evaluation. Displayed as "
+     "R = x, G = y.",
+     DebugDisplayMode::Motion, SelectMotion},
+    {"Depth",
+     "Depth buffer captured from the game's DLSS evaluation. Displayed as "
+     "grayscale (red channel replicated).",
+     DebugDisplayMode::Depth, SelectDepth},
+    {nullptr, nullptr, DebugDisplayMode::Color, nullptr},
 };
 
 const uint32_t CountDebugViews() {

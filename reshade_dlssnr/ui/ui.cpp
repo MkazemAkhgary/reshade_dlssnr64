@@ -122,12 +122,15 @@ bool DrawCheckboxAtLabel(const char* id, bool* value) {
   return ImGui::Checkbox(cb_id.c_str(), value);
 }
 
-// A combo row.
+// A combo row with per-item tooltips. `tooltips` is an array of item_count
+// pointers (nullptr entries are fine) and `preview_tooltips` works the same
+// way for the closed combo's hover tooltip.
 bool DrawComboRow(const char* id,
                   const char* label,
                   const char* tooltip,
                   int* value,
                   const char* const* items,
+                  const char* const* item_tooltips,
                   int item_count) {
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted(label);
@@ -137,8 +140,37 @@ bool DrawComboRow(const char* id,
 
   ImGui::SameLine(kControlLabelWidth);
   ImGui::SetNextItemWidth(-1.0f);
+
+  const int clamped = (*value >= 0 && *value < item_count) ? *value : 0;
+  const char* preview = items[clamped];
   const std::string combo_id = std::string("##") + id;
-  return ImGui::Combo(combo_id.c_str(), value, items, item_count);
+
+  bool changed = false;
+  if (ImGui::BeginCombo(combo_id.c_str(), preview)) {
+    for (int i = 0; i < item_count; ++i) {
+      const bool selected = (i == clamped);
+      if (ImGui::Selectable(items[i], selected)) {
+        if (*value != i) {
+          *value = i;
+          changed = true;
+        }
+      }
+      if (ImGui::IsItemHovered() && item_tooltips != nullptr &&
+          item_tooltips[i] != nullptr) {
+        ImGui::SetTooltip("%s", item_tooltips[i]);
+      }
+      if (selected) ImGui::SetItemDefaultFocus();
+    }
+    ImGui::EndCombo();
+  }
+
+  // Hovering the closed combo shows the tooltip of the current selection.
+  if (ImGui::IsItemHovered() && item_tooltips != nullptr &&
+      item_tooltips[clamped] != nullptr) {
+    ImGui::SetTooltip("%s", item_tooltips[clamped]);
+  }
+
+  return changed;
 }
 
 // ---------------------------------------------------------------------------
@@ -235,17 +267,24 @@ void DrawPipelineSection(uint32_t pass_index,
   // Debug view is shared across passes.
   {
     std::vector<const char*> names;
+    std::vector<const char*> tips;
     names.reserve(8);
+    tips.reserve(8);
+
     names.push_back("Off");
+    tips.push_back(
+        "Disable the debug view and show the normal composed output.");
+
     for (uint32_t i = 0; kDebugViews[i].name != nullptr; ++i) {
       names.push_back(kDebugViews[i].name);
+      tips.push_back(kDebugViews[i].tooltip);
     }
 
     changed |= DrawComboRow(
         "debug_view", "Debug View",
         "Display a pipeline resource instead of the final image. "
         "Shared across all passes; the active pass renders it.",
-        &settings.debug_view, names.data(),
+        &settings.debug_view, names.data(), tips.data(),
         static_cast<int>(names.size()));
   }
 }
@@ -355,6 +394,11 @@ void DrawModelSection(uint32_t pass_index,
     ImGui::SameLine(kControlLabelWidth);
 
     static const char* kPresetNames[] = {"A", "B", "C"};
+    static const char* kPresetTooltips[] = {
+        "Select model preset A.",
+        "Select model preset B.",
+        "Select model preset C.",
+    };
     for (int i = 0; i < 3; ++i) {
       if (i > 0) ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
 
@@ -369,6 +413,9 @@ void DrawModelSection(uint32_t pass_index,
         changed = true;
       }
       if (selected) ImGui::PopStyleColor();
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", kPresetTooltips[i]);
+      }
     }
   }
 
