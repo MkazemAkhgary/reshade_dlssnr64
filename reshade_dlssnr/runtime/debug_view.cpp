@@ -52,28 +52,27 @@ ID3D12Resource* SelectDepth(const DebugSnapshot& s,
 
 const DebugViewDef kDebugViews[] = {
     {"Model Input (source)",
-     "The frame before any model processing. At DLSS Output this is the "
-     "captured DLSS result as the model sees it, including resolution.",
+     "The frame as captured, before any processing. This is the DLSS "
+     "output the model will work from, at its native resolution.",
      DebugDisplayMode::Color, SelectSource},
     {"Model Input (prepared)",
-     "What the model actually receives: the source resized to the working "
-     "scale.",
+     "The image actually fed to the model, after resizing to the Working "
+     "Scale (and after HDR preparation, when enabled).",
      DebugDisplayMode::Color, SelectPreparedInput},
     {"Model Output (raw)",
-     "The model's raw output before composition. Post-processing sliders "
-     "do not affect this view.",
+     "The model's output, before any of the pipeline's post-processing is "
+     "applied. Useful for seeing exactly what the model produced.",
      DebugDisplayMode::Color, SelectModelOutput},
     {"Model Output (composed)",
-     "The composed result after residual, soft compression, and luma/chroma "
-     "strength. This is what gets written to the target.",
+     "The final result of this pass, after the model's edit has been "
+     "composed with the source. This is what gets written to the target.",
      DebugDisplayMode::Color, SelectComposedOutput},
     {"Motion Vectors",
-     "Motion vectors captured from the game's DLSS evaluation. Displayed as "
-     "R = x, G = y.",
+     "The motion vectors the game supplied to DLSS. Shown as R = x "
+     "direction, G = y direction.",
      DebugDisplayMode::Motion, SelectMotion},
     {"Depth",
-     "Depth buffer captured from the game's DLSS evaluation. Displayed as "
-     "grayscale (red channel replicated).",
+     "The depth buffer the game supplied to DLSS. Shown as grayscale.",
      DebugDisplayMode::Depth, SelectDepth},
     {nullptr, nullptr, DebugDisplayMode::Color, nullptr},
 };

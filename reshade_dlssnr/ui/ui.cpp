@@ -211,9 +211,12 @@ void DrawTargetSection(Settings& settings, uint32_t pass_index,
   ImGui::TextUnformatted("Target");
   if (ImGui::IsItemHovered()) {
     ImGui::SetTooltip(
-        "Where the model pipeline runs for this pass. DLSS Output writes "
-        "directly into the game's DLSS result (before UI and tone mapping); "
-        "Backbuffer runs at the ReShade present event on the final frame.");
+        "Where this pass runs in the frame.\n"
+        "  DLSS Output — runs right after the game's DLSS upscaling, "
+        "before UI and tone mapping are applied. Recommended: this is "
+        "the cleanest image the model can see.\n"
+        "  Backbuffer — runs at the very end of the frame, on the "
+        "finished image.");
   }
   ImGui::SameLine(kControlLabelWidth);
 
@@ -237,8 +240,11 @@ void DrawTargetSection(Settings& settings, uint32_t pass_index,
     if (at_dlss) ImGui::PopStyleColor();
     if (ImGui::IsItemHovered()) {
       ImGui::SetTooltip(
-          "Run inline after the game's DLSS upscaling, before UI. "
-          "Only available when all earlier passes also target DLSS Output.");
+          "Run this pass on the DLSS upscaled image, before the game "
+          "applies UI and tone mapping.\n"
+          "Unavailable when an earlier pass targets the Backbuffer, "
+          "because passes run in order and later stages cannot reach "
+          "back to earlier ones.");
     }
   });
 
@@ -259,8 +265,10 @@ void DrawTargetSection(Settings& settings, uint32_t pass_index,
   if (at_present) ImGui::PopStyleColor();
   if (ImGui::IsItemHovered()) {
     ImGui::SetTooltip(
-        "Run at the ReShade present event on the final frame. "
-        "Any later pass is forced to Backbuffer as well.");
+        "Run this pass on the final frame, after every other effect "
+        "including UI and post-processing.\n"
+        "Selecting this forces all later passes to Backbuffer as well, "
+        "because they cannot run earlier than this one.");
   }
 }
 
@@ -276,8 +284,9 @@ void DrawPipelineSection(uint32_t pass_index,
 
   changed |= DrawFloatRow(
       pass_index, "working_scale", "Working Scale",
-      "Model evaluation resolution as a fraction of the frame. "
-      "1.0 runs the model at full resolution.",
+      "The resolution the model runs at, as a fraction of the frame.\n"
+      "Lower values run the model faster but with less detail. "
+      "1.0 runs at full resolution (slowest, best quality).",
       &pass.working_scale, &pass.inherit_working_scale,
       resolved.working_scale, 0.25f, 1.0f, 1.0f);
 }
@@ -303,8 +312,10 @@ void DrawSharedDebugView(Settings& settings, bool& changed) {
 
   changed |= DrawComboRow(
       "debug_view", "Debug View",
-      "Display a pipeline resource instead of the final image. "
-      "Shared across all passes; the currently open pass tab renders it.",
+      "Replace the final image with an internal buffer, for inspecting "
+      "the pipeline.\n"
+      "The view is rendered by whichever pass is currently selected in "
+      "the tabs below, and only takes effect while that pass is enabled.",
       &settings.debug_view, names.data(), tips.data(),
       static_cast<int>(names.size()));
 }
@@ -322,7 +333,9 @@ bool DrawSkinStructureRow(uint32_t pass_index,
   changed |= DrawCheckboxAtLabel("skin_structure_enabled", &pass.auto_mask);
   if (ImGui::IsItemHovered()) {
     ImGui::SetTooltip(
-        "Enables the model's character skin mask and adjusts its strength.");
+        "Lets the model detect character skin and apply its edits to it "
+        "separately, so faces and hands are handled more gently than "
+        "the rest of the scene.");
   }
 
   ImGui::SameLine();
@@ -350,8 +363,8 @@ bool DrawSkinStructureRow(uint32_t pass_index,
     }
     if (ImGui::IsItemHovered()) {
       ImGui::SetTooltip(
-          "Strength of the model's character skin structure. "
-          "Disabled while Character Mask is off.");
+          "How strongly the model's edits are applied to detected skin.\n"
+          "Only available when the checkbox to the left is enabled.");
     }
   });
 
@@ -407,15 +420,20 @@ void DrawModelSection(uint32_t pass_index,
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Preset");
     if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip("Selects one of the model's trained presets.");
+      ImGui::SetTooltip(
+          "Which of the model's three trained presets to use. "
+          "They differ in how strongly the model's edits are applied.");
     }
     ImGui::SameLine(kControlLabelWidth);
 
     static const char* kPresetNames[] = {"A", "B", "C"};
     static const char* kPresetTooltips[] = {
-        "Select model preset A.",
-        "Select model preset B.",
-        "Select model preset C.",
+        "Model preset A. Typically the most conservative; preserves the "
+        "original image most closely.",
+        "Model preset B. Balanced default; a middle ground between "
+        "preservation and the model's edit.",
+        "Model preset C. The most aggressive preset; applies the model's "
+        "edit most strongly.",
     };
     for (int i = 0; i < 3; ++i) {
       if (i > 0) ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
@@ -439,19 +457,23 @@ void DrawModelSection(uint32_t pass_index,
 
   changed |= DrawFloatRow(
       pass_index, "intensity", "Intensity",
-      "Overall strength of the model's edit.",
+      "How strongly the model is instructed to edit the image.\n"
+      "0 turns the model's edits off entirely (only the rest of the "
+      "pipeline still runs). 1 is the model's intended default.",
       &pass.intensity, &pass.inherit_intensity, resolved.intensity,
       0.0f, 2.0f, 1.0f);
 
   changed |= DrawFloatRow(
       pass_index, "local_tone", "Local Tone",
-      "Strength of the model's local tone adjustments.",
+      "How much of the model's local tone adjustments to apply.\n"
+      "Lower values keep more of the game's original grading.",
       &pass.local_tone, &pass.inherit_local_tone, resolved.local_tone,
       0.0f, 2.0f, 1.0f);
 
   changed |= DrawFloatRow(
       pass_index, "local_structure", "Local Structure",
-      "Strength of the model's local structure detail.",
+      "How much of the model's local structure detail to apply.\n"
+      "Lower values keep the game's original texture character.",
       &pass.local_structure, &pass.inherit_local_structure,
       resolved.local_structure, 0.0f, 2.0f, 1.0f);
 
@@ -544,7 +566,9 @@ void DrawAdvancedSection(PassSettings& pass, bool& changed) {
   ImGui::AlignTextToFramePadding();
   changed |= ImGui::Checkbox("UI Correction", &pass.ui_correction);
   if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip("Experimental. Enables the model's UI correction pass.");
+    ImGui::SetTooltip(
+        "Experimental. Asks the model to reduce its edits where it detects "
+        "UI elements, so menus and HUD text stay crisp.");
   }
 }
 
@@ -587,8 +611,10 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   changed |= ImGui::Checkbox("Require DLSS", &settings.only_super_sampling);
   if (ImGui::IsItemHovered()) {
     ImGui::SetTooltip(
-        "Only run when the game is using DLSS SuperSampling. "
-        "Turn off to run on any frame.");
+        "Only run when the game is actively using DLSS upscaling.\n"
+        "Turn this off to also run on frames where DLSS is not in use. "
+        "Doing so is rarely useful: the model expects a DLSS result as "
+        "its input.");
   }
 
   if (settings.enabled) {
@@ -598,8 +624,9 @@ void DrawOverlay(reshade::api::effect_runtime*) {
       changed |= ImGui::Checkbox(label, &settings.pass_enabled[i]);
       if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
-            "Toggle this pass. When off its tab is greyed out but still "
-            "clickable.");
+            "Turn this pass on or off.\n"
+            "A disabled pass keeps its settings but does not run. Its tab "
+            "stays visible so you can still review or edit what it would do.");
       }
     }
   }
@@ -615,8 +642,13 @@ void DrawOverlay(reshade::api::effect_runtime*) {
                                &settings.hdr_enable);
     if (ImGui::IsItemHovered()) {
       ImGui::SetTooltip(
-          "Normalize HDR input for the model. Only affects passes running "
-          "at DLSS Output. The backbuffer path is already display-referred.");
+          "Prepares HDR content for the model, which expects a "
+          "display-referred SDR image.\n"
+          "Exposure is set automatically from the scene's brightness, and "
+          "the model's edits are mapped back into the source's HDR range on "
+          "output.\n"
+          "Only affects passes running at DLSS Output. Passes at Backbuffer "
+          "operate on a finished image and are unaffected.");
     }
 
     const bool hdr_on = settings.hdr_enable;
@@ -638,9 +670,12 @@ void DrawOverlay(reshade::api::effect_runtime*) {
       ImGui::TextUnformatted("Status");
       if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
-            "Live state of the HDR measurement. Phase A only measures "
-            "the scene; the exposure and white point will drive the "
-            "tonemap in a later phase.");
+            "Summary of the current HDR measurement.\n"
+            "Format — how the DLSS output is being interpreted.\n"
+            "Exposure — brightness multiplier being applied before the "
+            "model sees the scene.\n"
+            "White — the highlight headroom the tonemapper is targeting. "
+            "Expand Diagnostics for the raw numbers.");
       }
       ImGui::SameLine(kControlLabelWidth);
 
@@ -664,8 +699,10 @@ void DrawOverlay(reshade::api::effect_runtime*) {
             "Force HDR10 (PQ ST.2084)."};
         int fmt = static_cast<int>(settings.hdr_format);
         changed |= DrawComboRow("hdr_format", "Format",
-                                "How the source image is encoded. "
-                                "Auto detects from the DXGI format.",
+                                "How the source image is encoded. Auto "
+                                "detects the format from the DLSS output; "
+                                "override it if the automatic choice looks "
+                                "wrong.",
                                 &fmt, kFormatNames, kFormatTips, 4);
         settings.hdr_format = static_cast<HdrFormat>(fmt);
       }
@@ -674,55 +711,67 @@ void DrawOverlay(reshade::api::effect_runtime*) {
       {
         static const char* kChromaNames[] = {"Additive", "Ratio"};
         static const char* kChromaTips[] = {
-            "Apply the model's edit as an RGB delta in the SDR intermediate, "
-            "then inverse-tonemap back to HDR. Predictable; the edit's "
-            "magnitude is bounded by the SDR delta. Default.",
-            "Apply the model's edit as a per-channel multiplicative ratio "
-            "in linear space. Preserves relative brightness changes exactly, "
-            "but can amplify noise where the source is near zero."};
+            "Treat the model's output as a colour offset on top of the "
+            "source. Safe everywhere; the amount of change is bounded by "
+            "how far apart the two images are in SDR.",
+            "Treat the model's output as a brightness ratio applied to the "
+            "source. More faithful to the model's relative changes, but "
+            "can look noisy in very dark areas where the ratio has a small "
+            "denominator."};
         int mode = static_cast<int>(settings.hdr_chroma_mode);
         changed |= DrawComboRow(
             "hdr_chroma_mode", "Chroma Edit",
-            "How the model's chroma edit is transferred back to HDR.",
+            "How the model's colour changes are carried back to HDR.",
             &mode, kChromaNames, kChromaTips, 2);
         settings.hdr_chroma_mode = static_cast<ChromaEditMode>(mode);
       }
 
       changed |= DrawFloatRow(
           0, "hdr_responsiveness", "Responsiveness",
-          "How quickly the exposure follows scene changes. "
-          "Lower = slower and cheaper (measures less often); "
-          "higher = faster and more expensive (measures every frame).",
+          "How quickly exposure reacts when scene brightness changes.\n"
+          "Lower values react more slowly but measure the scene less often "
+          "(less GPU work).\n"
+          "Higher values react almost immediately at the cost of measuring "
+          "every frame.",
           &settings.hdr_responsiveness, nullptr, 0.0f,
           0.0f, 1.0f, 0.50f);
 
       changed |= DrawFloatRow(
           0, "hdr_midtone", "Midtone Target",
-          "Where the scene's median luminance lands in SDR. "
-          "18% grey is the classic choice.",
+          "Where the scene's median brightness is mapped in SDR before the "
+          "model sees it.\n"
+          "Higher values brighten the image fed to the model; lower values "
+          "darken it. 18% grey is a common photographic reference and the "
+          "default.",
           &settings.hdr_midtone, nullptr, 0.0f,
           0.05f, 0.50f, 0.18f);
 
       changed |= DrawFloatRow(
           0, "hdr_white_percentile", "White Percentile",
-          "Histogram percentile used as the white point. Higher values "
-          "preserve more highlight headroom; lower values roll off sooner.",
+          "Which brightness percentile in the scene defines the 'white' "
+          "reference for the tonemapper.\n"
+          "Higher values (closer to 1.0) treat only the very brightest "
+          "pixels as white, preserving more highlight detail. Lower values "
+          "roll off highlights sooner.",
           &settings.hdr_white_percentile, nullptr, 0.0f,
           0.90f, 0.999f, 0.99f);
 
       changed |= DrawFloatRow(
           0, "hdr_highlight_headroom", "Highlight Headroom",
-          "Multiplier on the auto-detected white point. 1.0 uses the "
-          "histogram's own value and clips the top 1% of pixels, which "
-          "flattens highlights on the round trip. 8.0 (default) gives "
-          "generous headroom so highlights survive intact. Lower values "
-          "compress the highlights harder.",
+          "How much extra room above the detected white point the "
+          "tonemapper is allowed before highlights clip.\n"
+          "Higher values keep more highlight detail but compress overall "
+          "contrast slightly. Lower values roll off highlights harder and "
+          "can flatten bright areas.",
           &settings.hdr_highlight_headroom, nullptr, 0.0f,
           0.25f, 16.0f, 8.0f);
 
       changed |= DrawFloatRow(
           0, "hdr_edit_strength", "Edit Strength",
-          "Global multiplier on the model's edit before HDR remap.",
+          "Scales the model's edit before it is applied to the HDR image.\n"
+          "0 makes the HDR path a pass-through (only the SDR round trip "
+          "runs). 1 applies the model's edit at its natural magnitude. "
+          "Above 1 amplifies it.",
           &settings.hdr_edit_strength, nullptr, 0.0f,
           0.0f, 2.0f, 1.0f);
     });
@@ -754,10 +803,13 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           ImGui::TextUnformatted("Histogram (log2 luminance)");
           if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip(
-                "Log2 luminance distribution of the measured source. "
-                "Left = dark, right = bright. The scene's exposure is set "
-                "so the median lands at the Midtone Target; the white "
-                "point comes from the selected percentile.");
+                "Distribution of brightness in the measured scene, on a "
+                "log2 scale.\n"
+                "Left is dark, right is bright, height is how many pixels "
+                "fall in that range.\n"
+                "The shape tells you how the tonemapper will behave: a "
+                "narrow cluster means a low-contrast scene; a long right "
+                "tail means strong highlights.");
           }
 
           float bins_float[256];
