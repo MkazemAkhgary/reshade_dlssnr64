@@ -295,17 +295,16 @@ void PassSession::OnPresent(
   command_.ClearState();
   SeedFrameState(backbuffer.Get());
 
-  const unsigned int create_width = use_working_scale ? work_width : width;
-  const unsigned int create_height = use_working_scale ? work_height : height;
-
-  // Called every frame: EnsureFeature is cheap when nothing changed, and it
-  // is the only place that detects tuning/size changes and rebuilds.
+  // Build (or rebuild) the feature at the full frame resolution. Working
+  // scale only affects the per-frame evaluation size, which FillEvaluateParams
+  // sets on every frame, so changing working scale never triggers a rebuild.
+  // A rebuild happens only when the swapchain resolution itself changes.
   if (!feature_.EnsureFeature(
           runtime,
           pass,
           command_.GetCommandList(),
-          create_width,
-          create_height)) {
+          width,
+          height)) {
     failed_ = true;
     command_.GetCommandList()->Close();
     return;
@@ -564,11 +563,9 @@ void PassSession::OnPostDlssEvaluate(
     model_input = scratch;
   }
 
-  const unsigned int create_width = use_working_scale ? work_width : width;
-  const unsigned int create_height = use_working_scale ? work_height : height;
-
-  if (!feature_.EnsureFeature(runtime, pass, command_list, create_width,
-                              create_height)) {
+  // Build at full frame resolution; working scale is applied per-evaluation
+  // via FillEvaluateParams. Matches the Present path.
+  if (!feature_.EnsureFeature(runtime, pass, command_list, width, height)) {
     return;
   }
   if (feature_.ConsumeJustRebuilt()) {
