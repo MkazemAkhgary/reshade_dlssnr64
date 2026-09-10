@@ -147,7 +147,6 @@ void HdrState::Shutdown() {
   frame_counter_ = 0;
   frames_until_measure_ = 0;
   warmup_frames_ = 0;
-  frames_since_log_ = 0;
   frames_since_measure_ = 0;
   prev_enabled_ = false;
   have_logged_format_ = false;
@@ -343,16 +342,6 @@ void HdrState::PollReadback(ID3D12Fence* fence, const Settings& settings) {
   last_samples_ = total;
 
   frames_since_measure_ = 0;
-
-  // Log every readback during Phase A so the values are visible immediately.
-  char msg[192];
-  std::snprintf(msg, sizeof(msg),
-                "HDR: format=%d exposure=%.4f white_point=%.3f samples=%u",
-                static_cast<int>(resolved_format_), exposure_ema_,
-                white_point_ema_, total);
-  reshade::log::message(reshade::log::level::info, msg);
-
-  frames_since_log_++;
 }
 
 void HdrState::UpdateExposure(const uint32_t* bins, uint32_t total,
