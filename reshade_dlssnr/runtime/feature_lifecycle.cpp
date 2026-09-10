@@ -40,6 +40,8 @@ bool FeatureLifecycle::EnsureFeature(
     first_evaluate_ = true;
   }
 
+  just_rebuilt_ = true;
+
   NgxParameterBlock& parameter_block = const_cast<NgxRuntime&>(runtime).Parameters();
   NVSDK_NGX_Parameter* params = parameter_block.Get();
 
@@ -111,6 +113,7 @@ void FeatureLifecycle::Shutdown(NgxRuntime& runtime) {
   built_auto_mask_ = false;
   built_ui_correction_ = false;
   first_evaluate_ = true;
+  just_rebuilt_ = false;
 }
 
 }  // namespace reshade_dlssnr

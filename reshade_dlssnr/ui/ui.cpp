@@ -197,12 +197,13 @@ void DrawPassSettingsBody(
     ImGui::SameLine(kControlLabelWidth);
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.0f);
     if (!pass.auto_mask) ImGui::BeginDisabled();
-    changed |= ImGui::SliderFloat("##skin_structure", &pass.skin_structure,
+    changed |= ImGui::SliderFloat("##skin_structure_value",
+                                  &pass.skin_structure,
                                   0.0f, 1.0f, "%.2f");
     if (!pass.auto_mask) ImGui::EndDisabled();
     ImGui::SameLine();
     if (!pass.auto_mask) ImGui::BeginDisabled();
-    if (ImGui::Button("R##skin_structure", ImVec2(24.0f, 0.0f))) {
+    if (ImGui::Button("##skin_structure_reset", ImVec2(24.0f, 0.0f))) {
       pass.skin_structure = 1.0f;
       changed = true;
     }

@@ -99,19 +99,6 @@ class PassSession {
   // retired game resources.
   void SubmitAndWait();
 
-  // Renders the selected debug view into `frame_debug.output` if this pass
-  // is the active one (matching Settings::active_pass) and has a debug view
-  // selected. Safe to call when no debug is configured — it's a no-op.
-  bool MaybeRenderDebug(
-      const PassSettings& pass,
-      const Settings& settings,
-      ID3D12GraphicsCommandList* command_list,
-      FrameDebugContext& frame_debug,
-      const DebugSnapshot& snapshot,
-      unsigned int width,
-      unsigned int height,
-      DXGI_FORMAT format);
-
   CommandContext command_;
   PassResources resources_;
   FeatureLifecycle feature_;

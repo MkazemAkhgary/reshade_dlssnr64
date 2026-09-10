@@ -168,70 +168,6 @@ void PassSession::SubmitAndWait() {
   guides_->ReleaseRetiredGameResources();
 }
 
-bool PassSession::MaybeRenderDebug(
-    const PassSettings& pass,
-    const Settings& settings,
-    ID3D12GraphicsCommandList* command_list,
-    FrameDebugContext& frame_debug,
-    const DebugSnapshot& snapshot,
-    unsigned int width,
-    unsigned int height,
-    DXGI_FORMAT format) {
-  if (pass.debug_view == 0) return false;
-  if (static_cast<int>(pass_index_) != settings.active_pass) return false;
-  if (command_list == nullptr || codec_ == nullptr) return false;
-
-  // Lazily (re)create the shared debug output when its shape changes.
-  const bool needs_recreate =
-      frame_debug.output == nullptr ||
-      frame_debug.width != width ||
-      frame_debug.height != height ||
-      frame_debug.format != format;
-
-  if (needs_recreate) {
-    Microsoft::WRL::ComPtr<ID3D12Device> device;
-    if (FAILED(command_list->GetDevice(IID_PPV_ARGS(&device))) ||
-        device == nullptr) {
-      return false;
-    }
-
-    D3D12_HEAP_PROPERTIES heap = {};
-    heap.Type = D3D12_HEAP_TYPE_DEFAULT;
-
-    D3D12_RESOURCE_DESC desc = {};
-    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-    desc.Width = width;
-    desc.Height = height;
-    desc.DepthOrArraySize = 1;
-    desc.MipLevels = 1;
-    desc.Format = format;
-    desc.SampleDesc.Count = 1;
-    desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-
-    frame_debug.output.Reset();
-    if (FAILED(device->CreateCommittedResource(
-            &heap, D3D12_HEAP_FLAG_NONE, &desc,
-            D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr,
-            IID_PPV_ARGS(frame_debug.output.GetAddressOf())))) {
-      return false;
-    }
-
-    frame_debug.width = width;
-    frame_debug.height = height;
-    frame_debug.format = format;
-  }
-
-  if (!RenderDebugView(command_, *codec_, command_list, snapshot,
-                       pass.debug_view, frame_debug.output.Get(),
-                       width, height)) {
-    return false;
-  }
-
-  frame_debug.valid = true;
-  return true;
-}
-
 void PassSession::OnPresent(
     NgxRuntime& runtime,
     const PassSettings& pass,
@@ -284,26 +220,27 @@ void PassSession::OnPresent(
   command_.ClearState();
   SeedFrameState(backbuffer.Get());
 
-  if (!feature_.HasFeature()) {
-    const unsigned int create_width = use_working_scale ? work_width : width;
-    const unsigned int create_height = use_working_scale ? work_height : height;
+  const unsigned int create_width = use_working_scale ? work_width : width;
+  const unsigned int create_height = use_working_scale ? work_height : height;
 
-    if (!feature_.EnsureFeature(
-            runtime,
-            pass,
-            command_.GetCommandList(),
-            create_width,
-            create_height)) {
-      failed_ = true;
-      command_.GetCommandList()->Close();
-      return;
-    }
+  // Called every frame: EnsureFeature is cheap when nothing changed, and it
+  // is the only place that detects tuning/size changes and rebuilds.
+  if (!feature_.EnsureFeature(
+          runtime,
+          pass,
+          command_.GetCommandList(),
+          create_width,
+          create_height)) {
+    failed_ = true;
+    command_.GetCommandList()->Close();
+    return;
+  }
 
+  if (feature_.ConsumeJustRebuilt()) {
     SubmitAndWait();
-
     reshade::log::message(
         reshade::log::level::info,
-        "Direct DLSSNR feature created; skipping evaluation this frame");
+        "Direct DLSSNR feature created/rebuilt; skipping evaluation this frame");
     return;
   }
 
@@ -420,23 +357,28 @@ void PassSession::OnPresent(
     debug.depth_height = guides.guide_height;
   }
 
-  MaybeRenderDebug(pass, settings, command_.GetCommandList(), frame_debug,
-                   debug, width, height, desc.Format);
-
-  // The last pass in the chain applies the debug output if one was
-  // rendered this frame; otherwise it writes its own composed output.
-  ID3D12Resource* final_output = resources_.GetCompositeOutput();
-  if (is_last_in_chain && frame_debug.valid) {
-    final_output = frame_debug.output.Get();
+  // Capture debug snapshot if this pass is the active one and has a debug
+  // view selected. The actual rendering is deferred to the Present event
+  // so the debug image never interferes with the game's own rendering.
+  if (pass.debug_view != 0 &&
+      static_cast<int>(pass_index_) == settings.active_pass) {
+    frame_debug.snapshot = debug;
+    frame_debug.debug_view = pass.debug_view;
+    frame_debug.valid = true;
   }
 
+  // Always write the real composed output; the debug override happens at
+  // Present and does not affect the game's resources.
   command_.CopyResourceToBackbuffer(
-      command_.GetCommandList(), final_output, backbuffer.Get());
+      command_.GetCommandList(), resources_.GetCompositeOutput(),
+      backbuffer.Get());
   command_.Transition(command_.GetCommandList(), model_output,
                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
   CleanupFrameState(command_.GetCommandList());
   SubmitAndWait();
+
+  (void)is_last_in_chain;
 
   if (result != NVSDK_NGX_Result_Success) {
     failed_ = true;
@@ -525,10 +467,15 @@ void PassSession::OnPostDlssEvaluate(
     model_input = scratch;
   }
 
-  if (!feature_.HasFeature()) {
-    const unsigned int create_width = use_working_scale ? work_width : width;
-    const unsigned int create_height = use_working_scale ? work_height : height;
-    feature_.EnsureFeature(runtime, pass, command_list, create_width, create_height);
+  const unsigned int create_width = use_working_scale ? work_width : width;
+  const unsigned int create_height = use_working_scale ? work_height : height;
+
+  if (!feature_.EnsureFeature(runtime, pass, command_list, create_width,
+                              create_height)) {
+    return;
+  }
+  if (feature_.ConsumeJustRebuilt()) {
+    // Skip evaluation this frame; the feature was just created/rebuilt.
     return;
   }
 
@@ -615,26 +562,31 @@ void PassSession::OnPostDlssEvaluate(
     debug.depth_height = guides.guide_height;
   }
 
-  MaybeRenderDebug(pass, settings, command_list, frame_debug,
-                   debug, width, height, desc.Format);
-
-  ID3D12Resource* final_output = resources_.GetCompositeOutput();
-  if (is_last_in_chain && frame_debug.valid) {
-    final_output = frame_debug.output.Get();
+  // Capture debug snapshot if this pass is the active one and has a debug
+  // view selected. The actual rendering is deferred to the Present event.
+  if (pass.debug_view != 0 &&
+      static_cast<int>(pass_index_) == settings.active_pass) {
+    frame_debug.snapshot = debug;
+    frame_debug.debug_view = pass.debug_view;
+    frame_debug.valid = true;
   }
 
-  command_.Transition(command_list, final_output,
+  // Always write the real composed output to the game's resource. The debug
+  // image is kept in the frame debug context and applied at Present only.
+  command_.Transition(command_list, resources_.GetCompositeOutput(),
                       D3D12_RESOURCE_STATE_COPY_SOURCE);
   const D3D12_RESOURCE_STATES out_state = InferResourceState(output_resource);
   command_.Transition(command_list, output_resource,
                       D3D12_RESOURCE_STATE_COPY_DEST);
-  command_list->CopyResource(output_resource, final_output);
+  command_list->CopyResource(output_resource, resources_.GetCompositeOutput());
   command_.Transition(command_list, output_resource, out_state);
-  command_.Transition(command_list, final_output,
+  command_.Transition(command_list, resources_.GetCompositeOutput(),
                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
   // Leave pass-owned resources in the state SeedFrameState() expects.
   CleanupFrameState(command_list);
+
+  (void)is_last_in_chain;
 }
 
 void PassSession::Shutdown(NgxRuntime& runtime) {

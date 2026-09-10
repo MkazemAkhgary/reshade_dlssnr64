@@ -21,26 +21,29 @@ void AddonController::OnPresent(
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
   const Settings& settings = GetSettings();
-  if (!settings.enabled) return;
-  if (command_queue == nullptr || swapchain == nullptr) return;
+  if (!settings.enabled) { frame_debug_.Reset(); return; }
+  if (command_queue == nullptr || swapchain == nullptr) {
+    frame_debug_.Reset();
+    return;
+  }
 
-  frame_debug_.Reset();
-
-  // Find the last enabled pass whose target is the backbuffer; that pass
-  // is the one that applies the debug output if one was rendered.
-  int last_present_pass = -1;
-  for (int i = static_cast<int>(kMaxPasses) - 1; i >= 0; --i) {
-    if (settings.pass_enabled[i] &&
-        settings.passes[i].injection_stage == InjectionStage::Present) {
-      last_present_pass = i;
-      break;
+  // Cache the backbuffer format for the Post-DLSS debug capture path.
+  {
+    Microsoft::WRL::ComPtr<IDXGISwapChain3> sc3;
+    if (SUCCEEDED(swapchain->QueryInterface(IID_PPV_ARGS(&sc3))) &&
+        sc3 != nullptr) {
+      Microsoft::WRL::ComPtr<ID3D12Resource> bb;
+      const UINT idx = sc3->GetCurrentBackBufferIndex();
+      if (SUCCEEDED(sc3->GetBuffer(idx, IID_PPV_ARGS(&bb))) &&
+          bb != nullptr) {
+        backbuffer_format_ = bb->GetDesc().Format;
+      }
     }
   }
 
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
     if (!settings.pass_enabled[i]) continue;
     if (settings.passes[i].injection_stage != InjectionStage::Present) continue;
-    const bool is_last = (static_cast<int>(i) == last_present_pass);
     passes_[i].OnPresent(
         runtime_,
         settings.passes[i],
@@ -48,8 +51,18 @@ void AddonController::OnPresent(
         command_queue,
         swapchain,
         frame_debug_,
-        is_last);
+        /*is_last_in_chain=*/false);
   }
+
+  // If a debug snapshot was captured (by a Present pass or earlier by a
+  // Post-DLSS pass this frame), render it into the backbuffer now. This
+  // runs at the ReShade present event, so it is the last thing that touches
+  // the backbuffer before the actual swapchain present.
+  if (frame_debug_.valid) {
+    PresentPendingDebug(command_queue, swapchain, frame_debug_);
+  }
+
+  frame_debug_.Reset();
 }
 
 void AddonController::OnPostDlssEvaluate(
@@ -61,28 +74,14 @@ void AddonController::OnPostDlssEvaluate(
   if (!settings.enabled) return;
   if (command_list == nullptr || output_resource == nullptr) return;
 
-  frame_debug_.Reset();
+  // Note: we do NOT reset frame_debug_ here — a Present pass earlier in the
+  // frame may have already captured a snapshot. We only set it if we have
+  // something to capture.
 
-  // Find the last enabled Post-DLSS pass; that pass applies the debug
-  // output if one was rendered.
-  int last_post_dlss_pass = -1;
-  for (int i = static_cast<int>(kMaxPasses) - 1; i >= 0; --i) {
-    if (settings.pass_enabled[i] &&
-        settings.passes[i].injection_stage == InjectionStage::PostDLSS) {
-      last_post_dlss_pass = i;
-      break;
-    }
-  }
-
-  // Run every enabled pass whose hook is Post-DLSS, in order. The first
-  // such pass reads the captured DLSS output; each subsequent pass reads
-  // a snapshot of the previous pass's result. The last write goes back
-  // into `output_resource`.
   bool is_first = true;
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
     if (!settings.pass_enabled[i]) continue;
     if (settings.passes[i].injection_stage != InjectionStage::PostDLSS) continue;
-    const bool is_last = (static_cast<int>(i) == last_post_dlss_pass);
     passes_[i].OnPostDlssEvaluate(
         runtime_,
         settings.passes[i],
@@ -91,9 +90,95 @@ void AddonController::OnPostDlssEvaluate(
         output_resource,
         is_first,
         frame_debug_,
-        is_last);
+        /*is_last_in_chain=*/false);
     is_first = false;
   }
+}
+
+void AddonController::PresentPendingDebug(
+    ID3D12CommandQueue* command_queue,
+    IDXGISwapChain* swapchain,
+    const FrameDebugContext& debug) {
+  if (debug.debug_view <= 0) return;
+
+  Microsoft::WRL::ComPtr<IDXGISwapChain3> swapchain3;
+  if (FAILED(swapchain->QueryInterface(IID_PPV_ARGS(&swapchain3))) ||
+      swapchain3 == nullptr) {
+    return;
+  }
+
+  Microsoft::WRL::ComPtr<ID3D12Device> device;
+  if (FAILED(command_queue->GetDevice(IID_PPV_ARGS(&device))) ||
+      device == nullptr) {
+    return;
+  }
+
+  Microsoft::WRL::ComPtr<ID3D12Resource> backbuffer;
+  const UINT idx = swapchain3->GetCurrentBackBufferIndex();
+  if (FAILED(swapchain3->GetBuffer(idx, IID_PPV_ARGS(&backbuffer))) ||
+      backbuffer == nullptr) {
+    return;
+  }
+
+  if (!debug_command_.Ensure(device.Get())) return;
+  if (!debug_codec_.IsInit() && !debug_codec_.Init(device.Get())) return;
+
+  const D3D12_RESOURCE_DESC bb_desc = backbuffer->GetDesc();
+  const unsigned int width = static_cast<unsigned int>(bb_desc.Width);
+  const unsigned int height = static_cast<unsigned int>(bb_desc.Height);
+
+  // (Re)create the debug output buffer at backbuffer format/size.
+  const bool needs_recreate =
+      debug_output_ == nullptr ||
+      debug_output_->GetDesc().Width != bb_desc.Width ||
+      debug_output_->GetDesc().Height != bb_desc.Height ||
+      debug_output_->GetDesc().Format != bb_desc.Format;
+
+  if (needs_recreate) {
+    D3D12_HEAP_PROPERTIES heap = {};
+    heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+    D3D12_RESOURCE_DESC desc = {};
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    desc.Width = bb_desc.Width;
+    desc.Height = bb_desc.Height;
+    desc.DepthOrArraySize = 1;
+    desc.MipLevels = 1;
+    desc.Format = bb_desc.Format;
+    desc.SampleDesc.Count = 1;
+    desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+    debug_output_.Reset();
+    if (FAILED(device->CreateCommittedResource(
+            &heap, D3D12_HEAP_FLAG_NONE, &desc,
+            D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr,
+            IID_PPV_ARGS(debug_output_.GetAddressOf())))) {
+      return;
+    }
+  }
+
+  debug_command_.Reset();
+  debug_command_.ClearState();
+  debug_command_.SetResourceState(backbuffer.Get(),
+                                  D3D12_RESOURCE_STATE_PRESENT);
+  debug_command_.SetResourceState(debug_output_.Get(),
+                                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+  ID3D12GraphicsCommandList* list = debug_command_.GetCommandList();
+
+  if (!RenderDebugView(debug_command_, debug_codec_, list, debug.snapshot,
+                       debug.debug_view, debug_output_.Get(), width, height)) {
+    return;
+  }
+
+  debug_command_.CopyResourceToBackbuffer(list, debug_output_.Get(),
+                                          backbuffer.Get());
+
+  debug_command_.GetCommandList()->Close();
+  ID3D12CommandList* lists[] = {debug_command_.GetCommandList()};
+  command_queue->ExecuteCommandLists(1, lists);
+  debug_command_.WaitGpu(command_queue);
 }
 
 void AddonController::Shutdown() {
@@ -102,6 +187,9 @@ void AddonController::Shutdown() {
   for (auto& pass : passes_) {
     pass.Shutdown(runtime_);
   }
+  debug_command_.Shutdown();
+  debug_codec_.Destroy();
+  debug_output_.Reset();
   runtime_.Shutdown();
 }
 

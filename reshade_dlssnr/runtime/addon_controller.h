@@ -5,10 +5,13 @@
 #include <dxgi1_4.h>
 #include <nvsdk_ngx.h>
 #include <windows.h>
+#include <wrl/client.h>
 
 #include <memory>
 #include <vector>
 
+#include "command_context.h"
+#include "compute_engine.h"
 #include "dlss_guides.h"
 #include "frame_debug_context.h"
 #include "pass_session.h"
@@ -45,9 +48,26 @@ class AddonController {
   AddonController(const AddonController&) = delete;
   AddonController& operator=(const AddonController&) = delete;
 
+  // Renders the pending debug snapshot into the backbuffer. Uses its own
+  // command context and compute engine so the pass sessions' resources are
+  // untouched.
+  void PresentPendingDebug(
+      ID3D12CommandQueue* command_queue,
+      IDXGISwapChain* swapchain,
+      const FrameDebugContext& debug);
+
   NgxRuntime runtime_;
   std::vector<PassSession> passes_;
   FrameDebugContext frame_debug_;
+
+  // Debug-present infrastructure (lazily initialized).
+  CommandContext debug_command_;
+  ComputeEngine debug_codec_;
+  Microsoft::WRL::ComPtr<ID3D12Resource> debug_output_;
+
+  // Cached from the last Present call. Used by Post-DLSS debug capture so
+  // the debug output buffer is created at the backbuffer's format.
+  DXGI_FORMAT backbuffer_format_ = DXGI_FORMAT_UNKNOWN;
 };
 
 }  // namespace reshade_dlssnr

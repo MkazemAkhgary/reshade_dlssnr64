@@ -27,6 +27,15 @@ class FeatureLifecycle {
   void MarkEvaluated() { first_evaluate_ = false; }
   void SetShouldReset(bool value) { first_evaluate_ = value; }
 
+  // True once after EnsureFeature actually (re)created the handle. Callers
+  // use this to skip the evaluation frame so the model has one frame to
+  // fully initialize. Consuming the flag clears it.
+  bool ConsumeJustRebuilt() {
+    const bool v = just_rebuilt_;
+    just_rebuilt_ = false;
+    return v;
+  }
+
   void Shutdown(NgxRuntime& runtime);
 
   const char* GetLastError() const { return reason_; }
@@ -34,6 +43,7 @@ class FeatureLifecycle {
  private:
   NVSDK_NGX_Handle* feature_handle_ = nullptr;
   bool first_evaluate_ = true;
+  bool just_rebuilt_ = false;
   const char* reason_ = "";
 
   unsigned int built_width_ = 0;
