@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "compute/shader_params.h"
+#include "debug_view.h"
 #include "dlss_guides.h"
 #include "settings.h"
 #include "version.h"
@@ -125,6 +126,23 @@ void DrawPassSettings(
               "Model evaluation resolution as a fraction of the frame. "
               "1.0 runs the model at full resolution.",
               &pass.working_scale, 0.25f, 1.0f, 1.0f);
+
+  // Debug view selector. Auto-populated from the debug view registry, so
+  // adding or removing a view is a single-table-edit change.
+  {
+    const char* names[kDebugViewCount + 1];
+    names[0] = "Off";
+    for (uint32_t i = 0; i < kDebugViewCount; ++i) {
+      names[i + 1] = kDebugViews[i].name;
+    }
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Debug View");
+    ImGui::SameLine(kControlLabelWidth);
+    ImGui::SetNextItemWidth(-1.0f);
+    changed |= ImGui::Combo("##debug_view", &pass.debug_view,
+                            names, kDebugViewCount + 1);
+  }
 
   ImGui::Separator();
 

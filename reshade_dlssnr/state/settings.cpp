@@ -44,6 +44,10 @@ void LoadPassSettings(const char* prefix, PassSettings& pass) {
   if (injection_stage < 0 || injection_stage > 1) injection_stage = 1;
   pass.injection_stage = static_cast<InjectionStage>(injection_stage);
 
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (pref + "DebugView").c_str(), pass.debug_view);
+  if (pass.debug_view < 0) pass.debug_view = 0;
+
   for (uint32_t i = 0; i < kShaderParamCount; ++i) {
     float v = kShaderParams[i].default_value;
     reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
@@ -74,6 +78,9 @@ void SavePassSettings(const char* prefix, const PassSettings& pass) {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             (pref + "InjectionStage").c_str(),
                             static_cast<int>(pass.injection_stage));
+
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (pref + "DebugView").c_str(), pass.debug_view);
 
   for (uint32_t i = 0; i < kShaderParamCount; ++i) {
     reshade::set_config_value(nullptr, "RESHADE_DLSSNR",

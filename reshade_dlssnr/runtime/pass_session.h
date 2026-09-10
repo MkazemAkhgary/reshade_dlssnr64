@@ -10,6 +10,7 @@
 
 #include "command_context.h"
 #include "compute_engine.h"
+#include "debug_view.h"
 #include "dlss_guides.h"
 #include "feature_lifecycle.h"
 #include "pass_resources.h"

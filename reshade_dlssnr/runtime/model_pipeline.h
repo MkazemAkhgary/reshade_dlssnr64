@@ -52,17 +52,4 @@ bool ComposeOutput(
     unsigned int full_height,
     const float* params);
 
-// Convenience wrapper for the Present path: composes and copies the result
-// into the swapchain backbuffer.
-bool Apply(
-    CommandContext& state,
-    PassResources& resources,
-    ComputeEngine* codec,
-    ID3D12Resource* backbuffer,
-    ID3D12Resource* low_input,
-    ID3D12Resource* low_enhanced,
-    unsigned int full_width,
-    unsigned int full_height,
-    const float* params);
-
 }  // namespace reshade_dlssnr::model_pipeline

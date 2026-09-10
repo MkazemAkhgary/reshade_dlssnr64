@@ -124,33 +124,4 @@ bool ComposeOutput(
       "ComposeModelOutput", command_list, constants, srvs, uavs);
 }
 
-bool Apply(
-    CommandContext& state,
-    PassResources& resources,
-    ComputeEngine* codec,
-    ID3D12Resource* backbuffer,
-    ID3D12Resource* low_input,
-    ID3D12Resource* low_enhanced,
-    unsigned int full_width,
-    unsigned int full_height,
-    const float* params) {
-  ID3D12GraphicsCommandList* list = state.GetCommandList();
-  if (list == nullptr) return false;
-
-  if (!ComposeOutput(state, list, resources, codec, backbuffer,
-                     low_input, low_enhanced, full_width, full_height,
-                     params)) {
-    return false;
-  }
-  state.Transition(list, resources.GetWhitePointBuffer(),
-                   D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-  state.CopyResourceToBackbuffer(
-      list, resources.GetCompositeOutput(), backbuffer);
-  state.Transition(list, low_enhanced,
-                   D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-
-  return true;
-}
-
 }  // namespace reshade_dlssnr::model_pipeline

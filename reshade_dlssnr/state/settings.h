@@ -32,6 +32,10 @@ struct PassSettings {
   // this pass must also run at Present. Enforced at load time and in the UI.
   InjectionStage injection_stage = InjectionStage::Present;
 
+  // Debug view selection for this pass. 0 = off; N (1-based) selects
+  // kDebugViews[N-1] in runtime/debug_view.h.
+  int debug_view = 0;
+
   // Dynamic shader parameter values, indexed by kShaderParams order.
   float params[16] = {};
 };

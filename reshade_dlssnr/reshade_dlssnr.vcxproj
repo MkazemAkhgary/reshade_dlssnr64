@@ -69,6 +69,7 @@
     <ClCompile Include="hooks\dlss_guides.cpp" />
     <ClCompile Include="runtime\addon_controller.cpp" />
     <ClCompile Include="runtime\command_context.cpp" />
+    <ClCompile Include="runtime\debug_view.cpp" />
     <ClCompile Include="runtime\feature_lifecycle.cpp" />
     <ClCompile Include="runtime\model_pipeline.cpp" />
     <ClCompile Include="runtime\ngx_model_params.cpp" />
@@ -90,6 +91,7 @@
     <ClInclude Include="hooks\nvngx_hook_compat.h" />
     <ClInclude Include="runtime\addon_controller.h" />
     <ClInclude Include="runtime\command_context.h" />
+    <ClInclude Include="runtime\debug_view.h" />
     <ClInclude Include="runtime\d3d12_utils.h" />
     <ClInclude Include="runtime\feature_lifecycle.h" />
     <ClInclude Include="runtime\model_pipeline.h" />

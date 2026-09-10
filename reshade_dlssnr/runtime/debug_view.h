@@ -1,0 +1,93 @@
+// Debug views: display pipeline resources by role.
+//
+// This module is a pure observer — it reads what the pipeline already
+// produced, and never recomputes anything. The pipeline populates a
+// DebugSnapshot (raw pointers to its live resources) as it runs. If the
+// pipeline changes (e.g. a new stage is added), the snapshot reflects it
+// automatically because it holds role-to-resource mappings, not copies.
+//
+// Adding or removing a view = editing one table entry in debug_view.cpp.
+#pragma once
+
+#include <d3d12.h>
+
+#include <cstdint>
+
+#include "command_context.h"
+#include "compute_engine.h"
+#include "pass_resources.h"
+
+namespace reshade_dlssnr {
+
+// Pointers captured during a pass. Only raw pointers are held; the caller
+// guarantees the resources stay alive until the pass finishes.
+struct DebugSnapshot {
+  // Model input before any post-processing (source frame or DLSS output).
+  ID3D12Resource* source = nullptr;
+  unsigned int source_width = 0;
+  unsigned int source_height = 0;
+
+  // Model input after HDR normalization and optional resize — what the
+  // model actually sees.
+  ID3D12Resource* prepared_input = nullptr;
+  unsigned int prepared_input_width = 0;
+  unsigned int prepared_input_height = 0;
+
+  // Model output as returned by NGX, before composition.
+  ID3D12Resource* model_output = nullptr;
+  unsigned int model_output_width = 0;
+  unsigned int model_output_height = 0;
+
+  // Model output after composition (residual, strength, HDR remap).
+  ID3D12Resource* composed_output = nullptr;
+  unsigned int composed_output_width = 0;
+  unsigned int composed_output_height = 0;
+
+  // DLSS guides captured from the game.
+  ID3D12Resource* motion = nullptr;
+  unsigned int motion_width = 0;
+  unsigned int motion_height = 0;
+
+  ID3D12Resource* depth = nullptr;
+  unsigned int depth_width = 0;
+  unsigned int depth_height = 0;
+};
+
+// How the display shader should interpret the selected resource.
+enum class DebugDisplayMode : uint32_t {
+  Color = 0,   // pass through as RGB
+  Motion = 1,  // remap [-1,1] xy to [0,1] and show as R=x, G=y
+  Depth = 2,   // replicate the red channel
+};
+
+struct DebugViewDef {
+  const char* name;
+  DebugDisplayMode display_mode;
+  // Returns the selected resource and its content size. Return nullptr if
+  // the resource is unavailable this frame. The resource may be larger than
+  // the content (e.g. NGX writes into the top-left corner of its output);
+  // the display shader accounts for that.
+  ID3D12Resource* (*select)(const DebugSnapshot& snapshot,
+                            unsigned int* out_content_width,
+                            unsigned int* out_content_height);
+};
+
+extern const DebugViewDef kDebugViews[];
+extern const uint32_t kDebugViewCount;
+
+// Renders the selected debug view into a scratch resource sized to
+// `target_width × target_height` (which should match the final output).
+// `debug_view` follows the settings convention: 0 = off, N = kDebugViews[N-1].
+// Returns the scratch resource on success, or nullptr on failure so the
+// caller can fall back to the normal composed output.
+ID3D12Resource* DisplayDebugView(
+    CommandContext& state,
+    ComputeEngine& codec,
+    ID3D12GraphicsCommandList* command_list,
+    PassResources& resources,
+    const DebugSnapshot& snapshot,
+    int debug_view,
+    unsigned int target_width,
+    unsigned int target_height);
+
+}  // namespace reshade_dlssnr

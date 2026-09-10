@@ -316,8 +316,9 @@ void PassSession::OnPresent(
           runtime.Parameters().Get(),
           nullptr);
 
-  if (!model_pipeline::Apply(
+  if (!model_pipeline::ComposeOutput(
           command_,
+          command_.GetCommandList(),
           resources_,
           codec_.get(),
           backbuffer.Get(),
@@ -327,9 +328,45 @@ void PassSession::OnPresent(
           height,
           pass.params)) {
     failed_ = true;
-    reason_ = "failed to apply post-model processing";
+    reason_ = "failed to compose model output";
     return;
   }
+
+  ID3D12Resource* final_output = resources_.GetCompositeOutput();
+
+  if (pass.debug_view != 0) {
+    DebugSnapshot debug;
+    debug.source = model_input;
+    debug.source_width = width;
+    debug.source_height = height;
+    debug.prepared_input = model_color;
+    debug.prepared_input_width = eval_width;
+    debug.prepared_input_height = eval_height;
+    debug.model_output = model_output;
+    debug.model_output_width = eval_width;
+    debug.model_output_height = eval_height;
+    debug.composed_output = resources_.GetCompositeOutput();
+    debug.composed_output_width = width;
+    debug.composed_output_height = height;
+    if (guides.valid) {
+      debug.motion = guides.motion;
+      debug.motion_width = guides.guide_width;
+      debug.motion_height = guides.guide_height;
+      debug.depth = guides.depth;
+      debug.depth_width = guides.guide_width;
+      debug.depth_height = guides.guide_height;
+    }
+
+    ID3D12Resource* debug_out = DisplayDebugView(
+        command_, *codec_, command_.GetCommandList(), resources_, debug,
+        pass.debug_view, width, height);
+    if (debug_out != nullptr) final_output = debug_out;
+  }
+
+  command_.CopyResourceToBackbuffer(
+      command_.GetCommandList(), final_output, backbuffer.Get());
+  command_.Transition(command_.GetCommandList(), model_output,
+                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
   CleanupFrameState(command_.GetCommandList());
   SubmitAndWait();
@@ -487,14 +524,45 @@ void PassSession::OnPostDlssEvaluate(
     return;
   }
 
-  command_.Transition(command_list, resources_.GetCompositeOutput(),
+  ID3D12Resource* final_output = resources_.GetCompositeOutput();
+
+  if (pass.debug_view != 0) {
+    DebugSnapshot debug;
+    debug.source = model_input;
+    debug.source_width = width;
+    debug.source_height = height;
+    debug.prepared_input = model_color;
+    debug.prepared_input_width = eval_width;
+    debug.prepared_input_height = eval_height;
+    debug.model_output = model_output;
+    debug.model_output_width = eval_width;
+    debug.model_output_height = eval_height;
+    debug.composed_output = resources_.GetCompositeOutput();
+    debug.composed_output_width = width;
+    debug.composed_output_height = height;
+    if (guides.valid) {
+      debug.motion = guides.motion;
+      debug.motion_width = guides.guide_width;
+      debug.motion_height = guides.guide_height;
+      debug.depth = guides.depth;
+      debug.depth_width = guides.guide_width;
+      debug.depth_height = guides.guide_height;
+    }
+
+    ID3D12Resource* debug_out = DisplayDebugView(
+        command_, *codec_, command_list, resources_, debug,
+        pass.debug_view, width, height);
+    if (debug_out != nullptr) final_output = debug_out;
+  }
+
+  command_.Transition(command_list, final_output,
                       D3D12_RESOURCE_STATE_COPY_SOURCE);
   const D3D12_RESOURCE_STATES out_state = InferResourceState(output_resource);
   command_.Transition(command_list, output_resource,
                       D3D12_RESOURCE_STATE_COPY_DEST);
-  command_list->CopyResource(output_resource, resources_.GetCompositeOutput());
+  command_list->CopyResource(output_resource, final_output);
   command_.Transition(command_list, output_resource, out_state);
-  command_.Transition(command_list, resources_.GetCompositeOutput(),
+  command_.Transition(command_list, final_output,
                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
   // Leave pass-owned resources in the state SeedFrameState() expects.
