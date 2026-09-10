@@ -1,13 +1,14 @@
-// DLSSNR compute codec: root signature, descriptor heap, shader dispatch API.
+// DLSSNR compute codec: root signature, descriptor heap, generic dispatch.
 #pragma once
 
 #include <d3d12.h>
 #include <d3dx12.h>
 #include <d3dcompiler.h>
 #include <wrl/client.h>
+
 #include <cstdint>
 #include <string>
-
+#include <unordered_map>
 
 namespace reshade_dlssnr {
 
@@ -33,23 +34,15 @@ class DlssNrCodec {
  public:
   bool Init(ID3D12Device* device);
 
-  bool InitDownsampleShader(ID3D12Device* device);
-
-  bool DispatchDownsample(
+  // Dispatches a registered compute pass by name. The pass is lazily
+  // compiled the first time it is used. SRV/UAV layouts are fixed at
+  // kDlssNrSrvCount / kDlssNrUavCount.
+  bool Dispatch(
+      const char* pass_name,
       ID3D12GraphicsCommandList* command_list,
       const DlssNrConstants& constants,
-      ID3D12Resource* source,
-      ID3D12Resource* out_target);
-
-  bool InitUpsampleResidualShader(ID3D12Device* device);
-
-  bool DispatchUpsampleResidual(
-      ID3D12GraphicsCommandList* command_list,
-      const DlssNrConstants& constants,
-      ID3D12Resource* original,
-      ID3D12Resource* low_input,
-      ID3D12Resource* low_enhanced,
-      ID3D12Resource* out_target);
+      ID3D12Resource* const* srvs,
+      ID3D12Resource* const* uavs);
 
   void Destroy();
 
@@ -58,20 +51,19 @@ class DlssNrCodec {
  private:
   ID3D12Device* device_ = nullptr;
   Microsoft::WRL::ComPtr<ID3D12RootSignature> root_signature_;
-  Microsoft::WRL::ComPtr<ID3D12PipelineState> downsample_pipeline_state_;
-  Microsoft::WRL::ComPtr<ID3D12PipelineState> upsample_residual_pipeline_state_;
-
   Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptor_heap_;
   uint32_t descriptor_size_ = 0;
   uint32_t heap_index_ = 0;
 
   Microsoft::WRL::ComPtr<ID3D12Resource> constant_buffers_[kDlssNrHeapCount];
 
+  struct CachedPass {
+    Microsoft::WRL::ComPtr<ID3D12PipelineState> pso;
+  };
+  std::unordered_map<std::string, CachedPass> passes_;
+
   bool CreateRootSignature(ID3D12Device* device);
-  bool CreateComputePipelineState(
-      ID3D12Device* device,
-      const char* shader_source,
-      ID3D12PipelineState** out_pipeline_state);
+  bool CompilePipeline(const char* hlsl, ID3D12PipelineState** out_pso);
   void CreateShaderResourceView(ID3D12Resource* resource, D3D12_CPU_DESCRIPTOR_HANDLE handle);
   void CreateUnorderedAccessView(ID3D12Resource* resource, D3D12_CPU_DESCRIPTOR_HANDLE handle);
   void CreateConstantBufferView(ID3D12Resource* resource, const void* data, size_t size, D3D12_CPU_DESCRIPTOR_HANDLE handle);

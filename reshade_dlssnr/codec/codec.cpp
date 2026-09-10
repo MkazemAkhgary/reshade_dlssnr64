@@ -2,6 +2,8 @@
 
 #include <reshade.hpp>
 
+#include "compute_passes.h"
+
 namespace reshade_dlssnr {
 
 DXGI_FORMAT DlssNrCodec::TypedFormat(DXGI_FORMAT format) const {
@@ -198,12 +200,10 @@ bool DlssNrCodec::CreateRootSignature(ID3D12Device* device) {
   return true;
 }
 
-bool DlssNrCodec::CreateComputePipelineState(
-    ID3D12Device* device,
-    const char* shader_source,
-    ID3D12PipelineState** out_pipeline_state) {
-  if (device == nullptr || shader_source == nullptr ||
-      out_pipeline_state == nullptr) {
+bool DlssNrCodec::CompilePipeline(
+    const char* hlsl,
+    ID3D12PipelineState** out_pso) {
+  if (device_ == nullptr || hlsl == nullptr || out_pso == nullptr) {
     return false;
   }
 
@@ -211,8 +211,8 @@ bool DlssNrCodec::CreateComputePipelineState(
   ID3DBlob* error_blob = nullptr;
 
   if (FAILED(D3DCompile(
-          shader_source,
-          strlen(shader_source),
+          hlsl,
+          strlen(hlsl),
           nullptr,
           nullptr,
           nullptr,
@@ -234,11 +234,37 @@ bool DlssNrCodec::CreateComputePipelineState(
   pso_desc.CS.BytecodeLength = shader_blob->GetBufferSize();
   pso_desc.NodeMask = 0;
 
-  const HRESULT hr = device->CreateComputePipelineState(
-      &pso_desc, IID_PPV_ARGS(out_pipeline_state));
+  const HRESULT hr = device_->CreateComputePipelineState(
+      &pso_desc, IID_PPV_ARGS(out_pso));
 
   shader_blob->Release();
   return SUCCEEDED(hr);
+}
+
+bool DlssNrCodec::Dispatch(
+    const char* pass_name,
+    ID3D12GraphicsCommandList* command_list,
+    const DlssNrConstants& constants,
+    ID3D12Resource* const* srvs,
+    ID3D12Resource* const* uavs) {
+  if (device_ == nullptr || pass_name == nullptr ||
+      command_list == nullptr || srvs == nullptr || uavs == nullptr) {
+    return false;
+  }
+
+  auto it = passes_.find(pass_name);
+  if (it == passes_.end()) {
+    const char* source = FindComputePassSource(pass_name);
+    if (source == nullptr) return false;
+
+    CachedPass pass;
+    if (!CompilePipeline(source, pass.pso.GetAddressOf())) return false;
+
+    it = passes_.emplace(pass_name, std::move(pass)).first;
+  }
+
+  return BindAndDispatch(
+      command_list, it->second.pso.Get(), constants, srvs, uavs);
 }
 
 bool DlssNrCodec::Init(ID3D12Device* device) {
@@ -302,9 +328,8 @@ void DlssNrCodec::Destroy() {
     buffer.Reset();
   }
 
+  passes_.clear();
   root_signature_.Reset();
-  downsample_pipeline_state_.Reset();
-  upsample_residual_pipeline_state_.Reset();
   descriptor_heap_.Reset();
 
   device_ = nullptr;

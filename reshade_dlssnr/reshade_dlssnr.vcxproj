@@ -63,7 +63,7 @@
   <ItemGroup>
     <ClCompile Include="addon.cpp" />
     <ClCompile Include="codec\codec.cpp" />
-    <ClCompile Include="codec\codec_working_scale.cpp" />
+    <ClCompile Include="codec\compute_passes.cpp" />
     <ClCompile Include="hooks\d3d12_hooks.cpp" />
     <ClCompile Include="hooks\d3d12_state.cpp" />
     <ClCompile Include="hooks\dlss_guides.cpp" />
@@ -80,6 +80,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="codec\codec.h" />
+    <ClInclude Include="codec\compute_passes.h" />
     <ClInclude Include="hooks\d3d12_hooks.h" />
     <ClInclude Include="hooks\d3d12_state.h" />
     <ClInclude Include="hooks\dlss_guides.h" />

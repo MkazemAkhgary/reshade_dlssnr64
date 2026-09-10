@@ -10,7 +10,6 @@ bool PrepareInput(
     DlssNrCommandContext& command,
     DlssNrPassResources& resources,
     DlssNrCodec* codec,
-    ID3D12Device* device,
     ID3D12Resource* full_input,
     ID3D12Resource** out_model_color,
     ID3D12Resource** out_model_output,
@@ -29,21 +28,17 @@ bool PrepareInput(
   *out_eval_height = full_height;
 
   if (!use_working_scale) return true;
-  if (codec == nullptr) return false;
-
-  if (!codec->InitDownsampleShader(device)) return false;
-
-  if (full_input == nullptr) return false;
+  if (codec == nullptr || full_input == nullptr) return false;
 
   DlssNrConstants constants = {};
   constants.Width = work_width;
   constants.Height = work_height;
 
-  codec->DispatchDownsample(
-      command.GetCommandList(),
-      constants,
-      full_input,
-      resources.GetWorkingInput());
+  ID3D12Resource* srvs[kDlssNrSrvCount] = {full_input, full_input, full_input};
+  ID3D12Resource* uavs[kDlssNrUavCount] = {resources.GetWorkingInput()};
+
+  codec->Dispatch(
+      "Downsample", command.GetCommandList(), constants, srvs, uavs);
 
   command.Transition(command.GetCommandList(), resources.GetWorkingInput(),
                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -59,7 +54,6 @@ bool Apply(
     DlssNrCommandContext& command,
     DlssNrPassResources& resources,
     DlssNrCodec* codec,
-    ID3D12Device* device,
     ID3D12Resource* backbuffer,
     ID3D12Resource* low_input,
     ID3D12Resource* low_enhanced,
@@ -70,8 +64,6 @@ bool Apply(
       low_input == nullptr || low_enhanced == nullptr || params == nullptr) {
     return false;
   }
-
-  if (!codec->InitUpsampleResidualShader(device)) return false;
 
   DlssNrConstants constants = {};
   constants.Width = full_width;
@@ -85,13 +77,11 @@ bool Apply(
   command.Transition(command.GetCommandList(), low_enhanced,
                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-  codec->DispatchUpsampleResidual(
-      command.GetCommandList(),
-      constants,
-      backbuffer,
-      low_input,
-      low_enhanced,
-      resources.GetCompositeOutput());
+  ID3D12Resource* srvs[kDlssNrSrvCount] = {backbuffer, low_input, low_enhanced};
+  ID3D12Resource* uavs[kDlssNrUavCount] = {resources.GetCompositeOutput()};
+
+  codec->Dispatch(
+      "UpsampleResidual", command.GetCommandList(), constants, srvs, uavs);
 
   command.CopyResourceToBackbuffer(
       command.GetCommandList(), resources.GetCompositeOutput(), backbuffer);

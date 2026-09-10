@@ -1,12 +1,12 @@
-#include "codec.h"
+#include "compute_passes.h"
+
+#include <cstring>
 
 namespace reshade_dlssnr {
 
-bool DlssNrCodec::InitDownsampleShader(ID3D12Device* device) {
-  if (downsample_pipeline_state_ != nullptr) return true;
-  if (root_signature_ == nullptr) return false;
+namespace {
 
-  const char* downsample_shader_source = R"(
+constexpr const char* kDownsample = R"(
 cbuffer Params : register(b0)
 {
     uint  gWidth;
@@ -29,39 +29,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 }
 )";
 
-  return CreateComputePipelineState(
-      device, downsample_shader_source, downsample_pipeline_state_.GetAddressOf());
-}
-
-bool DlssNrCodec::DispatchDownsample(
-    ID3D12GraphicsCommandList* command_list,
-    const DlssNrConstants& constants,
-    ID3D12Resource* source,
-    ID3D12Resource* out_target) {
-  if (downsample_pipeline_state_ == nullptr || command_list == nullptr ||
-      source == nullptr || out_target == nullptr) {
-    return false;
-  }
-
-  ID3D12Resource* srvs[kDlssNrSrvCount] = {
-      source,
-      source,
-      source,
-  };
-
-  ID3D12Resource* uavs[kDlssNrUavCount] = {
-      out_target,
-  };
-
-  return BindAndDispatch(
-      command_list, downsample_pipeline_state_.Get(), constants, srvs, uavs);
-}
-
-bool DlssNrCodec::InitUpsampleResidualShader(ID3D12Device* device) {
-  if (upsample_residual_pipeline_state_ != nullptr) return true;
-  if (root_signature_ == nullptr) return false;
-
-  const char* upsample_residual_shader_source = R"(
+constexpr const char* kUpsampleResidual = R"(
 cbuffer Params : register(b0)
 {
     uint  gWidth;
@@ -150,9 +118,6 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     float3 edited = original.rgb + residual;
 
-    // Final luma/chroma strength blend (after soft compression).
-    // Use linear YCbCr (BT.709) color-difference space to avoid division
-    // by luma, which causes artifacts in dark areas. No clamping needed.
     float original_y = dot(original.rgb, float3(0.2126, 0.7152, 0.0722));
     float edited_y   = dot(edited,   float3(0.2126, 0.7152, 0.0722));
     float final_y = lerp(original_y, edited_y, kLumaStrength);
@@ -170,43 +135,32 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     final_rgb.g = final_y - 0.1873 * final_cb - 0.4681 * final_cr;
     final_rgb.b = final_y + 1.8556 * final_cb;
 
-    // Smoothly project to non-negative values to avoid display clipping
-    // while preserving detail and monotonicity (no hard clamp).
     final_rgb = 0.5 * (final_rgb + sqrt(final_rgb * final_rgb + 1e-6));
 
     gOutput[id.xy] = float4(final_rgb, original.a);
 }
 )";
 
-  return CreateComputePipelineState(
-      device, upsample_residual_shader_source, upsample_residual_pipeline_state_.GetAddressOf());
-}
+}  // namespace
 
-bool DlssNrCodec::DispatchUpsampleResidual(
-    ID3D12GraphicsCommandList* command_list,
-    const DlssNrConstants& constants,
-    ID3D12Resource* original,
-    ID3D12Resource* low_input,
-    ID3D12Resource* low_enhanced,
-    ID3D12Resource* out_target) {
-  if (upsample_residual_pipeline_state_ == nullptr || command_list == nullptr ||
-      original == nullptr || low_input == nullptr || low_enhanced == nullptr ||
-      out_target == nullptr) {
-    return false;
+const ComputePassDef kComputePasses[] = {
+    {"Downsample",       kDownsample},
+    {"UpsampleResidual", kUpsampleResidual},
+    // Add new passes here, e.g.:
+    // {"PreExposure",   kPreExposure},
+};
+
+const uint32_t kComputePassCount =
+    sizeof(kComputePasses) / sizeof(kComputePasses[0]);
+
+const char* FindComputePassSource(const char* name) {
+  if (name == nullptr) return nullptr;
+  for (uint32_t i = 0; i < kComputePassCount; ++i) {
+    if (std::strcmp(kComputePasses[i].name, name) == 0) {
+      return kComputePasses[i].hlsl_source;
+    }
   }
-
-  ID3D12Resource* srvs[kDlssNrSrvCount] = {
-      original,
-      low_input,
-      low_enhanced,
-  };
-
-  ID3D12Resource* uavs[kDlssNrUavCount] = {
-      out_target,
-  };
-
-  return BindAndDispatch(
-      command_list, upsample_residual_pipeline_state_.Get(), constants, srvs, uavs);
+  return nullptr;
 }
 
 }  // namespace reshade_dlssnr
