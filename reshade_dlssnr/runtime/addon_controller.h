@@ -63,6 +63,12 @@ class AddonController {
 
   // Command context used only for the final debug-present copy.
   CommandContext debug_command_;
+
+  // Backbuffer format from the last Present. The debug output is displayed
+  // on the backbuffer, so we create it in this format. Cached because a
+  // Post-DLSS pass (which runs before Present) needs to know the format
+  // before we get a chance to query the backbuffer this frame.
+  DXGI_FORMAT backbuffer_format_ = DXGI_FORMAT_UNKNOWN;
 };
 
 }  // namespace reshade_dlssnr

@@ -20,12 +20,30 @@ struct FrameDebugContext {
   unsigned int height = 0;
   DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
 
+  // Format the debug output should be created in. The debug image is always
+  // displayed on the swapchain backbuffer, so its format should match the
+  // backbuffer's, regardless of the source pipeline stage's format. Set by
+  // AddonController before passes run. When UNKNOWN, falls back to the
+  // pass's own source format.
+  DXGI_FORMAT preferred_format = DXGI_FORMAT_UNKNOWN;
+
   // True when `output` holds a debug render produced this frame.
   bool valid = false;
 
   void Reset() {
     valid = false;
-    // Note: `output` is intentionally not reset — it is reused next frame.
+    // Note: `output`, `width`, `height`, `format` are intentionally kept —
+    // the resource is reused across frames to avoid churn.
+  }
+
+  // Discards the cached output buffer. Call when the swapchain or device is
+  // torn down.
+  void Release() {
+    output.Reset();
+    width = 0;
+    height = 0;
+    format = DXGI_FORMAT_UNKNOWN;
+    valid = false;
   }
 };
 

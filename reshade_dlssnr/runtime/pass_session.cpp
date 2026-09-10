@@ -181,12 +181,20 @@ bool PassSession::MaybeRenderDebug(
   if (static_cast<int>(pass_index_) != settings.active_pass) return false;
   if (command_list == nullptr || codec_ == nullptr) return false;
 
+  // The debug output is displayed on the backbuffer, so prefer the
+  // backbuffer's format. Fall back to the pass's own format only when
+  // the controller hasn't yet cached the backbuffer format.
+  const DXGI_FORMAT target_format =
+      frame_debug.preferred_format != DXGI_FORMAT_UNKNOWN
+          ? frame_debug.preferred_format
+          : format;
+
   // (Re)create the shared debug output when its shape changes. The output
   // is owned by FrameDebugContext and lives across frames.
   if (frame_debug.output == nullptr ||
       frame_debug.width != width ||
       frame_debug.height != height ||
-      frame_debug.format != format) {
+      frame_debug.format != target_format) {
     Microsoft::WRL::ComPtr<ID3D12Device> device;
     if (FAILED(command_list->GetDevice(IID_PPV_ARGS(&device))) ||
         device == nullptr) {
@@ -202,7 +210,7 @@ bool PassSession::MaybeRenderDebug(
     desc.Height = height;
     desc.DepthOrArraySize = 1;
     desc.MipLevels = 1;
-    desc.Format = format;
+    desc.Format = target_format;
     desc.SampleDesc.Count = 1;
     desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
     desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
@@ -218,7 +226,7 @@ bool PassSession::MaybeRenderDebug(
     frame_debug.output = std::move(new_output);
     frame_debug.width = width;
     frame_debug.height = height;
-    frame_debug.format = format;
+    frame_debug.format = target_format;
   }
 
   // Seed the pass tracker: at this point the debug output is always UAV
@@ -312,6 +320,18 @@ void PassSession::OnPresent(
   }
 
   const DlssGuideState guides = guides_->GetState();
+
+  // Guides are owned by DlssGuides and always left in SRV. The pass tracker
+  // was just reset, so seed that state explicitly; otherwise inference may
+  // pick a different (incorrect) "before" state for the debug render.
+  if (guides.valid) {
+    command_.SetResourceState(guides.depth,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    command_.SetResourceState(guides.motion,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    command_.SetResourceState(guides.dlss_output_color,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
 
   ID3D12Resource* model_input = backbuffer.Get();
 
@@ -505,6 +525,18 @@ void PassSession::OnPostDlssEvaluate(
   command_.ClearState();
   SeedFrameState(nullptr);
   command_.SetResourceState(output_resource, InferResourceState(output_resource));
+
+  // Seed guide states: guides are owned by DlssGuides and always left in
+  // SRV. Without this, the tracker would infer a state from the resource
+  // descriptor, which may be wrong (typeless depth, etc.).
+  if (guides.valid) {
+    command_.SetResourceState(guides.depth,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    command_.SetResourceState(guides.motion,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    command_.SetResourceState(guides.dlss_output_color,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
 
   // Determine input: first pass reads the captured DLSS output; subsequent
   // passes snapshot the previous result into scratch slot 0.

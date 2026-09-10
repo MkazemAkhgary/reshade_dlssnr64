@@ -27,6 +27,21 @@ void AddonController::OnPresent(
     return;
   }
 
+  // Refresh the cached backbuffer format. Used by the debug output buffer
+  // so it is always created in a format the backbuffer copy can accept.
+  {
+    Microsoft::WRL::ComPtr<IDXGISwapChain3> sc3;
+    if (SUCCEEDED(swapchain->QueryInterface(IID_PPV_ARGS(&sc3))) &&
+        sc3 != nullptr) {
+      Microsoft::WRL::ComPtr<ID3D12Resource> bb;
+      const UINT idx = sc3->GetCurrentBackBufferIndex();
+      if (SUCCEEDED(sc3->GetBuffer(idx, IID_PPV_ARGS(&bb))) && bb != nullptr) {
+        backbuffer_format_ = bb->GetDesc().Format;
+      }
+    }
+  }
+  frame_debug_.preferred_format = backbuffer_format_;
+
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
     if (!settings.pass_enabled[i]) continue;
     if (settings.passes[i].injection_stage != InjectionStage::Present) continue;
@@ -59,8 +74,11 @@ void AddonController::OnPostDlssEvaluate(
   if (!settings.enabled) return;
   if (command_list == nullptr || output_resource == nullptr) return;
 
-  // Fresh debug state for the frame's Post-DLSS chain.
+  // Fresh debug state for the frame's Post-DLSS chain. The debug output
+  // must still match the backbuffer's format (we cached it last Present),
+  // because that's what it will eventually be copied into.
   frame_debug_.Reset();
+  frame_debug_.preferred_format = backbuffer_format_;
 
   bool is_first = true;
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
@@ -103,10 +121,13 @@ void AddonController::PresentDebugOutput(
     return;
   }
 
-  // The debug output is created at the pass's format. In the normal case
-  // that matches the backbuffer; if it does not, skip the override so we
-  // don't break the present.
-  if (backbuffer->GetDesc().Format != debug.format) return;
+  // CopyResource requires exact format and size matches. The debug output
+  // is created at the cached backbuffer format, but sizes can differ if
+  // the source pipeline stage ran at a different resolution. In that case
+  // skip the override so we don't break the present.
+  const D3D12_RESOURCE_DESC bb_desc = backbuffer->GetDesc();
+  if (bb_desc.Format != debug.format) return;
+  if (bb_desc.Width != debug.width || bb_desc.Height != debug.height) return;
 
   if (!debug_command_.Ensure(device.Get())) return;
 
@@ -134,8 +155,7 @@ void AddonController::Shutdown() {
     pass.Shutdown(runtime_);
   }
   debug_command_.Shutdown();
-  frame_debug_.Reset();
-  frame_debug_.output.Reset();
+  frame_debug_.Release();
   runtime_.Shutdown();
 }
 
