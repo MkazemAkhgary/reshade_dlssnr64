@@ -4,6 +4,8 @@
 #include <d3d12.h>
 #include <wrl/client.h>
 
+#include <cstdint>
+
 namespace reshade_dlssnr {
 
 // Generic scratch texture pool for intermediate stages (pre-exposure,
