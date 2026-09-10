@@ -187,6 +187,7 @@ void PassSession::OnPresent(
   }
 
   command_.Reset();
+  command_.ClearState();
   command_.SetResourceState(backbuffer.Get(), D3D12_RESOURCE_STATE_PRESENT);
 
   if (!feature_.HasFeature()) {
@@ -349,6 +350,9 @@ void PassSession::OnPostDlssEvaluate(
     return;
   }
 
+  // State is tracked per frame; clear any stale entries from the previous
+  // frame before registering this frame's known initial states.
+  command_.ClearState();
   command_.SetResourceState(model_input,
                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
