@@ -149,7 +149,6 @@ void HdrState::Shutdown() {
   frames_until_measure_ = 0;
   warmup_frames_ = 0;
   frames_since_measure_ = 0;
-  prev_enabled_ = false;
   have_logged_format_ = false;
 
   have_histogram_ = false;
@@ -191,20 +190,8 @@ void HdrState::BeginFrame(CommandContext& cmd,
                           ComputeEngine& codec) {
   enabled_ = settings.hdr_enable;
   if (!enabled_) {
-    if (prev_enabled_) {
-      reshade::log::message(reshade::log::level::info,
-                            "HDR: disabled");
-      prev_enabled_ = false;
-    }
     // Keep existing EMA values around so toggling back on doesn't reset.
     return;
-  }
-
-  if (!prev_enabled_) {
-    reshade::log::message(
-        reshade::log::level::info,
-        "HDR: enabled; waiting for first histogram measurement");
-    prev_enabled_ = true;
   }
 
   if (command_list == nullptr || source == nullptr || width == 0 ||

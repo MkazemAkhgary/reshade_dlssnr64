@@ -98,7 +98,6 @@ class HdrState {
   uint32_t frames_until_measure_ = 0;
   uint32_t warmup_frames_ = 0;
   uint32_t frames_since_measure_ = 0;
-  bool prev_enabled_ = false;
   bool have_logged_format_ = false;
 
   // Diagnostics: last measured histogram and the values derived from it.
