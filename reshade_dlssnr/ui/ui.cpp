@@ -21,18 +21,28 @@ constexpr float kControlLabelWidth = 220.0f;
 constexpr float kResetButtonWidth = 24.0f;
 
 // ---------------------------------------------------------------------------
-// Row helpers. Every control that participates in the "label column + content"
-// layout uses one of these so the columns line up and the reset-button spacing
-// is consistent. Adding new controls to a section should use a helper, not
-// hand-rolled SameLine() math.
+// Row helpers
 // ---------------------------------------------------------------------------
 
+// Runs `fn` inside a disabled region when `disabled` is true.
+template <typename Fn>
+void WithDisabled(bool disabled, Fn&& fn) {
+  if (disabled) ImGui::BeginDisabled();
+  fn();
+  if (disabled) ImGui::EndDisabled();
+}
+
 // A float slider row: label at the control column, slider filling the
-// remaining width, reset button at the far right. Returns true if changed.
-bool DrawFloatRow(const char* id,
+// remaining width, reset button at the far right, and (for passes > 0) an
+// inherit toggle after reset. When inheriting, the slider is disabled and
+// shows the value resolved from earlier passes.
+bool DrawFloatRow(uint32_t pass_index,
+                  const char* id,
                   const char* label,
                   const char* tooltip,
-                  float* value,
+                  float* raw_value,
+                  bool* inherit_flag,
+                  float inherited_value,
                   float lo,
                   float hi,
                   float default_value) {
@@ -45,18 +55,36 @@ bool DrawFloatRow(const char* id,
   }
 
   ImGui::SameLine(kControlLabelWidth);
-  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - kResetButtonWidth -
+
+  const bool has_inherit = (pass_index > 0) && (inherit_flag != nullptr);
+  float trailing_width = kResetButtonWidth;
+  if (has_inherit) {
+    trailing_width += ImGui::GetStyle().ItemSpacing.x + kResetButtonWidth;
+  }
+  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - trailing_width -
                           ImGui::GetStyle().ItemSpacing.x);
+
+  const bool inheriting = has_inherit && *inherit_flag;
+  float display_value = inheriting ? inherited_value : *raw_value;
+
   const std::string slider_id = std::string("##") + id;
-  changed |= ImGui::SliderFloat(slider_id.c_str(), value, lo, hi, "%.2f");
+  bool slider_changed = false;
+  WithDisabled(inheriting, [&] {
+    slider_changed =
+        ImGui::SliderFloat(slider_id.c_str(), &display_value, lo, hi, "%.2f");
+  });
   if (tooltip != nullptr && ImGui::IsItemHovered()) {
     ImGui::SetTooltip("%s", tooltip);
+  }
+  if (slider_changed && !inheriting) {
+    *raw_value = display_value;
+    changed = true;
   }
 
   ImGui::SameLine();
   ImGui::PushID(id);
   if (ImGui::Button("R", ImVec2(kResetButtonWidth, 0.0f))) {
-    *value = default_value;
+    *raw_value = default_value;
     changed = true;
   }
   if (ImGui::IsItemHovered()) {
@@ -64,17 +92,37 @@ bool DrawFloatRow(const char* id,
   }
   ImGui::PopID();
 
+  if (has_inherit) {
+    ImGui::SameLine();
+    const std::string inherit_id = std::string(id) + "_inherit";
+    ImGui::PushID(inherit_id.c_str());
+    const bool on = *inherit_flag;
+    if (on) {
+      ImGui::PushStyleColor(ImGuiCol_Button,
+                            ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+    }
+    if (ImGui::Button("I", ImVec2(kResetButtonWidth, 0.0f))) {
+      *inherit_flag = !*inherit_flag;
+      changed = true;
+    }
+    if (on) ImGui::PopStyleColor();
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Inherit this value from the previous pass");
+    }
+    ImGui::PopID();
+  }
+
   return changed;
 }
 
-// A checkbox row that sits in the label column, with its caption after it.
-// Used for standalone checkboxes and as the left half of composite rows.
+// A checkbox placed at the label column (used for standalone checkboxes and
+// as the left half of composite rows).
 bool DrawCheckboxAtLabel(const char* id, bool* value) {
   const std::string cb_id = std::string("##") + id;
   return ImGui::Checkbox(cb_id.c_str(), value);
 }
 
-// A combo row: label at the control column, combo filling the rest.
+// A combo row.
 bool DrawComboRow(const char* id,
                   const char* label,
                   const char* tooltip,
@@ -91,14 +139,6 @@ bool DrawComboRow(const char* id,
   ImGui::SetNextItemWidth(-1.0f);
   const std::string combo_id = std::string("##") + id;
   return ImGui::Combo(combo_id.c_str(), value, items, item_count);
-}
-
-// Runs `fn` inside a disabled region when `disabled` is true.
-template <typename Fn>
-void WithDisabled(bool disabled, Fn&& fn) {
-  if (disabled) ImGui::BeginDisabled();
-  fn();
-  if (disabled) ImGui::EndDisabled();
 }
 
 // ---------------------------------------------------------------------------
@@ -120,6 +160,12 @@ void DrawTargetSection(Settings& settings, uint32_t pass_index,
 
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("Target");
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip(
+        "Where the model pipeline runs for this pass. DLSS Output writes "
+        "directly into the game's DLSS result (before UI and tone mapping); "
+        "Backbuffer runs at the ReShade present event on the final frame.");
+  }
   ImGui::SameLine(kControlLabelWidth);
 
   const float button_width =
@@ -140,6 +186,11 @@ void DrawTargetSection(Settings& settings, uint32_t pass_index,
       changed = true;
     }
     if (at_dlss) ImGui::PopStyleColor();
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip(
+          "Run inline after the game's DLSS upscaling, before UI. "
+          "Only available when all earlier passes also target DLSS Output.");
+    }
   });
 
   ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
@@ -157,20 +208,31 @@ void DrawTargetSection(Settings& settings, uint32_t pass_index,
     changed = true;
   }
   if (at_present) ImGui::PopStyleColor();
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip(
+        "Run at the ReShade present event on the final frame. "
+        "Any later pass is forced to Backbuffer as well.");
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Section: Pipeline (Working Scale + Debug View)
 // ---------------------------------------------------------------------------
 
-void DrawPipelineSection(PassSettings& pass, bool& changed) {
+void DrawPipelineSection(uint32_t pass_index,
+                         Settings& settings,
+                         bool& changed) {
+  PassSettings& pass = settings.passes[pass_index];
+  const PassSettings resolved = ResolvePassSettings(pass_index);
+
   changed |= DrawFloatRow(
-      "working_scale", "Working Scale",
+      pass_index, "working_scale", "Working Scale",
       "Model evaluation resolution as a fraction of the frame. "
       "1.0 runs the model at full resolution.",
-      &pass.working_scale, 0.25f, 1.0f, 1.0f);
+      &pass.working_scale, &pass.inherit_working_scale,
+      resolved.working_scale, 0.25f, 1.0f, 1.0f);
 
-  // Debug view selector. Auto-populated from the debug view registry.
+  // Debug view is shared across passes.
   {
     std::vector<const char*> names;
     names.reserve(8);
@@ -179,20 +241,22 @@ void DrawPipelineSection(PassSettings& pass, bool& changed) {
       names.push_back(kDebugViews[i].name);
     }
 
-    changed |= DrawComboRow("debug_view", "Debug View", nullptr,
-                            &pass.debug_view, names.data(),
-                            static_cast<int>(names.size()));
+    changed |= DrawComboRow(
+        "debug_view", "Debug View",
+        "Display a pipeline resource instead of the final image. "
+        "Shared across all passes; the active pass renders it.",
+        &settings.debug_view, names.data(),
+        static_cast<int>(names.size()));
   }
 }
 
 // ---------------------------------------------------------------------------
-// Section: Model (preset, tuning, character mask)
+// Section: Model
 // ---------------------------------------------------------------------------
 
-// The Skin Structure control is a composite: checkbox + caption + slider +
-// reset button, all on one row, with the slider and reset disabled when the
-// checkbox is off. This needs a bespoke layout rather than DrawFloatRow.
-bool DrawSkinStructureRow(PassSettings& pass) {
+bool DrawSkinStructureRow(uint32_t pass_index,
+                          PassSettings& pass,
+                          const PassSettings& resolved) {
   bool changed = false;
 
   ImGui::AlignTextToFramePadding();
@@ -205,12 +269,26 @@ bool DrawSkinStructureRow(PassSettings& pass) {
   ImGui::SameLine();
   ImGui::TextUnformatted("Skin Structure");
   ImGui::SameLine(kControlLabelWidth);
-  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - kResetButtonWidth -
+
+  const bool has_inherit = pass_index > 0;
+  float trailing_width = kResetButtonWidth;
+  if (has_inherit) {
+    trailing_width += ImGui::GetStyle().ItemSpacing.x + kResetButtonWidth;
+  }
+  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - trailing_width -
                           ImGui::GetStyle().ItemSpacing.x);
 
-  WithDisabled(!pass.auto_mask, [&] {
-    changed |= ImGui::SliderFloat("##skin_structure_value",
-                                  &pass.skin_structure, 0.0f, 1.0f, "%.2f");
+  const bool inheriting = has_inherit && pass.inherit_skin_structure;
+  const bool slider_disabled = !pass.auto_mask || inheriting;
+  float display_value =
+      inheriting ? resolved.skin_structure : pass.skin_structure;
+
+  WithDisabled(slider_disabled, [&] {
+    if (ImGui::SliderFloat("##skin_structure_value", &display_value,
+                           0.0f, 1.0f, "%.2f") && !inheriting) {
+      pass.skin_structure = display_value;
+      changed = true;
+    }
   });
 
   ImGui::SameLine();
@@ -224,17 +302,41 @@ bool DrawSkinStructureRow(PassSettings& pass) {
   if (ImGui::IsItemHovered()) ImGui::SetTooltip("Reset to default");
   ImGui::PopID();
 
+  if (has_inherit) {
+    ImGui::SameLine();
+    ImGui::PushID("skin_structure_inherit");
+    const bool on = pass.inherit_skin_structure;
+    if (on) {
+      ImGui::PushStyleColor(ImGuiCol_Button,
+                            ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+    }
+    if (ImGui::Button("I", ImVec2(kResetButtonWidth, 0.0f))) {
+      pass.inherit_skin_structure = !pass.inherit_skin_structure;
+      changed = true;
+    }
+    if (on) ImGui::PopStyleColor();
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Inherit this value from the previous pass");
+    }
+    ImGui::PopID();
+  }
+
   return changed;
 }
 
-void DrawModelSection(PassSettings& pass, bool& changed) {
+void DrawModelSection(uint32_t pass_index,
+                      Settings& settings,
+                      bool& changed) {
+  PassSettings& pass = settings.passes[pass_index];
+  const PassSettings resolved = ResolvePassSettings(pass_index);
+
   if (!ImGui::TreeNodeEx("Model",
                          ImGuiTreeNodeFlags_CollapsingHeader |
                              ImGuiTreeNodeFlags_DefaultOpen)) {
     return;
   }
 
-  // Preset row: three buttons of equal width on the content column.
+  // Preset row.
   {
     const float button_width =
         (ImGui::GetContentRegionAvail().x - kControlLabelWidth) / 3.0f -
@@ -242,6 +344,9 @@ void DrawModelSection(PassSettings& pass, bool& changed) {
 
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Preset");
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Selects one of the model's trained presets.");
+    }
     ImGui::SameLine(kControlLabelWidth);
 
     static const char* kPresetNames[] = {"A", "B", "C"};
@@ -262,21 +367,44 @@ void DrawModelSection(PassSettings& pass, bool& changed) {
     }
   }
 
-  changed |= DrawFloatRow("intensity", "Intensity", nullptr, &pass.intensity,
-                          0.0f, 2.0f, 1.0f);
-  changed |= DrawFloatRow("local_tone", "Local Tone", nullptr, &pass.local_tone,
-                          0.0f, 2.0f, 1.0f);
-  changed |= DrawFloatRow("local_structure", "Local Structure", nullptr,
-                          &pass.local_structure, 0.0f, 2.0f, 1.0f);
+  changed |= DrawFloatRow(
+      pass_index, "intensity", "Intensity",
+      "Overall strength of the model's edit.",
+      &pass.intensity, &pass.inherit_intensity, resolved.intensity,
+      0.0f, 2.0f, 1.0f);
 
-  changed |= DrawSkinStructureRow(pass);
+  changed |= DrawFloatRow(
+      pass_index, "local_tone", "Local Tone",
+      "Strength of the model's local tone adjustments.",
+      &pass.local_tone, &pass.inherit_local_tone, resolved.local_tone,
+      0.0f, 2.0f, 1.0f);
+
+  changed |= DrawFloatRow(
+      pass_index, "local_structure", "Local Structure",
+      "Strength of the model's local structure detail.",
+      &pass.local_structure, &pass.inherit_local_structure,
+      resolved.local_structure, 0.0f, 2.0f, 1.0f);
+
+  changed |= DrawSkinStructureRow(pass_index, pass, resolved);
 }
 
 // ---------------------------------------------------------------------------
-// Section: Dynamic shader parameters (one collapsible per category)
+// Section: Dynamic shader parameters
 // ---------------------------------------------------------------------------
 
-void DrawShaderParamSections(PassSettings& pass, bool& changed) {
+int FindShaderParamIndex(const char* name) {
+  for (uint32_t i = 0; i < kShaderParamCount; ++i) {
+    if (strcmp(kShaderParams[i].name, name) == 0) return static_cast<int>(i);
+  }
+  return -1;
+}
+
+void DrawShaderParamSections(uint32_t pass_index,
+                             Settings& settings,
+                             bool& changed) {
+  PassSettings& pass = settings.passes[pass_index];
+  const PassSettings resolved = ResolvePassSettings(pass_index);
+
   uint32_t i = 0;
   while (i < kShaderParamCount) {
     const char* category = kShaderParams[i].category;
@@ -297,21 +425,31 @@ void DrawShaderParamSections(PassSettings& pass, bool& changed) {
         const auto& param = kShaderParams[j];
         const std::string id = std::string(category) + "_" + param.name;
 
-        if (param.is_checkbox) {
-          bool checked = pass.params[j] > 0.5f;
-          ImGui::AlignTextToFramePadding();
-          changed |= DrawCheckboxAtLabel(id.c_str(), &checked);
-          if (ImGui::IsItemHovered() && param.tooltip != nullptr) {
-            ImGui::SetTooltip("%s", param.tooltip);
-          }
-          ImGui::SameLine();
-          ImGui::TextUnformatted(param.name);
-          pass.params[j] = checked ? 1.0f : 0.0f;
-        } else {
-          changed |= DrawFloatRow(id.c_str(), param.name, param.tooltip,
-                                  &pass.params[j], param.min_value,
-                                  param.max_value, param.default_value);
+        // Dependency gate: if the gating parameter is off, disable this one.
+        bool dependency_off = false;
+        if (param.depends_on != nullptr) {
+          const int gate = FindShaderParamIndex(param.depends_on);
+          if (gate >= 0 && pass.params[gate] < 0.5f) dependency_off = true;
         }
+
+        WithDisabled(dependency_off, [&] {
+          if (param.is_checkbox) {
+            bool checked = pass.params[j] > 0.5f;
+            ImGui::AlignTextToFramePadding();
+            changed |= DrawCheckboxAtLabel(id.c_str(), &checked);
+            if (ImGui::IsItemHovered() && param.tooltip != nullptr) {
+              ImGui::SetTooltip("%s", param.tooltip);
+            }
+            ImGui::SameLine();
+            ImGui::TextUnformatted(param.name);
+            pass.params[j] = checked ? 1.0f : 0.0f;
+          } else {
+            changed |= DrawFloatRow(
+                pass_index, id.c_str(), param.name, param.tooltip,
+                &pass.params[j], &pass.inherit_params[j], resolved.params[j],
+                param.min_value, param.max_value, param.default_value);
+          }
+        });
       }
     }
 
@@ -343,17 +481,15 @@ void DrawPassSettingsBody(uint32_t pass_index,
                           Settings& settings,
                           bool enabled,
                           bool& changed) {
-  PassSettings& pass = settings.passes[pass_index];
-
   ImGui::PushID(static_cast<int>(pass_index));
   WithDisabled(!enabled, [&] {
     DrawTargetSection(settings, pass_index, changed);
-    DrawPipelineSection(pass, changed);
+    DrawPipelineSection(pass_index, settings, changed);
     ImGui::Separator();
-    DrawModelSection(pass, changed);
-    DrawShaderParamSections(pass, changed);
+    DrawModelSection(pass_index, settings, changed);
+    DrawShaderParamSections(pass_index, settings, changed);
     ImGui::Separator();
-    DrawAdvancedSection(pass, changed);
+    DrawAdvancedSection(settings.passes[pass_index], changed);
   });
   ImGui::PopID();
 }
@@ -368,13 +504,28 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   ImGui::Separator();
 
   changed |= ImGui::Checkbox("Enable DLSSNR", &settings.enabled);
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip(
+        "Master switch. When off, no passes run and no GPU work is done.");
+  }
+
   changed |= ImGui::Checkbox("Require DLSS", &settings.only_super_sampling);
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip(
+        "Only run when the game is using DLSS SuperSampling. "
+        "Turn off to run on any frame.");
+  }
 
   if (settings.enabled) {
     for (uint32_t i = 1; i < kMaxPasses; ++i) {
       char label[32];
       std::snprintf(label, sizeof(label), "Enable Pass %u", i + 1);
       changed |= ImGui::Checkbox(label, &settings.pass_enabled[i]);
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip(
+            "Toggle this pass. When off its tab is greyed out but still "
+            "clickable.");
+      }
     }
   }
 
