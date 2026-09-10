@@ -24,6 +24,25 @@ struct alignas(256) DlssNrConstants {
 };
 static_assert(sizeof(DlssNrConstants) == 256, "Constants must have a 256-byte CBV allocation size");
 
+// Descriptor layout contract for every compute pass.
+//
+// The single root descriptor table (root param 0) exposes, in order:
+//   - kDlssNrSrvCount SRVs   at shader registers t0..t(kDlssNrSrvCount-1)
+//   - kDlssNrUavCount UAVs   at shader registers u0..u(kDlssNrUavCount-1)
+//   - kDlssNrCbvCount CBV    at shader register b0
+//   - one static linear-clamp sampler at s0
+//
+// Every Dispatch() call MUST provide exactly kDlssNrSrvCount SRVs and
+// kDlssNrUavCount UAVs. Passing fewer leaves stale descriptors from the
+// previous dispatch in the unused slots. Shaders that do not declare a
+// register simply ignore that slot, so it is safe (and required) to fill
+// unused slots with any valid resource — typically the same texture or
+// output resource repeated.
+//
+// If a pass needs more bindings, increase the count here; the root
+// signature, descriptor heap, and BindAndDispatch loop scale with it
+// automatically. Grid size is derived from constants.Width/Height using
+// a fixed 8x8 thread group (see BindAndDispatch).
 constexpr uint32_t kDlssNrHeapCount = 16;
 constexpr uint32_t kDlssNrSrvCount = 3;
 constexpr uint32_t kDlssNrUavCount = 1;
@@ -35,8 +54,13 @@ class DlssNrCodec {
   bool Init(ID3D12Device* device);
 
   // Dispatches a registered compute pass by name. The pass is lazily
-  // compiled the first time it is used. SRV/UAV layouts are fixed at
-  // kDlssNrSrvCount / kDlssNrUavCount.
+  // compiled the first time it is used.
+  //
+  // `srvs` must point to an array of exactly kDlssNrSrvCount valid
+  // resources (t0..tN-1). `uavs` must point to an array of exactly
+  // kDlssNrUavCount valid resources (u0..uN-1). Fill unused slots by
+  // repeating an already-bound resource. See the descriptor layout
+  // contract above for details.
   bool Dispatch(
       const char* pass_name,
       ID3D12GraphicsCommandList* command_list,
