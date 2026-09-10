@@ -72,11 +72,9 @@ struct DebugViewDef {
                             unsigned int* out_content_height);
 };
 
+// The debug view table. Terminated by an entry whose `name` is nullptr;
+// iterate until then. Adding or removing a view is a single-line edit here.
 extern const DebugViewDef kDebugViews[];
-
-// Sentinel table entry marking the end. Iterate kDebugViews until you reach
-// the entry whose `name` is nullptr; that's how the UI builds the combo list
-// without a separate count that would need updating.
 
 // Renders the selected debug view into `target`, which the caller owns and
 // must have sized to `target_width × target_height`. `debug_view` follows
