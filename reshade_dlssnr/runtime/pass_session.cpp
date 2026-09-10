@@ -48,16 +48,15 @@ bool PassSession::EnsureFrameResources(
     ID3D12Device* device,
     const D3D12_RESOURCE_DESC& desc,
     unsigned int work_width,
-    unsigned int work_height,
-    bool use_working_scale) {
+    unsigned int work_height) {
   if (!resources_.EnsureOutput(device, desc) ||
-      !resources_.EnsureCompositeOutput(device, desc)) {
+      !resources_.EnsureCompositeOutput(device, desc) ||
+      !resources_.EnsureWhitePointBuffer(device)) {
     reason_ = "failed to create DLSSNR pass resources";
     return false;
   }
 
-  if (use_working_scale &&
-      !resources_.EnsureWorkingResources(device, desc, work_width, work_height)) {
+  if (!resources_.EnsureWorkingResources(device, desc, work_width, work_height)) {
     reason_ = "failed to create DLSSNR working resources";
     return false;
   }
@@ -180,8 +179,7 @@ void PassSession::OnPresent(
   const bool use_working_scale =
       work_width != width || work_height != height;
 
-  if (!EnsureFrameResources(device.Get(), desc, work_width, work_height,
-                            use_working_scale)) {
+  if (!EnsureFrameResources(device.Get(), desc, work_width, work_height)) {
     failed_ = true;
     return;
   }
@@ -228,46 +226,57 @@ void PassSession::OnPresent(
     return;
   }
 
+  if (model_input == backbuffer.Get()) {
+    command_.Transition(command_.GetCommandList(), backbuffer.Get(),
+                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
+
+  // Measure the frame's white point once. The result is shared by
+  // PrepareInput (HDR -> SDR) and ComposeOutput (SDR -> HDR).
+  if (!model_pipeline::MeasureWhitePoint(
+          command_,
+          command_.GetCommandList(),
+          resources_,
+          codec_.get(),
+          model_input,
+          width,
+          height)) {
+    failed_ = true;
+    reason_ = "failed to measure white point";
+    return;
+  }
+  command_.Transition(command_.GetCommandList(),
+                      resources_.GetWhitePointBuffer(),
+                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
   ID3D12Resource* model_color = model_input;
   ID3D12Resource* model_output = resources_.GetOutput();
   unsigned int eval_width = width;
   unsigned int eval_height = height;
 
-  if (use_working_scale) {
-    if (model_input == backbuffer.Get()) {
-      command_.Transition(command_.GetCommandList(), backbuffer.Get(),
-                          D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    }
-
-    if (!model_pipeline::PrepareInput(
-            command_,
-            command_.GetCommandList(),
-            resources_,
-            codec_.get(),
-            model_input,
-            &model_color,
-            &model_output,
-            &eval_width,
-            &eval_height,
-            width,
-            height,
-            work_width,
-            work_height,
-            true)) {
-      failed_ = true;
-      reason_ = "failed to prepare working scale input";
-      return;
-    }
+  if (!model_pipeline::PrepareInput(
+          command_,
+          command_.GetCommandList(),
+          resources_,
+          codec_.get(),
+          model_input,
+          &model_color,
+          &model_output,
+          &eval_width,
+          &eval_height,
+          width,
+          height,
+          work_width,
+          work_height)) {
+    failed_ = true;
+    reason_ = "failed to prepare model input";
+    return;
   }
+  (void)use_working_scale;
 
   if (!FillEvaluateParams(runtime, pass, guides, model_color, model_output,
                           eval_width, eval_height, width, height)) {
     return;
-  }
-
-  if (!use_working_scale) {
-    command_.Transition(command_.GetCommandList(), backbuffer.Get(),
-                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   }
 
   const NVSDK_NGX_Result result =
@@ -343,8 +352,7 @@ void PassSession::OnPostDlssEvaluate(
   const bool use_working_scale =
       work_width != width || work_height != height;
 
-  if (!EnsureFrameResources(device.Get(), desc, work_width, work_height,
-                            use_working_scale)) {
+  if (!EnsureFrameResources(device.Get(), desc, work_width, work_height)) {
     failed_ = true;
     return;
   }
@@ -386,30 +394,41 @@ void PassSession::OnPostDlssEvaluate(
     return;
   }
 
+  if (!model_pipeline::MeasureWhitePoint(
+          command_,
+          command_list,
+          resources_,
+          codec_.get(),
+          model_input,
+          width,
+          height)) {
+    return;
+  }
+  command_.Transition(command_list, resources_.GetWhitePointBuffer(),
+                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
   ID3D12Resource* model_color = model_input;
   ID3D12Resource* model_output = resources_.GetOutput();
   unsigned int eval_width = width;
   unsigned int eval_height = height;
 
-  if (use_working_scale) {
-    if (!model_pipeline::PrepareInput(
-            command_,
-            command_list,
-            resources_,
-            codec_.get(),
-            model_input,
-            &model_color,
-            &model_output,
-            &eval_width,
-            &eval_height,
-            width,
-            height,
-            work_width,
-            work_height,
-            true)) {
-      return;
-    }
+  if (!model_pipeline::PrepareInput(
+          command_,
+          command_list,
+          resources_,
+          codec_.get(),
+          model_input,
+          &model_color,
+          &model_output,
+          &eval_width,
+          &eval_height,
+          width,
+          height,
+          work_width,
+          work_height)) {
+    return;
   }
+  (void)use_working_scale;
 
   if (!FillEvaluateParams(runtime, pass, guides, model_color, model_output,
                           eval_width, eval_height, width, height)) {
