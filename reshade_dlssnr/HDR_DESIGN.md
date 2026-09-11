@@ -93,7 +93,7 @@ Config lives in `Settings` (shared across passes):
 struct Settings {
   bool     hdr_enable = false;
   HdrFormat hdr_format = HdrFormat::Auto;
-  ChromaEditMode hdr_chroma_mode = ChromaEditMode::Additive;
+  ChromaEditMode hdr_chroma_mode = ChromaEditMode::Ratio;
   float    hdr_responsiveness = 0.50f;   // [0,1] — see below
   float    hdr_midtone = 0.18f;          // scene key target
   float    hdr_white_percentile = 0.99f;
@@ -352,7 +352,7 @@ Shared section above the pass tabs (HDR is not per-pass):
        at DLSS Output.
 
    Format             [Auto ▾]      // Auto / SDR / scRGB / HDR10
-   Chroma Edit        [Additive ▾]  // Additive / Ratio
+   Chroma Edit        [Ratio ▾]     // Additive / Ratio
    Responsiveness     [====●====]  R
    Midtone Target     [====●====]  R
    White Percentile   [====●====]  R
@@ -373,7 +373,7 @@ Defaults:
 |-------------------|---------|----------------|----------------------------------|
 | Enable            | off     |                |                                  |
 | Format            | Auto    |                |                                  |
-| Chroma Edit       | Additive|                |                                  |
+| Chroma Edit       | Ratio   |                |                                  |
 | Responsiveness    | 0.50    | 0.00 – 1.00    | Slow + cheap ↔ fast + costly     |
 | Midtone Target    | 0.18    | 0.05 – 0.50    | 18% grey                         |
 | White Percentile  | 0.99    | 0.90 – 0.999   |                                  |
@@ -420,17 +420,17 @@ ID3D12Resource* GetHistogram() const;
    using the exposure measured on the original. Acceptable for now.
 
 7. **Chroma edit modes.**
-   - `Additive` (default): the model's edit is expressed as an RGB delta in
+   - `Additive`: the model's edit is expressed as an RGB delta in
      SDR sRGB space, applied to the reconstructed full-res SDR, then
      inverse-tonemapped back to HDR. Predictable; the edit's magnitude is
      bounded by the SDR delta. Safe everywhere.
-   - `Ratio`: the model's edit is expressed as a per-channel multiplicative
+   - `Ratio` (default): the model's edit is expressed as a per-channel multiplicative
      ratio in linear SDR, applied directly to the HDR linear. Preserves
      relative brightness changes exactly, at the cost of amplifying noise
      where the SDR input is near zero.
 
    Both modes flow through the same soft compression (when enabled) and the
-   same luma/chroma strength blend. Ship both, default to Additive, iterate
+   same luma/chroma strength blend. Ship both, default to Ratio, iterate
    with real content.
 
 ## Implementation phases

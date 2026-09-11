@@ -23,7 +23,7 @@ struct HdrUniforms {
   //   0 = additive (RGB delta in SDR, then inverse-tonemapped)
   //   1 = ratio (multiplicative per-channel in linear SDR, applied
   //       directly to the HDR linear)
-  uint32_t chroma_mode = 0;
+  uint32_t chroma_mode = 1;
 };
 
 // Prepares the model input. With `hdr == nullptr`, resamples `full_input`

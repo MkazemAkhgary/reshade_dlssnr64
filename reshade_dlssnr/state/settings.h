@@ -95,7 +95,7 @@ struct Settings {
   // ---------------------------------------------------------------------
   bool hdr_enable = false;
   HdrFormat hdr_format = HdrFormat::Auto;
-  ChromaEditMode hdr_chroma_mode = ChromaEditMode::Additive;
+  ChromaEditMode hdr_chroma_mode = ChromaEditMode::Ratio;
 
   // Responsiveness: 0 = slow + cheap (measure rarely, blend slowly),
   // 1 = fast + expensive (measure every frame, blend quickly).

@@ -223,7 +223,7 @@ void LoadSettings() {
   int chroma_mode = static_cast<int>(g_settings.hdr_chroma_mode);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.ChromaMode",
                             chroma_mode);
-  if (chroma_mode < 0 || chroma_mode > 1) chroma_mode = 0;
+  if (chroma_mode < 0 || chroma_mode > 1) chroma_mode = 1;
   g_settings.hdr_chroma_mode = static_cast<ChromaEditMode>(chroma_mode);
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Responsiveness",
