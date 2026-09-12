@@ -863,11 +863,11 @@ void DrawOverlay(reshade::api::effect_runtime*) {
 
   ImGui::Separator();
 
-  // --- Status (shared across passes) ---
-  DrawStatusSection(settings, changed);
-
   // --- Debug view (shared across passes) ---
   DrawSharedDebugView(settings, changed);
+
+  // --- Status (shared across passes) ---
+  DrawStatusSection(settings, changed);
 
   // HDR handling only applies to passes that target DLSS Output.
   const bool hdr_relevant =
