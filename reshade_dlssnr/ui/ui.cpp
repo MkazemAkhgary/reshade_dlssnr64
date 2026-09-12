@@ -419,11 +419,19 @@ void DrawStatusSection(Settings& settings, bool& changed) {
   const StatusSnapshot snap = AddonController::Get().GetStatus();
 
   auto bullet = [](bool good) {
-    if (good) {
-      ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.4f, 1.0f), "\xe2\x97\x8f");
-    } else {
-      ImGui::TextColored(ImVec4(0.9f, 0.4f, 0.4f, 1.0f), "\xe2\x97\x8f");
-    }
+    const ImVec4 color = good ? ImVec4(0.4f, 0.9f, 0.4f, 1.0f)
+                              : ImVec4(0.9f, 0.4f, 0.4f, 1.0f);
+
+    // Reserve a square the size of one text line and paint a filled disc
+    // inside it, so the indicator does not depend on the active font
+    // carrying a bullet glyph.
+    const float h = ImGui::GetTextLineHeight();
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    ImGui::Dummy(ImVec2(h, h));
+    ImGui::GetWindowDrawList()->AddCircleFilled(
+        ImVec2(p.x + h * 0.5f, p.y + h * 0.5f), h * 0.35f,
+        ImGui::GetColorU32(color));
+
     ImGui::SameLine();
   };
 
