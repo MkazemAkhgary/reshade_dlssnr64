@@ -812,13 +812,35 @@ void DrawPassSettingsBody(uint32_t pass_index,
 
 void DrawOverlay(reshade::api::effect_runtime*) {
   Settings& settings = GetSettings();
+  g_show_tooltips = settings.show_tooltips;
   bool changed = false;
 
   ImGui::Text("Version %s", reshade_dlssnr::kAddonVersion);
   ImGui::Separator();
 
   changed |= ImGui::Checkbox("Enable DLSSNR", &settings.enabled);
-  if (ImGui::IsItemHovered()) {
+  const bool master_hovered = ImGui::IsItemHovered();
+
+  // Show Tooltips checkbox, right-aligned on the same row as Enable
+  // DLSSNR.
+  {
+    const char* kTipLabel = "Show Tooltips";
+    const float checkbox_w =
+        ImGui::GetFrameHeight() +
+        ImGui::GetStyle().ItemInnerSpacing.x +
+        ImGui::CalcTextSize(kTipLabel).x;
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
+                         ImGui::GetContentRegionAvail().x - checkbox_w);
+    changed |= ImGui::Checkbox(kTipLabel, &settings.show_tooltips);
+    if (ImGui::IsItemHovered()) {
+      Tip(
+          "Show tooltips for controls in this panel.\n"
+          "Turn this off once you know the controls, to reduce clutter.");
+    }
+  }
+
+  if (master_hovered) {
     Tip(
         "Master switch. When off, no passes run and no GPU work is done.");
   }
