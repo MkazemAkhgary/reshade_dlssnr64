@@ -874,6 +874,22 @@ void DrawOverlay(reshade::api::effect_runtime*) {
       settings.passes[settings.active_pass].injection_stage ==
       InjectionStage::PostDLSS;
 
+
+  ImGui::Separator();
+
+  if (ImGui::BeginTabBar("PassTabs")) {
+    for (uint32_t i = 0; i < kMaxPasses; ++i) {
+      char label[32];
+      std::snprintf(label, sizeof(label), "Pass %u", i + 1);
+      if (ImGui::BeginTabItem(label)) {
+        // The open tab determines which pass's debug view is rendered.
+        settings.active_pass = static_cast<int>(i);
+        DrawPassSettingsBody(i, settings, changed);
+        ImGui::EndTabItem();
+      }
+    }
+    ImGui::EndTabBar();
+  }
   // --- HDR section (shared across passes) ---
   if (PersistentHeader("HDR", settings.ui_hdr_open, changed)) {
     if (!hdr_relevant) ImGui::BeginDisabled();
@@ -1068,22 +1084,6 @@ void DrawOverlay(reshade::api::effect_runtime*) {
       }
     }
     if (!hdr_relevant) ImGui::EndDisabled();
-  }
-
-  ImGui::Separator();
-
-  if (ImGui::BeginTabBar("PassTabs")) {
-    for (uint32_t i = 0; i < kMaxPasses; ++i) {
-      char label[32];
-      std::snprintf(label, sizeof(label), "Pass %u", i + 1);
-      if (ImGui::BeginTabItem(label)) {
-        // The open tab determines which pass's debug view is rendered.
-        settings.active_pass = static_cast<int>(i);
-        DrawPassSettingsBody(i, settings, changed);
-        ImGui::EndTabItem();
-      }
-    }
-    ImGui::EndTabBar();
   }
 
   if (changed) {
