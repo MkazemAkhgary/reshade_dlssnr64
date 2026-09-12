@@ -96,7 +96,7 @@ struct Settings {
   // HDR handling. Shared across passes; only the Post-DLSS path uses it.
   // See HDR_DESIGN.md for the pipeline and the meaning of each control.
   // ---------------------------------------------------------------------
-  bool hdr_enable = false;
+  bool hdr_enable = true;
   HdrFormat hdr_format = HdrFormat::Auto;
   ChromaEditMode hdr_chroma_mode = ChromaEditMode::Ratio;
 
