@@ -105,7 +105,8 @@ bool DrawFloatRow(uint32_t pass_index,
   bool slider_changed = false;
   WithDisabled(inheriting, [&] {
     slider_changed =
-        ImGui::SliderFloat(slider_id.c_str(), &display_value, lo, hi, "%.2f");
+    slider_changed =
+        ImGui::SliderFloat(slider_id.c_str(), &display_value, lo, hi, "%.3f");
   });
   if (tooltip != nullptr && ImGui::IsItemHovered()) {
     Tip("%s", tooltip);
@@ -378,7 +379,7 @@ void DrawPipelineSection(uint32_t pass_index,
       "Lower values run the model faster but with less detail. "
       "1.0 runs at full resolution (slowest, best quality).",
       &pass.working_scale, &pass.inherit_working_scale,
-      resolved.working_scale, 0.25f, 1.0f, 1.0f);
+      resolved.working_scale, 0.10f, 1.0f, 1.0f);
 }
 
 // ---------------------------------------------------------------------------

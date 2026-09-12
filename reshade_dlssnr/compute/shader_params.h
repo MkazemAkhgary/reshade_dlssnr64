@@ -28,7 +28,7 @@ constexpr ShaderParamDef kShaderParams[] = {
     {"SoftCompression","Compression","Enable rational soft clamp of log residuals.",          0.0f, 1.0f, 0.00f, true,  nullptr},
     {"SoftMaxBrighten","Compression","Maximum allowed log-luma brightening.",                 0.0f, 2.0f, 0.50f, false, "SoftCompression"},
     {"SoftMaxDarken",  "Compression","Maximum allowed log-luma darkening.",                   0.0f, 2.0f, 0.50f, false, "SoftCompression"},
-    {"SoftMaxChroma",  "Compression","Maximum allowed log-chroma change per channel.",        0.0f, 1.0f, 0.25f, false, "SoftCompression"},
+    {"SoftMaxChroma",  "Compression","Maximum allowed log-chroma change per channel.",        0.0f, 2.0f, 0.50f, false, "SoftCompression"},
     {"SoftKnee",       "Compression","Controls how early compression starts (linear range).", 0.0f, 4.0f, 1.00f, false, "SoftCompression"},
 };
 

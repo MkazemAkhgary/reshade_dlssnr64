@@ -341,7 +341,7 @@ void PassSession::OnPresent(
   const unsigned int width = static_cast<unsigned int>(desc.Width);
   const unsigned int height = static_cast<unsigned int>(desc.Height);
 
-  const float working_scale = std::clamp(pass.working_scale, 0.25f, 1.0f);
+  const float working_scale = std::clamp(pass.working_scale, 0.10f, 1.0f);
   const unsigned int work_width =
       std::max(1u, static_cast<unsigned int>(width * working_scale + 0.5f));
   const unsigned int work_height =
@@ -569,7 +569,7 @@ void PassSession::OnPostDlssEvaluate(
   const unsigned int width = static_cast<unsigned int>(desc.Width);
   const unsigned int height = static_cast<unsigned int>(desc.Height);
 
-  const float working_scale = std::clamp(pass.working_scale, 0.25f, 1.0f);
+  const float working_scale = std::clamp(pass.working_scale, 0.10f, 1.0f);
   const unsigned int work_width =
       std::max(1u, static_cast<unsigned int>(width * working_scale + 0.5f));
   const unsigned int work_height =
