@@ -1012,7 +1012,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           "darken it. 18% grey is a common photographic reference and the "
           "default.",
           &settings.hdr_midtone, nullptr, 0.0f,
-          0.05f, 0.50f, 0.18f);
+          0.01f, 0.50f, 0.18f);
 
       changed |= DrawFloatRow(
           0, "hdr_white_percentile", "White Percentile",
