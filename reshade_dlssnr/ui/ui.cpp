@@ -881,8 +881,13 @@ void DrawOverlay(reshade::api::effect_runtime*) {
                                &settings.hdr_enable);
     if (ImGui::IsItemHovered()) {
       Tip(
-          "Prepares HDR content for the model.\n"
-          "Only applies to passes targeting DLSS Output.");
+          "Prepares HDR content for the model, which expects a "
+          "display-referred SDR image.\n"
+          "Exposure is set automatically from the scene's brightness, and "
+          "the model's edits are mapped back into the source's HDR range on "
+          "output.\n"
+          "Only affects passes running at DLSS Output. Passes at Backbuffer "
+          "operate on a finished image and are unaffected.");
     }
 
     const bool hdr_on = settings.hdr_enable;
