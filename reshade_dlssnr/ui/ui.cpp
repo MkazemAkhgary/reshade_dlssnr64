@@ -834,9 +834,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
                          ImGui::GetContentRegionAvail().x - checkbox_w);
     changed |= ImGui::Checkbox(kTipLabel, &settings.show_tooltips);
     if (ImGui::IsItemHovered()) {
-      Tip(
-          "Show tooltips for controls in this panel.\n"
-          "Turn this off once you know the controls, to reduce clutter.");
+      Tip("Show tooltips for controls in this panel.");
     }
   }
 
