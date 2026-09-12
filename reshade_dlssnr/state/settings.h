@@ -76,6 +76,10 @@ struct Settings {
   bool enabled = true;
   bool only_super_sampling = true;
 
+  // When true, hover tooltips are drawn in the overlay. Exposed next to
+  // the master switch as "Show Tooltips"; defaults to on.
+  bool show_tooltips = true;
+
   // Debug view selection, shared across all passes. 0 = off; N (1-based)
   // selects kDebugViews[N-1] in runtime/debug_view.h. The active pass
   // renders the selected view; switching tabs keeps the selection.

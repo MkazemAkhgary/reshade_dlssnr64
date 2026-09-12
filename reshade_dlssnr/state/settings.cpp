@@ -208,6 +208,8 @@ void LoadSettings() {
                             g_settings.enabled);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "OnlySuperSampling",
                             g_settings.only_super_sampling);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "ShowTooltips",
+                            g_settings.show_tooltips);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "DebugView",
                             g_settings.debug_view);
   if (g_settings.debug_view < 0) g_settings.debug_view = 0;
@@ -287,6 +289,8 @@ void SaveSettings() {
                             g_settings.enabled);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "OnlySuperSampling",
                             g_settings.only_super_sampling);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "ShowTooltips",
+                            g_settings.show_tooltips);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "DebugView",
                             g_settings.debug_view);
 
