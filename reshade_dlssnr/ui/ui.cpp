@@ -3,6 +3,7 @@
 #include "ui.h"
 
 #include <cstdio>
+#include <cstdarg>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -21,6 +22,21 @@ namespace {
 
 constexpr float kControlLabelWidth = 220.0f;
 constexpr float kResetButtonWidth = 24.0f;
+
+// Whether tooltips are drawn. Driven by the "Show Tooltips" checkbox and
+// consulted by Tip() below, so every tooltip in this file respects the
+// setting even from helpers that never see the current Settings.
+bool g_show_tooltips = true;
+
+// Variadic tooltip that no-ops when tooltips are off. All tooltip calls
+// in this file route through here.
+void Tip(const char* fmt, ...) {
+  if (!g_show_tooltips) return;
+  va_list args;
+  va_start(args, fmt);
+  ImGui::SetTooltipV(fmt, args);
+  va_end(args);
+}
 
 // ---------------------------------------------------------------------------
 // Row helpers
@@ -69,7 +85,7 @@ bool DrawFloatRow(uint32_t pass_index,
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted(label);
   if (tooltip != nullptr && ImGui::IsItemHovered()) {
-    ImGui::SetTooltip("%s", tooltip);
+    Tip("%s", tooltip);
   }
 
   ImGui::SameLine(kControlLabelWidth);
@@ -92,7 +108,7 @@ bool DrawFloatRow(uint32_t pass_index,
         ImGui::SliderFloat(slider_id.c_str(), &display_value, lo, hi, "%.2f");
   });
   if (tooltip != nullptr && ImGui::IsItemHovered()) {
-    ImGui::SetTooltip("%s", tooltip);
+    Tip("%s", tooltip);
   }
   if (slider_changed && !inheriting) {
     *raw_value = display_value;
@@ -106,7 +122,7 @@ bool DrawFloatRow(uint32_t pass_index,
     changed = true;
   }
   if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip("Reset to default");
+    Tip("Reset to default");
   }
   ImGui::PopID();
 
@@ -125,7 +141,7 @@ bool DrawFloatRow(uint32_t pass_index,
     }
     if (on) ImGui::PopStyleColor();
     if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip("Inherit this value from the previous pass");
+      Tip("Inherit this value from the previous pass");
     }
     ImGui::PopID();
   }
@@ -153,7 +169,7 @@ bool DrawComboRow(const char* id,
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted(label);
   if (tooltip != nullptr && ImGui::IsItemHovered()) {
-    ImGui::SetTooltip("%s", tooltip);
+    Tip("%s", tooltip);
   }
 
   ImGui::SameLine(kControlLabelWidth);
@@ -175,7 +191,7 @@ bool DrawComboRow(const char* id,
       }
       if (ImGui::IsItemHovered() && item_tooltips != nullptr &&
           item_tooltips[i] != nullptr) {
-        ImGui::SetTooltip("%s", item_tooltips[i]);
+        Tip("%s", item_tooltips[i]);
       }
       if (selected) ImGui::SetItemDefaultFocus();
     }
@@ -185,7 +201,7 @@ bool DrawComboRow(const char* id,
   // Hovering the closed combo shows the tooltip of the current selection.
   if (ImGui::IsItemHovered() && item_tooltips != nullptr &&
       item_tooltips[clamped] != nullptr) {
-    ImGui::SetTooltip("%s", item_tooltips[clamped]);
+    Tip("%s", item_tooltips[clamped]);
   }
 
   return changed;
@@ -246,7 +262,7 @@ int DrawGroupButtons(const char* id,
 
     if (tooltips != nullptr && tooltips[i] != nullptr &&
         ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-      ImGui::SetTooltip("%s", tooltips[i]);
+      Tip("%s", tooltips[i]);
     }
 
     if (is_disabled) ImGui::EndDisabled();
@@ -270,7 +286,7 @@ bool DrawGroupRow(const char* id,
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted(label);
   if (tooltip != nullptr && ImGui::IsItemHovered()) {
-    ImGui::SetTooltip("%s", tooltip);
+    Tip("%s", tooltip);
   }
 
   ImGui::SameLine(kControlLabelWidth);
@@ -318,7 +334,7 @@ void DrawTargetSection(Settings& settings, uint32_t pass_index,
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("Target");
   if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip(
+    Tip(
         "Where this pass runs in the frame.\n"
         "  DLSS Output — runs right after the game's DLSS upscaling, "
         "before UI and tone mapping are applied. Recommended: this is "
@@ -492,7 +508,7 @@ void DrawStatusSection(Settings& settings, bool& changed) {
         AddonController::Get().RetryPass(i);
       }
       if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip(
+        Tip(
             "Clear this pass's failure and try again on the next frame.\n"
             "The model will be recreated from scratch, so this also "
             "recovers from a feature handle that got into a bad state.");
@@ -546,7 +562,7 @@ bool DrawSkinStructureRow(uint32_t pass_index,
   ImGui::AlignTextToFramePadding();
   changed |= DrawCheckboxAtLabel("skin_structure_enabled", &pass.auto_mask);
   if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip(
+    Tip(
         "Lets the model detect character skin and apply its edits to it "
         "separately, so faces and hands are handled more gently than "
         "the rest of the scene.");
@@ -576,7 +592,7 @@ bool DrawSkinStructureRow(uint32_t pass_index,
       changed = true;
     }
     if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip(
+      Tip(
           "How strongly the model's edits are applied to detected skin.\n"
           "Only available when the checkbox to the left is enabled.");
     }
@@ -590,7 +606,7 @@ bool DrawSkinStructureRow(uint32_t pass_index,
       changed = true;
     }
   });
-  if (ImGui::IsItemHovered()) ImGui::SetTooltip("Reset to default");
+  if (ImGui::IsItemHovered()) Tip("Reset to default");
   ImGui::PopID();
 
   if (has_inherit) {
@@ -607,7 +623,7 @@ bool DrawSkinStructureRow(uint32_t pass_index,
     }
     if (on) ImGui::PopStyleColor();
     if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip("Inherit this value from the previous pass");
+      Tip("Inherit this value from the previous pass");
     }
     ImGui::PopID();
   }
@@ -640,7 +656,7 @@ void DrawModelSection(uint32_t pass_index,
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Preset");
     if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip(
+      Tip(
           "Which of the model's three trained presets to use. "
           "They differ in how strongly the model's edits are applied.");
     }
@@ -734,7 +750,7 @@ void DrawShaderParamSections(uint32_t pass_index,
             ImGui::AlignTextToFramePadding();
             changed |= DrawCheckboxAtLabel(id.c_str(), &checked);
             if (ImGui::IsItemHovered() && param.tooltip != nullptr) {
-              ImGui::SetTooltip("%s", param.tooltip);
+              Tip("%s", param.tooltip);
             }
             ImGui::SameLine();
             ImGui::TextUnformatted(param.name);
@@ -765,7 +781,7 @@ void DrawAdvancedSection(PassSettings& pass, bool& changed) {
   ImGui::AlignTextToFramePadding();
   changed |= ImGui::Checkbox("UI Correction", &pass.ui_correction);
   if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip(
+    Tip(
         "Experimental. Asks the model to reduce its edits where it detects "
         "UI elements, so menus and HUD text stay crisp.");
   }
@@ -803,13 +819,13 @@ void DrawOverlay(reshade::api::effect_runtime*) {
 
   changed |= ImGui::Checkbox("Enable DLSSNR", &settings.enabled);
   if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip(
+    Tip(
         "Master switch. When off, no passes run and no GPU work is done.");
   }
 
   changed |= ImGui::Checkbox("Require DLSS", &settings.only_super_sampling);
   if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip(
+    Tip(
         "Only run when the game is actively using DLSS upscaling.\n"
         "Turn this off to also run on frames where DLSS is not in use. "
         "Doing so is rarely useful: the model expects a DLSS result as "
@@ -822,7 +838,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
       std::snprintf(label, sizeof(label), "Enable Pass %u", i + 1);
       changed |= ImGui::Checkbox(label, &settings.pass_enabled[i]);
       if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip(
+        Tip(
             "Turn this pass on or off.\n"
             "A disabled pass keeps its settings but does not run. Its tab "
             "stays visible so you can still review or edit what it would do.");
@@ -843,7 +859,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
     changed |= ImGui::Checkbox("Enable HDR Handling",
                                &settings.hdr_enable);
     if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip(
+      Tip(
           "Prepares HDR content for the model, which expects a "
           "display-referred SDR image.\n"
           "Exposure is set automatically from the scene's brightness, and "
@@ -871,7 +887,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
       ImGui::AlignTextToFramePadding();
       ImGui::TextUnformatted("Status");
       if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip(
+        Tip(
             "Summary of the current HDR measurement.\n"
             "Format — how the DLSS output is being interpreted.\n"
             "Exposure — brightness multiplier being applied before the "
@@ -1007,7 +1023,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           ImGui::Separator();
           ImGui::TextUnformatted("Histogram (log2 luminance)");
           if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip(
+            Tip(
                 "Distribution of brightness in the measured scene, on a "
                 "log2 scale.\n"
                 "Left is dark, right is bright, height is how many pixels "
