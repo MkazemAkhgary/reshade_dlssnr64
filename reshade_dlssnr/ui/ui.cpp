@@ -869,19 +869,20 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   // --- Debug view (shared across passes) ---
   DrawSharedDebugView(settings, changed);
 
+  // HDR handling only applies to passes that target DLSS Output.
+  const bool hdr_relevant =
+      settings.passes[settings.active_pass].injection_stage ==
+      InjectionStage::PostDLSS;
+
   // --- HDR section (shared across passes) ---
   if (PersistentHeader("HDR", settings.ui_hdr_open, changed)) {
+    if (!hdr_relevant) ImGui::BeginDisabled();
     changed |= ImGui::Checkbox("Enable HDR Handling",
                                &settings.hdr_enable);
     if (ImGui::IsItemHovered()) {
       Tip(
-          "Prepares HDR content for the model, which expects a "
-          "display-referred SDR image.\n"
-          "Exposure is set automatically from the scene's brightness, and "
-          "the model's edits are mapped back into the source's HDR range on "
-          "output.\n"
-          "Only affects passes running at DLSS Output. Passes at Backbuffer "
-          "operate on a finished image and are unaffected.");
+          "Prepares HDR content for the model.\n"
+          "Only applies to passes targeting DLSS Output.");
     }
 
     const bool hdr_on = settings.hdr_enable;
@@ -1061,6 +1062,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
         }
       }
     }
+    if (!hdr_relevant) ImGui::EndDisabled();
   }
 
   ImGui::Separator();
