@@ -257,7 +257,6 @@ void LoadSettings() {
                               g_settings.pass_enabled[i]);
     LoadPassSettings(i, g_settings.passes[i]);
   }
-  g_settings.pass_enabled[0] = true;
 
   // Pass 0 is the inheritance root; its inherit flags are meaningless.
   g_settings.passes[0].inherit_working_scale = false;

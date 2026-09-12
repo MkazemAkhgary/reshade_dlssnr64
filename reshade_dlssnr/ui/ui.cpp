@@ -793,9 +793,18 @@ void DrawAdvancedSection(PassSettings& pass, bool& changed) {
 
 void DrawPassSettingsBody(uint32_t pass_index,
                           Settings& settings,
-                          bool enabled,
                           bool& changed) {
   ImGui::PushID(static_cast<int>(pass_index));
+
+  char label[32];
+  std::snprintf(label, sizeof(label), "Enable Pass %u", pass_index + 1);
+  changed |= ImGui::Checkbox(label, &settings.pass_enabled[pass_index]);
+  if (ImGui::IsItemHovered()) {
+    Tip("Turn this pass on or off.");
+  }
+  ImGui::Separator();
+
+  const bool enabled = settings.pass_enabled[pass_index];
   WithDisabled(!enabled, [&] {
     DrawTargetSection(settings, pass_index, changed);
     DrawPipelineSection(pass_index, settings, changed);
@@ -850,20 +859,6 @@ void DrawOverlay(reshade::api::effect_runtime*) {
         "Turn this off to also run on frames where DLSS is not in use. "
         "Doing so is rarely useful: the model expects a DLSS result as "
         "its input.");
-  }
-
-  if (settings.enabled) {
-    for (uint32_t i = 1; i < kMaxPasses; ++i) {
-      char label[32];
-      std::snprintf(label, sizeof(label), "Enable Pass %u", i + 1);
-      changed |= ImGui::Checkbox(label, &settings.pass_enabled[i]);
-      if (ImGui::IsItemHovered()) {
-        Tip(
-            "Turn this pass on or off.\n"
-            "A disabled pass keeps its settings but does not run. Its tab "
-            "stays visible so you can still review or edit what it would do.");
-      }
-    }
   }
 
   ImGui::Separator();
@@ -1077,7 +1072,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
       if (ImGui::BeginTabItem(label)) {
         // The open tab determines which pass's debug view is rendered.
         settings.active_pass = static_cast<int>(i);
-        DrawPassSettingsBody(i, settings, settings.pass_enabled[i], changed);
+        DrawPassSettingsBody(i, settings, changed);
         ImGui::EndTabItem();
       }
     }

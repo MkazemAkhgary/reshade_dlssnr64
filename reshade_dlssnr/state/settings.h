@@ -85,7 +85,6 @@ struct Settings {
   // renders the selected view; switching tabs keeps the selection.
   int debug_view = 0;
 
-  // Pass 0 is always enabled; the remaining entries are user-toggleable.
   bool pass_enabled[kMaxPasses] = {true, false, false};
   PassSettings passes[kMaxPasses];
 
