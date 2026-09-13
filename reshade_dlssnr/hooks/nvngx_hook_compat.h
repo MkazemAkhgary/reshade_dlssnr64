@@ -46,10 +46,19 @@ static bool HookStreamlineEnabled() {
   return enabled;
 }
 
+// Whether the game is loading through Streamline. Cached once: in
+// practice the game loads sl.interposer.dll at process start, long before
+// its first DLSS evaluation, so a single check on the first call is
+// sufficient and keeps the per-frame path off the loader lock.
+static bool StreamlineLoaded() {
+  static const bool loaded =
+      GetModuleHandleW(L"sl.interposer.dll") != nullptr;
+  return loaded;
+}
+
 // True when running a Post-DLSS pass would re-enter NGX unsafely.
 static bool PostDlssUnsafe() {
-  return GetModuleHandleW(L"sl.interposer.dll") != nullptr &&
-         !HookStreamlineEnabled();
+  return StreamlineLoaded() && !HookStreamlineEnabled();
 }
 
 static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_CreateFeature(
