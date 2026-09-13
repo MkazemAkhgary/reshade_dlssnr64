@@ -229,8 +229,6 @@ void LoadSettings() {
                             g_settings.ui_hdr_diagnostics_open);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.ModelOpen",
                             g_settings.ui_model_open);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.AdvancedOpen",
-                            g_settings.ui_advanced_open);
   for (uint32_t j = 0; j < kShaderParamCount; ++j) {
     const std::string key = "UI.CategoryOpen" + std::to_string(j);
     reshade::get_config_value(nullptr, "RESHADE_DLSSNR", key.c_str(),
@@ -304,8 +302,6 @@ void SaveSettings() {
                             g_settings.ui_hdr_diagnostics_open);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.ModelOpen",
                             g_settings.ui_model_open);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.AdvancedOpen",
-                            g_settings.ui_advanced_open);
   for (uint32_t j = 0; j < kShaderParamCount; ++j) {
     const std::string key = "UI.CategoryOpen" + std::to_string(j);
     reshade::set_config_value(nullptr, "RESHADE_DLSSNR", key.c_str(),

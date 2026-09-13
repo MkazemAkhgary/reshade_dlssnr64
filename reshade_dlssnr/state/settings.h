@@ -114,9 +114,8 @@ struct Settings {
   // tab, so the panel keeps a single, consistent shape. `ui_category_open`
   // is indexed by the order categories appear in kShaderParams (0, 1, ...);
   // entries past the current category count are unused. Model and each
-  // category default to open, Advanced to closed.
+  // category default to open.
   bool ui_model_open = true;
-  bool ui_advanced_open = false;
   bool ui_category_open[16] = {
       true, true, true, true, true, true, true, true,
       true, true, true, true, true, true, true, true};

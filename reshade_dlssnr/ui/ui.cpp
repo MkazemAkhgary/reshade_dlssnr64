@@ -749,6 +749,19 @@ void DrawModelSection(uint32_t pass_index,
       resolved.local_structure, 0.0f, 2.0f, 1.0f);
 
   changed |= DrawSkinStructureRow(pass_index, pass, resolved);
+
+  // UI Correction sits under Skin Structure: both are model-side masks
+  // that affect what the edit preserves. Same checkbox-at-label style, so
+  // the two read as siblings.
+  ImGui::AlignTextToFramePadding();
+  changed |= DrawCheckboxAtLabel("ui_correction", &pass.ui_correction);
+  if (ImGui::IsItemHovered()) {
+    Tip(
+        "Asks the model to reduce its edits where it detects UI elements, "
+        "so menus and HUD text stay crisp.");
+  }
+  ImGui::SameLine();
+  ImGui::TextUnformatted("UI Correction");
 }
 
 // ---------------------------------------------------------------------------
@@ -825,24 +838,6 @@ void DrawShaderParamSections(uint32_t pass_index,
   }
 }
 
-// ---------------------------------------------------------------------------
-// Section: Advanced
-// ---------------------------------------------------------------------------
-
-void DrawAdvancedSection(Settings& settings, PassSettings& pass,
-                         bool& changed) {
-  if (!PersistentHeader("Advanced", settings.ui_advanced_open, changed)) {
-    return;
-  }
-
-  ImGui::AlignTextToFramePadding();
-  changed |= ImGui::Checkbox("UI Correction", &pass.ui_correction);
-  if (ImGui::IsItemHovered()) {
-    Tip(
-        "Experimental. Asks the model to reduce its edits where it detects "
-        "UI elements, so menus and HUD text stay crisp.");
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Pass tab body
@@ -868,8 +863,6 @@ void DrawPassSettingsBody(uint32_t pass_index,
     ImGui::Separator();
     DrawModelSection(pass_index, settings, changed);
     DrawShaderParamSections(pass_index, settings, changed);
-    ImGui::Separator();
-    DrawAdvancedSection(settings, settings.passes[pass_index], changed);
   });
   ImGui::PopID();
 }
