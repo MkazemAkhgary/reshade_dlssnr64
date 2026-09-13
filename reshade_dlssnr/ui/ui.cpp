@@ -386,6 +386,18 @@ void DrawPipelineSection(uint32_t pass_index,
 // Section: Status
 // ---------------------------------------------------------------------------
 
+// True when at least one enabled pass runs at DLSS Output, i.e. when the
+// shared HDR stage would actually be applied. HDR only affects that path.
+bool AnyPassUsesDlssOutput(const Settings& settings) {
+  for (uint32_t i = 0; i < kMaxPasses; ++i) {
+    if (settings.pass_enabled[i] &&
+        settings.passes[i].injection_stage == InjectionStage::PostDLSS) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Describes what a pass is doing right now, in one line. The injection
 // stage and working scale are passed in separately because they are
 // settings, not part of the runtime status.
@@ -487,10 +499,18 @@ void DrawStatusSection(Settings& settings, bool& changed) {
   }
 
   // HDR. Always shown, so whether the stage is on is never ambiguous.
+  // The on/off state comes from the user setting, not the runtime snapshot:
+  // when every pass runs on the backbuffer the runtime stage never starts,
+  // but the toggle is still on and should read as such.
   {
+    const bool hdr_in_use = AnyPassUsesDlssOutput(settings);
+
     char buf[128];
-    if (!snap.hdr_enabled) {
+    if (!settings.hdr_enable) {
       std::snprintf(buf, sizeof(buf), "Off");
+    } else if (!hdr_in_use) {
+      std::snprintf(buf, sizeof(buf),
+                    "On · inactive (no pass targets DLSS Output)");
     } else if (snap.hdr_ready) {
       std::snprintf(buf, sizeof(buf),
                     "Active · exposure %.3f · white %.3f",
@@ -498,9 +518,10 @@ void DrawStatusSection(Settings& settings, bool& changed) {
     } else {
       std::snprintf(buf, sizeof(buf), "Warming up (no measurement yet)");
     }
-    // Disabled is a valid state, not a fault; only an enabled-but-not-yet-
-    // measured stage gets the warning colour.
-    bullet(!snap.hdr_enabled || snap.hdr_ready);
+
+    // Off and inactive are both valid, deliberate states; only a stage that
+    // is enabled and in use but not yet measured gets the warning colour.
+    bullet(!settings.hdr_enable || !hdr_in_use || snap.hdr_ready);
     row("HDR", buf);
   }
 
@@ -898,14 +919,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   // HDR handling only applies to passes that target DLSS Output. The
   // section is shared, so it is live whenever any enabled pass would use
   // it — not just the currently-selected tab.
-  bool hdr_relevant = false;
-  for (uint32_t i = 0; i < kMaxPasses; ++i) {
-    if (settings.pass_enabled[i] &&
-        settings.passes[i].injection_stage == InjectionStage::PostDLSS) {
-      hdr_relevant = true;
-      break;
-    }
-  }
+  const bool hdr_relevant = AnyPassUsesDlssOutput(settings);
 
 
   ImGui::Separator();
