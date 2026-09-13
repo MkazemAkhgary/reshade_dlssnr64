@@ -15,6 +15,11 @@
 
 namespace reshade_dlssnr {
 
+// Size and alignment are pinned to 256 bytes for two reasons: the CBV
+// created in BindAndDispatch hardcodes SizeInBytes = 256, and the D3D12
+// root signature requires CBVs to be 256-byte aligned. Growing `params`
+// past 48 floats is fine until the struct exceeds 256 bytes, at which
+// point the static_assert below fires.
 struct alignas(256) ComputeConstants {
   uint32_t Width = 0;
   uint32_t Height = 0;
