@@ -82,35 +82,61 @@ bool PersistentHeader(const char* label, bool& open_setting, bool& changed) {
   return open;
 }
 
-// Scoped ImGui indentation. Unindents on destruction, so the indent is
-// balanced even when the enclosing scope has early returns.
+// Scoped ImGui indentation with a smaller-than-default step, so nesting
+// reads as a shift rather than a jump. Unindents on destruction, so the
+// indent is balanced even when the enclosing scope has early returns.
 class IndentScope {
  public:
-  IndentScope() { ImGui::Indent(); }
-  ~IndentScope() { ImGui::Unindent(); }
+  explicit IndentScope(float amount = 12.0f) : amount_(amount) {
+    ImGui::Indent(amount_);
+  }
+  ~IndentScope() { ImGui::Unindent(amount_); }
 
   IndentScope(const IndentScope&) = delete;
   IndentScope& operator=(const IndentScope&) = delete;
+
+ private:
+  float amount_;
 };
 
 // A collapsible header for a sub-section — something nested inside a
-// top-level section, e.g. "Model" inside a pass tab, or a shader-param
-// category. Same collapse behavior as PersistentHeader, but dims and cools
-// the label so the two tiers read differently. The caller indents with an
-// IndentScope, which this function does not do itself, so header and
-// content land at the same indent.
+// top-level section, e.g. "Model" inside a pass tab, a shader-param
+// category, or "Diagnostics" inside HDR. Same collapse behavior as
+// PersistentHeader, but with a darkened background and a dimmed, cooler
+// label, so the two tiers read as distinct without changing the theme.
+// The caller indents with an IndentScope; this function does not indent.
 bool PersistentSubHeader(const char* label, bool& open_setting,
                          bool& changed) {
-  // Multiply by <1 to dim, and nudge blue to cool. Works on both light and
-  // dark themes because it's relative to the current text color.
+  // Text: dim, nudge blue. Relative to the current text color so it
+  // survives any theme swap.
   const ImVec4 base = ImGui::GetStyleColorVec4(ImGuiCol_Text);
   const ImVec4 tint(base.x * 0.82f, base.y * 0.82f, base.z * 0.92f, base.w);
 
+  // Background: derive from the theme's own header colors and darken, so
+  // the sub-header reads as the same family as a top-level header but
+  // quieter. Pushing all three states keeps hover/active feedback alive.
+  const ImVec4 hdr = ImGui::GetStyleColorVec4(ImGuiCol_Header);
+  const ImVec4 hdr_hover = ImGui::GetStyleColorVec4(ImGuiCol_HeaderHovered);
+  const ImVec4 hdr_active = ImGui::GetStyleColorVec4(ImGuiCol_HeaderActive);
+
   ImGui::PushStyleColor(ImGuiCol_Text, tint);
+  ImGui::PushStyleColor(
+      ImGuiCol_Header,
+      ImVec4(hdr.x * 0.55f, hdr.y * 0.55f, hdr.z * 0.70f, hdr.w));
+  ImGui::PushStyleColor(
+      ImGuiCol_HeaderHovered,
+      ImVec4(hdr_hover.x * 0.65f, hdr_hover.y * 0.65f,
+             hdr_hover.z * 0.75f, hdr_hover.w));
+  ImGui::PushStyleColor(
+      ImGuiCol_HeaderActive,
+      ImVec4(hdr_active.x * 0.75f, hdr_active.y * 0.75f,
+             hdr_active.z * 0.85f, hdr_active.w));
+
   ImGui::SetNextItemOpen(open_setting, ImGuiCond_Always);
   const bool open =
       ImGui::TreeNodeEx(label, ImGuiTreeNodeFlags_CollapsingHeader);
-  ImGui::PopStyleColor();
+
+  ImGui::PopStyleColor(4);
 
   if (open != open_setting) {
     open_setting = open;
@@ -1226,8 +1252,12 @@ void DrawOverlay(reshade::api::effect_runtime*) {
     // Diagnostics: raw measurement values, for scenes where the exposure
     // converges somewhere unexpected. Everything below is read-only.
     if (hdr_on) {
-      if (PersistentHeader("Diagnostics", settings.ui_hdr_diagnostics_open,
-                           changed)) {
+      // Sub-section of HDR: same indent-and-background treatment as the
+      // other nested headers, so it reads as belonging to HDR rather than
+      // sitting beside it.
+      IndentScope indent;
+      if (PersistentSubHeader("Diagnostics",
+                              settings.ui_hdr_diagnostics_open, changed)) {
         const HdrSnapshot snap = AddonController::Get().GetHdrSnapshot();
 
         if (!snap.has_histogram) {
