@@ -199,18 +199,6 @@ StatusSnapshot AddonController::GetStatus() const {
   return status_;
 }
 
-void AddonController::RetryPass(uint32_t index) {
-  if (index >= kMaxPasses) return;
-
-  std::lock_guard<std::mutex> lock(g_direct_mutex);
-  passes_[index].Retry(runtime_);
-
-  // Refresh so the UI sees the cleared failure on its next read. If we
-  // skip this, the pass would still show as failed for one frame after the
-  // user clicks Retry.
-  RefreshStatus(GetSettings());
-}
-
 void AddonController::SetPostDlssBlocked(const char* reason) {
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 

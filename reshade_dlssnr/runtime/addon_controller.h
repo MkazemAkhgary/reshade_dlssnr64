@@ -45,10 +45,6 @@ class AddonController {
   // Thread-safe snapshot of the addon's current health, for the UI.
   StatusSnapshot GetStatus() const;
 
-  // Clears the failure state of pass `index` and re-arms it for the next
-  // frame. Safe to call even when the pass has not failed, and when
-  // `index` is out of range (both are no-ops).
-  void RetryPass(uint32_t index);
 
   // Clears the failure state of every pass. One button in the UI, so the
   // user never has to click through tabs to un-stick a frame.
