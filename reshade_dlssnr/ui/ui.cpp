@@ -470,77 +470,69 @@ void DrawStatusSection(Settings& settings, bool& changed) {
     ImGui::SameLine();
   };
 
-  auto row = [&](const char* label, const char* value) {
+  // A single cell of a two-column status table: bullet, then "Label: value".
+  auto cell = [&](bool good, const char* label, const char* value) {
+    bullet(good);
     ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(label);
-    ImGui::SameLine(kControlLabelWidth);
-    ImGui::TextUnformatted(value);
+    ImGui::Text("%s: %s", label, value);
   };
 
-  // Master.
-  {
-    char buf[64];
-    std::snprintf(buf, sizeof(buf), "%s", snap.enabled ? "Enabled" : "Off");
-    bullet(snap.enabled);
-    row("DLSSNR", buf);
+  // Build the value strings up front so they can be paired into a compact
+  // two-column table.
+  char dlssnr_buf[16];
+  std::snprintf(dlssnr_buf, sizeof(dlssnr_buf), "%s",
+                snap.enabled ? "Enabled" : "Off");
+
+  char runtime_buf[kStatusTextLength + 32];
+  if (snap.runtime_initialized) {
+    std::snprintf(runtime_buf, sizeof(runtime_buf), "Initialized");
+  } else if (snap.runtime_reason[0] != '\0') {
+    std::snprintf(runtime_buf, sizeof(runtime_buf), "Not initialized — %s",
+                  snap.runtime_reason);
+  } else {
+    std::snprintf(runtime_buf, sizeof(runtime_buf), "Not initialized");
   }
 
-  // Runtime.
-  {
-    char buf[kStatusTextLength + 32];
-    if (snap.runtime_initialized) {
-      std::snprintf(buf, sizeof(buf), "Initialized");
-    } else if (snap.runtime_reason[0] != '\0') {
-      std::snprintf(buf, sizeof(buf), "Not initialized — %s",
-                    snap.runtime_reason);
-    } else {
-      std::snprintf(buf, sizeof(buf), "Not initialized");
-    }
-    bullet(snap.runtime_initialized);
-    row("NGX runtime", buf);
+  char guides_buf[48];
+  std::snprintf(guides_buf, sizeof(guides_buf), "%s",
+                snap.guides_valid ? "Valid (depth + motion)" : "Not seen");
+
+  const bool hdr_in_use = AnyPassUsesDlssOutput(settings);
+  const bool hdr_good = !settings.hdr_enable || !hdr_in_use || snap.hdr_ready;
+  char hdr_buf[96];
+  if (!settings.hdr_enable) {
+    std::snprintf(hdr_buf, sizeof(hdr_buf), "Off");
+  } else if (!hdr_in_use) {
+    std::snprintf(hdr_buf, sizeof(hdr_buf), "Inactive (no DLSS Output pass)");
+  } else if (snap.hdr_ready) {
+    std::snprintf(hdr_buf, sizeof(hdr_buf), "Active · exp %.3f · white %.3f",
+                  snap.hdr_exposure, snap.hdr_white_point);
+  } else {
+    std::snprintf(hdr_buf, sizeof(hdr_buf), "Warming up");
   }
 
-  // Guides.
-  {
-    char buf[64];
-    std::snprintf(buf, sizeof(buf), "%s",
-                  snap.guides_valid ? "Valid (depth + motion)" : "Not seen");
-    bullet(snap.guides_valid);
-    row("DLSS guides", buf);
-  }
+  // Shared health, two cells per row.
+  if (ImGui::BeginTable("status_shared", 2,
+                        ImGuiTableFlags_SizingStretchSame)) {
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    cell(snap.enabled, "DLSSNR", dlssnr_buf);
+    ImGui::TableNextColumn();
+    cell(snap.runtime_initialized, "NGX runtime", runtime_buf);
 
-  // Post-DLSS block. Only present when the NGX hook skipped the DLSS
-  // Output path because re-entering NGX would have been unsafe.
-  if (snap.post_dlss_blocked) {
-    bullet(false);
-    row("Post-DLSS", snap.post_dlss_block_reason);
-  }
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    cell(snap.guides_valid, "DLSS guides", guides_buf);
+    ImGui::TableNextColumn();
+    cell(hdr_good, "HDR", hdr_buf);
 
-  // HDR. Always shown, so whether the stage is on is never ambiguous.
-  // The on/off state comes from the user setting, not the runtime snapshot:
-  // when every pass runs on the backbuffer the runtime stage never starts,
-  // but the toggle is still on and should read as such.
-  {
-    const bool hdr_in_use = AnyPassUsesDlssOutput(settings);
-
-    char buf[128];
-    if (!settings.hdr_enable) {
-      std::snprintf(buf, sizeof(buf), "Off");
-    } else if (!hdr_in_use) {
-      std::snprintf(buf, sizeof(buf),
-                    "On · inactive (no pass targets DLSS Output)");
-    } else if (snap.hdr_ready) {
-      std::snprintf(buf, sizeof(buf),
-                    "Active · exposure %.3f · white %.3f",
-                    snap.hdr_exposure, snap.hdr_white_point);
-    } else {
-      std::snprintf(buf, sizeof(buf), "Warming up (no measurement yet)");
+    if (snap.post_dlss_blocked) {
+      ImGui::TableNextRow();
+      ImGui::TableNextColumn();
+      cell(false, "Post-DLSS", snap.post_dlss_block_reason);
     }
 
-    // Off and inactive are both valid, deliberate states; only a stage that
-    // is enabled and in use but not yet measured gets the warning colour.
-    bullet(!settings.hdr_enable || !hdr_in_use || snap.hdr_ready);
-    row("HDR", buf);
+    ImGui::EndTable();
   }
 
   ImGui::Separator();
@@ -1118,18 +1110,36 @@ void DrawOverlay(reshade::api::effect_runtime*) {
         if (!snap.has_histogram) {
           ImGui::TextDisabled("Waiting for first histogram measurement...");
         } else {
-          ImGui::Text("Samples: %u", snap.samples);
-          ImGui::Text("Scene median (P50): %.4f", snap.p50_luma);
-          ImGui::Text("White point source (P%.1f): %.4f",
-                      settings.hdr_white_percentile * 100.0f,
-                      snap.p_hi_luma);
-          ImGui::Text("Target exposure: %.3f   Current: %.3f",
-                      snap.target_exposure, snap.exposure);
-          ImGui::Text("White point (post-headroom): %.3f",
-                      snap.white_point *
-                          std::max(settings.hdr_highlight_headroom, 0.01f));
-          ImGui::Text("Frames since last measurement: %u",
-                      snap.frames_since_measure);
+          if (ImGui::BeginTable("hdr_diag", 2,
+                                ImGuiTableFlags_SizingStretchSame)) {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::Text("Samples: %u", snap.samples);
+            ImGui::TableNextColumn();
+            ImGui::Text("Frames since: %u", snap.frames_since_measure);
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::Text("Median (P50): %.4f", snap.p50_luma);
+            ImGui::TableNextColumn();
+            ImGui::Text("White source (P%.1f): %.4f",
+                        settings.hdr_white_percentile * 100.0f,
+                        snap.p_hi_luma);
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::Text("Target exposure: %.3f", snap.target_exposure);
+            ImGui::TableNextColumn();
+            ImGui::Text("Current: %.3f", snap.exposure);
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::Text("White (post-headroom): %.3f",
+                        snap.white_point *
+                            std::max(settings.hdr_highlight_headroom, 0.01f));
+
+            ImGui::EndTable();
+          }
 
           ImGui::Separator();
           ImGui::TextUnformatted("Histogram (log2 luminance)");
