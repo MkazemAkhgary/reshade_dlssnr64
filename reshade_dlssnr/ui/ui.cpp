@@ -924,6 +924,8 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   // --- Debug view (shared across passes) ---
   DrawSharedDebugView(settings, changed);
 
+  SectionDivider();
+
   // --- Status (shared across passes) ---
   DrawStatusSection(settings, changed);
 
