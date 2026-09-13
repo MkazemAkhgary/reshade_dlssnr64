@@ -741,12 +741,9 @@ void DrawModelSection(uint32_t pass_index,
   {
     static const char* kPresetNames[] = {"A", "B", "C"};
     static const char* kPresetTooltips[] = {
-        "Model preset A. Typically the most conservative; preserves the "
-        "original image most closely.",
-        "Model preset B. Balanced default; a middle ground between "
-        "preservation and the model's edit.",
-        "Model preset C. The most aggressive preset; applies the model's "
-        "edit most strongly.",
+        "Model preset A.",
+        "Model preset B.",
+        "Model preset C.",
     };
 
     ImGui::AlignTextToFramePadding();
