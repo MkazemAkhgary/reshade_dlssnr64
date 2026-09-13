@@ -6,6 +6,7 @@
 #include <d3dcompiler.h>
 #include <wrl/client.h>
 
+#include <atomic>
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -90,6 +91,14 @@ class ComputeEngine {
 
   bool IsInit() const { return device_ != nullptr; }
 
+  // True once the background compiler has finished its pass over
+  // kComputePasses[]. Callers check this before dispatching so the render
+  // thread never blocks on a compile; if it is false, they skip the frame
+  // without treating it as a failure. Dispatch itself also refuses to
+  // compile synchronously while this is false, so an unguarded caller
+  // cannot reintroduce the hitch.
+  bool IsReady() const { return ready_.load(std::memory_order_acquire); }
+
  private:
   ID3D12Device* device_ = nullptr;
   Microsoft::WRL::ComPtr<ID3D12RootSignature> root_signature_;
@@ -110,6 +119,11 @@ class ComputeEngine {
 
   std::thread worker_;
   bool worker_stop_ = false;
+
+  // Set by the worker when it finishes, cleared by Init before it starts
+  // a fresh worker. Acquire/release only; the heavier state (passes_) is
+  // still guarded by passes_mutex_.
+  std::atomic<bool> ready_{false};
 
   // Compiles every pass in kComputePasses[] off the render thread. Runs
   // once per Init; joins before any device or root signature teardown.
