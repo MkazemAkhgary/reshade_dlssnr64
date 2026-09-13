@@ -44,7 +44,6 @@ struct StatusSnapshot {
   bool guides_valid = false;
 
   // HDR stage (shared across passes; only used by Post-DLSS passes).
-  bool hdr_enabled = false;
   bool hdr_ready = false;        // has consumed at least one measurement
   float hdr_exposure = 1.0f;
   float hdr_white_point = 1.0f;
