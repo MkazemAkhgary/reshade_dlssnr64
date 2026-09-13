@@ -93,7 +93,7 @@ struct Settings {
   // every frame (most responsive, most GPU work); higher values measure
   // less often. The EMA blend rate scales with this so a longer interval
   // also smooths more slowly.
-  int hdr_measure_interval = 16;
+  int hdr_measure_interval = 4;
 
   // Scene key target in SDR (midtones land here).
   float hdr_midtone = 0.18f;

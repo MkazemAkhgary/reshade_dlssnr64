@@ -1136,7 +1136,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           "Higher values measure less often and let exposure adjust more "
           "slowly.",
           &settings.hdr_measure_interval,
-          32, 1, 16);
+          32, 1, 4);
 
       changed |= DrawFloatRow(
           0, "hdr_midtone", "Midtone Target",
