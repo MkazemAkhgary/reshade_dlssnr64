@@ -120,8 +120,8 @@ struct Settings {
   bool ui_category_open[16] = {
       true, true, true, true, true, true, true, true,
       true, true, true, true, true, true, true, true};
-  bool ui_status_open = false;
-  bool ui_hdr_open = false;
+  bool ui_status_open = true;
+  bool ui_hdr_open = true;
   bool ui_hdr_diagnostics_open = false;
 };
 
