@@ -32,6 +32,7 @@ class PassSession {
       NgxRuntime& runtime,
       const PassSettings& pass,
       const Settings& settings,
+      ComputeEngine& codec,
       ID3D12CommandQueue* command_queue,
       IDXGISwapChain* swapchain,
       FrameDebugContext& frame_debug);
@@ -47,6 +48,7 @@ class PassSession {
       NgxRuntime& runtime,
       const PassSettings& pass,
       const Settings& settings,
+      ComputeEngine& codec,
       ID3D12GraphicsCommandList* command_list,
       ID3D12Resource* output_resource,
       bool is_first_pass,
@@ -121,6 +123,7 @@ class PassSession {
   // states. Returns true on success. No-op otherwise.
   bool MaybeRenderDebug(
       const Settings& settings,
+      ComputeEngine& codec,
       ID3D12GraphicsCommandList* command_list,
       FrameDebugContext& frame_debug,
       const DebugSnapshot& snapshot,
@@ -142,7 +145,6 @@ class PassSession {
   uint32_t pass_index_ = 0;
 
   ID3D12CommandQueue* command_queue_ = nullptr;
-  std::unique_ptr<ComputeEngine> codec_;
 
   bool failed_ = false;
   const char* reason_ = "";
