@@ -82,6 +82,43 @@ bool PersistentHeader(const char* label, bool& open_setting, bool& changed) {
   return open;
 }
 
+// Scoped ImGui indentation. Unindents on destruction, so the indent is
+// balanced even when the enclosing scope has early returns.
+class IndentScope {
+ public:
+  IndentScope() { ImGui::Indent(); }
+  ~IndentScope() { ImGui::Unindent(); }
+
+  IndentScope(const IndentScope&) = delete;
+  IndentScope& operator=(const IndentScope&) = delete;
+};
+
+// A collapsible header for a sub-section — something nested inside a
+// top-level section, e.g. "Model" inside a pass tab, or a shader-param
+// category. Same collapse behavior as PersistentHeader, but dims and cools
+// the label so the two tiers read differently. The caller indents with an
+// IndentScope, which this function does not do itself, so header and
+// content land at the same indent.
+bool PersistentSubHeader(const char* label, bool& open_setting,
+                         bool& changed) {
+  // Multiply by <1 to dim, and nudge blue to cool. Works on both light and
+  // dark themes because it's relative to the current text color.
+  const ImVec4 base = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+  const ImVec4 tint(base.x * 0.82f, base.y * 0.82f, base.z * 0.92f, base.w);
+
+  ImGui::PushStyleColor(ImGuiCol_Text, tint);
+  ImGui::SetNextItemOpen(open_setting, ImGuiCond_Always);
+  const bool open =
+      ImGui::TreeNodeEx(label, ImGuiTreeNodeFlags_CollapsingHeader);
+  ImGui::PopStyleColor();
+
+  if (open != open_setting) {
+    open_setting = open;
+    changed = true;
+  }
+  return open;
+}
+
 // A float slider row: label at the control column, slider filling the
 // remaining width, reset button at the far right, and (for passes > 0) an
 // inherit toggle after reset. When inheriting, the slider is disabled and
@@ -777,7 +814,11 @@ void DrawModelSection(uint32_t pass_index,
   PassSettings& pass = settings.passes[pass_index];
   const PassSettings& resolved = GetResolvedPass(pass_index);
 
-  if (!PersistentHeader("Model", settings.ui_model_open, changed)) {
+  // Indent the whole sub-section (header included), so it reads as nested
+  // inside the pass tab it belongs to.
+  IndentScope indent;
+
+  if (!PersistentSubHeader("Model", settings.ui_model_open, changed)) {
     return;
   }
 
@@ -879,7 +920,11 @@ void DrawShaderParamSections(uint32_t pass_index,
     // past kShaderParamCount are ignored and new ones default to open.
     bool& category_open =
         settings.ui_category_open[category_index < 16 ? category_index : 15];
-    const bool open = PersistentHeader(category, category_open, changed);
+
+    // Sub-section: same indent-and-dim treatment as "Model", so categories
+    // read as sitting one level in from the pass tab's own content.
+    IndentScope indent;
+    const bool open = PersistentSubHeader(category, category_open, changed);
     category_index++;
 
     if (open) {
