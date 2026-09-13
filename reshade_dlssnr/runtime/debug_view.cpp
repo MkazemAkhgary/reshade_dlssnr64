@@ -96,6 +96,9 @@ bool RenderDebugView(
       target_width == 0 || target_height == 0) {
     return false;
   }
+  // The debug shader is compiled on the worker like everything else;
+  // skipping a frame here just leaves the debug view one frame behind.
+  if (!codec.IsReady()) return false;
 
   const uint32_t index = static_cast<uint32_t>(debug_view) - 1;
   if (index >= CountDebugViews()) return false;

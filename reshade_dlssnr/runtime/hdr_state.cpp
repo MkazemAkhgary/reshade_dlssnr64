@@ -241,6 +241,14 @@ void HdrState::BeginFrame(CommandContext& cmd,
   }
   frames_until_measure_ = capped_every - 1;
 
+  // The histogram shaders are compiled on the worker like everything
+  // else. Skipping here is safe: pending_measurement_ stays false, so
+  // the next frame retries, and the readback ring is untouched.
+  if (!codec.IsReady()) {
+    frame_counter_++;
+    return;
+  }
+
   // Dispatch histogram on the game's command list.
   ComputeConstants constants = {};
   constants.Width = width;

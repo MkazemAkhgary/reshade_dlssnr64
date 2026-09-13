@@ -412,6 +412,9 @@ void PassSession::OnPresent(
     Fail("failed to initialize compute engine");
     return;
   }
+  // Background compiler still running. Skip this frame without failing;
+  // the pass runs normally once it finishes.
+  if (!codec_->IsReady()) return;
 
   if (model_input == backbuffer.Get()) {
     command_.Transition(command_.GetCommandList(), backbuffer.Get(),
@@ -559,6 +562,8 @@ void PassSession::OnPostDlssEvaluate(
     Fail("failed to initialize compute engine");
     return;
   }
+  // Same skip as OnPresent: don't block the render thread on a compile.
+  if (!codec_->IsReady()) return;
 
   const DlssGuideState guides = guides_->GetState();
 
