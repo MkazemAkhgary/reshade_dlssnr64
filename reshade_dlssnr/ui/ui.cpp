@@ -939,7 +939,6 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   }
   // --- HDR section (shared across passes) ---
   if (PersistentHeader("HDR", settings.ui_hdr_open, changed)) {
-    if (!hdr_relevant) ImGui::BeginDisabled();
     changed |= ImGui::Checkbox("Enable HDR Handling",
                                &settings.hdr_enable);
     if (ImGui::IsItemHovered()) {
@@ -952,6 +951,11 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           "Only affects passes running at DLSS Output. Passes at Backbuffer "
           "operate on a finished image and are unaffected.");
     }
+
+    // The checkbox above stays live regardless of which pass is selected,
+    // so HDR can be toggled on before wiring up a DLSS Output pass. The
+    // rest of the section is inert while no pass uses the stage.
+    if (!hdr_relevant) ImGui::BeginDisabled();
 
     const bool hdr_on = settings.hdr_enable;
 
