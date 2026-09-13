@@ -1033,8 +1033,10 @@ void DrawOverlay(reshade::api::effect_runtime*) {
       }
       ImGui::SameLine(kControlLabelWidth);
 
-      if (!snap.ready) {
-        ImGui::TextDisabled("waiting for first measurement...");
+      if (!hdr_relevant) {
+        ImGui::TextDisabled("Inactive (no DLSS Output pass)");
+      } else if (!snap.ready) {
+        ImGui::TextDisabled("Waiting for first measurement...");
       } else {
         ImGui::Text("Format: %s   Exposure: %.3f   White: %.3f",
                     format_name, snap.exposure, snap.white_point);
