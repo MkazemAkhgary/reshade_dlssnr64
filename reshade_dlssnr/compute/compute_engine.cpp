@@ -301,24 +301,35 @@ bool ComputeEngine::Dispatch(
     return false;
   }
 
-  auto it = passes_.find(pass_name);
-  if (it == passes_.end()) {
-    const char* source = FindComputePassSource(pass_name);
-    if (source == nullptr) return false;
+  ID3D12PipelineState* pso = nullptr;
 
-    CachedPass pass;
-    if (!CompilePipeline(source, pass.pso.GetAddressOf())) {
-      std::string msg = "Failed to compile compute pass: ";
-      msg += pass_name;
-      reshade::log::message(reshade::log::level::error, msg.c_str());
-      return false;
+  {
+    std::lock_guard<std::mutex> lock(passes_mutex_);
+
+    auto it = passes_.find(pass_name);
+    if (it == passes_.end()) {
+      // Fallback: the background worker has not produced this pass yet, or
+      // failed to. Compile it here so the current contract (Dispatch either
+      // runs the pass or reports failure) is unchanged.
+      const char* source = FindComputePassSource(pass_name);
+      if (source == nullptr) return false;
+
+      CachedPass pass;
+      if (!CompilePipeline(source, pass.pso.GetAddressOf())) {
+        std::string msg = "Failed to compile compute pass: ";
+        msg += pass_name;
+        reshade::log::message(reshade::log::level::error, msg.c_str());
+        return false;
+      }
+
+      it = passes_.emplace(pass_name, std::move(pass)).first;
     }
 
-    it = passes_.emplace(pass_name, std::move(pass)).first;
+    pso = it->second.pso.Get();
   }
 
   return BindAndDispatch(
-      command_list, it->second.pso.Get(), constants, srvs, uavs,
+      command_list, pso, constants, srvs, uavs,
       threads_x, threads_y, threads_z);
 }
 
