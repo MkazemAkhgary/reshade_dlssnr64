@@ -91,8 +91,10 @@ class AddonController {
   // not submit — it just records state on the game's list).
   CommandContext pass1_command_;
 
-  // Compute engine used only for the HDR histogram passes.
-  ComputeEngine hdr_codec_;
+  // Shared compute codec for every pass and the HDR histogram. One engine
+  // means one root signature, one descriptor heap, and one background
+  // compile of kComputePasses[] instead of one per session.
+  ComputeEngine codec_;
 
   // Set once after the first successful hdr_.Ensure() + hdr_codec_.Init().
   // After that, Ensure/Init are not called again — BeginFrame does its own
