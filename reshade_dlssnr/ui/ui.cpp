@@ -112,25 +112,22 @@ bool PersistentSubHeader(const char* label, bool& open_setting,
   const ImVec4 base = ImGui::GetStyleColorVec4(ImGuiCol_Text);
   const ImVec4 tint(base.x * 0.82f, base.y * 0.82f, base.z * 0.92f, base.w);
 
-  // Background: derive from the theme's own header colors and darken, so
-  // the sub-header reads as the same family as a top-level header but
-  // quieter. Pushing all three states keeps hover/active feedback alive.
-  const ImVec4 hdr = ImGui::GetStyleColorVec4(ImGuiCol_Header);
+  // Background: transparent at rest, so the tier distinction comes from
+  // the text tint and the indent rather than a fill. Hover and active
+  // still tint at reduced alpha so the header gives feedback. The theme's
+  // own hover/active colors are reused, just dialed down.
   const ImVec4 hdr_hover = ImGui::GetStyleColorVec4(ImGuiCol_HeaderHovered);
   const ImVec4 hdr_active = ImGui::GetStyleColorVec4(ImGuiCol_HeaderActive);
 
   ImGui::PushStyleColor(ImGuiCol_Text, tint);
-  ImGui::PushStyleColor(
-      ImGuiCol_Header,
-      ImVec4(hdr.x * 0.55f, hdr.y * 0.55f, hdr.z * 0.70f, hdr.w));
+  ImGui::PushStyleColor(ImGuiCol_Header,
+                        ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
   ImGui::PushStyleColor(
       ImGuiCol_HeaderHovered,
-      ImVec4(hdr_hover.x * 0.65f, hdr_hover.y * 0.65f,
-             hdr_hover.z * 0.75f, hdr_hover.w));
+      ImVec4(hdr_hover.x, hdr_hover.y, hdr_hover.z, hdr_hover.w * 0.30f));
   ImGui::PushStyleColor(
       ImGuiCol_HeaderActive,
-      ImVec4(hdr_active.x * 0.75f, hdr_active.y * 0.75f,
-             hdr_active.z * 0.85f, hdr_active.w));
+      ImVec4(hdr_active.x, hdr_active.y, hdr_active.z, hdr_active.w * 0.50f));
 
   ImGui::SetNextItemOpen(open_setting, ImGuiCond_Always);
   const bool open =
