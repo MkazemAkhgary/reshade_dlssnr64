@@ -126,11 +126,10 @@ void DlssGuides::Capture(
     ID3D12GraphicsCommandList* command_list,
     const NVSDK_NGX_Parameter* params,
     NVSDK_NGX_Feature feature_id) {
-  lock_.lock();
+  std::lock_guard<std::mutex> lock(lock_);
 
   if (feature_id != NVSDK_NGX_Feature_SuperSampling || command_list == nullptr || params == nullptr) {
     state_.valid = false;
-    lock_.unlock();
     return;
   }
 
@@ -139,14 +138,12 @@ void DlssGuides::Capture(
 
   if (depth == nullptr || motion == nullptr) {
     state_.valid = false;
-    lock_.unlock();
     return;
   }
 
   ID3D12Device* device = nullptr;
   if (FAILED(command_list->GetDevice(IID_PPV_ARGS(&device))) || device == nullptr) {
     state_.valid = false;
-    lock_.unlock();
     return;
   }
 
@@ -201,7 +198,6 @@ void DlssGuides::Capture(
   if (depth_clone_ == nullptr || motion_clone_ == nullptr) {
     state_.valid = false;
     device->Release();
-    lock_.unlock();
     return;
   }
 
@@ -269,7 +265,6 @@ void DlssGuides::Capture(
   state_.valid = true;
 
   device->Release();
-  lock_.unlock();
 }
 
 void DlssGuides::RetireResource(Microsoft::WRL::ComPtr<ID3D12Resource>& resource) {
