@@ -34,7 +34,7 @@ bool FeatureLifecycle::EnsureFeature(
 
   just_rebuilt_ = true;
 
-  NgxParameterBlock& parameter_block = const_cast<NgxRuntime&>(runtime).Parameters();
+  NgxParameterBlock& parameter_block = runtime.Parameters();
   NVSDK_NGX_Parameter* params = parameter_block.Get();
 
   if (params == nullptr) {
@@ -55,7 +55,7 @@ bool FeatureLifecycle::EnsureFeature(
   parameter_block.SetUInt("VisibilityNodeMask", 1u);
   ApplyModelTuningParams(parameter_block, pass);
 
-  const NVSDK_NGX_Result result = const_cast<NgxRuntime&>(runtime).CreateFeature(
+  const NVSDK_NGX_Result result = runtime.CreateFeature(
       command_list,
       static_cast<NVSDK_NGX_Feature>(18),
       params,
