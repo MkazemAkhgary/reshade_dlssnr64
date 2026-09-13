@@ -694,7 +694,7 @@ void DrawModelSection(uint32_t pass_index,
   PassSettings& pass = settings.passes[pass_index];
   const PassSettings& resolved = GetResolvedPass(pass_index);
 
-  if (!PersistentHeader("Model", pass.ui_model_open, changed)) {
+  if (!PersistentHeader("Model", settings.ui_model_open, changed)) {
     return;
   }
 
@@ -785,7 +785,7 @@ void DrawShaderParamSections(uint32_t pass_index,
     // state stays mapped correctly. If the table is reordered, entries
     // past kShaderParamCount are ignored and new ones default to open.
     bool& category_open =
-        pass.ui_category_open[category_index < 16 ? category_index : 15];
+        settings.ui_category_open[category_index < 16 ? category_index : 15];
     const bool open = PersistentHeader(category, category_open, changed);
     category_index++;
 
@@ -830,8 +830,9 @@ void DrawShaderParamSections(uint32_t pass_index,
 // Section: Advanced
 // ---------------------------------------------------------------------------
 
-void DrawAdvancedSection(PassSettings& pass, bool& changed) {
-  if (!PersistentHeader("Advanced", pass.ui_advanced_open, changed)) {
+void DrawAdvancedSection(Settings& settings, PassSettings& pass,
+                         bool& changed) {
+  if (!PersistentHeader("Advanced", settings.ui_advanced_open, changed)) {
     return;
   }
 
@@ -869,7 +870,7 @@ void DrawPassSettingsBody(uint32_t pass_index,
     DrawModelSection(pass_index, settings, changed);
     DrawShaderParamSections(pass_index, settings, changed);
     ImGui::Separator();
-    DrawAdvancedSection(settings.passes[pass_index], changed);
+    DrawAdvancedSection(settings, settings.passes[pass_index], changed);
   });
   ImGui::PopID();
 }

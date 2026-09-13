@@ -86,18 +86,6 @@ void LoadPassSettings(uint32_t index, PassSettings& pass) {
   if (injection_stage < 0 || injection_stage > 1) injection_stage = 1;
   pass.injection_stage = static_cast<InjectionStage>(injection_stage);
 
-  // UI section open/closed state (per-pass).
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            (pref + "UIModelOpen").c_str(), pass.ui_model_open);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            (pref + "UIAdvancedOpen").c_str(),
-                            pass.ui_advanced_open);
-  for (uint32_t j = 0; j < kShaderParamCount; ++j) {
-    const std::string key =
-        pref + "UICategoryOpen" + std::to_string(j);
-    reshade::get_config_value(nullptr, "RESHADE_DLSSNR", key.c_str(),
-                              pass.ui_category_open[j]);
-  }
 
   if (inherit_capable) {
     reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
@@ -157,17 +145,6 @@ void SavePassSettings(uint32_t index, const PassSettings& pass) {
                             (pref + "InjectionStage").c_str(),
                             static_cast<int>(pass.injection_stage));
 
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            (pref + "UIModelOpen").c_str(), pass.ui_model_open);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            (pref + "UIAdvancedOpen").c_str(),
-                            pass.ui_advanced_open);
-  for (uint32_t j = 0; j < kShaderParamCount; ++j) {
-    const std::string key =
-        pref + "UICategoryOpen" + std::to_string(j);
-    reshade::set_config_value(nullptr, "RESHADE_DLSSNR", key.c_str(),
-                              pass.ui_category_open[j]);
-  }
 
   if (inherit_capable) {
     reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
@@ -250,6 +227,15 @@ void LoadSettings() {
                             g_settings.ui_hdr_open);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.HdrDiagnosticsOpen",
                             g_settings.ui_hdr_diagnostics_open);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.ModelOpen",
+                            g_settings.ui_model_open);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.AdvancedOpen",
+                            g_settings.ui_advanced_open);
+  for (uint32_t j = 0; j < kShaderParamCount; ++j) {
+    const std::string key = "UI.CategoryOpen" + std::to_string(j);
+    reshade::get_config_value(nullptr, "RESHADE_DLSSNR", key.c_str(),
+                              g_settings.ui_category_open[j]);
+  }
 
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
     const std::string key = PassEnabledKey(i);
@@ -316,6 +302,15 @@ void SaveSettings() {
                             g_settings.ui_hdr_open);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.HdrDiagnosticsOpen",
                             g_settings.ui_hdr_diagnostics_open);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.ModelOpen",
+                            g_settings.ui_model_open);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.AdvancedOpen",
+                            g_settings.ui_advanced_open);
+  for (uint32_t j = 0; j < kShaderParamCount; ++j) {
+    const std::string key = "UI.CategoryOpen" + std::to_string(j);
+    reshade::set_config_value(nullptr, "RESHADE_DLSSNR", key.c_str(),
+                              g_settings.ui_category_open[j]);
+  }
 
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
     const std::string key = PassEnabledKey(i);

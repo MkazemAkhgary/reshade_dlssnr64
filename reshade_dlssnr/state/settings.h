@@ -59,17 +59,6 @@ struct PassSettings {
   // Dynamic shader parameter values, indexed by kShaderParams order.
   float params[16] = {};
 
-  // UI state: which collapsible sections in this pass's tab are open.
-  // Persisted so sections stay as the user left them across sessions.
-  // `ui_category_open` is indexed by the order categories appear in
-  // kShaderParams (0, 1, 2, ...); entries past the current category count
-  // are unused. Defaults are all-open for Model and each category, closed
-  // for Advanced.
-  bool ui_model_open = true;
-  bool ui_advanced_open = false;
-  bool ui_category_open[16] = {
-      true, true, true, true, true, true, true, true,
-      true, true, true, true, true, true, true, true};
 };
 
 struct Settings {
@@ -120,7 +109,17 @@ struct Settings {
   // Global multiplier on the model's edit before HDR remap.
   float hdr_edit_strength = 1.0f;
 
-  // UI state: which shared sections are open. Persisted.
+  // UI state: which collapsible sections are open. Persisted, and shared
+  // across passes — collapsing a section in one tab collapses it in every
+  // tab, so the panel keeps a single, consistent shape. `ui_category_open`
+  // is indexed by the order categories appear in kShaderParams (0, 1, ...);
+  // entries past the current category count are unused. Model and each
+  // category default to open, Advanced to closed.
+  bool ui_model_open = true;
+  bool ui_advanced_open = false;
+  bool ui_category_open[16] = {
+      true, true, true, true, true, true, true, true,
+      true, true, true, true, true, true, true, true};
   bool ui_status_open = false;
   bool ui_hdr_open = false;
   bool ui_hdr_diagnostics_open = false;
