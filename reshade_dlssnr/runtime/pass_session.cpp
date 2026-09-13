@@ -231,6 +231,7 @@ void PassSession::SubmitAndWait() {
 
 bool PassSession::MaybeRenderDebug(
     const Settings& settings,
+    ComputeEngine& codec,
     ID3D12GraphicsCommandList* command_list,
     FrameDebugContext& frame_debug,
     const DebugSnapshot& snapshot,
@@ -240,7 +241,7 @@ bool PassSession::MaybeRenderDebug(
   // Debug view is a shared setting; only the active pass renders it.
   if (settings.debug_view == 0) return false;
   if (static_cast<int>(pass_index_) != settings.active_pass) return false;
-  if (command_list == nullptr || codec_ == nullptr) return false;
+  if (command_list == nullptr) return false;
 
   // The debug output is displayed on the backbuffer, so prefer the
   // backbuffer's format. Fall back to the pass's own format only when
@@ -295,7 +296,7 @@ bool PassSession::MaybeRenderDebug(
   command_.SetResourceState(frame_debug.output.Get(),
                             D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-  if (!RenderDebugView(command_, *codec_, command_list, snapshot,
+  if (!RenderDebugView(command_, codec, command_list, snapshot,
                        settings.debug_view, frame_debug.output.Get(),
                        width, height)) {
     return false;
@@ -309,6 +310,7 @@ void PassSession::OnPresent(
     NgxRuntime& runtime,
     const PassSettings& pass,
     const Settings& settings,
+    ComputeEngine& codec,
     ID3D12CommandQueue* command_queue,
     IDXGISwapChain* swapchain,
     FrameDebugContext& frame_debug) {
@@ -404,17 +406,13 @@ void PassSession::OnPresent(
 
   ID3D12Resource* model_input = backbuffer.Get();
 
-  if (codec_ == nullptr) {
-    codec_ = std::make_unique<ComputeEngine>();
-  }
-
-  if (!codec_->IsInit() && !codec_->Init(device.Get())) {
+  if (!codec.IsInit() && !codec.Init(device.Get())) {
     Fail("failed to initialize compute engine");
     return;
   }
   // Background compiler still running. Skip this frame without failing;
   // the pass runs normally once it finishes.
-  if (!codec_->IsReady()) return;
+  if (!codec.IsReady()) return;
 
   if (model_input == backbuffer.Get()) {
     command_.Transition(command_.GetCommandList(), backbuffer.Get(),
@@ -430,7 +428,7 @@ void PassSession::OnPresent(
           command_,
           command_.GetCommandList(),
           resources_,
-          codec_.get(),
+          &codec,
           model_input,
           &model_color,
           &model_output,
@@ -468,7 +466,7 @@ void PassSession::OnPresent(
           command_,
           command_.GetCommandList(),
           resources_,
-          codec_.get(),
+          &codec,
           backbuffer.Get(),
           model_color,
           model_output,
@@ -504,7 +502,7 @@ void PassSession::OnPresent(
   // If this is the active pass, render the debug view now — while the
   // source resources are in the states this pass left them in. It goes
   // into our own resource (frame_debug.output), never the backbuffer.
-  MaybeRenderDebug(settings, command_.GetCommandList(), frame_debug,
+  MaybeRenderDebug(settings, codec, command_.GetCommandList(), frame_debug,
                    debug, width, height, desc.Format);
 
   // Always write the real composed output; the debug override happens at
@@ -527,6 +525,7 @@ void PassSession::OnPostDlssEvaluate(
     NgxRuntime& runtime,
     const PassSettings& pass,
     const Settings& settings,
+    ComputeEngine& codec,
     ID3D12GraphicsCommandList* command_list,
     ID3D12Resource* output_resource,
     bool is_first_pass,
@@ -554,16 +553,12 @@ void PassSession::OnPostDlssEvaluate(
     return;
   }
 
-  if (codec_ == nullptr) {
-    codec_ = std::make_unique<ComputeEngine>();
-  }
-
-  if (!codec_->IsInit() && !codec_->Init(device.Get())) {
+  if (!codec.IsInit() && !codec.Init(device.Get())) {
     Fail("failed to initialize compute engine");
     return;
   }
   // Same skip as OnPresent: don't block the render thread on a compile.
-  if (!codec_->IsReady()) return;
+  if (!codec.IsReady()) return;
 
   const DlssGuideState guides = guides_->GetState();
 
@@ -688,7 +683,7 @@ void PassSession::OnPostDlssEvaluate(
           command_,
           command_list,
           resources_,
-          codec_.get(),
+          &codec,
           model_input,
           &model_color,
           &model_output,
@@ -725,7 +720,7 @@ void PassSession::OnPostDlssEvaluate(
           command_,
           command_list,
           resources_,
-          codec_.get(),
+          &codec,
           model_input,
           model_color,
           model_output,
@@ -762,7 +757,7 @@ void PassSession::OnPostDlssEvaluate(
   // If this is the active pass, render the debug view now — while the
   // source resources are in the states this pass left them in. It goes
   // into our own resource, never the game's.
-  MaybeRenderDebug(settings, command_list, frame_debug,
+  MaybeRenderDebug(settings, codec, command_list, frame_debug,
                    debug, width, height, desc.Format);
 
   // Always write the real composed output to the game's resource. The debug
@@ -788,7 +783,6 @@ void PassSession::Shutdown(NgxRuntime& runtime) {
   resources_.Shutdown();
   command_.Shutdown();
 
-  codec_.reset();
   command_queue_ = nullptr;
   failed_ = false;
   reason_ = "";
