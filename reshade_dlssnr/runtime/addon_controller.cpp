@@ -50,6 +50,7 @@ void AddonController::OnPresent(
         runtime_,
         GetResolvedPass(i),
         settings,
+        codec_,
         command_queue,
         swapchain,
         frame_debug_);
@@ -98,7 +99,7 @@ void AddonController::OnPostDlssEvaluate(
     Microsoft::WRL::ComPtr<ID3D12Device> hdr_device;
     if (SUCCEEDED(command_list->GetDevice(IID_PPV_ARGS(&hdr_device))) &&
         hdr_device != nullptr) {
-      if (hdr_.Ensure(hdr_device.Get()) && hdr_codec_.Init(hdr_device.Get())) {
+      if (hdr_.Ensure(hdr_device.Get()) && codec_.Init(hdr_device.Get())) {
         hdr_initialized_ = true;
       }
     }
@@ -114,7 +115,7 @@ void AddonController::OnPostDlssEvaluate(
                       guides.output_width,
                       guides.output_height,
                       settings,
-                      hdr_codec_);
+                      codec_);
     }
   }
 
@@ -126,6 +127,7 @@ void AddonController::OnPostDlssEvaluate(
         runtime_,
         GetResolvedPass(i),
         settings,
+        codec_,
         command_list,
         output_resource,
         is_first,
@@ -269,7 +271,7 @@ void AddonController::Shutdown() {
   }
   debug_command_.Shutdown();
   pass1_command_.Shutdown();
-  hdr_codec_.Destroy();
+  codec_.Destroy();
   hdr_.Shutdown();
   hdr_initialized_ = false;
   frame_debug_.Release();
