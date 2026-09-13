@@ -387,29 +387,40 @@ void DrawPipelineSection(uint32_t pass_index,
 // ---------------------------------------------------------------------------
 
 // Describes what a pass is doing right now, in one line. The injection
-// stage is passed in separately because it is a setting, not part of the
-// runtime status.
+// stage and working scale are passed in separately because they are
+// settings, not part of the runtime status.
 void FormatPassStatus(const PassStatus& pass,
                       InjectionStage stage,
+                      float working_scale,
                       char* out, size_t out_size) {
   const char* stage_name =
       stage == InjectionStage::PostDLSS ? "DLSS Output" : "Backbuffer";
+
+  // Suffix describing the working scale (" · 0.5x"), empty at full
+  // resolution. Only meaningful while the pass is enabled.
+  char scale[24] = "";
+  if (pass.enabled && working_scale < 0.999f) {
+    std::snprintf(scale, sizeof(scale), " · %.3gx",
+                  static_cast<double>(working_scale));
+  }
 
   if (!pass.enabled) {
     std::snprintf(out, out_size, "Disabled");
     return;
   }
   if (pass.failed) {
-    std::snprintf(out, out_size, "%s · FAILED: %s",
+    std::snprintf(out, out_size, "%s · FAILED: %s%s",
                   stage_name,
-                  pass.reason[0] != '\0' ? pass.reason : "unknown error");
+                  pass.reason[0] != '\0' ? pass.reason : "unknown error",
+                  scale);
     return;
   }
   if (!pass.has_feature) {
-    std::snprintf(out, out_size, "%s · initializing", stage_name);
+    std::snprintf(out, out_size, "%s · initializing%s",
+                  stage_name, scale);
     return;
   }
-  std::snprintf(out, out_size, "%s · running", stage_name);
+  std::snprintf(out, out_size, "%s · running%s", stage_name, scale);
 }
 
 void DrawStatusSection(Settings& settings, bool& changed) {
@@ -475,17 +486,21 @@ void DrawStatusSection(Settings& settings, bool& changed) {
     row("DLSS guides", buf);
   }
 
-  // HDR, only when enabled.
-  if (snap.hdr_enabled) {
+  // HDR. Always shown, so whether the stage is on is never ambiguous.
+  {
     char buf[128];
-    if (snap.hdr_ready) {
+    if (!snap.hdr_enabled) {
+      std::snprintf(buf, sizeof(buf), "Off");
+    } else if (snap.hdr_ready) {
       std::snprintf(buf, sizeof(buf),
                     "Active · exposure %.3f · white %.3f",
                     snap.hdr_exposure, snap.hdr_white_point);
     } else {
       std::snprintf(buf, sizeof(buf), "Warming up (no measurement yet)");
     }
-    bullet(snap.hdr_ready);
+    // Disabled is a valid state, not a fault; only an enabled-but-not-yet-
+    // measured stage gets the warning colour.
+    bullet(!snap.hdr_enabled || snap.hdr_ready);
     row("HDR", buf);
   }
 
@@ -495,6 +510,7 @@ void DrawStatusSection(Settings& settings, bool& changed) {
   for (uint32_t i = 0; i < snap.pass_count; ++i) {
     char buf[kStatusTextLength];
     FormatPassStatus(snap.passes[i], settings.passes[i].injection_stage,
+                     GetResolvedPass(i).working_scale,
                      buf, sizeof(buf));
 
     char label[32];
@@ -879,10 +895,17 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   // --- Status (shared across passes) ---
   DrawStatusSection(settings, changed);
 
-  // HDR handling only applies to passes that target DLSS Output.
-  const bool hdr_relevant =
-      settings.passes[settings.active_pass].injection_stage ==
-      InjectionStage::PostDLSS;
+  // HDR handling only applies to passes that target DLSS Output. The
+  // section is shared, so it is live whenever any enabled pass would use
+  // it — not just the currently-selected tab.
+  bool hdr_relevant = false;
+  for (uint32_t i = 0; i < kMaxPasses; ++i) {
+    if (settings.pass_enabled[i] &&
+        settings.passes[i].injection_stage == InjectionStage::PostDLSS) {
+      hdr_relevant = true;
+      break;
+    }
+  }
 
 
   ImGui::Separator();
