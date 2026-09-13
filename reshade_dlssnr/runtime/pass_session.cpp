@@ -346,8 +346,6 @@ void PassSession::OnPresent(
       std::max(1u, static_cast<unsigned int>(width * working_scale + 0.5f));
   const unsigned int work_height =
       std::max(1u, static_cast<unsigned int>(height * working_scale + 0.5f));
-  const bool use_working_scale =
-      work_width != width || work_height != height;
 
   // Always retire replaced resources rather than releasing them immediately.
   // Even in Present mode, a resource replaced this frame might still be read
@@ -442,7 +440,6 @@ void PassSession::OnPresent(
     Fail("failed to prepare model input");
     return;
   }
-  (void)use_working_scale;
 
   if (!FillEvaluateParams(runtime, pass, guides, model_color, model_output,
                           eval_width, eval_height, width, height)) {
@@ -574,8 +571,6 @@ void PassSession::OnPostDlssEvaluate(
       std::max(1u, static_cast<unsigned int>(width * working_scale + 0.5f));
   const unsigned int work_height =
       std::max(1u, static_cast<unsigned int>(height * working_scale + 0.5f));
-  const bool use_working_scale =
-      work_width != width || work_height != height;
 
   // Post-DLSS runs on the game's command list and does not submit or wait.
   // Resources replaced mid-frame (e.g. when the working-scale slider is
@@ -694,7 +689,6 @@ void PassSession::OnPostDlssEvaluate(
     Fail("failed to prepare model input");
     return;
   }
-  (void)use_working_scale;
 
   if (!FillEvaluateParams(runtime, pass, guides, model_color, model_output,
                           eval_width, eval_height, width, height)) {
