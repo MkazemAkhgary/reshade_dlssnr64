@@ -89,9 +89,11 @@ struct Settings {
   HdrFormat hdr_format = HdrFormat::Auto;
   ChromaEditMode hdr_chroma_mode = ChromaEditMode::Ratio;
 
-  // Responsiveness: 0 = slow + cheap (measure rarely, blend slowly),
-  // 1 = fast + expensive (measure every frame, blend quickly).
-  float hdr_responsiveness = 0.50f;
+  // How often the scene's brightness is measured, in frames. 1 measures
+  // every frame (most responsive, most GPU work); higher values measure
+  // less often. The EMA blend rate scales with this so a longer interval
+  // also smooths more slowly.
+  int hdr_measure_interval = 16;
 
   // Scene key target in SDR (midtones land here).
   float hdr_midtone = 0.18f;

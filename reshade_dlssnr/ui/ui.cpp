@@ -166,6 +166,88 @@ bool DrawFloatRow(uint32_t pass_index,
   return changed;
 }
 
+// An integer slider row, mirroring DrawFloatRow. `lo` and `hi` may be
+// reversed (lo > hi) to put the smallest value on the right — ImGui
+// handles this natively.
+bool DrawIntRow(uint32_t pass_index,
+                const char* id,
+                const char* label,
+                const char* tooltip,
+                int* raw_value,
+                bool* inherit_flag,
+                int inherited_value,
+                int lo,
+                int hi,
+                int default_value) {
+  bool changed = false;
+
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted(label);
+  if (tooltip != nullptr && ImGui::IsItemHovered()) {
+    Tip("%s", tooltip);
+  }
+
+  ImGui::SameLine(kControlLabelWidth);
+
+  const bool has_inherit = (pass_index > 0) && (inherit_flag != nullptr);
+  float trailing_width = kResetButtonWidth;
+  if (has_inherit) {
+    trailing_width += ImGui::GetStyle().ItemSpacing.x + kResetButtonWidth;
+  }
+  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - trailing_width -
+                          ImGui::GetStyle().ItemSpacing.x);
+
+  const bool inheriting = has_inherit && *inherit_flag;
+  int display_value = inheriting ? inherited_value : *raw_value;
+
+  const std::string slider_id = std::string("##") + id;
+  bool slider_changed = false;
+  WithDisabled(inheriting, [&] {
+    slider_changed =
+        ImGui::SliderInt(slider_id.c_str(), &display_value, lo, hi);
+  });
+  if (tooltip != nullptr && ImGui::IsItemHovered()) {
+    Tip("%s", tooltip);
+  }
+  if (slider_changed && !inheriting) {
+    *raw_value = display_value;
+    changed = true;
+  }
+
+  ImGui::SameLine();
+  ImGui::PushID(id);
+  if (ImGui::Button("R", ImVec2(kResetButtonWidth, 0.0f))) {
+    *raw_value = default_value;
+    changed = true;
+  }
+  if (ImGui::IsItemHovered()) {
+    Tip("Reset to default");
+  }
+  ImGui::PopID();
+
+  if (has_inherit) {
+    ImGui::SameLine();
+    const std::string inherit_id = std::string(id) + "_inherit";
+    ImGui::PushID(inherit_id.c_str());
+    const bool on = *inherit_flag;
+    if (on) {
+      ImGui::PushStyleColor(ImGuiCol_Button,
+                            ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+    }
+    if (ImGui::Button("I", ImVec2(kResetButtonWidth, 0.0f))) {
+      *inherit_flag = !*inherit_flag;
+      changed = true;
+    }
+    if (on) ImGui::PopStyleColor();
+    if (ImGui::IsItemHovered()) {
+      Tip("Inherit this value from the previous pass");
+    }
+    ImGui::PopID();
+  }
+
+  return changed;
+}
+
 // A checkbox placed at the label column (used for standalone checkboxes and
 // as the left half of composite rows).
 bool DrawCheckboxAtLabel(const char* id, bool* value) {
@@ -1082,15 +1164,17 @@ void DrawOverlay(reshade::api::effect_runtime*) {
         settings.hdr_chroma_mode = static_cast<ChromaEditMode>(mode);
       }
 
-      changed |= DrawFloatRow(
-          0, "hdr_responsiveness", "Responsiveness",
-          "How quickly exposure reacts when scene brightness changes.\n"
-          "Lower values react more slowly but measure the scene less often "
-          "(less GPU work).\n"
-          "Higher values react almost immediately at the cost of measuring "
-          "every frame.",
-          &settings.hdr_responsiveness, nullptr, 0.0f,
-          0.0f, 1.0f, 0.50f);
+      // Range is reversed: dragging right goes toward 1 frame, matching
+      // the "more = more aggressive" feel of the other sliders.
+      changed |= DrawIntRow(
+          0, "hdr_measure_interval", "Measure Interval",
+          "How often the scene's brightness is measured, in frames.\n"
+          "1 measures every frame — the most responsive option, and the "
+          "most GPU work.\n"
+          "Higher values measure less often and let exposure adjust more "
+          "slowly.",
+          &settings.hdr_measure_interval, nullptr, 0,
+          32, 1, 16);
 
       changed |= DrawFloatRow(
           0, "hdr_midtone", "Midtone Target",

@@ -228,11 +228,9 @@ void HdrState::BeginFrame(CommandContext& cmd,
     return;
   }
 
-  // Determine how often to measure.
-  const float resp = std::clamp(settings.hdr_responsiveness, 0.0f, 1.0f);
-  const uint32_t measure_every =
-      static_cast<uint32_t>(std::round(32.0f - 31.0f * resp));
-  const uint32_t capped_every = std::max(measure_every, 1u);
+  // Determine how often to measure. 1 = every frame.
+  const uint32_t capped_every =
+      static_cast<uint32_t>(std::clamp(settings.hdr_measure_interval, 1, 32));
 
   if (frames_until_measure_ > 0) {
     frames_until_measure_--;
@@ -360,9 +358,14 @@ void HdrState::UpdateExposure(const uint32_t* bins, uint32_t total,
   p_hi_luma_ = luma_hi;
   target_exposure_ = target;
 
-  // Warm-up: converge quickly for the first ~30 measurements, then use
-  // the user's responsiveness setting.
-  const float resp = std::clamp(settings.hdr_responsiveness, 0.0f, 1.0f);
+  // Warm-up: converge quickly for the first ~30 measurements, then blend
+  // at a rate proportional to how often we measure. A short interval means
+  // fresher data, so the EMA can move faster; a long one means stale data,
+  // so it smooths more. Converted back to the [0,1] responsiveness scale
+  // used below.
+  const uint32_t interval =
+      static_cast<uint32_t>(std::clamp(settings.hdr_measure_interval, 1, 32));
+  const float resp = (32.0f - static_cast<float>(interval)) / 31.0f;
   const float alpha = warmup_frames_ < 30
                           ? 0.5f
                           : (0.02f + resp * 0.38f);

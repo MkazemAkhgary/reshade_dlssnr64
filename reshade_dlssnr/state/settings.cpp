@@ -205,8 +205,10 @@ void LoadSettings() {
   if (chroma_mode < 0 || chroma_mode > 1) chroma_mode = 1;
   g_settings.hdr_chroma_mode = static_cast<ChromaEditMode>(chroma_mode);
 
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Responsiveness",
-                            g_settings.hdr_responsiveness);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.MeasureInterval",
+                            g_settings.hdr_measure_interval);
+  if (g_settings.hdr_measure_interval < 1) g_settings.hdr_measure_interval = 1;
+  if (g_settings.hdr_measure_interval > 32) g_settings.hdr_measure_interval = 32;
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Midtone",
                             g_settings.hdr_midtone);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.WhitePercentile",
@@ -283,8 +285,8 @@ void SaveSettings() {
                             static_cast<int>(g_settings.hdr_format));
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.ChromaMode",
                             static_cast<int>(g_settings.hdr_chroma_mode));
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Responsiveness",
-                            g_settings.hdr_responsiveness);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.MeasureInterval",
+                            g_settings.hdr_measure_interval);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Midtone",
                             g_settings.hdr_midtone);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.WhitePercentile",
