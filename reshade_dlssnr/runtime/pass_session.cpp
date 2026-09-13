@@ -593,6 +593,14 @@ void PassSession::OnPostDlssEvaluate(
   // Fresh state tracking per pass: no cross-pass aliasing to rely on.
   command_.ClearState();
   SeedFrameState(nullptr);
+  // `output_resource` belongs to the game and we do not know what state
+  // DLSS left it in. InferResourceState() guesses from the descriptor
+  // flags (UAV-flagged → UNORDERED_ACCESS, RT-flagged → RENDER_TARGET,
+  // else COMMON), which matches what DLSS produces in practice but is not
+  // guaranteed. There is no fully safe assumption for a resource we did
+  // not create, so this is best-effort. If a game ships with a mismatched
+  // barrier here, the D3D12 debug layer will name it at the CopyResource
+  // below.
   command_.SetResourceState(output_resource, InferResourceState(output_resource));
 
   // Seed guide states: guides are owned by DlssGuides and always left in
