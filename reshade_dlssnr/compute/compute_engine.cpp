@@ -255,7 +255,7 @@ bool ComputeEngine::CompilePipeline(
           nullptr,
           "CSMain",
           "cs_5_1",
-          0,
+          D3DCOMPILE_OPTIMIZATION_LEVEL3,
           0,
           &shader_blob,
           &error_blob))) {
