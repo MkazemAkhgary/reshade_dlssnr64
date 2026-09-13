@@ -308,9 +308,14 @@ bool ComputeEngine::Dispatch(
 
     auto it = passes_.find(pass_name);
     if (it == passes_.end()) {
-      // Fallback: the background worker has not produced this pass yet, or
-      // failed to. Compile it here so the current contract (Dispatch either
-      // runs the pass or reports failure) is unchanged.
+      // Refuse to compile synchronously while the worker is still running:
+      // that would reintroduce the freeze this is designed to avoid. Once
+      // the worker has finished, a miss means the pass genuinely failed to
+      // compile (or was never registered), and the synchronous retry is
+      // both cheap (D3DCompile on a bad shader fails fast) and informative
+      // (CompilePipeline logs the error).
+      if (!IsReady()) return false;
+
       const char* source = FindComputePassSource(pass_name);
       if (source == nullptr) return false;
 
@@ -385,6 +390,8 @@ bool ComputeEngine::Init(ID3D12Device* device) {
     }
   }
 
+  ready_.store(false, std::memory_order_relaxed);
+
   device_ = device;
 
   // Kick off the background compile. Dispatch still compiles synchronously
@@ -443,6 +450,8 @@ void ComputeEngine::WorkerCompileAll() {
     if (worker_stop_) return;
     passes_.emplace(name, std::move(pass));
   }
+
+  ready_.store(true, std::memory_order_release);
 }
 
 }  // namespace reshade_dlssnr
