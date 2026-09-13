@@ -38,6 +38,17 @@ void Tip(const char* fmt, ...) {
   va_end(args);
 }
 
+// Heavier divider between top-level sections. Plain ImGui::Separator is
+// used inside a section to group rows; this one, with the extra space on
+// both sides, marks where one section ends and the next begins.
+void SectionDivider() {
+  ImGui::Spacing();
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Spacing();
+  ImGui::Spacing();
+}
+
 // ---------------------------------------------------------------------------
 // Row helpers
 // ---------------------------------------------------------------------------
@@ -908,7 +919,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
         "its input.");
   }
 
-  ImGui::Separator();
+  SectionDivider();
 
   // --- Debug view (shared across passes) ---
   DrawSharedDebugView(settings, changed);
@@ -922,7 +933,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   const bool hdr_relevant = AnyPassUsesDlssOutput(settings);
 
 
-  ImGui::Separator();
+  SectionDivider();
 
   if (ImGui::BeginTabBar("PassTabs")) {
     for (uint32_t i = 0; i < kMaxPasses; ++i) {
@@ -937,6 +948,8 @@ void DrawOverlay(reshade::api::effect_runtime*) {
     }
     ImGui::EndTabBar();
   }
+  SectionDivider();
+
   // --- HDR section (shared across passes) ---
   if (PersistentHeader("HDR", settings.ui_hdr_open, changed)) {
     changed |= ImGui::Checkbox("Enable HDR Handling",
