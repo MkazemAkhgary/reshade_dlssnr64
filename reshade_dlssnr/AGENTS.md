@@ -364,5 +364,5 @@ passes, add the corresponding `inherit_*` field and handle it in
 - Project: `reshade_dlssnr.vcxproj`
 - Platform: `Release|x64`
 - Toolset: `v145`
-- Output: `reshade_dlssnr64.addon64`
+- Output: `reshade_dlssnr_coda.addon64`
 - Link: `d3d12.lib;dxgi.lib;detours.lib;d3dcompiler.lib`
