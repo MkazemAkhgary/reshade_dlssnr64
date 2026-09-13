@@ -14,6 +14,8 @@
 
 #include <detours.h>
 
+#include <reshade.hpp>
+
 #include "addon_controller.h"
 #include "d3d12_hooks.h"
 #include "dlss_guides.h"
@@ -27,6 +29,28 @@ static decltype(&NVSDK_NGX_D3D12_CreateFeature) real_NVSDK_NGX_D3D12_CreateFeatu
 
 static inline std::unordered_map<unsigned int, NVSDK_NGX_Feature> g_handle_to_feature;
 static inline std::mutex g_handle_to_feature_mutex;
+
+// Post-DLSS edits re-enter NGX from inside the game's own EvaluateFeature
+// call. When the game goes through NVIDIA Streamline and ReShade isn't the
+// one owning sl.interposer's entry point, that re-entry happens in the
+// middle of Streamline's dispatch and crashes. ReShade only registers that
+// hook when [INSTALL] HookStreamline=1, so the value here is exactly the
+// condition we need — read once, since ReShade reads its global config
+// only at load.
+static bool HookStreamlineEnabled() {
+  static const bool enabled = [] {
+    bool v = false;
+    reshade::get_config_value(nullptr, "INSTALL", "HookStreamline", v);
+    return v;
+  }();
+  return enabled;
+}
+
+// True when running a Post-DLSS pass would re-enter NGX unsafely.
+static bool PostDlssUnsafe() {
+  return GetModuleHandleW(L"sl.interposer.dll") != nullptr &&
+         !HookStreamlineEnabled();
+}
 
 static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_CreateFeature(
     ID3D12GraphicsCommandList* command_list,
@@ -79,12 +103,20 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
           }
         }
 
-        if (any_post_dlss) {
-          ID3D12Resource* output = nullptr;
-          if (parameters->Get(NVSDK_NGX_Parameter_Output, &output) ==
-                  NVSDK_NGX_Result_Success &&
-              output != nullptr) {
-            AddonController::Get().OnPostDlssEvaluate(command_list, output);
+        if (any_post_dlss && PostDlssUnsafe()) {
+          // Skip rather than crash. The controller surfaces this in the
+          // Status section so the cause is visible without the log.
+          AddonController::Get().SetPostDlssBlocked(
+              "Post-DLSS disabled: set HookStreamline=1 in ReShade.ini");
+        } else {
+          AddonController::Get().SetPostDlssBlocked(nullptr);
+          if (any_post_dlss) {
+            ID3D12Resource* output = nullptr;
+            if (parameters->Get(NVSDK_NGX_Parameter_Output, &output) ==
+                    NVSDK_NGX_Result_Success &&
+                output != nullptr) {
+              AddonController::Get().OnPostDlssEvaluate(command_list, output);
+            }
           }
         }
       }

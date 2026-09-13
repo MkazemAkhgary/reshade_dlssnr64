@@ -211,6 +211,20 @@ void AddonController::RetryPass(uint32_t index) {
   RefreshStatus(GetSettings());
 }
 
+void AddonController::SetPostDlssBlocked(const char* reason) {
+  std::lock_guard<std::mutex> lock(g_direct_mutex);
+
+  if (reason == nullptr || reason[0] == '\0') {
+    post_dlss_blocked_ = false;
+    post_dlss_block_reason_[0] = '\0';
+    return;
+  }
+
+  post_dlss_blocked_ = true;
+  std::snprintf(post_dlss_block_reason_, sizeof(post_dlss_block_reason_),
+                "%s", reason);
+}
+
 void AddonController::RefreshStatus(const Settings& settings) {
   status_ = StatusSnapshot{};
 
@@ -226,6 +240,13 @@ void AddonController::RefreshStatus(const Settings& settings) {
 
   const DlssGuideState guides = DlssGuides::Get().GetState();
   status_.guides_valid = guides.valid;
+
+  status_.post_dlss_blocked = post_dlss_blocked_;
+  if (post_dlss_blocked_) {
+    std::snprintf(status_.post_dlss_block_reason,
+                  sizeof(status_.post_dlss_block_reason), "%s",
+                  post_dlss_block_reason_);
+  }
 
   const HdrSnapshot hdr = hdr_.GetSnapshot();
   status_.hdr_ready = hdr.ready;

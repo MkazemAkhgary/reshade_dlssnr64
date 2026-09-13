@@ -50,6 +50,11 @@ class AddonController {
   // `index` is out of range (both are no-ops).
   void RetryPass(uint32_t index);
 
+  // Records why the Post-DLSS path was skipped, for display in the Status
+  // section. Pass nullptr to clear — the hook calls this on every frame,
+  // so the value only persists while the condition does.
+  void SetPostDlssBlocked(const char* reason);
+
  private:
   AddonController() {
     passes_.reserve(kMaxPasses);
@@ -103,6 +108,11 @@ class AddonController {
   // Latest status snapshot, refreshed each frame. Guarded by the same
   // mutex that guards every other controller entry point.
   StatusSnapshot status_;
+
+  // Sticky until cleared by SetPostDlssBlocked(nullptr). Copied into the
+  // status snapshot by RefreshStatus.
+  bool post_dlss_blocked_ = false;
+  char post_dlss_block_reason_[kStatusTextLength] = {};
 };
 
 }  // namespace reshade_dlssnr

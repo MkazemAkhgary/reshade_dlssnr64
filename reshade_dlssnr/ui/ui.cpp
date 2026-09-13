@@ -509,6 +509,13 @@ void DrawStatusSection(Settings& settings, bool& changed) {
     row("DLSS guides", buf);
   }
 
+  // Post-DLSS block. Only present when the NGX hook skipped the DLSS
+  // Output path because re-entering NGX would have been unsafe.
+  if (snap.post_dlss_blocked) {
+    bullet(false);
+    row("Post-DLSS", snap.post_dlss_block_reason);
+  }
+
   // HDR. Always shown, so whether the stage is on is never ambiguous.
   // The on/off state comes from the user setting, not the runtime snapshot:
   // when every pass runs on the backbuffer the runtime stage never starts,
