@@ -225,6 +225,16 @@ void AddonController::SetPostDlssBlocked(const char* reason) {
                 "%s", reason);
 }
 
+void AddonController::RetryAll() {
+  std::lock_guard<std::mutex> lock(g_direct_mutex);
+
+  for (auto& pass : passes_) {
+    pass.Retry(runtime_);
+  }
+
+  RefreshStatus(GetSettings());
+}
+
 void AddonController::RefreshStatus(const Settings& settings) {
   status_ = StatusSnapshot{};
 

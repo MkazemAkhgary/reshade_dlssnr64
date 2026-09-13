@@ -50,6 +50,10 @@ class AddonController {
   // `index` is out of range (both are no-ops).
   void RetryPass(uint32_t index);
 
+  // Clears the failure state of every pass. One button in the UI, so the
+  // user never has to click through tabs to un-stick a frame.
+  void RetryAll();
+
   // Records why the Post-DLSS path was skipped, for display in the Status
   // section. Pass nullptr to clear — the hook calls this on every frame,
   // so the value only persists while the condition does.

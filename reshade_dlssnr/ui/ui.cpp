@@ -28,6 +28,11 @@ constexpr float kResetButtonWidth = 24.0f;
 // setting even from helpers that never see the current Settings.
 bool g_show_tooltips = true;
 
+// Set once the user clicks the HookStreamline fix. The setting is read by
+// ReShade only at load, so the flag is used to keep showing "restart
+// required" for the rest of the session.
+bool g_hookstreamline_fix_applied = false;
+
 // Variadic tooltip that no-ops when tooltips are off. All tooltip calls
 // in this file route through here.
 void Tip(const char* fmt, ...) {
@@ -415,6 +420,7 @@ bool AnyPassUsesDlssOutput(const Settings& settings) {
 void FormatPassStatus(const PassStatus& pass,
                       InjectionStage stage,
                       float working_scale,
+                      bool post_dlss_blocked,
                       char* out, size_t out_size) {
   const char* stage_name =
       stage == InjectionStage::PostDLSS ? "DLSS Output" : "Backbuffer";
@@ -429,6 +435,13 @@ void FormatPassStatus(const PassStatus& pass,
 
   if (!pass.enabled) {
     std::snprintf(out, out_size, "Disabled");
+    return;
+  }
+  // A Post-DLSS pass that the hook guard skipped is not the pass's fault,
+  // so it reads as blocked rather than failed. Same colouring as failed,
+  // because it does mean the pass is not running.
+  if (post_dlss_blocked && stage == InjectionStage::PostDLSS) {
+    std::snprintf(out, out_size, "%s · blocked%s", stage_name, scale);
     return;
   }
   if (pass.failed) {
@@ -526,13 +539,54 @@ void DrawStatusSection(Settings& settings, bool& changed) {
     ImGui::TableNextColumn();
     cell(hdr_good, "HDR", hdr_buf);
 
-    if (snap.post_dlss_blocked) {
-      ImGui::TableNextRow();
-      ImGui::TableNextColumn();
-      cell(false, "Post-DLSS", snap.post_dlss_block_reason);
+    ImGui::EndTable();
+  }
+
+  // Post-DLSS block notice. Deliberately outside the two-column table so
+  // it reads as an alarm rather than another data field, and so it can
+  // carry an action button without breaking the cell layout.
+  if (snap.post_dlss_blocked) {
+    ImGui::Spacing();
+    bullet(false);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(snap.post_dlss_block_reason);
+
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Fix")) {
+      reshade::set_config_value(nullptr, "INSTALL", "HookStreamline", 1);
+      g_hookstreamline_fix_applied = true;
+    }
+    if (ImGui::IsItemHovered()) {
+      Tip("Writes HookStreamline=1 to ReShade.ini.");
     }
 
-    ImGui::EndTable();
+    if (g_hookstreamline_fix_applied) {
+      ImGui::Indent();
+      ImGui::TextColored(ImVec4(0.9f, 0.8f, 0.3f, 1.0f),
+                         "Restart the game for the change to take effect.");
+      ImGui::Unindent();
+    }
+  }
+
+  // Global retry: one button resets every failed pass. Replaces the
+  // per-row Retry buttons, so the status section reads as one control.
+  {
+    bool any_failed = false;
+    for (uint32_t i = 0; i < snap.pass_count; ++i) {
+      if (snap.passes[i].failed) { any_failed = true; break; }
+    }
+
+    if (any_failed) {
+      ImGui::Spacing();
+      if (ImGui::Button("Retry failed passes")) {
+        AddonController::Get().RetryAll();
+      }
+      if (ImGui::IsItemHovered()) {
+        Tip(
+            "Clear every failed pass and rebuild its model on the next "
+            "frame.");
+      }
+    }
   }
 
   ImGui::Separator();
@@ -542,35 +596,21 @@ void DrawStatusSection(Settings& settings, bool& changed) {
     char buf[kStatusTextLength];
     FormatPassStatus(snap.passes[i], settings.passes[i].injection_stage,
                      GetResolvedPass(i).working_scale,
+                     snap.post_dlss_blocked,
                      buf, sizeof(buf));
 
     char label[32];
     std::snprintf(label, sizeof(label), "Pass %u", i + 1);
 
-    const bool failed = snap.passes[i].failed;
-    const bool ok = snap.passes[i].enabled && !failed;
+    const bool stage_blocked =
+        snap.post_dlss_blocked &&
+        settings.passes[i].injection_stage == InjectionStage::PostDLSS;
+    const bool ok = snap.passes[i].enabled && !snap.passes[i].failed &&
+                    !stage_blocked;
 
-    // Bullet + label, with an optional Retry button placed between the
-    // label and the status text. The button is only shown when the pass
-    // has actually failed.
     bullet(ok);
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(label);
-
-    if (failed) {
-      ImGui::SameLine();
-      ImGui::PushID(static_cast<int>(i));
-      if (ImGui::SmallButton("Retry")) {
-        AddonController::Get().RetryPass(i);
-      }
-      if (ImGui::IsItemHovered()) {
-        Tip(
-            "Clear this pass's failure and try again on the next frame.\n"
-            "The model will be recreated from scratch, so this also "
-            "recovers from a feature handle that got into a bad state.");
-      }
-      ImGui::PopID();
-    }
 
     ImGui::SameLine(kControlLabelWidth);
     ImGui::TextUnformatted(buf);
