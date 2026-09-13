@@ -375,19 +375,63 @@ bool ComputeEngine::Init(ID3D12Device* device) {
   }
 
   device_ = device;
+
+  // Kick off the background compile. Dispatch still compiles synchronously
+  // on a miss, so a caller that arrives before the worker finishes sees the
+  // old behaviour rather than a new failure mode.
+  worker_stop_ = false;
+  worker_ = std::thread(&ComputeEngine::WorkerCompileAll, this);
+
   return true;
 }
 
 void ComputeEngine::Destroy() {
+  // Stop and join first: the worker reads device_ and root_signature_ and
+  // writes passes_, all of which are torn down below.
+  {
+    std::lock_guard<std::mutex> lock(passes_mutex_);
+    worker_stop_ = true;
+  }
+  if (worker_.joinable()) {
+    worker_.join();
+  }
+
   for (auto& buffer : constant_buffers_) {
     buffer.Reset();
   }
 
-  passes_.clear();
+  {
+    std::lock_guard<std::mutex> lock(passes_mutex_);
+    passes_.clear();
+  }
   root_signature_.Reset();
   descriptor_heap_.Reset();
 
   device_ = nullptr;
+}
+
+void ComputeEngine::WorkerCompileAll() {
+  for (uint32_t i = 0; i < kComputePassCount; ++i) {
+    const char* name = kComputePasses[i].name;
+
+    {
+      std::lock_guard<std::mutex> lock(passes_mutex_);
+      if (worker_stop_) return;
+      // Already compiled by a synchronous Dispatch while the worker ran.
+      if (passes_.find(name) != passes_.end()) continue;
+    }
+
+    CachedPass pass;
+    if (!CompilePipeline(kComputePasses[i].hlsl_source,
+                         pass.pso.GetAddressOf())) {
+      // CompilePipeline already logged. Dispatch will retry synchronously.
+      continue;
+    }
+
+    std::lock_guard<std::mutex> lock(passes_mutex_);
+    if (worker_stop_) return;
+    passes_.emplace(name, std::move(pass));
+  }
 }
 
 }  // namespace reshade_dlssnr
