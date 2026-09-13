@@ -7,7 +7,9 @@
 #include <wrl/client.h>
 
 #include <cstdint>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <unordered_map>
 
 namespace reshade_dlssnr {
@@ -100,7 +102,18 @@ class ComputeEngine {
   struct CachedPass {
     Microsoft::WRL::ComPtr<ID3D12PipelineState> pso;
   };
+  // Guards `passes_`, which is filled by the worker and read by Dispatch.
+  // `device_` and `root_signature_` are set before the worker starts and
+  // reset after it joins, so they need no additional protection.
+  std::mutex passes_mutex_;
   std::unordered_map<std::string, CachedPass> passes_;
+
+  std::thread worker_;
+  bool worker_stop_ = false;
+
+  // Compiles every pass in kComputePasses[] off the render thread. Runs
+  // once per Init; joins before any device or root signature teardown.
+  void WorkerCompileAll();
 
   bool CreateRootSignature(ID3D12Device* device);
   bool CompilePipeline(const char* hlsl, ID3D12PipelineState** out_pso);
