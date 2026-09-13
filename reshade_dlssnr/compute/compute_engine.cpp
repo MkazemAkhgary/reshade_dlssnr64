@@ -432,20 +432,18 @@ void ComputeEngine::WorkerCompileAll() {
   for (uint32_t i = 0; i < kComputePassCount; ++i) {
     const char* name = kComputePasses[i].name;
 
-    {
-      std::lock_guard<std::mutex> lock(passes_mutex_);
-      if (worker_stop_) return;
-      // Already compiled by a synchronous Dispatch while the worker ran.
-      if (passes_.find(name) != passes_.end()) continue;
-    }
-
     CachedPass pass;
     if (!CompilePipeline(kComputePasses[i].hlsl_source,
                          pass.pso.GetAddressOf())) {
-      // CompilePipeline already logged. Dispatch will retry synchronously.
+      // CompilePipeline already logged the HLSL error. Dispatch will
+      // retry synchronously once ready_ is set, so a bad shader surfaces
+      // through the normal failure path instead of silently.
       continue;
     }
 
+    // Dispatch cannot insert into passes_ while !IsReady(), so the worker
+    // is the only writer during its run. The lock guards the emplace
+    // against a concurrent Destroy().
     std::lock_guard<std::mutex> lock(passes_mutex_);
     if (worker_stop_) return;
     passes_.emplace(name, std::move(pass));
