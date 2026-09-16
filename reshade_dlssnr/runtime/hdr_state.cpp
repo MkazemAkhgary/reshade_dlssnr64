@@ -7,6 +7,8 @@
 #include <reshade.hpp>
 
 #include "d3d12_utils.h"
+#include "pipeline_graph.h"
+#include "pipeline_trace.h"
 
 namespace reshade_dlssnr {
 
@@ -377,6 +379,73 @@ void HdrState::UpdateExposure(const uint32_t* bins, uint32_t total,
 
   have_measurement_ = true;
   warmup_frames_++;
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline step registration
+// ---------------------------------------------------------------------------
+//
+// The HDR histogram is a single stage-local unit: HdrState::BeginFrame emits
+// the zero, the build, and the readback enqueue in one contiguous block, and
+// splitting them would mean threading the histogram resource and constants
+// through PassRun for no benefit. So HdrBeginFrame is the real step, and the
+// three histogram nodes are declared in the graph as documentation of what it
+// does. Splitting them later is a matter of moving code from BeginFrame into
+// the three step bodies below and listing them in kPostDlssSteps; the graph's
+// shape does not have to change.
+namespace {
+
+PipelineStatus RunHdrBeginFrame(PassRun& run) {
+  // The controller called BeginFrame exactly once per frame, before the pass
+  // loop. As a step it is listed once in the PostDLSS stage, which runs that
+  // step per pass — so the gate moves here. Only the first pass in the chain
+  // measures.
+  if (!run.is_first_pass) return PipelineStatus::Ok;
+  if (run.hdr == nullptr || run.hdr_cmd == nullptr) return PipelineStatus::Ok;
+  if (run.guides.dlss_output_color == nullptr || run.guides.output_width == 0 ||
+      run.guides.output_height == 0) {
+    TRACE_EVT(run.session, "hdr_begin_frame SKIP (no guide color)");
+    return PipelineStatus::Ok;
+  }
+
+  TRACE_EVT(run.session, "hdr_begin_frame %ux%u", run.guides.output_width,
+            run.guides.output_height);
+
+  // hdr_cmd is the controller-owned scratch context the histogram records
+  // through. Carried on the run so the graph has no controller coupling.
+  run.hdr->BeginFrame(*run.hdr_cmd, run.list, run.guides.dlss_output_color,
+                      run.guides.output_width, run.guides.output_height,
+                      *run.settings, *run.codec);
+  return PipelineStatus::Ok;
+}
+
+// Placeholder steps: the work is inside RunHdrBeginFrame above. They exist so
+// the graph names the histogram sub-steps explicitly.
+PipelineStatus RunHistogramPlaceholder(PassRun&) { return PipelineStatus::Ok; }
+
+const PipelineNodeId kHdrBeginRequires[] = {PipelineNodeId::EnsureComputeEngine,
+                                            PipelineNodeId::Count};
+const PipelineNodeId kHistogramRequires[] = {PipelineNodeId::HdrBeginFrame,
+                                             PipelineNodeId::Count};
+
+const PipelineStepDef kHdrSteps[] = {
+    {PipelineNodeId::HdrBeginFrame, "HdrBeginFrame", &RunHdrBeginFrame,
+     kHdrBeginRequires, /*requires_hdr_aware=*/true},
+    {PipelineNodeId::HistogramZero, "HistogramZero", &RunHistogramPlaceholder,
+     kHistogramRequires, /*requires_hdr_aware=*/true},
+    {PipelineNodeId::HistogramBuild, "HistogramBuild", &RunHistogramPlaceholder,
+     kHistogramRequires, /*requires_hdr_aware=*/true},
+    {PipelineNodeId::HistogramReadback, "HistogramReadback",
+     &RunHistogramPlaceholder, kHistogramRequires, /*requires_hdr_aware=*/true},
+};
+
+}  // namespace
+
+const PipelineStepDef* HdrStepFor(PipelineNodeId id) {
+  for (const PipelineStepDef& def : kHdrSteps) {
+    if (def.id == id) return &def;
+  }
+  return nullptr;
 }
 
 }  // namespace reshade_dlssnr

@@ -2,6 +2,8 @@
 
 #include <wrl/client.h>
 
+#include "pipeline_graph.h"
+
 namespace reshade_dlssnr {
 
 namespace {
@@ -135,5 +137,18 @@ bool RenderDebugView(
 
   return codec.Dispatch("DebugDisplay", command_list, constants, srvs, uavs);
 }
+
+// ---------------------------------------------------------------------------
+// Pipeline step registration
+// ---------------------------------------------------------------------------
+//
+// This translation unit owns no pipeline steps. The RenderDebugView node is
+// implemented in pass_session.cpp, because rendering the debug view requires
+// the pass's own state: the DebugSnapshot of live resources, which only the
+// pass can populate, and the FrameDebugContext::output (re)creation that has
+// to happen while those resources are in known states.
+//
+// Declared anyway so the graph has a definition for every node slot.
+const PipelineStepDef* DebugStepFor(PipelineNodeId) { return nullptr; }
 
 }  // namespace reshade_dlssnr

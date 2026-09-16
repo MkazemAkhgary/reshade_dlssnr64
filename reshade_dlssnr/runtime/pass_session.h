@@ -17,6 +17,7 @@
 #include "hdr_state.h"
 #include "model_pipeline.h"
 #include "pass_resources.h"
+#include "pipeline_graph.h"
 #include "runtime.h"
 #include "settings.h"
 #include "status.h"
@@ -28,32 +29,26 @@ class PassSession {
   PassSession(DlssGuides* guides, uint32_t pass_index)
       : guides_(guides), pass_index_(pass_index) {}
 
-  void OnPresent(
-      NgxRuntime& runtime,
-      const PassSettings& pass,
-      const Settings& settings,
-      ComputeEngine& codec,
-      ID3D12CommandQueue* command_queue,
-      IDXGISwapChain* swapchain,
-      FrameDebugContext& frame_debug);
-
-  // Runs the model pipeline inline on the game's command list, right after
-  // the DLSS pass. Writes the composed result back into `output_resource`.
-  // Does not close, submit, or wait on the command list.
+  // Runs `stage` against this session. This is the single entry point the
+  // AddonController uses: the session supplies the owners of its own state and
+  // the controller supplies the frame inputs, and the runner walks the stage's
+  // step table. Returns the stage status.
   //
-  // `is_first_pass` is true for the first Post-DLSS pass in the chain: its
-  // input is the captured DLSS output clone. Subsequent passes read a
-  // snapshot of the previous pass's result from `output_resource`.
-  void OnPostDlssEvaluate(
-      NgxRuntime& runtime,
-      const PassSettings& pass,
-      const Settings& settings,
-      ComputeEngine& codec,
-      ID3D12GraphicsCommandList* command_list,
-      ID3D12Resource* output_resource,
-      bool is_first_pass,
-      FrameDebugContext& frame_debug,
-      HdrState* hdr);
+  // The per-stage guards that the pre-refactor OnPresent / OnPostDlssEvaluate
+  // applied before their first real work (`settings.enabled`, `failed_`, null
+  // inputs) live here, so every caller gets them without repeating them.
+  PipelineStatus RunStage(const PipelineStageDef& stage,
+                          const Settings& settings,
+                          ComputeEngine& codec,
+                          NgxRuntime& runtime,
+                          ID3D12GraphicsCommandList* command_list,
+                          ID3D12Resource* output_resource,
+                          bool is_first_pass,
+                          FrameDebugContext& frame_debug,
+                          HdrState* hdr,
+                          CommandContext* hdr_cmd,
+                          ID3D12CommandQueue* command_queue,
+                          IDXGISwapChain* swapchain);
 
   void Shutdown(NgxRuntime& runtime);
 
@@ -66,11 +61,69 @@ class PassSession {
   // Snapshot of this pass's current state, for the controller's status UI.
   PassStatus GetStatus() const;
 
+  // The list a stage records on: the session's own list for the Present
+  // stage, the game's for PostDLSS. Steps that touch GPU state go through
+  // this so the stage's ownership rule is stated once.
+  //
+  // Static because it reads only `run`; a step holds a PassSession* already,
+  // but stating that it needs nothing else keeps it usable from the table.
+  static ID3D12GraphicsCommandList* StageList(const PassRun& run,
+                                              CommandContext& command) {
+    return run.stage != nullptr && !run.stage->is_post_dlss
+               ? command.GetCommandList()
+               : run.list;
+  }
+
+  // -- Step bodies ----------------------------------------------------------
+  //
+  // Published through SessionStepFor(). Static so they convert to the
+  // PipelineStepFn pointer type while still reaching this session's state.
+  static PipelineStatus StepAcquireBackbuffer(PassRun& run);
+  static PipelineStatus StepResolveDevice(PassRun& run);
+  static PipelineStatus StepEnsureComputeEngine(PassRun& run);
+  static PipelineStatus StepResolveWorkingScale(PassRun& run);
+  static PipelineStatus StepEnsureFrameResources(PassRun& run);
+  static PipelineStatus StepSeedResourceStates(PassRun& run);
+  static PipelineStatus StepSeedGuideStates(PassRun& run);
+  static PipelineStatus StepResolveModelInput(PassRun& run);
+  static PipelineStatus StepBuildHdrUniforms(PassRun& run);
+  static PipelineStatus StepEnsureFeature(PassRun& run);
+  static PipelineStatus StepSnapshotGuides(PassRun& run);
+  static PipelineStatus StepPrepareModelInput(PassRun& run);
+  static PipelineStatus StepFillEvaluateParams(PassRun& run);
+  static PipelineStatus StepEvaluateFeature(PassRun& run);
+  static PipelineStatus StepModelOutputBarrier(PassRun& run);
+  static PipelineStatus StepComposeModelOutput(PassRun& run);
+  static PipelineStatus StepRenderDebugView(PassRun& run);
+  static PipelineStatus StepWriteToBackbuffer(PassRun& run);
+  static PipelineStatus StepWriteToGameResource(PassRun& run);
+  static PipelineStatus StepSubmitAndWait(PassRun& run);
+
  private:
   // Sets failed_ and reason_, and logs the failure once. Use in place of
   // the `failed_ = true; reason_ = "...";` pattern so every failure has a
   // single visible log entry.
   void Fail(const char* reason);
+
+  // Step-side wrapper around Fail(). A step that reports Fail has always
+  // left a reason behind, which the status UI relies on. Passing nullptr
+  // keeps an existing reason_ rather than blanking it.
+  void FailForStep(const char* reason);
+
+  // Fills `run` with this session's owners and the pass-level frame inputs.
+  // The runner supplies the rest as steps run.
+  void PrepareRun(PassRun& run,
+                  const Settings& settings,
+                  ComputeEngine& codec,
+                  NgxRuntime& runtime,
+                  ID3D12GraphicsCommandList* command_list,
+                  ID3D12Resource* output_resource,
+                  bool is_first_pass,
+                  FrameDebugContext& frame_debug,
+                  HdrState* hdr,
+                  CommandContext* hdr_cmd,
+                  ID3D12CommandQueue* command_queue,
+                  IDXGISwapChain* swapchain);
 
   // Acquires the backbuffer and its descriptor for the current frame.
   bool AcquireBackbuffer(

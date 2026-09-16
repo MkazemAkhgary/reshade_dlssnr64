@@ -43,12 +43,14 @@ reshade_dlssnr/
 
   runtime/
     addon_controller.h/.cpp      // controller facade; owns runtime + pass sessions + status
+    pipeline_graph.h/.cpp        // declarative pipeline: stages, step tables, runner
+    pipeline_trace.h/.cpp        // DLSSNR_TRACE command-stream trace (regression oracle)
     runtime.h/.cpp               // model loading, patching, NGX init, parameter block
     command_context.h/.cpp       // command allocator/list/fence/barrier/state helpers
     feature_lifecycle.h/.cpp     // feature handle creation and rebuild state
     model_pipeline.h/.cpp        // prepare input, compose output, HDR variants
     pass_resources.h/.cpp        // per-pass textures + scratch pool
-    pass_session.h/.cpp          // per-pass orchestrator
+    pass_session.h/.cpp          // step implementations + RunStage entry point
     frame_debug_context.h        // per-frame debug output container
     debug_view.h/.cpp            // debug view registry + render
     hdr_state.h/.cpp             // HDR measurement, exposure EMA, readback
@@ -82,6 +84,12 @@ reshade_dlssnr/
 
 ## Runtime Flow
 
+The frame is described declaratively in `runtime/pipeline_graph.h/.cpp` as a
+list of **stages**, each holding an ordered table of **steps**. Stages and
+their step tables are data; a step is a named function plus a status. Adding,
+removing or reordering a step is a one-line table edit — see *The Pipeline
+Graph* below before changing anything.
+
 ```text
 Game frame:
   ...
@@ -90,21 +98,117 @@ Game frame:
           -> real EvaluateFeature
           -> DlssGuides::Capture           // clones depth/motion/DLSS output
           -> AddonController::OnPostDlssEvaluate
-              -> HdrState::BeginFrame       // measure, if scheduled
               -> for each enabled pass at DLSS Output:
-                  PassSession::OnPostDlssEvaluate
+                  PassSession::RunStage(PostDLSS stage, ...)
+                    // EnsureHdr / HdrBeginFrame / ... / WriteToGameResource
   ...
 
 ReShade present:
   -> AddonController::OnPresent
       -> for each enabled pass at Backbuffer:
-          PassSession::OnPresent
+          PassSession::RunStage(Present stage, ...)
+      -> RunSingleStage(Release stage)         // SignalHdrAtPresent
       -> if a debug view was rendered this frame:
           PresentDebugOutput             // copy frame_debug.output to backbuffer
-      -> HdrState::SignalAtPresent       // signal readback fence
 ```
 
-`PassSession::OnPresent` and `OnPostDlssEvaluate` run the same model pipeline; they differ in input, output target, and whether the game's command list is used (Post-DLSS) or our own (Present).
+`PassSession::RunStage` is the single entry point for every stage. It builds a
+`PassRun` (the per-frame inputs and resolved resources), then hands off to
+`PipelineRunner::RunStage`, which walks the stage's step table in order,
+checks prerequisites, and interprets each step's `PipelineStatus`. The old
+`PassSession::OnPresent` and `OnPostDlssEvaluate` methods no longer exist.
+
+The two injection points run the same step *functions* but not the same step
+*order*: Post-DLSS builds its feature after seeding guide states, Present
+before. That asymmetry is a property of the existing code and is deliberately
+preserved — see the FIDELITY note in `pipeline_graph.cpp`.
+
+---
+
+## The Pipeline Graph
+
+`runtime/pipeline_graph.h` defines the model; `pipeline_graph.cpp` holds the
+tables. Read the header comments first — they state the invariants.
+
+**Nodes.** `PipelineNodeId` is a flat enum ordered by dependency depth. A step
+may only declare prerequisites that appear *earlier* in the enum, which makes
+a dependency cycle impossible to express rather than something to debug later.
+
+**Step definitions.** Each entry in a step table names a node, a human name,
+a `run` function pointer, its `depends_on` prerequisites, and whether it is
+`requires_hdr_aware`. A step whose prerequisites are unmet is skipped and
+logged at error level: a missing prerequisite means the table lists a step
+before something it depends on, which is a bug in the table, so the frame
+degrades instead of rendering garbage.
+
+**Prerequisites are currently empty** (`kNoDeps`) for every step. The checking
+machinery is live and correct; the arrays are intentionally unfilled until the
+step order has been confirmed by a runtime trace. Filling them in is a genuine
+safety net for future table edits, not decoration.
+
+**Stages** carry policy as data rather than as inline branches:
+
+| Field | Meaning |
+|---|---|
+| `is_post_dlss` | records on the game's command list instead of our own |
+| `default_failure` | `Fail` / `Transient` / `Ignore` for an unhandled step status |
+| `owns_submit` | whether this stage submits and waits |
+| `hdr_capable` | a `requires_hdr_aware` step in a non-capable stage is skipped, not failed |
+| `reads_dlss_output` | input comes from the game's DLSS output |
+
+Current stages: **PostDLSS** (transient, not owning submit, HDR-capable),
+**Present** (fail, owns submit), **Release** (ignore, owns submit).
+
+**Step ownership in practice.** Most steps live in `pass_session.cpp` as
+static members and reach private state through `run.session`. Two other files
+contribute steps for concerns that belong to them: the controller contributes
+`EnsureHdr` / `WriteToBackbuffer` / `SignalHdrAtPresent` (it owns those
+resources), and `hdr_state.cpp` contributes `HdrBeginFrame`. `FindPipelineStep`
+consults all registries in turn, so a step can be placed next to the code it
+drives without the table caring where it lives.
+
+**Verifying an edit.** `tools/verify_pipeline_order.py` prints the step tables
+beside the ordered operations of the pre-refactor methods, read from git. Use
+it before and after any reordering:
+
+```bash
+python tools/verify_pipeline_order.py          # compare against HEAD
+python tools/verify_pipeline_order.py HEAD~1   # compare against an older rev
+```
+
+It reports early-exit guards (frames abandoned inside a step) separately from
+sequential steps, because those legitimately differ between the two stages.
+
+**Runtime tracing.** `pipeline_trace.cpp` writes a command-stream trace when
+`DLSSNR_TRACE=<path>` is set. Resource pointers are printed as stable
+first-seen indices, not raw addresses, because COM heaps recycle addresses and
+raw pointers would make two runs incomparable. This is the regression oracle
+for the refactor: build the pre-refactor tree, capture a trace, and diff.
+
+Coverage is deliberately at the choke points rather than in the steps, so a
+new step is traced without being instrumented: every `Transition`,
+`UavBarrier` and copy goes through `CommandContext`, and every shader dispatch
+through `ComputeEngine::Dispatch` — the latter logs the pass name, grid,
+SRV/UAV resource ids and all 48 shader params. Steps add `TRACE_EVT` lines for
+decisions (a skip, a failure reason) that produce no GPU command.
+
+Diff two captures with:
+
+```bash
+python tools/diff_trace.py --summary before.log after.log   # counts per op
+python tools/diff_trace.py before.log after.log             # first divergence
+```
+
+Run `--summary` first. It counts operations by type and flags the difference
+immediately, which is far easier to read than a line diff. A line diff
+desynchronises after the first difference, so only the first one is
+meaningful — the tool says so and prints both sides in context.
+
+Bound the capture. Traces grow fast — every transition, barrier and dispatch
+is a line — so an unbounded capture from a menu screen is unreadable. Use a
+fixed, short, deterministic scene: same save, same camera, same duration for
+both runs.
+
 
 ---
 
@@ -275,6 +379,17 @@ See `HDR_DESIGN.md`. Short version:
 
 The no-op model round trip is exact (up to saturation at the white point).
 
+**These names are compute shader passes, not pipeline stages.** In
+`kComputePasses[]`, `TonemapForward` and `ComposeModelOutputHdr` are the
+HDR-aware *alternatives* to `PrepareModelInput` and `ComposeModelOutput`
+respectively. `model_pipeline.cpp` picks between them with a plain
+`hdr != nullptr` test, so a frame runs one or the other, never both. The
+pipeline *stage* that owns them is the PostDLSS stage; steps such as
+`PrepareModelInput` and `ComposeModelOutput` in `pass_session.cpp` are the
+orchestration around them — a name collision, not the same thing. Some earlier
+revisions of this document described these as four separate chained passes;
+they are not.
+
 ### Resource ownership
 
 Command contexts and compute engines owned by `AddonController`:
@@ -282,12 +397,16 @@ Command contexts and compute engines owned by `AddonController`:
 | Member | Purpose |
 |---|---|
 | `debug_command_` | the copy that puts a debug view onto the backbuffer at Present |
-| `pass1_command_` | the histogram dispatch (records on the game's list) |
-| `debug_codec_` (per `PassSession`) | dispatch engine for the pass's own stages |
-| `hdr_codec_` | dispatch engine for the histogram passes |
+| `pass1_command_` | the HDR histogram dispatch (records on the game's list) |
+| `codec_` | one shared `ComputeEngine` for every pass **and** the histogram |
 
-Each `PassSession` owns its own `codec_` (a `ComputeEngine`) and all its
-pass-scoped resources.
+There is a single shared `codec_`, not one engine per concern. One engine
+means one root signature, one descriptor heap, and one background compile of
+`kComputePasses[]` instead of one per session. Earlier revisions had separate
+`debug_codec_` and `hdr_codec_` members; those no longer exist.
+
+Each `PassSession` owns all its pass-scoped resources and reaches the shared
+engine through the `PassRun`.
 
 ---
 
@@ -330,8 +449,28 @@ shader cbuffer at `gParams[i]`.
 
 Add one entry to `kDebugViews` in `debug_view.cpp`. The pipeline populates
 `DebugSnapshot` (see `debug_view.h`); if the resource you want to display is
-not in the snapshot, add a field for it and fill it in at pass time in
-`PassSession::OnPresent` / `OnPostDlssEvaluate`.
+not in the snapshot, add a field for it and fill it in from the step that
+produces it (`PassSession::Step*` in `pass_session.cpp`), not from a
+stage-level method — the resource's state is only trustworthy at that point.
+
+### A new pipeline step
+
+1. Add the node to `PipelineNodeId` in `pipeline_graph.h`. Position it after
+   everything it depends on: the enum is depth-ordered, and that ordering is
+   what makes a cycle unrepresentable.
+2. Write the step as a `static PipelineStatus Step*(PassRun& run);` on
+   `PassSession` and start the body with `PassSession* self = run.session;`.
+   Return `Ok`, `SkipFrame`, or `Fail` — the runner interprets these.
+3. Register it in the right step table in `pipeline_graph.cpp`, inside the
+   correct phase range, and add a name to `kNodeNames[]`.
+4. If the step needs a new phase, add it to the phase table. `PhasesCover`
+   is a `constexpr` check that the phases tile the step list exactly, so a
+   mismatch fails the build rather than misbehaving at runtime.
+5. Run `tools/verify_pipeline_order.py` to confirm nothing moved.
+
+If the step belongs to a concern owned by another file, register it there
+instead — see the controller and `hdr_state.cpp` registries, and
+`FindPipelineStep` for how they are combined.
 
 ### A new UI section
 
@@ -364,5 +503,28 @@ passes, add the corresponding `inherit_*` field and handle it in
 - Project: `reshade_dlssnr.vcxproj`
 - Platform: `Release|x64`
 - Toolset: `v145`
-- Output: `reshade_dlssnr_coda.addon64`
+- Output: `build\Release\reshade_dlssnr_coda.addon64`
 - Link: `d3d12.lib;dxgi.lib;detours.lib;d3dcompiler.lib`
+
+`OutDir` is `$(SolutionDir)build\$(Configuration)\`. The target name is
+`reshade_dlssnr_coda` for this fork (`reshade_dlssnr64` in upstream builds);
+both may be present in `build\Release\`.
+
+Builds are done by hand in this workspace, not by an agent: the sandbox blocks
+`MSBuild.exe` as an unrecognised executable, so MSBuild-based builds are not
+something an agent can run here. Do not add scratch build scripts to work
+around it.
+
+## Verification
+
+Static checks that pass today:
+
+- 22 translation units compile clean under `/W3 /permissive- /std:c++20`.
+- The addon links, with `AddonInit` / `AddonUninit` exported.
+- `tools/verify_pipeline_order.py` confirms the step tables reproduce the
+  original operation order.
+
+These are all static. The one check that can catch a mistake they cannot is a
+runtime trace diff: build the pre-refactor tree, run both with `DLSSNR_TRACE`
+set, and compare. Resource pointers are emitted as stable first-seen indices
+precisely so the two traces are comparable.

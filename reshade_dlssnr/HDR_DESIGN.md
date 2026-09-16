@@ -80,10 +80,14 @@ class HdrState {
 
 ### Extended
 
-- `PassResources` — one 256 × u32 histogram buffer (UAV). `kScratchCount`
-  grows from 4 to 6 with two slots reserved for HDR SDR intermediates.
-- `PassSession::OnPostDlssEvaluate` — branches between SDR (existing) and
-  HDR (new) paths.
+- `PassResources` — `kScratchCount` stays at **4**. The histogram is *not*
+  held here; it lives on `HdrState` as a dedicated 256 × u32 UAV buffer, so
+  the pass-scratch pool is unaffected by HDR.
+- Pipeline step `PassSession::StepPrepareModelInput` — selects between the
+  SDR pass (`PrepareModelInput`) and the HDR pass (`TonemapForward`) with an
+  `hdr != nullptr` test. The matching choice on output is made in
+  `PassSession::StepComposeModelOutput` (`ComposeModelOutput` vs
+  `ComposeModelOutputHdr`). There is no separate HDR "branch" method.
 
 ## Settings
 
@@ -130,31 +134,44 @@ The first 30 frames after HDR is enabled use an accelerated warm-up
 
 ## Per-frame flow (Post-DLSS, HDR enabled)
 
+The pipeline is declarative: the Post-DLSS stage's step table in
+`runtime/pipeline_graph.cpp` is the authority. The HDR-relevant steps in
+order are:
+
 ```
-AddonController::OnPostDlssEvaluate
+PostDLSS stage (PassSession::RunStage → PipelineRunner::RunStage)
   │
-  ├─ if (hdr.enabled && first pass in chain)
-  │    hdr.BeginFrame(cmd, list, dlss_output, w, h, settings)
-  │      ├─ if (frame_counter % measure_every == 0)
-  │      │    issue ZeroHistogram
-  │      │    issue BuildHistogram(source → histogram)
-  │      │    enqueue readback copy (histogram → readback ring slot)
-  │      ├─ TryGet previous histogram
-  │      │    └─ if data: UpdateExposure() → EMA update
-  │      └─ frame_counter++
-  │
-  └─ for each enabled Post-DLSS pass:
-       PassSession::OnPostDlssEvaluate(..., hdr)
-         ├─ if (!hdr.enabled) → existing SDR path
-         └─ else →
-              TonemapForward(source_hdr → sdr_intermediate)
-              EvaluateFeature(sdr_intermediate → sdr_model_output)
-              ComposeModelOutputHdr(...)
-              → write to DLSS output resource
+  ├─ EnsureHdr          — one-time hdr_.Ensure() + codec_.Init()
+  ├─ HdrBeginFrame      — only when is_first_pass; see below
+  ├─ ...
+  ├─ StepPrepareModelInput
+  │    ├─ if (!hdr.enabled) → dispatch "PrepareModelInput"  (SDR path)
+  │    └─ else              → dispatch "TonemapForward"     (HDR path)
+  ├─ ...
+  └─ StepComposeModelOutput
+       ├─ if (!hdr.enabled) → dispatch "ComposeModelOutput"
+       └─ else              → dispatch "ComposeModelOutputHdr"
+            → write to the DLSS output resource
+
+HdrBeginFrame, when it runs:
+  ├─ if (frame_counter % measure_every == 0)
+  │    issue ZeroHistogram
+  │    issue BuildHistogram(source → histogram)
+  │    enqueue readback copy (histogram → readback ring slot)
+  ├─ poll the fence from a previous frame's SignalAtPresent
+  │    └─ if data ready: UpdateExposure() → EMA update
+  └─ frame_counter++
 ```
 
-Only the first Post-DLSS pass in the chain runs `BeginFrame`; subsequent
-passes reuse the same exposure / white point.
+**`HdrBeginFrame` runs only on the first enabled pass** (`run.is_first_pass`),
+which is what the pre-refactor controller did by calling `BeginFrame` exactly
+once before the pass loop. Subsequent passes reuse the same exposure and white
+point. The step is gated on `is_first_pass` rather than on pass index 0, so
+disabling the first pass moves the measurement to the next enabled one.
+
+`SignalAtPresent` runs in the **Release** stage at Present, not in the
+PostDLSS stage — it signals the queue fence that the next frame's
+`HdrBeginFrame` polls.
 
 ## Shader specs
 
@@ -382,17 +399,21 @@ Defaults:
 
 ## `PassResources` additions
 
-```cpp
-constexpr uint32_t kScratchCount = 6;
-constexpr uint32_t kInputSnapshotSlot = 0;  // Post-DLSS multi-pass
-constexpr uint32_t kDebugScratchSlot  = 1;  // frame debug output
-constexpr uint32_t kSdrWorkingSlot    = 2;  // HDR SDR intermediate
-constexpr uint32_t kSdrFullSlot       = 3;  // reserved
+None. The scratch pool is unchanged at 4 slots, and the histogram is owned by
+`HdrState` rather than shared through `PassResources`:
 
-// Dedicated histogram buffer (256 × u32, UAV)
-bool EnsureHistogram(ID3D12Device* device);
-ID3D12Resource* GetHistogram() const;
+```cpp
+constexpr uint32_t kScratchCount = 4;
+constexpr uint32_t kInputSnapshotSlot = 0;  // Post-DLSS multi-pass
+
+// On HdrState, not PassResources:
+Microsoft::WRL::ComPtr<ID3D12Resource> histogram_;  // 256 × u32, UAV
 ```
+
+An earlier revision of this document proposed growing `kScratchCount` to 6
+and adding `EnsureHistogram` / `GetHistogram` to `PassResources`. That is not
+what was built — the histogram is a single buffer owned by the object that
+measures into it, which keeps the scratch pool free for pass textures.
 
 ## Edge cases and known limitations
 

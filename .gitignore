@@ -438,3 +438,9 @@ CyberFSR/imgui.ini
 
 release
 .env
+
+# Agent session state (local notes, not project source)
+.workbuddy-ai/
+
+# Generated verification reports
+reshade_dlssnr/tools/pipeline_order_report.txt

@@ -1,6 +1,7 @@
 #include "command_context.h"
 
 #include "d3d12_utils.h"
+#include "pipeline_trace.h"
 
 namespace reshade_dlssnr {
 
@@ -63,6 +64,7 @@ void CommandContext::CloseAndSubmit(ID3D12CommandQueue* command_queue) {
   command_list_->Close();
   ID3D12CommandList* lists[] = {command_list_.Get()};
   command_queue->ExecuteCommandLists(1, lists);
+  TRACE_CMD(this, "close_and_submit queue=%d", trace::ResourceId(command_queue));
 }
 
 void CommandContext::WaitGpu(ID3D12CommandQueue* command_queue) {
@@ -70,11 +72,16 @@ void CommandContext::WaitGpu(ID3D12CommandQueue* command_queue) {
 
   const UINT64 value = ++fence_value_;
   command_queue->Signal(fence_.Get(), value);
+  TRACE_CMD(this, "wait_gpu signal=%llu queue=%d",
+            static_cast<unsigned long long>(value),
+            trace::ResourceId(command_queue));
 
   if (fence_->GetCompletedValue() < value) {
     fence_->SetEventOnCompletion(value, fence_event_);
     WaitForSingleObject(fence_event_, INFINITE);
   }
+  TRACE_CMD(this, "wait_gpu done signal=%llu",
+            static_cast<unsigned long long>(value));
 }
 
 void CommandContext::Transition(
@@ -84,11 +91,19 @@ void CommandContext::Transition(
   if (resource == nullptr || command_list == nullptr) return;
 
   auto it = resource_states_.find(resource);
+  const bool tracked = it != resource_states_.end();
   const D3D12_RESOURCE_STATES before =
-      it != resource_states_.end() ? it->second : InferResourceState(resource);
+      tracked ? it->second : InferResourceState(resource);
 
   if (before == after) {
     resource_states_[resource] = after;
+    TRACE_CMD(this, "transition res=%d(%s) %s -> %s SKIP(same) tracked=%d",
+              trace::ResourceId(resource),
+              trace::ResourceName(resource) != nullptr
+                  ? trace::ResourceName(resource)
+                  : "-",
+              trace::StateName(before), trace::StateName(after),
+              tracked ? 1 : 0);
     return;
   }
 
@@ -100,6 +115,14 @@ void CommandContext::Transition(
   barrier.Transition.StateAfter = after;
   command_list->ResourceBarrier(1, &barrier);
 
+  TRACE_CMD(this, "transition res=%d(%s) %s -> %s tracked=%d",
+            trace::ResourceId(resource),
+            trace::ResourceName(resource) != nullptr
+                ? trace::ResourceName(resource)
+                : "-",
+            trace::StateName(before), trace::StateName(after),
+            tracked ? 1 : 0);
+
   resource_states_[resource] = after;
 }
 
@@ -108,6 +131,11 @@ void CommandContext::SetResourceState(
     D3D12_RESOURCE_STATES state) {
   if (resource == nullptr) return;
   resource_states_[resource] = state;
+  TRACE_CMD(this, "seed res=%d(%s) = %s", trace::ResourceId(resource),
+            trace::ResourceName(resource) != nullptr
+                ? trace::ResourceName(resource)
+                : "-",
+            trace::StateName(state));
 }
 
 D3D12_RESOURCE_STATES CommandContext::GetResourceState(
@@ -126,6 +154,10 @@ void CommandContext::UavBarrier(
   barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
   barrier.UAV.pResource = resource;
   command_list->ResourceBarrier(1, &barrier);
+  TRACE_CMD(this, "uav_barrier res=%d(%s)", trace::ResourceId(resource),
+            trace::ResourceName(resource) != nullptr
+                ? trace::ResourceName(resource)
+                : "-");
 }
 
 void CommandContext::CopyResourceToBackbuffer(
@@ -133,6 +165,16 @@ void CommandContext::CopyResourceToBackbuffer(
     ID3D12Resource* source,
     ID3D12Resource* backbuffer) {
   if (command_list == nullptr || source == nullptr || backbuffer == nullptr) return;
+
+  TRACE_CMD(this, "copy_to_backbuffer src=%d(%s) dst=%d(%s)",
+            trace::ResourceId(source),
+            trace::ResourceName(source) != nullptr
+                ? trace::ResourceName(source)
+                : "-",
+            trace::ResourceId(backbuffer),
+            trace::ResourceName(backbuffer) != nullptr
+                ? trace::ResourceName(backbuffer)
+                : "-");
 
   Transition(command_list, source, D3D12_RESOURCE_STATE_COPY_SOURCE);
   Transition(command_list, backbuffer, D3D12_RESOURCE_STATE_COPY_DEST);

@@ -1,6 +1,10 @@
 #include "pass_resources.h"
 
+#include <cstdio>
+
 #include <reshade.hpp>
+
+#include "pipeline_trace.h"
 
 namespace reshade_dlssnr {
 
@@ -63,6 +67,9 @@ bool PassResources::EnsureOutput(
 
   output_width = static_cast<unsigned int>(desc.Width);
   output_height = desc.Height;
+  trace::NameResource(output.Get(), "output");
+  TRACE_CMD(this, "create output res=%d %ux%u", trace::ResourceId(output.Get()),
+            output_width, output_height);
   return true;
 }
 
@@ -87,6 +94,10 @@ bool PassResources::EnsureCompositeOutput(
   composite_output_width = static_cast<unsigned int>(desc.Width);
   composite_output_height = desc.Height;
   composite_output_format = desc.Format;
+  trace::NameResource(composite_output.Get(), "composite_output");
+  TRACE_CMD(this, "create composite_output res=%d %ux%u",
+            trace::ResourceId(composite_output.Get()),
+            composite_output_width, composite_output_height);
   return true;
 }
 
@@ -128,6 +139,12 @@ bool PassResources::EnsureWorkingResources(
   working_width = work_width;
   working_height = work_height;
   working_format = desc.Format;
+  trace::NameResource(working_input.Get(), "working_input");
+  trace::NameResource(working_output.Get(), "working_output");
+  TRACE_CMD(this, "create working res=%d/%d %ux%u",
+            trace::ResourceId(working_input.Get()),
+            trace::ResourceId(working_output.Get()),
+            working_width, working_height);
   return true;
 }
 
@@ -161,6 +178,13 @@ bool PassResources::EnsureScratch(
   scratch_width_[index] = width;
   scratch_height_[index] = height;
   scratch_format_[index] = desc.Format;
+  {
+    char name[32];
+    std::snprintf(name, sizeof(name), "scratch[%u]", index);
+    trace::NameResource(scratch_[index].Get(), name);
+  }
+  TRACE_CMD(this, "create scratch[%u] res=%d %ux%u", index,
+            trace::ResourceId(scratch_[index].Get()), width, height);
   return true;
 }
 

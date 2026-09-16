@@ -10,6 +10,8 @@
 #include "dlss_guides.h"
 #include "model_pipeline.h"
 #include "ngx_model_params.h"
+#include "pipeline_graph.h"
+#include "pipeline_trace.h"
 
 namespace reshade_dlssnr {
 
@@ -20,6 +22,8 @@ std::mutex g_session_mutex;
 void PassSession::Fail(const char* reason) {
   failed_ = true;
   reason_ = reason;
+  TRACE_EVT(this, "FAIL pass=%u reason=%s", pass_index_,
+            reason != nullptr ? reason : "(null)");
   reshade::log::message(reshade::log::level::error, reason);
 }
 
@@ -306,476 +310,6 @@ bool PassSession::MaybeRenderDebug(
   return true;
 }
 
-void PassSession::OnPresent(
-    NgxRuntime& runtime,
-    const PassSettings& pass,
-    const Settings& settings,
-    ComputeEngine& codec,
-    ID3D12CommandQueue* command_queue,
-    IDXGISwapChain* swapchain,
-    FrameDebugContext& frame_debug) {
-  std::lock_guard<std::mutex> lock(g_session_mutex);
-
-  if (!settings.enabled) return;
-  if (failed_ || command_queue == nullptr || swapchain == nullptr) return;
-
-  Microsoft::WRL::ComPtr<IDXGISwapChain3> swapchain3;
-  Microsoft::WRL::ComPtr<ID3D12Device> device;
-  Microsoft::WRL::ComPtr<ID3D12Resource> backbuffer;
-  D3D12_RESOURCE_DESC desc = {};
-
-  if (!AcquireBackbuffer(swapchain, command_queue, swapchain3, device,
-                         backbuffer, desc)) {
-    return;
-  }
-
-  if (!runtime.Initialize(device.Get())) {
-    Fail(runtime.GetLastError());
-    return;
-  }
-  if (!command_.Ensure(device.Get())) {
-    Fail("failed to create DLSSNR command list");
-    return;
-  }
-
-  command_queue_ = command_queue;
-
-  const unsigned int width = static_cast<unsigned int>(desc.Width);
-  const unsigned int height = static_cast<unsigned int>(desc.Height);
-
-  const float working_scale = std::clamp(pass.working_scale, 0.10f, 1.0f);
-  const unsigned int work_width =
-      std::max(1u, static_cast<unsigned int>(width * working_scale + 0.5f));
-  const unsigned int work_height =
-      std::max(1u, static_cast<unsigned int>(height * working_scale + 0.5f));
-
-  // Always retire replaced resources rather than releasing them immediately.
-  // Even in Present mode, a resource replaced this frame might still be read
-  // by the game's queue from a previous DLSS-mode frame (the game's present
-  // is queued, not necessarily flushed). Retiring hands ownership to a
-  // deferred queue that is drained only after we synchronize with the GPU.
-  resources_.SetRetireCallback(&PassSession::RetireResourceCallback, guides_);
-
-  if (!EnsureFrameResources(device.Get(), desc, work_width, work_height)) {
-    Fail(reason_ != nullptr && reason_[0] != '\0'
-             ? reason_
-             : "failed to create pass resources");
-    return;
-  }
-
-  command_.Reset();
-  command_.ClearState();
-  SeedFrameState(backbuffer.Get());
-
-  // Build (or rebuild) the feature at the full frame resolution. Working
-  // scale only affects the per-frame evaluation size, which FillEvaluateParams
-  // sets on every frame, so changing working scale never triggers a rebuild.
-  // A rebuild happens only when the swapchain resolution itself changes.
-  if (!feature_.EnsureFeature(
-          runtime,
-          pass,
-          command_.GetCommandList(),
-          width,
-          height)) {
-    Fail(feature_.GetLastError());
-    command_.GetCommandList()->Close();
-    return;
-  }
-
-  if (feature_.ConsumeJustRebuilt()) {
-    SubmitAndWait();
-    reshade::log::message(
-        reshade::log::level::info,
-        "Direct DLSSNR feature created/rebuilt; skipping evaluation this frame");
-    return;
-  }
-
-  const DlssGuideState guides = guides_->GetState();
-
-  // Guides are owned by DlssGuides and always left in SRV. The pass tracker
-  // was just reset, so seed that state explicitly; otherwise inference may
-  // pick a different (incorrect) "before" state for the debug render.
-  if (guides.valid) {
-    command_.SetResourceState(guides.depth,
-                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    command_.SetResourceState(guides.motion,
-                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    command_.SetResourceState(guides.dlss_output_color,
-                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  }
-
-  ID3D12Resource* model_input = backbuffer.Get();
-
-  if (!codec.IsInit() && !codec.Init(device.Get())) {
-    Fail("failed to initialize compute engine");
-    return;
-  }
-  // Background compiler still running. Skip this frame without failing;
-  // the pass runs normally once it finishes.
-  if (!codec.IsReady()) return;
-
-  if (model_input == backbuffer.Get()) {
-    command_.Transition(command_.GetCommandList(), backbuffer.Get(),
-                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  }
-
-  ID3D12Resource* model_color = model_input;
-  ID3D12Resource* model_output = resources_.GetOutput();
-  unsigned int eval_width = width;
-  unsigned int eval_height = height;
-
-  if (!model_pipeline::PrepareInput(
-          command_,
-          command_.GetCommandList(),
-          resources_,
-          &codec,
-          model_input,
-          &model_color,
-          &model_output,
-          &eval_width,
-          &eval_height,
-          width,
-          height,
-          work_width,
-          work_height)) {
-    Fail("failed to prepare model input");
-    return;
-  }
-
-  if (!FillEvaluateParams(runtime, pass, guides, model_color, model_output,
-                          eval_width, eval_height, width, height)) {
-    Fail(reason_ != nullptr && reason_[0] != '\0'
-             ? reason_
-             : "failed to fill NGX evaluation parameters");
-    return;
-  }
-
-  const NVSDK_NGX_Result result =
-      runtime.EvaluateFeature(
-          command_.GetCommandList(),
-          feature_.FeatureHandle(),
-          runtime.Parameters().Get(),
-          nullptr);
-
-  // NGX writes to the model output through a UAV. A state transition alone
-  // does not guarantee those writes are visible to the subsequent reads, so
-  // insert an explicit UAV barrier before ComposeOutput reads it back.
-  command_.UavBarrier(command_.GetCommandList(), model_output);
-
-  if (!model_pipeline::ComposeOutput(
-          command_,
-          command_.GetCommandList(),
-          resources_,
-          &codec,
-          backbuffer.Get(),
-          model_color,
-          model_output,
-          width,
-          height,
-          pass.params)) {
-    Fail("failed to compose model output");
-    return;
-  }
-
-  DebugSnapshot debug;
-  debug.source = model_input;
-  debug.source_width = width;
-  debug.source_height = height;
-  debug.prepared_input = model_color;
-  debug.prepared_input_width = eval_width;
-  debug.prepared_input_height = eval_height;
-  debug.model_output = model_output;
-  debug.model_output_width = eval_width;
-  debug.model_output_height = eval_height;
-  debug.composed_output = resources_.GetCompositeOutput();
-  debug.composed_output_width = width;
-  debug.composed_output_height = height;
-  if (guides.valid) {
-    debug.motion = guides.motion;
-    debug.motion_width = guides.guide_width;
-    debug.motion_height = guides.guide_height;
-    debug.depth = guides.depth;
-    debug.depth_width = guides.guide_width;
-    debug.depth_height = guides.guide_height;
-  }
-
-  // If this is the active pass, render the debug view now — while the
-  // source resources are in the states this pass left them in. It goes
-  // into our own resource (frame_debug.output), never the backbuffer.
-  MaybeRenderDebug(settings, codec, command_.GetCommandList(), frame_debug,
-                   debug, width, height, desc.Format);
-
-  // Always write the real composed output; the debug override happens at
-  // Present and does not affect the game's resources.
-  command_.CopyResourceToBackbuffer(
-      command_.GetCommandList(), resources_.GetCompositeOutput(),
-      backbuffer.Get());
-  command_.Transition(command_.GetCommandList(), model_output,
-                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-
-  CleanupFrameState(command_.GetCommandList());
-  SubmitAndWait();
-
-  if (result != NVSDK_NGX_Result_Success) {
-    Fail("DLSSNR EvaluateFeature failed");
-  }
-}
-
-void PassSession::OnPostDlssEvaluate(
-    NgxRuntime& runtime,
-    const PassSettings& pass,
-    const Settings& settings,
-    ComputeEngine& codec,
-    ID3D12GraphicsCommandList* command_list,
-    ID3D12Resource* output_resource,
-    bool is_first_pass,
-    FrameDebugContext& frame_debug,
-    HdrState* hdr) {
-  if (!settings.enabled) return;
-  if (failed_ || command_list == nullptr || output_resource == nullptr) return;
-
-  Microsoft::WRL::ComPtr<ID3D12Device> device;
-  if (FAILED(command_list->GetDevice(IID_PPV_ARGS(&device))) ||
-      device == nullptr) {
-    // Transient: don't fail the pass permanently. This can happen on
-    // frames where ReShade hasn't fully wired up the command list yet.
-    return;
-  }
-
-  if (!runtime.Initialize(device.Get())) {
-    // Not fatal here either — the game may not have loaded the DLSS
-    // model yet this frame. Log once and keep trying.
-    if (runtime.GetLastError() != nullptr &&
-        runtime.GetLastError()[0] != '\0') {
-      reshade::log::message(reshade::log::level::warning,
-                            runtime.GetLastError());
-    }
-    return;
-  }
-
-  if (!codec.IsInit() && !codec.Init(device.Get())) {
-    Fail("failed to initialize compute engine");
-    return;
-  }
-  // Same skip as OnPresent: don't block the render thread on a compile.
-  if (!codec.IsReady()) return;
-
-  const DlssGuideState guides = guides_->GetState();
-
-  const D3D12_RESOURCE_DESC desc = output_resource->GetDesc();
-  const unsigned int width = static_cast<unsigned int>(desc.Width);
-  const unsigned int height = static_cast<unsigned int>(desc.Height);
-
-  const float working_scale = std::clamp(pass.working_scale, 0.10f, 1.0f);
-  const unsigned int work_width =
-      std::max(1u, static_cast<unsigned int>(width * working_scale + 0.5f));
-  const unsigned int work_height =
-      std::max(1u, static_cast<unsigned int>(height * working_scale + 0.5f));
-
-  // Post-DLSS runs on the game's command list and does not submit or wait.
-  // Resources replaced mid-frame (e.g. when the working-scale slider is
-  // dragged) may still be read by in-flight GPU work, so hand them to the
-  // retire queue instead of releasing them immediately.
-  resources_.SetRetireCallback(&PassSession::RetireResourceCallback, guides_);
-
-  if (!EnsureFrameResources(device.Get(), desc, work_width, work_height)) {
-    Fail(reason_ != nullptr && reason_[0] != '\0'
-             ? reason_
-             : "failed to create pass resources");
-    return;
-  }
-
-  // Fresh state tracking per pass: no cross-pass aliasing to rely on.
-  command_.ClearState();
-  SeedFrameState(nullptr);
-  // `output_resource` belongs to the game and we do not know what state
-  // DLSS left it in. InferResourceState() guesses from the descriptor
-  // flags (UAV-flagged → UNORDERED_ACCESS, RT-flagged → RENDER_TARGET,
-  // else COMMON), which matches what DLSS produces in practice but is not
-  // guaranteed. There is no fully safe assumption for a resource we did
-  // not create, so this is best-effort. If a game ships with a mismatched
-  // barrier here, the D3D12 debug layer will name it at the CopyResource
-  // below.
-  command_.SetResourceState(output_resource, InferResourceState(output_resource));
-
-  // Seed guide states: guides are owned by DlssGuides and always left in
-  // SRV. Without this, the tracker would infer a state from the resource
-  // descriptor, which may be wrong (typeless depth, etc.).
-  if (guides.valid) {
-    command_.SetResourceState(guides.depth,
-                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    command_.SetResourceState(guides.motion,
-                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    command_.SetResourceState(guides.dlss_output_color,
-                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  }
-
-  // Determine input: first pass reads the captured DLSS output; subsequent
-  // passes snapshot the previous result into scratch slot 0.
-  ID3D12Resource* model_input = nullptr;
-  if (is_first_pass) {
-    if (guides.dlss_output_color == nullptr) return;
-    model_input = guides.dlss_output_color;
-    command_.SetResourceState(model_input,
-                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  } else {
-    constexpr uint32_t kInputSnapshotSlot = 0;
-    if (!resources_.EnsureScratch(device.Get(), desc, width, height,
-                                  kInputSnapshotSlot)) {
-      failed_ = true;
-      return;
-    }
-    ID3D12Resource* scratch = resources_.GetScratch(kInputSnapshotSlot);
-    command_.Transition(command_list, output_resource,
-                        D3D12_RESOURCE_STATE_COPY_SOURCE);
-    command_.Transition(command_list, scratch,
-                        D3D12_RESOURCE_STATE_COPY_DEST);
-    command_list->CopyResource(scratch, output_resource);
-    command_.Transition(command_list, scratch,
-                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    model_input = scratch;
-  }
-
-  // Build at full frame resolution; working scale is applied per-evaluation
-  // via FillEvaluateParams. Matches the Present path.
-  if (!feature_.EnsureFeature(runtime, pass, command_list, width, height)) {
-    Fail(feature_.GetLastError());
-    return;
-  }
-  if (feature_.ConsumeJustRebuilt()) {
-    // Skip evaluation this frame; the feature was just created/rebuilt.
-    return;
-  }
-
-  // Build HDR tonemap uniforms if HDR is enabled. The tonemap shader
-  // doubles as the resize into working scale, so passing these uniforms
-  // is all that's needed to switch from a plain resample to a full
-  // HDR → SDR normalize.
-  //
-  // `Highlight Headroom` scales the auto-detected white point. Default 1.0
-  // keeps the detected value; larger values push the compression knee
-  // higher, preserving more highlight headroom.
-  model_pipeline::HdrUniforms hdr_uniforms;
-  const model_pipeline::HdrUniforms* hdr_ptr = nullptr;
-  if (hdr != nullptr && hdr->Enabled()) {
-    hdr_uniforms.exposure = hdr->Exposure();
-    hdr_uniforms.white_point =
-        hdr->WhitePoint() * std::max(settings.hdr_highlight_headroom, 0.01f);
-    hdr_uniforms.edit_strength = settings.hdr_edit_strength;
-    hdr_uniforms.chroma_mode =
-        static_cast<uint32_t>(settings.hdr_chroma_mode);
-    switch (hdr->ResolvedFormat()) {
-      case HdrFormat::ScRgb: hdr_uniforms.format = 1; break;
-      case HdrFormat::Hdr10: hdr_uniforms.format = 2; break;
-      case HdrFormat::Sdr:
-      case HdrFormat::Auto:
-      default:               hdr_uniforms.format = 0; break;
-    }
-    hdr_ptr = &hdr_uniforms;
-  }
-
-  ID3D12Resource* model_color = model_input;
-  ID3D12Resource* model_output = resources_.GetOutput();
-  unsigned int eval_width = width;
-  unsigned int eval_height = height;
-
-  if (!model_pipeline::PrepareInput(
-          command_,
-          command_list,
-          resources_,
-          &codec,
-          model_input,
-          &model_color,
-          &model_output,
-          &eval_width,
-          &eval_height,
-          width,
-          height,
-          work_width,
-          work_height,
-          hdr_ptr)) {
-    Fail("failed to prepare model input");
-    return;
-  }
-
-  if (!FillEvaluateParams(runtime, pass, guides, model_color, model_output,
-                          eval_width, eval_height, width, height)) {
-    Fail(reason_ != nullptr && reason_[0] != '\0'
-             ? reason_
-             : "failed to fill NGX evaluation parameters");
-    return;
-  }
-
-  runtime.EvaluateFeature(
-      command_list,
-      feature_.FeatureHandle(),
-      runtime.Parameters().Get(),
-      nullptr);
-
-  // NGX writes to the model output through a UAV; barrier it before we
-  // read it back (a state transition alone does not synchronize UAVs).
-  command_.UavBarrier(command_list, model_output);
-
-  if (!model_pipeline::ComposeOutput(
-          command_,
-          command_list,
-          resources_,
-          &codec,
-          model_input,
-          model_color,
-          model_output,
-          width,
-          height,
-          pass.params,
-          hdr_ptr)) {
-    Fail("failed to compose model output");
-    return;
-  }
-
-  DebugSnapshot debug;
-  debug.source = model_input;
-  debug.source_width = width;
-  debug.source_height = height;
-  debug.prepared_input = model_color;
-  debug.prepared_input_width = eval_width;
-  debug.prepared_input_height = eval_height;
-  debug.model_output = model_output;
-  debug.model_output_width = eval_width;
-  debug.model_output_height = eval_height;
-  debug.composed_output = resources_.GetCompositeOutput();
-  debug.composed_output_width = width;
-  debug.composed_output_height = height;
-  if (guides.valid) {
-    debug.motion = guides.motion;
-    debug.motion_width = guides.guide_width;
-    debug.motion_height = guides.guide_height;
-    debug.depth = guides.depth;
-    debug.depth_width = guides.guide_width;
-    debug.depth_height = guides.guide_height;
-  }
-
-  // If this is the active pass, render the debug view now — while the
-  // source resources are in the states this pass left them in. It goes
-  // into our own resource, never the game's.
-  MaybeRenderDebug(settings, codec, command_list, frame_debug,
-                   debug, width, height, desc.Format);
-
-  // Always write the real composed output to the game's resource. The debug
-  // image is applied to the backbuffer at Present only.
-  command_.Transition(command_list, resources_.GetCompositeOutput(),
-                      D3D12_RESOURCE_STATE_COPY_SOURCE);
-  const D3D12_RESOURCE_STATES out_state = InferResourceState(output_resource);
-  command_.Transition(command_list, output_resource,
-                      D3D12_RESOURCE_STATE_COPY_DEST);
-  command_list->CopyResource(output_resource, resources_.GetCompositeOutput());
-  command_.Transition(command_list, output_resource, out_state);
-  command_.Transition(command_list, resources_.GetCompositeOutput(),
-                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-
-  // Leave pass-owned resources in the state SeedFrameState() expects.
-  CleanupFrameState(command_list);
-}
-
 void PassSession::Shutdown(NgxRuntime& runtime) {
   std::lock_guard<std::mutex> lock(g_session_mutex);
 
@@ -786,6 +320,787 @@ void PassSession::Shutdown(NgxRuntime& runtime) {
   command_queue_ = nullptr;
   failed_ = false;
   reason_ = "";
+}
+
+void PassSession::PrepareRun(PassRun& run,
+                             const Settings& settings,
+                             ComputeEngine& codec,
+                             NgxRuntime& runtime,
+                             ID3D12GraphicsCommandList* command_list,
+                             ID3D12Resource* output_resource,
+                             bool is_first_pass,
+                             FrameDebugContext& frame_debug,
+                             HdrState* hdr,
+                             CommandContext* hdr_cmd,
+                             ID3D12CommandQueue* command_queue,
+                             IDXGISwapChain* swapchain) {
+  run.session = this;
+  run.cmd = &command_;
+  run.resources = &resources_;
+  run.feature = &feature_;
+  run.codec = &codec;
+  run.runtime = &runtime;
+  run.hdr = hdr;
+  run.hdr_cmd = hdr_cmd;
+  run.frame_debug = &frame_debug;
+
+  run.settings = &settings;
+  run.pass = &GetResolvedPass(pass_index_);
+  run.pass_index = pass_index_;
+
+  run.list = command_list;
+  run.output_resource = output_resource;
+  run.command_queue = command_queue;
+  run.swapchain = swapchain;
+
+  run.guides = guides_->GetState();
+  run.guides_valid = run.guides.valid;
+  run.is_first_pass = is_first_pass;
+}
+
+PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
+                                     const Settings& settings,
+                                     ComputeEngine& codec,
+                                     NgxRuntime& runtime,
+                                     ID3D12GraphicsCommandList* command_list,
+                                     ID3D12Resource* output_resource,
+                                     bool is_first_pass,
+                                     FrameDebugContext& frame_debug,
+                                     HdrState* hdr,
+                                     CommandContext* hdr_cmd,
+                                     ID3D12CommandQueue* command_queue,
+                                     IDXGISwapChain* swapchain) {
+  // The pre-refactor entry points were serialized against each other with this
+  // mutex; the runner walk replaces them, so it has to hold the same lock.
+  std::lock_guard<std::mutex> lock(g_session_mutex);
+
+  // Guards common to both stages. They were the first four lines of each
+  // stage method. A disabled addon or a failed pass does nothing at all; a
+  // missing input is likewise not an error, just nothing to do.
+  if (!settings.enabled) return PipelineStatus::SkipFrame;
+  if (failed_) return PipelineStatus::SkipFrame;
+
+  if (stage.is_post_dlss) {
+    // PostDLSS records onto the game's list and writes into the game's
+    // resource, so both must be present.
+    if (command_list == nullptr || output_resource == nullptr) {
+      return PipelineStatus::SkipFrame;
+    }
+  } else {
+    // Present owns its list, so it needs a queue and a swapchain instead.
+    if (command_queue == nullptr || swapchain == nullptr) {
+      return PipelineStatus::SkipFrame;
+    }
+  }
+
+  TRACE_EVT(this, "ENTER stage=%s pass=%u", stage.name, pass_index_);
+
+  PassRun run;
+  PrepareRun(run, settings, codec, runtime, command_list, output_resource,
+             is_first_pass, frame_debug, hdr, hdr_cmd, command_queue, swapchain);
+
+  const PipelineStatus status = PipelineRunner::RunStage(stage, run);
+
+  TRACE_EVT(this, "EXIT stage=%s pass=%u status=%d", stage.name, pass_index_,
+            static_cast<int>(status));
+  return status;
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline step bodies
+// ---------------------------------------------------------------------------
+//
+// These are the extracted bodies of the steps that used to be inline in
+// OnPresent and OnPostDlssEvaluate. The step order lives in
+// runtime/pipeline_graph.cpp; this file says how each step runs.
+//
+// They are static members of PassSession rather than free functions because
+// they are the session's own work: they touch resources_, feature_, command_
+// and guides_ directly, which is exactly what a free function could not do
+// without a dozen accessors that would only exist to defeat encapsulation.
+// The step signature is the same either way — a static member converts to the
+// PipelineStepFn pointer type.
+//
+// Two conventions hold throughout:
+//
+//   - Ok means the stage may continue. SkipFrame means the rest of the stage
+//     does not run this frame but the pass stays healthy (feature just
+//     rebuilt, codec still compiling, a guide not yet available). Fail means
+//     the pass has been marked failed via Fail() and the stage stops.
+//   - A step reads what it needs from `run` and writes results back to it.
+
+// Sets failed_/reason_ and logs. The step wrappers use this instead of calling
+// Fail() on the session directly so that a step which reports Fail always has
+// left a reason behind: passing nullptr keeps an existing reason_ if one is
+// already set, which is what the pre-refactor call sites did when they had
+// produced a reason deeper down.
+void PassSession::FailForStep(const char* reason) {
+  if (reason == nullptr && reason_ != nullptr && reason_[0] != '\0') {
+    Fail(reason_);
+    return;
+  }
+  Fail(reason != nullptr ? reason : "DLSSNR pass failed");
+}
+
+// ---------------------------------------------------------------------------
+// Setup
+// ---------------------------------------------------------------------------
+
+// Present only: acquire the swapchain backbuffer and the device behind the
+// command queue. Replaces the block at the top of the old OnPresent.
+PipelineStatus PassSession::StepAcquireBackbuffer(PassRun& run) {
+  PassSession* self = run.session;
+  IDXGISwapChain* swapchain = run.swapchain;
+  ID3D12CommandQueue* queue = run.command_queue;
+  if (swapchain == nullptr || queue == nullptr) return PipelineStatus::SkipFrame;
+
+  Microsoft::WRL::ComPtr<IDXGISwapChain3> swapchain3;
+  Microsoft::WRL::ComPtr<ID3D12Device> device;
+  Microsoft::WRL::ComPtr<ID3D12Resource> backbuffer;
+  D3D12_RESOURCE_DESC desc = {};
+
+  if (!self->AcquireBackbuffer(swapchain, queue, swapchain3, device, backbuffer,
+                         desc)) {
+    TRACE_EVT(self, "SKIP stage=Present pass=%u reason=acquire_backbuffer",
+              self->pass_index_);
+    return PipelineStatus::SkipFrame;
+  }
+
+  run.swapchain3 = swapchain3;
+  run.device = device.Get();
+  run.backbuffer = backbuffer.Get();
+  run.desc = desc;
+  run.width = static_cast<unsigned int>(desc.Width);
+  run.height = static_cast<unsigned int>(desc.Height);
+  return PipelineStatus::Ok;
+}
+
+// Resolve the device and bring up the two objects every later step needs:
+// the NGX runtime and this session's own command list.
+//
+// Present gets the device from the command queue; PostDLSS from the game's
+// command list. The difference in failure handling is deliberate and matches
+// the pre-refactor code: Present treats both failures as fatal, PostDLSS
+// treats a missing device as transient (the game may not have loaded the DLSS
+// model yet) and a failing runtime.Initialize as transient too.
+PipelineStatus PassSession::StepResolveDevice(PassRun& run) {
+  PassSession* self = run.session;
+  const bool is_post_dlss = run.stage != nullptr && run.stage->is_post_dlss;
+
+  if (is_post_dlss) {
+    if (run.list == nullptr) return PipelineStatus::SkipFrame;
+
+    Microsoft::WRL::ComPtr<ID3D12Device> device;
+    if (FAILED(run.list->GetDevice(IID_PPV_ARGS(&device))) ||
+        device == nullptr) {
+      // Transient: don't fail the pass permanently. This can happen on frames
+      // where ReShade hasn't fully wired up the command list yet.
+      TRACE_EVT(self, "SKIP stage=PostDLSS pass=%u reason=no_device",
+                self->pass_index_);
+      return PipelineStatus::SkipFrame;
+    }
+    run.device = device.Get();
+
+    if (run.runtime == nullptr) return PipelineStatus::SkipFrame;
+    if (!run.runtime->Initialize(run.device)) {
+      // Not fatal here either — the game may not have loaded the DLSS model
+      // yet this frame. Log once and keep trying.
+      TRACE_EVT(self, "SKIP stage=PostDLSS pass=%u reason=runtime_not_ready",
+                self->pass_index_);
+      const char* err = run.runtime->GetLastError();
+      if (err != nullptr && err[0] != '\0') {
+        reshade::log::message(reshade::log::level::warning, err);
+      }
+      return PipelineStatus::SkipFrame;
+    }
+
+    // PostDLSS records onto the game's list, so description and extent come
+    // from the resource it will write into.
+    run.desc = run.output_resource != nullptr ? run.output_resource->GetDesc()
+                                              : D3D12_RESOURCE_DESC{};
+  } else {
+    // Present resolved the device from the command queue in
+    // StepAcquireBackbuffer; all that is left is bringing up the runtime and
+    // this session's own list, both fatal here.
+    if (run.device == nullptr || run.runtime == nullptr) {
+      return PipelineStatus::SkipFrame;
+    }
+    if (!run.runtime->Initialize(run.device)) {
+      self->FailForStep(run.runtime->GetLastError());
+      return PipelineStatus::Fail;
+    }
+    if (!self->command_.Ensure(run.device)) {
+      self->FailForStep("failed to create DLSSNR command list");
+      return PipelineStatus::Fail;
+    }
+    self->command_queue_ = run.command_queue;
+    run.list = self->command_.GetCommandList();
+    run.desc = run.desc;  // already set from the backbuffer
+  }
+
+  run.width = static_cast<unsigned int>(run.desc.Width);
+  run.height = static_cast<unsigned int>(run.desc.Height);
+  return PipelineStatus::Ok;
+}
+
+// The engine is initialized once and shared by every pass. A background compile
+// means "not ready yet", which is not a failure.
+PipelineStatus PassSession::StepEnsureComputeEngine(PassRun& run) {
+  PassSession* self = run.session;
+  if (run.device == nullptr || run.codec == nullptr) {
+    return PipelineStatus::SkipFrame;
+  }
+
+  if (!run.codec->IsInit() && !run.codec->Init(run.device)) {
+    self->FailForStep("failed to initialize compute engine");
+    return PipelineStatus::Fail;
+  }
+  if (!run.codec->IsReady()) {
+    TRACE_EVT(self, "SKIP stage=%s pass=%u reason=codec_not_ready",
+              run.stage != nullptr ? run.stage->name : "?", self->pass_index_);
+    return PipelineStatus::SkipFrame;
+  }
+  return PipelineStatus::Ok;
+}
+
+// ---------------------------------------------------------------------------
+// Frame resources and state
+// ---------------------------------------------------------------------------
+
+// Compute the per-pass working resolution from the frame extent and the pass's
+// working-scale setting.
+PipelineStatus PassSession::StepResolveWorkingScale(PassRun& run) {
+  PassSession* self = run.session;
+  if (run.pass == nullptr) return PipelineStatus::SkipFrame;
+
+  const float working_scale = std::clamp(run.pass->working_scale, 0.10f, 1.0f);
+  run.work_width = std::max(
+      1u, static_cast<unsigned int>(run.width * working_scale + 0.5f));
+  run.work_height = std::max(
+      1u, static_cast<unsigned int>(run.height * working_scale + 0.5f));
+  return PipelineStatus::Ok;
+}
+
+// Create/resize the per-pass output, composite and working resources.
+//
+// Always retire replaced resources rather than releasing them immediately.
+// Even in Present mode, a resource replaced this frame might still be read by
+// the game's queue from a previous DLSS-mode frame (the game's present is
+// queued, not necessarily flushed). Retiring hands ownership to a deferred
+// queue that is drained only after we synchronize with the GPU.
+PipelineStatus PassSession::StepEnsureFrameResources(PassRun& run) {
+  PassSession* self = run.session;
+  if (run.device == nullptr) return PipelineStatus::SkipFrame;
+
+  self->resources_.SetRetireCallback(&PassSession::RetireResourceCallback, self->guides_);
+
+  if (!self->EnsureFrameResources(run.device, run.desc, run.work_width,
+                            run.work_height)) {
+    self->FailForStep(self->reason_);
+    return PipelineStatus::Fail;
+  }
+  return PipelineStatus::Ok;
+}
+
+// Register the known frame-boundary state of every pass-owned resource, so
+// inference never has to guess for resources we own.
+PipelineStatus PassSession::StepSeedResourceStates(PassRun& run) {
+  PassSession* self = run.session;
+  if (run.cmd == nullptr) return PipelineStatus::SkipFrame;
+
+  if (run.stage != nullptr && run.stage->is_post_dlss) {
+    // Fresh state tracking per pass: no cross-pass aliasing to rely on.
+    self->command_.ClearState();
+    self->SeedFrameState(nullptr);
+
+    // `output_resource` belongs to the game and we do not know what state DLSS
+    // left it in. InferResourceState() guesses from the descriptor flags
+    // (UAV-flagged -> UNORDERED_ACCESS, RT-flagged -> RENDER_TARGET, else
+    // COMMON), which matches what DLSS produces in practice but is not
+    // guaranteed. There is no fully safe assumption for a resource we did not
+    // create, so this is best-effort. If a game ships with a mismatched
+    // barrier here, the D3D12 debug layer will name it at the CopyResource in
+    // WriteToGameResource.
+    self->command_.SetResourceState(run.output_resource,
+                              InferResourceState(run.output_resource));
+  } else {
+    self->command_.Reset();
+    self->command_.ClearState();
+    self->SeedFrameState(run.backbuffer);
+  }
+  return PipelineStatus::Ok;
+}
+
+// Re-read the guide state, and seed the guide resources' tracked state.
+//
+// This must run after EnsureFeature. Creating the NGX feature is what makes
+// the game re-capture its DLSS guides, so a snapshot taken before the feature
+// exists can be stale — and on the first frame is entirely invalid. The
+// pre-refactor code called guides_->GetState() at exactly this point in both
+// stages, and this node is that call.
+//
+// Seeding the guide states belongs here rather than in SeedResourceStates
+// because the two stages place it differently relative to the feature build;
+// grouping it with the snapshot is what makes one step table serve both.
+PipelineStatus PassSession::StepSnapshotGuides(PassRun& run) {
+  PassSession* self = run.session;
+
+  run.guides = self->guides_->GetState();
+  run.guides_valid = run.guides.valid;
+
+  if (run.cmd == nullptr) return PipelineStatus::Ok;
+
+  // Guides are owned by DlssGuides and always left in SRV. Without this the
+  // tracker would infer a state from the resource descriptor, which may be
+  // wrong (typeless depth, etc.).
+  if (run.guides_valid) {
+    self->command_.SetResourceState(
+        run.guides.depth, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    self->command_.SetResourceState(
+        run.guides.motion, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    self->command_.SetResourceState(
+        run.guides.dlss_output_color,
+        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
+  return PipelineStatus::Ok;
+}
+
+// PostDLSS takes its guide snapshot at the same point, but needs the states
+// seeded before the model-input resolve rather than after the feature build.
+// Rather than duplicate the seeding, this node re-uses SnapshotGuides for the
+// seeding half only: the snapshot itself is taken by SnapshotGuides.
+PipelineStatus PassSession::StepSeedGuideStates(PassRun& run) {
+  PassSession* self = run.session;
+  if (run.cmd == nullptr) return PipelineStatus::Ok;
+
+  if (run.guides_valid) {
+    self->command_.SetResourceState(
+        run.guides.depth, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    self->command_.SetResourceState(
+        run.guides.motion, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    self->command_.SetResourceState(
+        run.guides.dlss_output_color,
+        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
+  return PipelineStatus::Ok;
+}
+
+// ---------------------------------------------------------------------------
+// Model input
+// ---------------------------------------------------------------------------
+
+// Select the image the model consumes. Present reads the backbuffer; PostDLSS
+// reads the captured DLSS output on the first pass and a scratch snapshot of
+// the previous pass's result afterwards.
+PipelineStatus PassSession::StepResolveModelInput(PassRun& run) {
+  PassSession* self = run.session;
+  if (run.stage != nullptr && !run.stage->is_post_dlss) {
+    // Present: the backbuffer is the source, and it starts in PRESENT.
+    run.model_input = run.backbuffer;
+    if (run.model_input != nullptr) {
+      self->command_.Transition(self->command_.GetCommandList(), run.model_input,
+                          D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    }
+    return PipelineStatus::Ok;
+  }
+
+  // PostDLSS: first pass reads the captured DLSS output clone.
+  if (run.is_first_pass) {
+    if (run.guides.dlss_output_color == nullptr) {
+      TRACE_EVT(self, "SKIP stage=PostDLSS pass=%u reason=no_guide_color",
+                self->pass_index_);
+      return PipelineStatus::SkipFrame;
+    }
+    run.model_input = run.guides.dlss_output_color;
+    self->command_.SetResourceState(run.model_input,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    return PipelineStatus::Ok;
+  }
+
+  // Chained pass: snapshot the previous result into scratch slot 0.
+  if (run.device == nullptr) return PipelineStatus::SkipFrame;
+  constexpr uint32_t kSnapshotSlot = kInputSnapshotSlot;
+  if (!self->resources_.EnsureScratch(run.device, run.desc, run.width, run.height,
+                                kSnapshotSlot)) {
+    // Pre-refactor set failed_ directly here without a reason string; keep
+    // that shape but give it a reason so the status UI is not blank.
+    self->FailForStep("failed to create input snapshot");
+    TRACE_EVT(self, "FAIL pass=%u reason=ensure_scratch", self->pass_index_);
+    return PipelineStatus::Fail;
+  }
+  ID3D12Resource* scratch = self->resources_.GetScratch(kSnapshotSlot);
+  TRACE_CMD(self, "snapshot_input scratch=%d from=%d",
+            trace::ResourceId(scratch), trace::ResourceId(run.output_resource));
+  self->command_.Transition(run.list, run.output_resource,
+                      D3D12_RESOURCE_STATE_COPY_SOURCE);
+  self->command_.Transition(run.list, scratch, D3D12_RESOURCE_STATE_COPY_DEST);
+  run.list->CopyResource(scratch, run.output_resource);
+  self->command_.Transition(run.list, scratch,
+                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  run.model_input = scratch;
+  return PipelineStatus::Ok;
+}
+
+// Build the HDR tonemap uniforms, if HDR is on for this pass. The tonemap
+// shader doubles as the resize into working scale, so passing these uniforms is
+// all that is needed to switch from a plain resample to a full HDR -> SDR
+// normalize.
+//
+// `Highlight Headroom` scales the auto-detected white point. Default 1.0 keeps
+// the detected value; larger values push the compression knee higher,
+// preserving more highlight headroom.
+//
+// The SDR variant is selected by leaving hdr_uniforms_ready false, which is what
+// the old `hdr_ptr == nullptr` test expressed.
+PipelineStatus PassSession::StepBuildHdrUniforms(PassRun& run) {
+  PassSession* self = run.session;
+  run.hdr_uniforms_ready = false;
+  if (run.hdr == nullptr || run.settings == nullptr) return PipelineStatus::Ok;
+  if (!run.hdr->Enabled()) return PipelineStatus::Ok;
+
+  const Settings& settings = *run.settings;
+  run.hdr_uniforms.exposure = run.hdr->Exposure();
+  run.hdr_uniforms.white_point =
+      run.hdr->WhitePoint() * std::max(settings.hdr_highlight_headroom, 0.01f);
+  run.hdr_uniforms.edit_strength = settings.hdr_edit_strength;
+  run.hdr_uniforms.chroma_mode = static_cast<uint32_t>(settings.hdr_chroma_mode);
+  switch (run.hdr->ResolvedFormat()) {
+    case HdrFormat::ScRgb: run.hdr_uniforms.format = 1; break;
+    case HdrFormat::Hdr10: run.hdr_uniforms.format = 2; break;
+    case HdrFormat::Sdr:
+    case HdrFormat::Auto:
+    default:               run.hdr_uniforms.format = 0; break;
+  }
+  run.hdr_uniforms_ready = true;
+  return PipelineStatus::Ok;
+}
+
+// ---------------------------------------------------------------------------
+// Model evaluation
+// ---------------------------------------------------------------------------
+
+// Build (or rebuild) the NGX feature at the full frame resolution. Working
+// scale only affects the per-frame evaluation size, which FillEvaluateParams
+// sets on every frame, so changing working scale never triggers a rebuild. A
+// rebuild happens only when the swapchain resolution itself changes.
+PipelineStatus PassSession::StepEnsureFeature(PassRun& run) {
+  PassSession* self = run.session;
+  if (run.runtime == nullptr || run.pass == nullptr) {
+    return PipelineStatus::SkipFrame;
+  }
+
+  // The list this stage records on: its own for Present, the game's for
+  // PostDLSS.
+  ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
+
+  if (!self->feature_.EnsureFeature(*run.runtime, *run.pass, list, run.width,
+                              run.height)) {
+    self->FailForStep(self->feature_.GetLastError());
+    if (run.stage != nullptr && !run.stage->is_post_dlss) {
+      // Present owns the list, so it has to close what it opened before
+      // bailing; PostDLSS must leave the game's list alone.
+      list->Close();
+    }
+    return PipelineStatus::Fail;
+  }
+
+  if (self->feature_.ConsumeJustRebuilt()) {
+    // The feature was just created or rebuilt; skip evaluation this frame so
+    // the model has a frame to fully initialize.
+    TRACE_EVT(self, "SKIP stage=%s pass=%u reason=feature_rebuilt",
+              run.stage != nullptr ? run.stage->name : "?", self->pass_index_);
+    if (run.stage != nullptr && !run.stage->is_post_dlss) {
+      self->SubmitAndWait();
+    }
+    reshade::log::message(
+        reshade::log::level::info,
+        "Direct DLSSNR feature created/rebuilt; skipping evaluation this frame");
+    return PipelineStatus::SkipFrame;
+  }
+  return PipelineStatus::Ok;
+}
+
+// Resample (and optionally tonemap) the model input to working resolution, and
+// report the resolution the model will actually run at.
+PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
+  PassSession* self = run.session;
+  if (run.codec == nullptr) return PipelineStatus::SkipFrame;
+
+  ID3D12Resource* model_input = run.stage != nullptr && run.stage->is_post_dlss
+                                    ? run.model_input
+                                    : run.backbuffer;
+  ID3D12Resource* model_color = model_input;
+  ID3D12Resource* model_output = self->resources_.GetOutput();
+  unsigned int eval_width = run.width;
+  unsigned int eval_height = run.height;
+
+  const model_pipeline::HdrUniforms* hdr_ptr =
+      run.hdr_uniforms_ready ? &run.hdr_uniforms : nullptr;
+
+  if (!model_pipeline::PrepareInput(
+          self->command_, self->StageList(run, self->command_), self->resources_, run.codec, model_input,
+          &model_color, &model_output, &eval_width, &eval_height, run.width,
+          run.height, run.work_width, run.work_height, hdr_ptr)) {
+    self->FailForStep("failed to prepare model input");
+    return PipelineStatus::Fail;
+  }
+
+  run.model_color = model_color;
+  run.model_output = model_output;
+  run.eval_width = eval_width;
+  run.eval_height = eval_height;
+  return PipelineStatus::Ok;
+}
+
+// Fill the real NGX parameter block with tuning values, resources and subrects
+// for this evaluation.
+PipelineStatus PassSession::StepFillEvaluateParams(PassRun& run) {
+  PassSession* self = run.session;
+  if (run.runtime == nullptr || run.pass == nullptr) {
+    return PipelineStatus::SkipFrame;
+  }
+  if (!self->FillEvaluateParams(*run.runtime, *run.pass, run.guides, run.model_color,
+                          run.model_output, run.eval_width, run.eval_height,
+                          run.width, run.height)) {
+    self->FailForStep(self->reason_);
+    return PipelineStatus::Fail;
+  }
+  return PipelineStatus::Ok;
+}
+
+// Invoke NGX.
+//
+// Present captures the result and reports a failure after the frame has been
+// submitted (see StepSubmitAndWait); PostDLSS ignores the result entirely,
+// which is what the pre-refactor code did — deliberately or not, it is the
+// behaviour this refactor preserves. The Stage 5 bug list records it.
+PipelineStatus PassSession::StepEvaluateFeature(PassRun& run) {
+  PassSession* self = run.session;
+  if (run.runtime == nullptr) return PipelineStatus::SkipFrame;
+
+  if (run.stage != nullptr && run.stage->is_post_dlss) {
+    run.runtime->EvaluateFeature(self->StageList(run, self->command_), self->feature_.FeatureHandle(),
+                                 run.runtime->Parameters().Get(), nullptr);
+    return PipelineStatus::Ok;
+  }
+
+  run.eval_result = run.runtime->EvaluateFeature(
+      self->StageList(run, self->command_), self->feature_.FeatureHandle(),
+      run.runtime->Parameters().Get(), nullptr);
+  return PipelineStatus::Ok;
+}
+
+// NGX writes to the model output through a UAV. A state transition alone does
+// not guarantee those writes are visible to the subsequent reads, so insert an
+// explicit UAV barrier before composition reads it back.
+PipelineStatus PassSession::StepModelOutputBarrier(PassRun& run) {
+  PassSession* self = run.session;
+  if (run.model_output == nullptr) return PipelineStatus::Ok;
+  self->command_.UavBarrier(self->StageList(run, self->command_), run.model_output);
+  return PipelineStatus::Ok;
+}
+
+// ---------------------------------------------------------------------------
+// Composition
+// ---------------------------------------------------------------------------
+
+// Compose the model output into PassResources::GetCompositeOutput(). With HDR
+// on, this inverse-tonemaps the model's SDR edit back into the HDR source's own
+// range and encoding.
+PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
+  PassSession* self = run.session;
+  if (run.codec == nullptr || run.pass == nullptr) {
+    return PipelineStatus::SkipFrame;
+  }
+
+  // Present composes the model edit against the backbuffer; PostDLSS composes
+  // it against the model input, which is the DLSS output or a snapshot of it.
+  ID3D12Resource* original = run.stage != nullptr && run.stage->is_post_dlss
+                                 ? run.model_input
+                                 : run.backbuffer;
+
+  const model_pipeline::HdrUniforms* hdr_ptr =
+      run.hdr_uniforms_ready ? &run.hdr_uniforms : nullptr;
+
+  if (!model_pipeline::ComposeOutput(
+          self->command_, self->StageList(run, self->command_), self->resources_, run.codec, original,
+          run.model_color, run.model_output, run.width, run.height,
+          run.pass->params, hdr_ptr)) {
+    self->FailForStep("failed to compose model output");
+    return PipelineStatus::Fail;
+  }
+  return PipelineStatus::Ok;
+}
+
+// ---------------------------------------------------------------------------
+// Output
+// ---------------------------------------------------------------------------
+
+// If this is the active pass, render the selected debug view now — while the
+// source resources are in the states this pass left them in. It goes into our
+// own resource, never the game's.
+PipelineStatus PassSession::StepRenderDebugView(PassRun& run) {
+  PassSession* self = run.session;
+  if (run.settings == nullptr || run.codec == nullptr ||
+      run.frame_debug == nullptr) {
+    return PipelineStatus::Ok;
+  }
+
+  DebugSnapshot debug;
+  debug.source = run.stage != nullptr && run.stage->is_post_dlss
+                     ? run.model_input
+                     : run.backbuffer;
+  debug.source_width = run.width;
+  debug.source_height = run.height;
+  debug.prepared_input = run.model_color;
+  debug.prepared_input_width = run.eval_width;
+  debug.prepared_input_height = run.eval_height;
+  debug.model_output = run.model_output;
+  debug.model_output_width = run.eval_width;
+  debug.model_output_height = run.eval_height;
+  debug.composed_output = self->resources_.GetCompositeOutput();
+  debug.composed_output_width = run.width;
+  debug.composed_output_height = run.height;
+  if (run.guides_valid) {
+    debug.motion = run.guides.motion;
+    debug.motion_width = run.guides.guide_width;
+    debug.motion_height = run.guides.guide_height;
+    debug.depth = run.guides.depth;
+    debug.depth_width = run.guides.guide_width;
+    debug.depth_height = run.guides.guide_height;
+  }
+
+  self->MaybeRenderDebug(*run.settings, *run.codec, self->StageList(run, self->command_), *run.frame_debug,
+                   debug, run.width, run.height, run.desc.Format);
+  return PipelineStatus::Ok;
+}
+
+// Present: publish the composed image on the backbuffer.
+PipelineStatus PassSession::StepWriteToBackbuffer(PassRun& run) {
+  PassSession* self = run.session;
+  // Always write the real composed output; the debug override happens in the
+  // Release stage and does not affect the game's resources.
+  self->command_.CopyResourceToBackbuffer(self->command_.GetCommandList(),
+                                    self->resources_.GetCompositeOutput(),
+                                    run.backbuffer);
+  self->command_.Transition(self->command_.GetCommandList(), run.model_output,
+                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  return PipelineStatus::Ok;
+}
+
+// PostDLSS: publish the composed image into the game's resource.
+PipelineStatus PassSession::StepWriteToGameResource(PassRun& run) {
+  PassSession* self = run.session;
+  if (run.output_resource == nullptr) return PipelineStatus::SkipFrame;
+
+  // Always write the real composed output to the game's resource. The debug
+  // image is applied to the backbuffer at Present only.
+  TRACE_CMD(self, "write_to_game_resource src=%d dst=%d",
+            trace::ResourceId(self->resources_.GetCompositeOutput()),
+            trace::ResourceId(run.output_resource));
+  self->command_.Transition(run.list, self->resources_.GetCompositeOutput(),
+                      D3D12_RESOURCE_STATE_COPY_SOURCE);
+  const D3D12_RESOURCE_STATES out_state =
+      InferResourceState(run.output_resource);
+  self->command_.Transition(run.list, run.output_resource,
+                      D3D12_RESOURCE_STATE_COPY_DEST);
+  run.list->CopyResource(run.output_resource, self->resources_.GetCompositeOutput());
+  self->command_.Transition(run.list, run.output_resource, out_state);
+  self->command_.Transition(run.list, self->resources_.GetCompositeOutput(),
+                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+  // Leave pass-owned resources in the state SeedFrameState() expects.
+  self->CleanupFrameState(run.list);
+  return PipelineStatus::Ok;
+}
+
+// Present: return pass-owned resources to UNORDERED_ACCESS, then close,
+// submit, wait and drain the retire queue. This is the only submit point in
+// the Present stage.
+PipelineStatus PassSession::StepSubmitAndWait(PassRun& run) {
+  PassSession* self = run.session;
+  self->CleanupFrameState(self->command_.GetCommandList());
+  self->SubmitAndWait();
+
+  // Present reports the NGX result after the frame is on the GPU, matching the
+  // pre-refactor ordering: the frame is never dropped because the model
+  // failed, but the pass is marked so the user sees it.
+  if (run.eval_result != NVSDK_NGX_Result_Success) {
+    self->FailForStep("DLSSNR EvaluateFeature failed");
+    return PipelineStatus::Fail;
+  }
+  return PipelineStatus::Ok;
+}
+
+// ---------------------------------------------------------------------------
+// Step table
+// ---------------------------------------------------------------------------
+
+// Prerequisites are deliberately empty for now. The runner checks them and
+// logs at error level when one is missing, so populating them is a genuine
+// safety net rather than decoration — but it has to be done against a running
+// pipeline to be worth anything, which is Stage 4. The flat, depth-ordered
+// PipelineNodeId enum is what makes a cycle impossible to express when that
+// happens.
+constexpr PipelineNodeId kNoDeps[] = {PipelineNodeId::Count};
+
+constexpr PipelineStepDef kSessionSteps[] = {
+    // -- setup --------------------------------------------------------------
+    {PipelineNodeId::AcquireBackbuffer, "AcquireBackbuffer",
+     &PassSession::StepAcquireBackbuffer, kNoDeps, false},
+    {PipelineNodeId::ResolveDevice, "ResolveDevice",
+     &PassSession::StepResolveDevice, kNoDeps, false},
+    {PipelineNodeId::EnsureComputeEngine, "EnsureComputeEngine",
+     &PassSession::StepEnsureComputeEngine, kNoDeps, false},
+    {PipelineNodeId::ResolveWorkingScale, "ResolveWorkingScale",
+     &PassSession::StepResolveWorkingScale, kNoDeps, false},
+    {PipelineNodeId::EnsureFrameResources, "EnsureFrameResources",
+     &PassSession::StepEnsureFrameResources, kNoDeps, false},
+    {PipelineNodeId::SeedResourceStates, "SeedResourceStates",
+     &PassSession::StepSeedResourceStates, kNoDeps, false},
+    {PipelineNodeId::SeedGuideStates, "SeedGuideStates",
+     &PassSession::StepSeedGuideStates, kNoDeps, false},
+
+    // -- model input --------------------------------------------------------
+    {PipelineNodeId::ResolveModelInput, "ResolveModelInput",
+     &PassSession::StepResolveModelInput, kNoDeps, false},
+    {PipelineNodeId::BuildHdrUniforms, "BuildHdrUniforms",
+     &PassSession::StepBuildHdrUniforms, kNoDeps, true},
+
+    // -- model evaluation ---------------------------------------------------
+    {PipelineNodeId::EnsureFeature, "EnsureFeature", &PassSession::StepEnsureFeature,
+     kNoDeps, false},
+    {PipelineNodeId::SnapshotGuides, "SnapshotGuides",
+     &PassSession::StepSnapshotGuides, kNoDeps, false},
+    {PipelineNodeId::PrepareModelInput, "PrepareModelInput",
+     &PassSession::StepPrepareModelInput, kNoDeps, true},
+    {PipelineNodeId::FillEvaluateParams, "FillEvaluateParams",
+     &PassSession::StepFillEvaluateParams, kNoDeps, false},
+    {PipelineNodeId::EvaluateFeature, "EvaluateFeature",
+     &PassSession::StepEvaluateFeature, kNoDeps, false},
+    {PipelineNodeId::ModelOutputBarrier, "ModelOutputBarrier",
+     &PassSession::StepModelOutputBarrier, kNoDeps, false},
+
+    // -- composition --------------------------------------------------------
+    {PipelineNodeId::ComposeModelOutput, "ComposeModelOutput",
+     &PassSession::StepComposeModelOutput, kNoDeps, true},
+
+    // -- output -------------------------------------------------------------
+    {PipelineNodeId::RenderDebugView, "RenderDebugView",
+     &PassSession::StepRenderDebugView, kNoDeps, false},
+    {PipelineNodeId::WriteToBackbuffer, "WriteToBackbuffer",
+     &PassSession::StepWriteToBackbuffer, kNoDeps, false},
+    {PipelineNodeId::WriteToGameResource, "WriteToGameResource",
+     &PassSession::StepWriteToGameResource, kNoDeps, false},
+    {PipelineNodeId::SubmitAndWait, "SubmitAndWait", &PassSession::StepSubmitAndWait,
+     kNoDeps, false},
+};
+
+const PipelineStepDef* SessionStepFor(PipelineNodeId id) {
+  for (const PipelineStepDef& def : kSessionSteps) {
+    if (def.id == id) return &def;
+  }
+  return nullptr;
 }
 
 }  // namespace reshade_dlssnr

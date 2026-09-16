@@ -15,6 +15,7 @@
 #include "frame_debug_context.h"
 #include "hdr_state.h"
 #include "pass_session.h"
+#include "pipeline_graph.h"
 #include "runtime.h"
 #include "settings.h"
 #include "status.h"
@@ -55,6 +56,23 @@ class AddonController {
   // so the value only persists while the condition does.
   void SetPostDlssBlocked(const char* reason);
 
+  // Copies frame_debug.output to the swapchain backbuffer. The debug image
+  // was already rendered (at pass time) into a resource we own; this is
+  // purely a present-time override so the game's rendering is unaffected.
+  //
+  // Public because it is the body of the WriteDebugToBackbuffer pipeline
+  // step, which is a free function registered with the runner.
+  void PresentDebugOutput(
+      ID3D12CommandQueue* command_queue,
+      IDXGISwapChain* swapchain,
+      const FrameDebugContext& debug);
+
+  // HDR measurement bring-up, exposed for the EnsureHdr pipeline step. The
+  // lazy-init flag spans every pass and frame, so it belongs to the
+  // controller rather than to a session.
+  bool HdrInitialized() const { return hdr_initialized_; }
+  bool EnsureHdr(ID3D12Device* device);
+
  private:
   AddonController() {
     passes_.reserve(kMaxPasses);
@@ -67,13 +85,28 @@ class AddonController {
   AddonController(const AddonController&) = delete;
   AddonController& operator=(const AddonController&) = delete;
 
-  // Copies frame_debug.output to the swapchain backbuffer. The debug image
-  // was already rendered (at pass time) into a resource we own; this is
-  // purely a present-time override so the game's rendering is unaffected.
-  void PresentDebugOutput(
+  // Refreshes backbuffer_format_ from the swapchain's current backbuffer.
+  // Called once per Present, before any pass runs, so both the debug output
+  // buffer and the Release stage's copy see the format actually in use.
+  // A failure to query leaves the cached value untouched.
+  void RefreshBackbufferFormat(IDXGISwapChain* swapchain);
+
+  // Builds the PassRun for one pass of `stage` and hands it to the session.
+  // `command_list` / `output_resource` are the game's, and are null for the
+  // Present stage, whose steps act on the swapchain instead.
+  PipelineStatus RunPassStage(
+      const PipelineStageDef& stage,
+      uint32_t pass_index,
+      ID3D12GraphicsCommandList* command_list,
+      ID3D12Resource* output_resource,
+      bool is_first_pass);
+
+  // Runs a stage once, outside the per-pass loop. Used for the Release stage,
+  // whose steps act on the swapchain rather than on a game resource.
+  PipelineStatus RunSingleStage(
+      const PipelineStageDef& stage,
       ID3D12CommandQueue* command_queue,
-      IDXGISwapChain* swapchain,
-      const FrameDebugContext& debug);
+      IDXGISwapChain* swapchain);
 
   // Refresh status_ from the current state. Called at the end of every
   // OnPresent and OnPostDlssEvaluate.
@@ -96,7 +129,7 @@ class AddonController {
   // compile of kComputePasses[] instead of one per session.
   ComputeEngine codec_;
 
-  // Set once after the first successful hdr_.Ensure() + hdr_codec_.Init().
+  // Set once after the first successful hdr_.Ensure() + codec_.Init().
   // After that, Ensure/Init are not called again — BeginFrame does its own
   // lightweight polling and dispatch scheduling.
   bool hdr_initialized_ = false;

@@ -4,6 +4,8 @@
 #include <mutex>
 
 #include "dlss_guides.h"
+#include "pipeline_graph.h"
+#include "pipeline_trace.h"
 
 namespace reshade_dlssnr {
 
@@ -14,6 +16,58 @@ std::mutex g_direct_mutex;
 AddonController& AddonController::Get() {
   static AddonController direct;
   return direct;
+}
+
+void AddonController::RefreshBackbufferFormat(IDXGISwapChain* swapchain) {
+  Microsoft::WRL::ComPtr<IDXGISwapChain3> sc3;
+  if (FAILED(swapchain->QueryInterface(IID_PPV_ARGS(&sc3))) || sc3 == nullptr) {
+    return;
+  }
+  Microsoft::WRL::ComPtr<ID3D12Resource> bb;
+  const UINT idx = sc3->GetCurrentBackBufferIndex();
+  if (FAILED(sc3->GetBuffer(idx, IID_PPV_ARGS(&bb))) || bb == nullptr) return;
+
+  backbuffer_format_ = bb->GetDesc().Format;
+  trace::NameResource(bb.Get(), "backbuffer");
+}
+
+PipelineStatus AddonController::RunPassStage(const PipelineStageDef& stage,
+                                             uint32_t pass_index,
+                                             ID3D12GraphicsCommandList* command_list,
+                                             ID3D12Resource* output_resource,
+                                             bool is_first_pass) {
+  const Settings& settings = GetSettings();
+  if (pass_index >= kMaxPasses) return PipelineStatus::SkipFrame;
+
+  return passes_[pass_index].RunStage(
+      stage, settings, codec_, runtime_, command_list, output_resource,
+      is_first_pass, frame_debug_, &hdr_, &pass1_command_, nullptr, nullptr);
+}
+
+PipelineStatus AddonController::RunSingleStage(
+    const PipelineStageDef& stage,
+    ID3D12CommandQueue* command_queue,
+    IDXGISwapChain* swapchain) {
+  const Settings& settings = GetSettings();
+
+  PassRun run;
+  run.codec = &codec_;
+  run.runtime = &runtime_;
+  run.hdr = &hdr_;
+  run.frame_debug = &frame_debug_;
+  run.settings = &settings;
+  run.command_queue = command_queue;
+  run.swapchain = swapchain;
+
+  return PipelineRunner::RunStage(stage, run);
+}
+
+bool AddonController::EnsureHdr(ID3D12Device* device) {
+  if (hdr_initialized_) return true;
+  if (device == nullptr) return false;
+  if (!hdr_.Ensure(device) || !codec_.Init(device)) return false;
+  hdr_initialized_ = true;
+  return true;
 }
 
 void AddonController::OnPresent(
@@ -28,49 +82,30 @@ void AddonController::OnPresent(
     return;
   }
 
+  TRACE_EVT(this, "controller_enter stage=Present fmt_before=%d",
+            static_cast<int>(backbuffer_format_));
+
   // Refresh the cached backbuffer format. Used by the debug output buffer
   // so it is always created in a format the backbuffer copy can accept.
-  {
-    Microsoft::WRL::ComPtr<IDXGISwapChain3> sc3;
-    if (SUCCEEDED(swapchain->QueryInterface(IID_PPV_ARGS(&sc3))) &&
-        sc3 != nullptr) {
-      Microsoft::WRL::ComPtr<ID3D12Resource> bb;
-      const UINT idx = sc3->GetCurrentBackBufferIndex();
-      if (SUCCEEDED(sc3->GetBuffer(idx, IID_PPV_ARGS(&bb))) && bb != nullptr) {
-        backbuffer_format_ = bb->GetDesc().Format;
-      }
-    }
-  }
+  RefreshBackbufferFormat(swapchain);
   frame_debug_.preferred_format = backbuffer_format_;
 
-  for (uint32_t i = 0; i < kMaxPasses; ++i) {
-    if (!settings.pass_enabled[i]) continue;
-    if (settings.passes[i].injection_stage != InjectionStage::Present) continue;
-    passes_[i].OnPresent(
-        runtime_,
-        GetResolvedPass(i),
-        settings,
-        codec_,
-        command_queue,
-        swapchain,
-        frame_debug_);
+  const PipelineStageDef* stage =
+      FindPipelineStageForInjection(static_cast<int>(InjectionStage::Present));
+  if (stage != nullptr) {
+    for (uint32_t i = 0; i < kMaxPasses; ++i) {
+      if (!settings.pass_enabled[i]) continue;
+      if (settings.passes[i].injection_stage != InjectionStage::Present) continue;
+      TRACE_EVT(this, "controller_dispatch stage=Present pass=%u", i);
+      RunPassStage(*stage, i, nullptr, nullptr, false);
+    }
   }
 
-  // If a debug view was rendered (either by a Present pass now, or by a
-  // Post-DLSS pass earlier this frame), overwrite the backbuffer with it.
-  // This is the last touch before the swapchain present, so it does not
-  // interfere with anything the game did.
-  if (frame_debug_.valid) {
-    PresentDebugOutput(command_queue, swapchain, frame_debug_);
-  }
-
-  // Signal the HDR fence on the game's queue. The game has already
-  // submitted its command list, so this marks the point at which any
-  // pending histogram copy has completed.
-  hdr_.SignalAtPresent(command_queue);
+  RunSingleStage(PipelineReleaseStage(), command_queue, swapchain);
 
   RefreshStatus(settings);
   frame_debug_.Reset();
+  TRACE_EVT(this, "controller_exit stage=Present");
 }
 
 void AddonController::OnPostDlssEvaluate(
@@ -82,61 +117,35 @@ void AddonController::OnPostDlssEvaluate(
   if (!settings.enabled) return;
   if (command_list == nullptr || output_resource == nullptr) return;
 
+  TRACE_EVT(this, "controller_enter stage=PostDLSS hdr_init=%d guides_out=%d",
+            hdr_initialized_ ? 1 : 0, 0);
+
   // Fresh debug state for the frame's Post-DLSS chain. The debug output
   // must still match the backbuffer's format (we cached it last Present),
   // because that's what it will eventually be copied into.
   frame_debug_.Reset();
   frame_debug_.preferred_format = backbuffer_format_;
 
-  // HDR measurement: only the first pass in the chain runs it. It uses
-  // the captured DLSS output clone as the source, since that is what the
-  // model will actually consume.
-  //
-  // Ensure/Init run exactly once. BeginFrame itself does the per-frame
-  // work: it polls for completed histogram readbacks, updates the
-  // exposure EMA, and schedules new measurements at the configured rate.
-  if (!hdr_initialized_) {
-    Microsoft::WRL::ComPtr<ID3D12Device> hdr_device;
-    if (SUCCEEDED(command_list->GetDevice(IID_PPV_ARGS(&hdr_device))) &&
-        hdr_device != nullptr) {
-      if (hdr_.Ensure(hdr_device.Get()) && codec_.Init(hdr_device.Get())) {
-        hdr_initialized_ = true;
-      }
+  const PipelineStageDef* stage = FindPipelineStageForInjection(
+      static_cast<int>(InjectionStage::PostDLSS));
+  if (stage != nullptr) {
+    // `is_first` tracks the first ENABLED Post-DLSS pass, not index 0: the
+    // first pass in the chain is the one that reads the captured DLSS output,
+    // and it stays the first even if earlier passes are disabled or set to
+    // the Present stage.
+    bool is_first = true;
+    for (uint32_t i = 0; i < kMaxPasses; ++i) {
+      if (!settings.pass_enabled[i]) continue;
+      if (settings.passes[i].injection_stage != InjectionStage::PostDLSS) continue;
+      TRACE_EVT(this, "controller_dispatch stage=PostDLSS pass=%u is_first=%d", i,
+                is_first ? 1 : 0);
+      RunPassStage(*stage, i, command_list, output_resource, is_first);
+      is_first = false;
     }
-  }
-
-  if (hdr_initialized_) {
-    const DlssGuideState guides = DlssGuides::Get().GetState();
-    if (guides.dlss_output_color != nullptr &&
-        guides.output_width > 0 && guides.output_height > 0) {
-      hdr_.BeginFrame(pass1_command_,
-                      command_list,
-                      guides.dlss_output_color,
-                      guides.output_width,
-                      guides.output_height,
-                      settings,
-                      codec_);
-    }
-  }
-
-  bool is_first = true;
-  for (uint32_t i = 0; i < kMaxPasses; ++i) {
-    if (!settings.pass_enabled[i]) continue;
-    if (settings.passes[i].injection_stage != InjectionStage::PostDLSS) continue;
-    passes_[i].OnPostDlssEvaluate(
-        runtime_,
-        GetResolvedPass(i),
-        settings,
-        codec_,
-        command_list,
-        output_resource,
-        is_first,
-        frame_debug_,
-        &hdr_);
-    is_first = false;
   }
 
   RefreshStatus(settings);
+  TRACE_EVT(this, "controller_exit stage=PostDLSS");
 }
 
 void AddonController::PresentDebugOutput(
@@ -169,8 +178,18 @@ void AddonController::PresentDebugOutput(
   // the source pipeline stage ran at a different resolution. In that case
   // skip the override so we don't break the present.
   const D3D12_RESOURCE_DESC bb_desc = backbuffer->GetDesc();
-  if (bb_desc.Format != debug.format) return;
-  if (bb_desc.Width != debug.width || bb_desc.Height != debug.height) return;
+  if (bb_desc.Format != debug.format) {
+    TRACE_EVT(this, "skip_present_debug reason=format_mismatch bb=%d dbg=%d",
+              static_cast<int>(bb_desc.Format), static_cast<int>(debug.format));
+    return;
+  }
+  if (bb_desc.Width != debug.width || bb_desc.Height != debug.height) {
+    TRACE_EVT(this, "skip_present_debug reason=size_mismatch bb=%llux%llu dbg=%ux%u",
+              static_cast<unsigned long long>(bb_desc.Width),
+              static_cast<unsigned long long>(bb_desc.Height), debug.width,
+              debug.height);
+    return;
+  }
 
   if (!debug_command_.Ensure(device.Get())) return;
 
@@ -276,6 +295,86 @@ void AddonController::Shutdown() {
   hdr_initialized_ = false;
   frame_debug_.Release();
   runtime_.Shutdown();
+}
+
+// ---------------------------------------------------------------------------
+// Release-stage step bodies
+// ---------------------------------------------------------------------------
+//
+// The two release steps touch only controller state, so they live here rather
+// than in the translation units that own the pass and HDR machinery. They are
+// registered through the same lookup the runner uses for every other step.
+
+namespace {
+
+// Lazily creates the HDR histogram resources and initializes the compute
+// engine for them. Runs once, on the first Post-DLSS frame; after that both
+// are reused and BeginFrame does the per-frame work.
+//
+// This is controller state (hdr_initialized_ spans every pass and every
+// frame), which is why the step lives here rather than in hdr_state.cpp.
+PipelineStatus RunEnsureHdr(PassRun& run) {
+  AddonController& controller = AddonController::Get();
+  if (controller.HdrInitialized()) return PipelineStatus::Ok;
+  if (run.list == nullptr) return PipelineStatus::SkipFrame;
+
+  Microsoft::WRL::ComPtr<ID3D12Device> device;
+  if (FAILED(run.list->GetDevice(IID_PPV_ARGS(&device))) || device == nullptr) {
+    return PipelineStatus::SkipFrame;
+  }
+
+  if (controller.EnsureHdr(device.Get())) {
+    TRACE_EVT(run.session, "hdr_initialized");
+  }
+  // A failure here is not fatal: the pass runs without HDR measurement and
+  // retries the ensure next frame.
+  return PipelineStatus::Ok;
+}
+
+// Copies the debug image onto the backbuffer, if a pass produced one this
+// frame. This is the last touch before the swapchain present, so it does not
+// interfere with anything the game did.
+PipelineStatus RunWriteDebugToBackbuffer(PassRun& run) {
+  AddonController& controller = AddonController::Get();
+  if (run.frame_debug == nullptr || !run.frame_debug->valid) {
+    return PipelineStatus::Ok;
+  }
+  TRACE_EVT(run.session, "present_debug_output");
+  controller.PresentDebugOutput(run.command_queue, run.swapchain,
+                                *run.frame_debug);
+  return PipelineStatus::Ok;
+}
+
+// Signals the HDR fence on the game's queue. The game has already submitted
+// its command list, so this marks the point at which any pending histogram
+// copy has completed.
+PipelineStatus RunSignalHdrAtPresent(PassRun& run) {
+  if (run.hdr == nullptr) return PipelineStatus::Ok;
+  run.hdr->SignalAtPresent(run.command_queue);
+  return PipelineStatus::Ok;
+}
+
+const PipelineNodeId kEnsureHdrRequires[] = {PipelineNodeId::Count};
+const PipelineNodeId kWriteDebugRequires[] = {PipelineNodeId::Count};
+const PipelineNodeId kSignalHdrRequires[] = {PipelineNodeId::Count};
+
+const PipelineStepDef kControllerSteps[] = {
+    {PipelineNodeId::EnsureHdr, "EnsureHdr", &RunEnsureHdr, kEnsureHdrRequires,
+     /*requires_hdr_aware=*/true},
+    {PipelineNodeId::WriteDebugToBackbuffer, "WriteDebugToBackbuffer",
+     &RunWriteDebugToBackbuffer, kWriteDebugRequires,
+     /*requires_hdr_aware=*/false},
+    {PipelineNodeId::SignalHdrAtPresent, "SignalHdrAtPresent",
+     &RunSignalHdrAtPresent, kSignalHdrRequires, /*requires_hdr_aware=*/false},
+};
+
+}  // namespace
+
+const PipelineStepDef* ControllerStepFor(PipelineNodeId id) {
+  for (const PipelineStepDef& def : kControllerSteps) {
+    if (def.id == id) return &def;
+  }
+  return nullptr;
 }
 
 }  // namespace reshade_dlssnr

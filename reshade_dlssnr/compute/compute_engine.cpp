@@ -1,8 +1,11 @@
 #include "compute_engine.h"
 
+#include <cstdio>
+
 #include <reshade.hpp>
 
 #include "compute_passes.h"
+#include "pipeline_trace.h"
 
 namespace reshade_dlssnr {
 
@@ -331,6 +334,31 @@ bool ComputeEngine::Dispatch(
     }
 
     pso = it->second.pso.Get();
+  }
+
+  // Logged before BindAndDispatch so the pass name and constants line up with
+  // the transitions that precede and follow it in the trace.
+  if (trace::Enabled()) {
+    char params[48 * 10];
+    int used = 0;
+    for (uint32_t i = 0; i < 48 && used < static_cast<int>(sizeof(params)) - 12; ++i) {
+      const int n = std::snprintf(params + used, sizeof(params) - used,
+                                  "%s%.6g", i == 0 ? "" : ",",
+                                  static_cast<double>(constants.params[i]));
+      if (n <= 0) break;
+      used += n;
+    }
+    trace::Line("cmd", "Dispatch", this,
+                "dispatch pass=%s w=%u h=%u grid=%u,%u,%u "
+                "srv=[%d,%d,%d] uav=[%d] params=[%s]",
+                pass_name, constants.Width, constants.Height,
+                threads_x != 0 ? threads_x : (constants.Width + 7) / 8,
+                threads_y != 0 ? threads_y : (constants.Height + 7) / 8,
+                threads_z != 0 ? threads_z : 1,
+                trace::ResourceId(srvs[0]),
+                kSrvCount > 1 ? trace::ResourceId(srvs[1]) : -1,
+                kSrvCount > 2 ? trace::ResourceId(srvs[2]) : -1,
+                trace::ResourceId(uavs[0]), params);
   }
 
   return BindAndDispatch(
