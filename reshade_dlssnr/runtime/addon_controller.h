@@ -92,14 +92,20 @@ class AddonController {
   void RefreshBackbufferFormat(IDXGISwapChain* swapchain);
 
   // Builds the PassRun for one pass of `stage` and hands it to the session.
+  //
   // `command_list` / `output_resource` are the game's, and are null for the
-  // Present stage, whose steps act on the swapchain instead.
+  // Present stage. `command_queue` / `swapchain` are the Present stage's
+  // inputs, and are null for PostDLSS. Both pairs must be forwarded: the
+  // runner rejects a Present stage whose swapchain is missing, so passing
+  // null here silently skips the whole stage rather than failing loudly.
   PipelineStatus RunPassStage(
       const PipelineStageDef& stage,
       uint32_t pass_index,
       ID3D12GraphicsCommandList* command_list,
       ID3D12Resource* output_resource,
-      bool is_first_pass);
+      bool is_first_pass,
+      ID3D12CommandQueue* command_queue,
+      IDXGISwapChain* swapchain);
 
   // Runs a stage once, outside the per-pass loop. Used for the Release stage,
   // whose steps act on the swapchain rather than on a game resource.

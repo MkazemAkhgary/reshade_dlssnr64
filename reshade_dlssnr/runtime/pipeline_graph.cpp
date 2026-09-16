@@ -156,11 +156,15 @@ constexpr PipelineNodeId kPostDlssSteps[] = {
     PipelineNodeId::ResolveDevice,        // GetDevice + runtime.Initialize
     // EnsureHdr runs once per process (lazy), HdrBeginFrame once per frame.
     // Both gate themselves, so the per-pass loop below is harmless for them.
-    // HdrBeginFrame must follow EnsureHdr: BeginFrame touches the histogram
-    // buffer that Ensure creates.
+    //
+    // Ordering here is load bearing, not cosmetic. EnsureComputeEngine must
+    // precede HdrBeginFrame: HdrBeginFrame dispatches the histogram through
+    // that engine, and it declares EnsureComputeEngine as a prerequisite, so
+    // listing it first would make the prerequisite permanently unsatisfiable
+    // and silently skip HDR measurement every frame.
     PipelineNodeId::EnsureHdr,
-    PipelineNodeId::HdrBeginFrame,
     PipelineNodeId::EnsureComputeEngine,  // codec.Init + IsReady
+    PipelineNodeId::HdrBeginFrame,
     PipelineNodeId::ResolveWorkingScale,
     PipelineNodeId::EnsureFrameResources, // includes SetRetireCallback
     PipelineNodeId::SeedResourceStates,   // ClearState + SeedFrameState + output
@@ -179,8 +183,9 @@ constexpr PipelineNodeId kPostDlssSteps[] = {
 };
 
 constexpr PipelinePhaseDef kPostDlssPhases[] = {
-    {"setup", 0, 3, nullptr},   // ResolveDevice, EnsureHdr, HdrBeginFrame
-    {"resources", 3, 5, nullptr},
+    {"setup", 0, 4, nullptr},   // ResolveDevice, EnsureHdr,
+                                // EnsureComputeEngine, HdrBeginFrame
+    {"resources", 4, 4, nullptr},
     {"feature", 8, 3, nullptr},
     {"evaluate", 11, 4, nullptr},
     {"compose", 15, 1, nullptr},
@@ -240,7 +245,32 @@ static_assert(PhasesCover(kReleasePhases, kReleasePhaseCount,
                           kReleaseStepCount),
               "Release phases must span kReleaseSteps with no gap or overlap");
 
-#undef ASSERT_PHASES_TILE
+// The step lists above must match the copies in pipeline_graph.h, which exist
+// so that every translation unit defining a step can static_assert its own
+// prerequisites against the stage it runs in. These compare element by
+// element, not just by length, so the two cannot drift apart silently.
+static_assert(NodeListsEqual(kPresentSteps, kPresentStepNodes),
+              "kPresentSteps and kPresentStepNodes disagree - update both");
+static_assert(NodeListsEqual(kPostDlssSteps, kPostDlssStepNodes),
+              "kPostDlssSteps and kPostDlssStepNodes disagree - update both");
+static_assert(NodeListsEqual(kReleaseSteps, kReleaseStepNodes),
+              "kReleaseSteps and kReleaseStepNodes disagree - update both");
+
+// The lists are the single source of truth for how many steps a stage has, so
+// the counts the stage table publishes are derived from them rather than
+// repeated by hand.
+static_assert(kPresentStepCount == ArrayCount(kPresentStepNodes),
+              "kPresentStepNodes is stale - update it to match kPresentSteps");
+static_assert(kPostDlssStepCount == ArrayCount(kPostDlssStepNodes),
+              "kPostDlssStepNodes is stale - update it to match kPostDlssSteps");
+static_assert(kReleaseStepCount == ArrayCount(kReleaseStepNodes),
+              "kReleaseStepNodes is stale - update it to match kReleaseSteps");
+
+// Prerequisite validation lives in the translation unit that owns each step
+// table, because a definition table is `constexpr` inside its anonymous
+// namespace and cannot be reached from here. Each of pass_session.cpp,
+// hdr_state.cpp and addon_controller.cpp asserts its own steps against the
+// stage lists published in pipeline_graph.h.
 
 }  // namespace
 
@@ -357,7 +387,70 @@ void FormatMissingPrerequisites(const PipelineStepDef& def, const PassRun& run,
   }
 }
 
+// Remembers which (stage, step) skips have already been reported, so a skip
+// that repeats every frame prints once and a skip that clears then returns
+// prints again.
+//
+// The skip diagnostics are the runner's only per-step logging, and both fire
+// every frame in exactly the situations the user is looking at: a
+// mis-flagged step skipped in the wrong stage, or a prerequisite that can
+// never be met. Printing them per frame turns the present path into a log
+// flood, which shows up as stutter and buries the first occurrence — the one
+// that matters — under thousands of identical copies. Keying on the skip
+// *state* keeps the transition visible and the steady state silent.
+//
+// Bounded and fixed-size: the pipeline has a compile-time step count, so a
+// small table of pending skips is enough, and a full table cannot lose a
+// diagnostic (it simply re-prints, which is the safe failure direction).
+struct SkipLogEntry {
+  const void* session = nullptr;
+  const char* stage = nullptr;
+  PipelineNodeId node = PipelineNodeId::Idle;
+  // Frame on which this skip was last seen, so entries that stop happening
+  // are dropped and a recurrence logs afresh.
+  uint64_t last_seen_frame = 0;
+};
+
+constexpr size_t kMaxSkipLogEntries = 64;
+SkipLogEntry g_skip_log[kMaxSkipLogEntries] = {};
+size_t g_skip_log_count = 0;
+uint64_t g_skip_log_frame = 0;
+
+// Advances the frame counter and drops entries not seen in the previous frame.
+void BeginSkipLogFrameImpl() {
+  ++g_skip_log_frame;
+  size_t write = 0;
+  for (size_t i = 0; i < g_skip_log_count; ++i) {
+    if (g_skip_log[i].last_seen_frame + 1 >= g_skip_log_frame) {
+      g_skip_log[write++] = g_skip_log[i];
+    }
+  }
+  g_skip_log_count = write;
+}
+
+// Returns true when this skip has not been reported in the current run of
+// frames, recording it as seen.
+bool ShouldLogSkip(const void* session, const char* stage, PipelineNodeId node) {
+  for (size_t i = 0; i < g_skip_log_count; ++i) {
+    SkipLogEntry& e = g_skip_log[i];
+    if (e.session == session && e.stage == stage && e.node == node) {
+      e.last_seen_frame = g_skip_log_frame;
+      return false;
+    }
+  }
+  if (g_skip_log_count < kMaxSkipLogEntries) {
+    g_skip_log[g_skip_log_count++] =
+        SkipLogEntry{session, stage, node, g_skip_log_frame};
+  } else {
+    // Table full: fall back to no dedup rather than dropping the diagnostic.
+    return true;
+  }
+  return true;
+}
+
 }  // namespace
+
+void PipelineRunner::BeginSkipLogFrame() { BeginSkipLogFrameImpl(); }
 
 PipelineStatus PipelineRunner::RunStage(const PipelineStageDef& stage,
                                         PassRun& run) {
@@ -402,9 +495,22 @@ PipelineStatus PipelineRunner::RunStage(const PipelineStageDef& stage,
         continue;
       }
 
-      // An HDR-aware step in a stage that cannot do HDR never runs. This is
-      // a property of the stage, not a failure.
+      // A step that cannot work without the HDR path never runs in a stage
+      // that is not HDR-capable. This is a property of the stage, not a
+      // failure — but it is logged at info level rather than left to the
+      // trace, because a silent skip here once hid a real bug (two steps
+      // mis-flagged as HDR-only were skipped in Present, so the model was
+      // evaluated with null inputs). A skip that changes behaviour should be
+      // visible without opting into tracing.
       if (def->requires_hdr_aware && !stage.hdr_capable) {
+        if (ShouldLogSkip(run.session, stage.name, node)) {
+          char message[256];
+          std::snprintf(message, sizeof(message),
+                        "pipeline: step '%s' (stage %s) skipped: stage is not "
+                        "HDR-capable",
+                        def->name, stage.name);
+          reshade::log::message(reshade::log::level::info, message);
+        }
         if (tracing) {
           trace::Line("evt", "RunStage", run.session,
                       "step=%s SKIP (stage not hdr_capable)", def->name);
@@ -420,12 +526,17 @@ PipelineStatus PipelineRunner::RunStage(const PipelineStageDef& stage,
       if (!PrerequisitesMet(*def, run)) {
         char missing[256];
         FormatMissingPrerequisites(*def, run, missing, sizeof(missing));
-        char message[384];
-        std::snprintf(message, sizeof(message),
-                      "pipeline: step '%s' (stage %s) skipped: unmet "
-                      "prerequisite(s) [%s]",
-                      def->name, stage.name, missing);
-        reshade::log::message(reshade::log::level::error, message);
+        // Logged once per (pass, stage, step) rather than once per frame: a
+        // prerequisite that can never be met is a permanent condition, and
+        // repeating it every frame is what buried the original report of it.
+        if (ShouldLogSkip(run.session, stage.name, node)) {
+          char message[384];
+          std::snprintf(message, sizeof(message),
+                        "pipeline: step '%s' (stage %s) skipped: unmet "
+                        "prerequisite(s) [%s]",
+                        def->name, stage.name, missing);
+          reshade::log::message(reshade::log::level::error, message);
+        }
         if (tracing) {
           trace::Line("evt", "RunStage", run.session, "step=%s SKIP (requires %s)",
                       def->name, missing);

@@ -24,7 +24,11 @@ void PassSession::Fail(const char* reason) {
   reason_ = reason;
   TRACE_EVT(this, "FAIL pass=%u reason=%s", pass_index_,
             reason != nullptr ? reason : "(null)");
-  reshade::log::message(reshade::log::level::error, reason);
+  // FailForStep() already substitutes a default before calling here, but Fail
+  // is also reachable directly, and passing nullptr to the logger would
+  // dereference it.
+  reshade::log::message(reshade::log::level::error,
+                        reason != nullptr ? reason : "DLSSNR pass failed");
 }
 
 void PassSession::Retry(NgxRuntime& runtime) {
@@ -42,6 +46,13 @@ void PassSession::Retry(NgxRuntime& runtime) {
 
   failed_ = false;
   reason_ = "";
+
+  // Re-arm the evaluate diagnostic. The retry rebuilds the feature, so the
+  // next evaluation genuinely is a new one and its descriptors belong in the
+  // log even if they match the failed attempt's.
+  eval_log_key_ = EvalLogKey{};
+  eval_log_key_valid_ = false;
+  eval_log_written_this_frame_ = false;
 
   reshade::log::message(reshade::log::level::info,
                         "DLSSNR pass: retrying after failure");
@@ -320,6 +331,12 @@ void PassSession::Shutdown(NgxRuntime& runtime) {
   command_queue_ = nullptr;
   failed_ = false;
   reason_ = "";
+
+  // Drop the cached diagnostic so a re-created session logs its first
+  // evaluation unconditionally.
+  eval_log_key_ = EvalLogKey{};
+  eval_log_key_valid_ = false;
+  eval_log_written_this_frame_ = false;
 }
 
 void PassSession::PrepareRun(PassRun& run,
@@ -868,6 +885,95 @@ PipelineStatus PassSession::StepFillEvaluateParams(PassRun& run) {
   return PipelineStatus::Ok;
 }
 
+// Builds one line describing exactly what NGX is being asked to do.
+// EvaluateFeature rejects on a format or dimension mismatch with no other
+// clue, and the two stages feed it different resources (a swapchain backbuffer
+// for Present, the game's DLSS output resource for PostDLSS), so recording the
+// concrete descriptors is what makes a failure attributable to one of them.
+//
+// Logged through the ReShade log, not the trace: the trace is opt-in via
+// DLSSNR_TRACE, and this has to be visible to someone who just enabled the
+// pass and saw it fail.
+//
+// The caller emits it only when something about the evaluation changed, plus
+// always when a resource is null or an evaluation fails. Printing this every
+// frame costs a formatting pass and a log write in the present path, which is
+// measurable as stutter, and in a steady state every field is constant — so a
+// repeated line carries no information and only the transitions are worth
+// printing.
+void PassSession::FormatEvalLine(const PassRun& run, const EvalLogKey& key,
+                                 char* line, size_t line_size) {
+  char color_part[128] = "color=null";
+  char out_part[128] = "out=null";
+  if (key.color != nullptr) {
+    snprintf(color_part, sizeof(color_part), "color=%ux%u/%s", key.color_width,
+             key.color_height,
+             FormatName(static_cast<DXGI_FORMAT>(key.color_format)));
+  }
+  if (key.output != nullptr) {
+    snprintf(out_part, sizeof(out_part), "out=%ux%u/%s", key.output_width,
+             key.output_height,
+             FormatName(static_cast<DXGI_FORMAT>(key.output_format)));
+  }
+  snprintf(line, line_size,
+           "DLSSNR evaluate st=%s %s %s eval=%ux%u frame=%ux%u "
+           "in=%ux%u work=%ux%u guides=%d pass=%u hdl=%p params=%p",
+           run.stage != nullptr ? run.stage->name : "?", color_part, out_part,
+           key.eval_width, key.eval_height, key.frame_width, key.frame_height,
+           key.input_width, key.input_height, key.work_width, key.work_height,
+           key.guides_valid, key.pass_index, key.feature_handle, key.params);
+}
+
+// Fills `key` from the current run. Split out so the comparison and the
+// formatting read the same values.
+void PassSession::BuildEvalKey(const PassRun& run, void* feature_handle,
+                               EvalLogKey* key) {
+  *key = EvalLogKey{};
+  key->stage = run.stage != nullptr ? run.stage->name : "?";
+  key->color = run.model_color;
+  key->output = run.model_output;
+  if (run.model_color != nullptr) {
+    const D3D12_RESOURCE_DESC d = run.model_color->GetDesc();
+    key->color_width = static_cast<unsigned int>(d.Width);
+    key->color_height = static_cast<unsigned int>(d.Height);
+    key->color_format = static_cast<int>(d.Format);
+  }
+  if (run.model_output != nullptr) {
+    const D3D12_RESOURCE_DESC d = run.model_output->GetDesc();
+    key->output_width = static_cast<unsigned int>(d.Width);
+    key->output_height = static_cast<unsigned int>(d.Height);
+    key->output_format = static_cast<int>(d.Format);
+  }
+  key->eval_width = run.eval_width;
+  key->eval_height = run.eval_height;
+  key->frame_width = run.width;
+  key->frame_height = run.height;
+  key->input_width = static_cast<unsigned int>(run.desc.Width);
+  key->input_height = static_cast<unsigned int>(run.desc.Height);
+  key->work_width = run.work_width;
+  key->work_height = run.work_height;
+  key->guides_valid = run.guides_valid ? 1 : 0;
+  key->pass_index = run.pass_index;
+  key->feature_handle = feature_handle;
+  key->params = run.runtime != nullptr
+                    ? static_cast<void*>(run.runtime->Parameters().Get())
+                    : nullptr;
+}
+
+bool PassSession::EvalKeysDiffer(const EvalLogKey& a, const EvalLogKey& b) {
+  return a.stage != b.stage || a.color != b.color || a.output != b.output ||
+         a.color_width != b.color_width || a.color_height != b.color_height ||
+         a.output_width != b.output_width ||
+         a.output_height != b.output_height ||
+         a.color_format != b.color_format || a.output_format != b.output_format ||
+         a.eval_width != b.eval_width || a.eval_height != b.eval_height ||
+         a.frame_width != b.frame_width || a.frame_height != b.frame_height ||
+         a.input_width != b.input_width || a.input_height != b.input_height ||
+         a.work_width != b.work_width || a.work_height != b.work_height ||
+         a.guides_valid != b.guides_valid || a.pass_index != b.pass_index ||
+         a.feature_handle != b.feature_handle || a.params != b.params;
+}
+
 // Invoke NGX.
 //
 // Present captures the result and reports a failure after the frame has been
@@ -877,6 +983,28 @@ PipelineStatus PassSession::StepFillEvaluateParams(PassRun& run) {
 PipelineStatus PassSession::StepEvaluateFeature(PassRun& run) {
   PassSession* self = run.session;
   if (run.runtime == nullptr) return PipelineStatus::SkipFrame;
+
+  void* feature_handle = static_cast<void*>(self->feature_.FeatureHandle());
+  EvalLogKey key = {};
+  BuildEvalKey(run, feature_handle, &key);
+
+  // A null input is itself the answer to FAIL_InvalidParameter, so the line
+  // that would reveal it must never be suppressed by the change check.
+  const bool null_input = run.model_color == nullptr || run.model_output == nullptr;
+  const bool first = !self->eval_log_key_valid_;
+  const bool changed = first || EvalKeysDiffer(key, self->eval_log_key_);
+
+  self->eval_log_written_this_frame_ = false;
+  if (changed || null_input) {
+    char line[384] = {};
+    FormatEvalLine(run, key, line, sizeof(line));
+    reshade::log::message(reshade::log::level::info, line);
+    TRACE_EVT(self, "%s", line);
+
+    self->eval_log_key_ = key;
+    self->eval_log_key_valid_ = true;
+    self->eval_log_written_this_frame_ = true;
+  }
 
   if (run.stage != nullptr && run.stage->is_post_dlss) {
     run.runtime->EvaluateFeature(self->StageList(run, self->command_), self->feature_.FeatureHandle(),
@@ -1025,8 +1153,28 @@ PipelineStatus PassSession::StepSubmitAndWait(PassRun& run) {
   // Present reports the NGX result after the frame is on the GPU, matching the
   // pre-refactor ordering: the frame is never dropped because the model
   // failed, but the pass is marked so the user sees it.
+  //
+  // The numeric result is logged as well as named. "EvaluateFeature failed" on
+  // its own is not diagnosable - the code distinguishes a missing input from a
+  // bad parameter from an unsupported format, and those need different fixes.
   if (run.eval_result != NVSDK_NGX_Result_Success) {
-    self->FailForStep("DLSSNR EvaluateFeature failed");
+    // Re-print the descriptors when the evaluation step suppressed them as
+    // unchanged. A failure is exactly the case where the line matters, and a
+    // pass that fails the same way every frame would otherwise go silent after
+    // its first frame - the steady state the change check exists for is also
+    // the state a persistent failure gets stuck in.
+    if (!self->eval_log_written_this_frame_ && self->eval_log_key_valid_) {
+      char line[384] = {};
+      FormatEvalLine(run, self->eval_log_key_, line, sizeof(line));
+      reshade::log::message(reshade::log::level::error, line);
+      TRACE_EVT(self, "%s", line);
+    }
+
+    char reason[160] = {};
+    snprintf(reason, sizeof(reason), "DLSSNR EvaluateFeature failed: %s (0x%08X)",
+             NgxResultName(static_cast<NVSDK_NGX_Result>(run.eval_result)),
+             static_cast<unsigned int>(run.eval_result));
+    self->FailForStep(reason);
     return PipelineStatus::Fail;
   }
   return PipelineStatus::Ok;
@@ -1073,7 +1221,7 @@ constexpr PipelineStepDef kSessionSteps[] = {
     {PipelineNodeId::SnapshotGuides, "SnapshotGuides",
      &PassSession::StepSnapshotGuides, kNoDeps, false},
     {PipelineNodeId::PrepareModelInput, "PrepareModelInput",
-     &PassSession::StepPrepareModelInput, kNoDeps, true},
+     &PassSession::StepPrepareModelInput, kNoDeps, false},
     {PipelineNodeId::FillEvaluateParams, "FillEvaluateParams",
      &PassSession::StepFillEvaluateParams, kNoDeps, false},
     {PipelineNodeId::EvaluateFeature, "EvaluateFeature",
@@ -1083,7 +1231,7 @@ constexpr PipelineStepDef kSessionSteps[] = {
 
     // -- composition --------------------------------------------------------
     {PipelineNodeId::ComposeModelOutput, "ComposeModelOutput",
-     &PassSession::StepComposeModelOutput, kNoDeps, true},
+     &PassSession::StepComposeModelOutput, kNoDeps, false},
 
     // -- output -------------------------------------------------------------
     {PipelineNodeId::RenderDebugView, "RenderDebugView",
@@ -1095,6 +1243,41 @@ constexpr PipelineStepDef kSessionSteps[] = {
     {PipelineNodeId::SubmitAndWait, "SubmitAndWait", &PassSession::StepSubmitAndWait,
      kNoDeps, false},
 };
+
+// Every prerequisite these steps declare must be satisfiable, which means
+// listed earlier in the stage they run in. Getting this wrong does not fail to
+// build and does not crash: the runner logs at error level and skips the step,
+// every frame, forever. These assertions make it a build error instead.
+//
+// Both stage lists live in pipeline_graph.h so a translation unit that defines
+// a step can check itself without depending on the stage table in
+// pipeline_graph.cpp.
+static_assert(PrerequisitesPrecedeSteps(kPresentStepNodes,
+                                        ArrayCount(kPresentStepNodes),
+                                        kSessionSteps,
+                                        ArrayCount(kSessionSteps)),
+              "a session step in the Present stage declares a prerequisite "
+              "that runs after it");
+static_assert(PrerequisitesPrecedeSteps(kPostDlssStepNodes,
+                                        ArrayCount(kPostDlssStepNodes),
+                                        kSessionSteps,
+                                        ArrayCount(kSessionSteps)),
+              "a session step in the PostDLSS stage declares a prerequisite "
+              "that runs after it");
+
+// The Present stage is not HDR-capable, so no step listed there may be marked
+// `requires_hdr_aware`: the runner would skip it silently. This is the guard
+// for a bug that shipped — PrepareModelInput and ComposeModelOutput were
+// flagged HDR-only, got skipped in Present, and left the model to be evaluated
+// with null inputs (NGX: FAIL_InvalidParameter).
+//
+// Those two steps are not HDR-only: they pick the HDR shader when
+// `hdr_uniforms_ready` is set and the SDR shader otherwise. Only BuildHdrUniforms
+// genuinely needs `run.hdr`, and it is listed in PostDLSS alone.
+static_assert(NoHdrAwareSteps(kPresentStepNodes, ArrayCount(kPresentStepNodes),
+                              kSessionSteps, ArrayCount(kSessionSteps)),
+              "a step in the Present stage is marked requires_hdr_aware, but "
+              "Present is not HDR-capable so it would never run");
 
 const PipelineStepDef* SessionStepFor(PipelineNodeId id) {
   for (const PipelineStepDef& def : kSessionSteps) {

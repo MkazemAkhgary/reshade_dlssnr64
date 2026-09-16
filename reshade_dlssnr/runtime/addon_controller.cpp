@@ -35,13 +35,16 @@ PipelineStatus AddonController::RunPassStage(const PipelineStageDef& stage,
                                              uint32_t pass_index,
                                              ID3D12GraphicsCommandList* command_list,
                                              ID3D12Resource* output_resource,
-                                             bool is_first_pass) {
+                                             bool is_first_pass,
+                                             ID3D12CommandQueue* command_queue,
+                                             IDXGISwapChain* swapchain) {
   const Settings& settings = GetSettings();
   if (pass_index >= kMaxPasses) return PipelineStatus::SkipFrame;
 
   return passes_[pass_index].RunStage(
       stage, settings, codec_, runtime_, command_list, output_resource,
-      is_first_pass, frame_debug_, &hdr_, &pass1_command_, nullptr, nullptr);
+      is_first_pass, frame_debug_, &hdr_, &pass1_command_, command_queue,
+      swapchain);
 }
 
 PipelineStatus AddonController::RunSingleStage(
@@ -82,6 +85,11 @@ void AddonController::OnPresent(
     return;
   }
 
+  // Start a new frame for the runner's skip diagnostics, so a skip that has
+  // cleared is forgotten and a recurring one logs again. Present is the one
+  // entry point that runs every frame, so the counter belongs here.
+  PipelineRunner::BeginSkipLogFrame();
+
   TRACE_EVT(this, "controller_enter stage=Present fmt_before=%d",
             static_cast<int>(backbuffer_format_));
 
@@ -97,7 +105,7 @@ void AddonController::OnPresent(
       if (!settings.pass_enabled[i]) continue;
       if (settings.passes[i].injection_stage != InjectionStage::Present) continue;
       TRACE_EVT(this, "controller_dispatch stage=Present pass=%u", i);
-      RunPassStage(*stage, i, nullptr, nullptr, false);
+      RunPassStage(*stage, i, nullptr, nullptr, false, command_queue, swapchain);
     }
   }
 
@@ -139,7 +147,8 @@ void AddonController::OnPostDlssEvaluate(
       if (settings.passes[i].injection_stage != InjectionStage::PostDLSS) continue;
       TRACE_EVT(this, "controller_dispatch stage=PostDLSS pass=%u is_first=%d", i,
                 is_first ? 1 : 0);
-      RunPassStage(*stage, i, command_list, output_resource, is_first);
+      RunPassStage(*stage, i, command_list, output_resource, is_first, nullptr,
+                   nullptr);
       is_first = false;
     }
   }
@@ -354,11 +363,15 @@ PipelineStatus RunSignalHdrAtPresent(PassRun& run) {
   return PipelineStatus::Ok;
 }
 
-const PipelineNodeId kEnsureHdrRequires[] = {PipelineNodeId::Count};
-const PipelineNodeId kWriteDebugRequires[] = {PipelineNodeId::Count};
-const PipelineNodeId kSignalHdrRequires[] = {PipelineNodeId::Count};
+// `constexpr`, not `const`: a static_assert can only read an array whose
+// initializer is a constant expression. `const` would compile fine for the
+// runtime lookup in ControllerStepFor below and still fail the assertion at
+// the end of this namespace with C2131.
+constexpr PipelineNodeId kEnsureHdrRequires[] = {PipelineNodeId::Count};
+constexpr PipelineNodeId kWriteDebugRequires[] = {PipelineNodeId::Count};
+constexpr PipelineNodeId kSignalHdrRequires[] = {PipelineNodeId::Count};
 
-const PipelineStepDef kControllerSteps[] = {
+constexpr PipelineStepDef kControllerSteps[] = {
     {PipelineNodeId::EnsureHdr, "EnsureHdr", &RunEnsureHdr, kEnsureHdrRequires,
      /*requires_hdr_aware=*/true},
     {PipelineNodeId::WriteDebugToBackbuffer, "WriteDebugToBackbuffer",
@@ -376,5 +389,18 @@ const PipelineStepDef* ControllerStepFor(PipelineNodeId id) {
   }
   return nullptr;
 }
+
+// The controller's steps run in the Release stage, against the stage node list
+// published in pipeline_graph.h. This is what turns "a step declares a
+// prerequisite that the runner can never satisfy" from a per-frame error log
+// into a build failure. Add a step here and point it at a prerequisite listed
+// later in the release stage - or at one the stage never lists - and the build
+// stops.
+static_assert(PrerequisitesPrecedeSteps(kReleaseStepNodes,
+                                        ArrayCount(kReleaseStepNodes),
+                                        kControllerSteps,
+                                        ArrayCount(kControllerSteps)),
+              "a controller step in the Release stage declares a prerequisite "
+              "that runs after it, or that the stage never lists");
 
 }  // namespace reshade_dlssnr

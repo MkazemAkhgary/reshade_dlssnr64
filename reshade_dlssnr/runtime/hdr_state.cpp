@@ -423,12 +423,16 @@ PipelineStatus RunHdrBeginFrame(PassRun& run) {
 // the graph names the histogram sub-steps explicitly.
 PipelineStatus RunHistogramPlaceholder(PassRun&) { return PipelineStatus::Ok; }
 
-const PipelineNodeId kHdrBeginRequires[] = {PipelineNodeId::EnsureComputeEngine,
-                                            PipelineNodeId::Count};
-const PipelineNodeId kHistogramRequires[] = {PipelineNodeId::HdrBeginFrame,
-                                             PipelineNodeId::Count};
+// `constexpr`, not `const`: a static_assert can only read an array whose
+// initializer is a constant expression. `const` would compile fine for the
+// runtime lookup in HdrStepFor below and still fail the assertion at the end
+// of this namespace with C2131.
+constexpr PipelineNodeId kHdrBeginRequires[] = {PipelineNodeId::EnsureComputeEngine,
+                                                PipelineNodeId::Count};
+constexpr PipelineNodeId kHistogramRequires[] = {PipelineNodeId::HdrBeginFrame,
+                                                 PipelineNodeId::Count};
 
-const PipelineStepDef kHdrSteps[] = {
+constexpr PipelineStepDef kHdrSteps[] = {
     {PipelineNodeId::HdrBeginFrame, "HdrBeginFrame", &RunHdrBeginFrame,
      kHdrBeginRequires, /*requires_hdr_aware=*/true},
     {PipelineNodeId::HistogramZero, "HistogramZero", &RunHistogramPlaceholder,
@@ -438,6 +442,21 @@ const PipelineStepDef kHdrSteps[] = {
     {PipelineNodeId::HistogramReadback, "HistogramReadback",
      &RunHistogramPlaceholder, kHistogramRequires, /*requires_hdr_aware=*/true},
 };
+
+// HdrBeginFrame declares EnsureComputeEngine as a prerequisite, and this is the
+// assertion that keeps it satisfiable. kPostDlssStepNodes is the stage's
+// ordered node list, published in pipeline_graph.h; if HdrBeginFrame is listed
+// before the engine it depends on, the runner would log "unmet prerequisite"
+// and skip the step every frame, silently disabling HDR measurement. Now the
+// build fails instead.
+//
+// This exact mistake shipped once. See the ordering comment on kPostDlssSteps
+// in pipeline_graph.cpp.
+static_assert(PrerequisitesPrecedeSteps(kPostDlssStepNodes,
+                                        ArrayCount(kPostDlssStepNodes),
+                                        kHdrSteps, ArrayCount(kHdrSteps)),
+              "an HDR step declares a prerequisite that the PostDLSS stage "
+              "lists after it - reorder kPostDlssStepNodes, not this");
 
 }  // namespace
 

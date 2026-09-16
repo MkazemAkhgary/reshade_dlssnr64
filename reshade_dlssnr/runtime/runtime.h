@@ -12,6 +12,12 @@
 
 namespace reshade_dlssnr {
 
+// Human-readable name for an NVSDK_NGX_Result. Returns a stable string such as
+// "FAIL_InvalidParameter", with the numeric value appended when the code is not
+// one this build knows. Used to make a failed EvaluateFeature diagnosable: the
+// result is otherwise a bare enum that the log cannot interpret.
+const char* NgxResultName(NVSDK_NGX_Result result);
+
 class NgxRuntime {
  public:
   bool Initialize(ID3D12Device* device);

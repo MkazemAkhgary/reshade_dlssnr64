@@ -188,4 +188,49 @@ NVSDK_NGX_Result NgxRuntime::ReleaseFeature(NVSDK_NGX_Handle* feature_handle) {
   return release_feature_(feature_handle);
 }
 
+const char* NgxResultName(NVSDK_NGX_Result result) {
+  switch (result) {
+    case NVSDK_NGX_Result_Success:
+      return "Success";
+    case NVSDK_NGX_Result_FAIL_FeatureNotSupported:
+      return "FAIL_FeatureNotSupported";
+    case NVSDK_NGX_Result_FAIL_PlatformError:
+      return "FAIL_PlatformError";
+    case NVSDK_NGX_Result_FAIL_FeatureAlreadyExists:
+      return "FAIL_FeatureAlreadyExists";
+    case NVSDK_NGX_Result_FAIL_FeatureNotFound:
+      return "FAIL_FeatureNotFound";
+    case NVSDK_NGX_Result_FAIL_InvalidParameter:
+      return "FAIL_InvalidParameter";
+    case NVSDK_NGX_Result_FAIL_ScratchBufferTooSmall:
+      return "FAIL_ScratchBufferTooSmall";
+    case NVSDK_NGX_Result_FAIL_NotInitialized:
+      return "FAIL_NotInitialized";
+    case NVSDK_NGX_Result_FAIL_UnsupportedInputFormat:
+      return "FAIL_UnsupportedInputFormat";
+    case NVSDK_NGX_Result_FAIL_RWFlagMissing:
+      return "FAIL_RWFlagMissing";
+    case NVSDK_NGX_Result_FAIL_MissingInput:
+      return "FAIL_MissingInput";
+    case NVSDK_NGX_Result_FAIL_UnableToInitializeFeature:
+      return "FAIL_UnableToInitializeFeature";
+    case NVSDK_NGX_Result_FAIL_OutOfDate:
+      return "FAIL_OutOfDate";
+    case NVSDK_NGX_Result_FAIL_OutOfGPUMemory:
+      return "FAIL_OutOfGPUMemory";
+    case NVSDK_NGX_Result_FAIL_UnsupportedFormat:
+      return "FAIL_UnsupportedFormat";
+    case NVSDK_NGX_Result_FAIL_UnableToWriteToAppDataPath:
+      return "FAIL_UnableToWriteToAppDataPath";
+    case NVSDK_NGX_Result_FAIL_UnsupportedParameter:
+      return "FAIL_UnsupportedParameter";
+    case NVSDK_NGX_Result_FAIL_Denied:
+      return "FAIL_Denied";
+    case NVSDK_NGX_Result_FAIL_NotImplemented:
+      return "FAIL_NotImplemented";
+    default:
+      return "UNKNOWN";
+  }
+}
+
 }  // namespace reshade_dlssnr

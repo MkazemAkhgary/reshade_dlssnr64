@@ -6,6 +6,7 @@
 #include <windows.h>
 #include <wrl/client.h>
 
+#include <cstddef>
 #include <memory>
 
 #include "command_context.h"
@@ -190,6 +191,53 @@ class PassSession {
   static void RetireResourceCallback(ID3D12Resource* resource,
                                      void* user_data);
 
+  // Everything the evaluate diagnostic prints, kept so the line can be
+  // emitted only when it would say something new.
+  //
+  // The descriptor line is the one piece of the pipeline's logging that has to
+  // be per-frame accurate but costs a printf and a log write every frame, which
+  // shows up as stutter in a frame-limited game. None of the fields below
+  // change frame to frame in a steady state, so comparing against the previous
+  // frame's values keeps the diagnostic without paying for it — a resolution
+  // change, a resource swap, a feature rebuild or a format change still prints.
+  //
+  // A failure (or a null input) forces the line out regardless, because that is
+  // exactly when the descriptors are the answer; see StepEvaluateFeature.
+  struct EvalLogKey {
+    const char* stage = nullptr;
+    ID3D12Resource* color = nullptr;
+    ID3D12Resource* output = nullptr;
+    unsigned int color_width = 0;
+    unsigned int color_height = 0;
+    unsigned int output_width = 0;
+    unsigned int output_height = 0;
+    int color_format = 0;
+    int output_format = 0;
+    unsigned int eval_width = 0;
+    unsigned int eval_height = 0;
+    unsigned int frame_width = 0;
+    unsigned int frame_height = 0;
+    unsigned int input_width = 0;
+    unsigned int input_height = 0;
+    unsigned int work_width = 0;
+    unsigned int work_height = 0;
+    int guides_valid = 0;
+    uint32_t pass_index = 0;
+    void* feature_handle = nullptr;
+    void* params = nullptr;
+  };
+
+  // Builds the descriptor line for the current evaluation from `key`.
+  static void FormatEvalLine(const PassRun& run, const EvalLogKey& key,
+                             char* line, size_t line_size);
+
+  // Fills `key` from the current run so comparison and formatting agree.
+  static void BuildEvalKey(const PassRun& run, void* feature_handle,
+                           EvalLogKey* key);
+
+  // True when any field the diagnostic prints differs.
+  static bool EvalKeysDiffer(const EvalLogKey& a, const EvalLogKey& b);
+
   CommandContext command_;
   PassResources resources_;
   FeatureLifecycle feature_;
@@ -201,6 +249,17 @@ class PassSession {
 
   bool failed_ = false;
   const char* reason_ = "";
+
+  // Last values printed by the evaluate diagnostic, and whether anything has
+  // been printed yet. `eval_log_key_valid_` false means the next evaluation
+  // logs unconditionally (first frame of a pass, or after Shutdown).
+  EvalLogKey eval_log_key_ = {};
+  bool eval_log_key_valid_ = false;
+
+  // Set by StepEvaluateFeature when it emits the descriptor line, so
+  // StepSubmitAndWait can tell a fresh line was already written and does not
+  // repeat it when the same frame also fails.
+  bool eval_log_written_this_frame_ = false;
 };
 
 }  // namespace reshade_dlssnr

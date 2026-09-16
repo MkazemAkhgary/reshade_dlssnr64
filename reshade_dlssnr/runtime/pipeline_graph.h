@@ -22,6 +22,7 @@
 // at the step that diverges.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 #include <d3d12.h>
@@ -214,7 +215,13 @@ struct PassRun {
 
   // Result of the NGX call. Only the Present stage consults it, and only
   // after the frame has been submitted.
-  int eval_result = 0;  // NVSDK_NGX_Result; 0 == Success
+  //
+  // Note NVSDK_NGX_Result_Success is 0x1, NOT 0, so zero is a sentinel meaning
+  // "EvaluateFeature was never reached this frame" rather than a success. The
+  // check in StepSubmitAndWait treats anything other than Success as a failure,
+  // which is correct either way, but the sentinel is why a step that bailed out
+  // early cannot be mistaken for a clean evaluation.
+  int eval_result = 0;
 
   // HDR tonemap uniforms, built by BuildHdrUniforms and consumed by the
   // PrepareModelInput / ComposeModelOutput steps. `hdr_uniforms_ready` false
@@ -251,8 +258,17 @@ struct PipelineStepDef {
   // (it introduces a requires-clause) and cannot be used as a member name.
   const PipelineNodeId* depends_on;
 
-  // Set when this step needs the HDR path. The runner consults it together
-  // with the stage's hdr_capable flag before running the step.
+  // Set when this step cannot do its work without the HDR path, i.e. it reads
+  // `PassRun::hdr` and has no meaningful SDR behaviour. The runner consults it
+  // together with the stage's hdr_capable flag and skips the step in a stage
+  // that is not HDR-capable.
+  //
+  // It does NOT mean "this step has an HDR variant". PrepareModelInput and
+  // ComposeModelOutput each select an HDR shader when `hdr_uniforms_ready` is
+  // set and fall back to the SDR shader otherwise, so they run in both kinds of
+  // stage. Flagging them with this was a real bug: Present is not HDR-capable,
+  // so both were skipped and the model was evaluated with null inputs, which
+  // NGX reported as FAIL_InvalidParameter.
   bool requires_hdr_aware = false;
 };
 
@@ -318,6 +334,206 @@ struct PipelineStageDef {
 // coarser step currently performs).
 const PipelineStepDef* FindPipelineStep(PipelineNodeId id);
 
+// ---------------------------------------------------------------------------
+// Compile-time validation of step prerequisite declarations
+// ---------------------------------------------------------------------------
+//
+// A step declares prerequisites as node ids, and the runner refuses to run a
+// step whose prerequisites have not completed. That check is only meaningful
+// if a prerequisite can actually complete BEFORE the step runs, which (since
+// the runner walks its stage's step list in order) means the prerequisite must
+// appear EARLIER in that list.
+//
+// Getting this wrong does not fail to compile and does not crash. The runner
+// logs at error level and skips the step, every frame, forever — which is how
+// a mis-ordered HdrBeginFrame silently disabled HDR measurement entirely.
+// These helpers turn that into a build error.
+//
+// Usage, in the translation unit that defines a step table:
+//
+//   static_assert(PrerequisitesPrecedeSteps(kStageNodes, ArrayCount(kStageNodes),
+//                                           kMySteps, ArrayCount(kMySteps)),
+//                 "a step declares a prerequisite that runs after it");
+//
+// `steps` is the stage's ordered node list, published below as
+// kPresentStepNodes / kPostDlssStepNodes / kReleaseStepNodes; `defs` is the
+// flat definition table in the owning .cpp. A definition whose node is not in
+// `steps` is skipped, because the same definition may serve a stage that lists
+// it elsewhere — the histogram placeholders are in no stage list at all, with
+// the work folded into HdrBeginFrame.
+
+// True when `needle` is present in the first `limit` entries of `steps`.
+constexpr bool NodePrecedes(const PipelineNodeId* steps, size_t step_count,
+                            size_t limit, PipelineNodeId needle) {
+  return limit == 0
+             ? false
+             : (steps[limit - 1] == needle ||
+                NodePrecedes(steps, step_count, limit - 1, needle));
+}
+
+// Position of `needle` in `steps`, written to `*out_index`; false when absent.
+//
+// Absence is reported through the return value rather than a sentinel index,
+// because index 0 is a legal position: folding "not found" into 0 made every
+// absent node look like the stage's first step, which in turn made every
+// prerequisite of an absent step look violated. The histogram placeholder
+// steps are absent from the Present list and hit exactly this.
+constexpr bool IndexOfNode(const PipelineNodeId* steps, size_t step_count,
+                           PipelineNodeId needle, size_t* out_index) {
+  return step_count == 0
+             ? false
+             : (steps[step_count - 1] == needle
+                    ? (*out_index = step_count - 1, true)
+                    : IndexOfNode(steps, step_count - 1, needle, out_index));
+}
+
+// True when every prerequisite listed by `def` appears before position
+// `def_index` in `steps`. `dep_index` walks the null-terminated list.
+constexpr bool StepPrerequisitesPrecedeImpl(const PipelineStepDef* def,
+                                            const PipelineNodeId* steps,
+                                            size_t step_count,
+                                            size_t def_index,
+                                            size_t dep_index) {
+  return def->depends_on[dep_index] == PipelineNodeId::Count
+             ? true
+             : (NodePrecedes(steps, step_count, def_index,
+                             def->depends_on[dep_index]) &&
+                StepPrerequisitesPrecedeImpl(def, steps, step_count, def_index,
+                                             dep_index + 1));
+}
+
+// True when every step in `defs` has all its prerequisites satisfied by an
+// earlier entry in `steps`. Steps whose node is absent from `steps` pass
+// trivially, because the same definition may serve a stage that lists it
+// elsewhere (or not at all) — that is exactly the histogram placeholders'
+// situation against the Present list.
+//
+// Note the gap this cannot close: a prerequisite that appears in NO stage list
+// is accepted here, since "absent" is treated as "not this stage's business".
+// The runner still refuses such a step at runtime and logs it. This check
+// covers ordering, which is the mistake that is easy to make and hard to see.
+constexpr bool StepPrerequisitesPrecede(const PipelineStepDef* def,
+                                        const PipelineNodeId* steps,
+                                        size_t step_count) {
+  size_t def_index = 0;
+  return def->depends_on == nullptr
+             ? true
+             : (IndexOfNode(steps, step_count, def->id, &def_index)
+                    ? StepPrerequisitesPrecedeImpl(def, steps, step_count,
+                                                   def_index, 0)
+                    : true);
+}
+
+// Walks `defs` from the end so the recursion stays measurable by the compiler.
+constexpr bool PrerequisitesPrecedeSteps(const PipelineNodeId* steps,
+                                         size_t step_count,
+                                         const PipelineStepDef* defs,
+                                         size_t def_count) {
+  return def_count == 0
+             ? true
+             : (StepPrerequisitesPrecede(defs + def_count - 1, steps,
+                                         step_count) &&
+                PrerequisitesPrecedeSteps(steps, step_count, defs,
+                                          def_count - 1));
+}
+
+// Count of entries in a constexpr array, for use in the static_asserts below.
+template <typename T, size_t N>
+constexpr size_t ArrayCount(const T (&)[N]) { return N; }
+
+// True when both arrays hold the same node ids in the same order. Used to
+// prove the stage node lists here match the step tables in
+// pipeline_graph.cpp, so the two cannot drift apart silently.
+template <size_t N>
+constexpr bool NodeListsEqual(const PipelineNodeId (&a)[N],
+                              const PipelineNodeId (&b)[N]) {
+  for (size_t i = 0; i < N; ++i) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
+}
+
+// True when no step in `defs` that is listed in `steps` is marked
+// `requires_hdr_aware`.
+//
+// Use this to assert that a stage which is not HDR-capable carries no
+// HDR-only step. The runner silently skips such a step, so the mistake shows up
+// as a step that never runs rather than as a compile or runtime error — which
+// is exactly how PrepareModelInput and ComposeModelOutput came to be skipped in
+// the Present stage, leaving the model to be evaluated with null inputs.
+//
+// Steps not listed in `steps` are ignored, mirroring PrerequisitesPrecedeSteps.
+constexpr bool NoHdrAwareSteps(const PipelineNodeId* steps, size_t step_count,
+                               const PipelineStepDef* defs, size_t def_count) {
+  size_t index = 0;
+  return def_count == 0
+             ? true
+             : ((defs[def_count - 1].requires_hdr_aware &&
+                 IndexOfNode(steps, step_count, defs[def_count - 1].id, &index))
+                    ? false
+                    : NoHdrAwareSteps(steps, step_count, defs,
+                                      def_count - 1));
+}
+
+// ---------------------------------------------------------------------------
+// Stage node lists
+// ---------------------------------------------------------------------------
+//
+// The ordered node list for each stage. These live in the header, rather than
+// beside the phase tables in pipeline_graph.cpp, so that a translation unit
+// defining a step can static_assert its own prerequisites against them. See
+// StepPrerequisitesPrecede below for why that matters.
+//
+// Keep in step with the step tables in pipeline_graph.cpp; the phase tiling
+// assertions there are what catch a mismatch.
+
+inline constexpr PipelineNodeId kPresentStepNodes[] = {
+    PipelineNodeId::AcquireBackbuffer,
+    PipelineNodeId::ResolveDevice,
+    PipelineNodeId::ResolveWorkingScale,
+    PipelineNodeId::EnsureFrameResources,
+    PipelineNodeId::SeedResourceStates,
+    PipelineNodeId::EnsureFeature,
+    PipelineNodeId::SnapshotGuides,
+    PipelineNodeId::EnsureComputeEngine,
+    PipelineNodeId::ResolveModelInput,
+    PipelineNodeId::PrepareModelInput,
+    PipelineNodeId::FillEvaluateParams,
+    PipelineNodeId::EvaluateFeature,
+    PipelineNodeId::ModelOutputBarrier,
+    PipelineNodeId::ComposeModelOutput,
+    PipelineNodeId::RenderDebugView,
+    PipelineNodeId::WriteToBackbuffer,
+    PipelineNodeId::SubmitAndWait,
+};
+
+inline constexpr PipelineNodeId kPostDlssStepNodes[] = {
+    PipelineNodeId::ResolveDevice,
+    PipelineNodeId::EnsureHdr,
+    PipelineNodeId::EnsureComputeEngine,
+    PipelineNodeId::HdrBeginFrame,
+    PipelineNodeId::ResolveWorkingScale,
+    PipelineNodeId::EnsureFrameResources,
+    PipelineNodeId::SeedResourceStates,
+    PipelineNodeId::SeedGuideStates,
+    PipelineNodeId::ResolveModelInput,
+    PipelineNodeId::EnsureFeature,
+    PipelineNodeId::SnapshotGuides,
+    PipelineNodeId::BuildHdrUniforms,
+    PipelineNodeId::PrepareModelInput,
+    PipelineNodeId::FillEvaluateParams,
+    PipelineNodeId::EvaluateFeature,
+    PipelineNodeId::ModelOutputBarrier,
+    PipelineNodeId::ComposeModelOutput,
+    PipelineNodeId::RenderDebugView,
+    PipelineNodeId::WriteToGameResource,
+};
+
+inline constexpr PipelineNodeId kReleaseStepNodes[] = {
+    PipelineNodeId::WriteDebugToBackbuffer,
+    PipelineNodeId::SignalHdrAtPresent,
+};
+
 // Per-translation-unit step registries. Each owning .cpp implements the ones
 // covering the nodes whose bodies live there; returning nullptr for a node it
 // does not own is required. FindPipelineStep() consults them in order.
@@ -360,6 +576,13 @@ class PipelineRunner {
 
   // Debug aid: when DLSSNR_TRACE is set, every step entry/exit is traced.
   static bool TraceEnabled();
+
+  // Starts a new frame for the skip diagnostics. A step skipped by the runner
+  // (unmet prerequisite, or not HDR-capable in a stage that is not) logs once
+  // per occurrence rather than once per frame, because a permanent condition
+  // repeated every frame floods the log and hides the first occurrence.
+  // Call once per frame, from the one entry point that runs every frame.
+  static void BeginSkipLogFrame();
 };
 
 }  // namespace reshade_dlssnr

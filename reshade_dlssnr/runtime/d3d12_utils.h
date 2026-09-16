@@ -26,4 +26,34 @@ inline D3D12_RESOURCE_STATES InferResourceState(ID3D12Resource* resource) {
   }
 }
 
+// Short stable name for a DXGI format, for log lines. Only the formats this
+// addon can plausibly meet are named; anything else prints as a number so an
+// unexpected format is still identifiable rather than silently blank.
+inline const char* FormatName(DXGI_FORMAT format) {
+  switch (format) {
+    case DXGI_FORMAT_UNKNOWN:
+      return "UNKNOWN";
+    case DXGI_FORMAT_R8G8B8A8_UNORM:
+      return "R8G8B8A8_UNORM";
+    case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+      return "R8G8B8A8_SRGB";
+    case DXGI_FORMAT_B8G8R8A8_UNORM:
+      return "B8G8R8A8_UNORM";
+    case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
+      return "B8G8R8A8_SRGB";
+    case DXGI_FORMAT_R10G10B10A2_UNORM:
+      return "R10G10B10A2_UNORM";
+    case DXGI_FORMAT_R11G11B10_FLOAT:
+      return "R11G11B10_FLOAT";
+    case DXGI_FORMAT_R16G16B16A16_FLOAT:
+      return "R16G16B16A16_FLOAT";
+    case DXGI_FORMAT_R16G16B16A16_UNORM:
+      return "R16G16B16A16_UNORM";
+    case DXGI_FORMAT_R32G32B32A32_FLOAT:
+      return "R32G32B32A32_FLOAT";
+    default:
+      return "other";
+  }
+}
+
 }  // namespace reshade_dlssnr
