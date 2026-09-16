@@ -134,17 +134,32 @@ tables. Read the header comments first — they state the invariants.
 may only declare prerequisites that appear *earlier* in the enum, which makes
 a dependency cycle impossible to express rather than something to debug later.
 
-**Step definitions.** Each entry in a step table names a node, a human name,
-a `run` function pointer, its `depends_on` prerequisites, and whether it is
-`requires_hdr_aware`. A step whose prerequisites are unmet is skipped and
-logged at error level: a missing prerequisite means the table lists a step
-before something it depends on, which is a bug in the table, so the frame
-degrades instead of rendering garbage.
+**Prerequisites** are the mechanism that makes ordering explicit rather than
+relying on table position. `hdr_state.cpp` populates real ones —
+`HdrBeginFrame` declares `EnsureComputeEngine`, because it dispatches the
+histogram through that engine — and the ordering in `kPostDlssSteps` exists to
+satisfy them. The session and controller steps still use `kNoDeps`, because
+their ordering is already fixed by the frame's data flow.
 
-**Prerequisites are currently empty** (`kNoDeps`) for every step. The checking
-machinery is live and correct; the arrays are intentionally unfilled until the
-step order has been confirmed by a runtime trace. Filling them in is a genuine
-safety net for future table edits, not decoration.
+The distinction matters: a prerequisite that can never be met does not fail
+loudly, it skips the step *silently for the rest of the run*. Bug 1 in the
+refactor was exactly this — `HdrBeginFrame` listed before the
+`EnsureComputeEngine` it depends on, so HDR was skipped every frame. Hence the
+guards below.
+
+**Compile-time guards.** Three `static_assert` families back the tables, so the
+mistakes that produced real bugs now fail the build instead of failing at
+runtime:
+
+| Guard | Rejects |
+|---|---|
+| `NodeListsEqual` | a stage's step list in `pipeline_graph.cpp` drifting from the copy in the header |
+| `PrerequisitesPrecedeSteps` | a step declaring a prerequisite listed *after* it — the Bug 1 class. Asserted in each TU that owns a step table |
+| `NoHdrAwareSteps` | a `requires_hdr_aware` step in a stage that is not `hdr_capable`, so it could never run — the Bug 3 class |
+
+`PhasesCover` additionally requires a stage's phases to tile its steps exactly,
+with no gap or overlap. A table edit that renumbers steps without re-tiling
+phases is a build error.
 
 **Stages** carry policy as data rather than as inline branches:
 
@@ -153,7 +168,7 @@ safety net for future table edits, not decoration.
 | `is_post_dlss` | records on the game's command list instead of our own |
 | `default_failure` | `Fail` / `Transient` / `Ignore` for an unhandled step status |
 | `owns_submit` | whether this stage submits and waits |
-| `hdr_capable` | a `requires_hdr_aware` step in a non-capable stage is skipped, not failed |
+| `hdr_capable` | a `requires_hdr_aware` step in a non-capable stage is skipped at runtime, and additionally rejected at build time by `NoHdrAwareSteps` |
 | `reads_dlss_output` | input comes from the game's DLSS output |
 
 Current stages: **PostDLSS** (transient, not owning submit, HDR-capable),
@@ -432,6 +447,35 @@ not, what is wrong" without requiring the user to read the log.
 Do not add per-frame log messages during normal operation. If a value is
 useful every frame, put it in Status.
 
+**Diagnostics on the per-frame path must be transition-based.** A line that is
+accurate every frame but informative only when it changes is a stutter source
+and a log flood — and worse, a permanent condition repeated every frame buries
+its own first occurrence, which is the only one that matters. Two patterns are
+in use:
+
+- **Change detection.** `StepEvaluateFeature` compares a cached
+  `PassSession::EvalLogKey` (every field the line prints) against the current
+  frame and only emits on the first evaluation, on any change, or when a
+  resource is null. `Retry()` and `Shutdown()` clear the cache so a retry
+  re-arms it.
+- **Skip dedup.** The runner's unmet-prerequisite and non-HDR-capable skips log
+  once per `(session, stage, node)` via `PipelineRunner::BeginSkipLogFrame`
+  (called from `OnPresent`), dropping entries when a skip clears so a
+  recurrence logs again.
+
+The rule both follow: **the failure path must force its own emission.** A pass
+failing identically every frame is a steady state, which is exactly what a
+change check suppresses — so `StepSubmitAndWait` re-emits the cached descriptor
+line at error level when the evaluation step didn't already write one that
+frame. Without that, the state a persistent bug produces is the one the dedup
+silences.
+
+The remaining per-frame risk is the `TRACE_*` macros. They are compiled in but
+gate on `trace::Enabled()`, which is a couple of global loads and a branch, so
+a traced call site costs a branch when `DLSSNR_TRACE` is unset. Anything
+expensive added *inside* a trace argument is still paid every frame, so keep
+formatting out of the call.
+
 ---
 
 ## Adding Things
@@ -469,11 +513,20 @@ stage-level method — the resource's state is only trustworthy at that point.
    `PassSession` and start the body with `PassSession* self = run.session;`.
    Return `Ok`, `SkipFrame`, or `Fail` — the runner interprets these.
 3. Register it in the right step table in `pipeline_graph.cpp`, inside the
-   correct phase range, and add a name to `kNodeNames[]`.
+   correct phase range, and add a name to `kNodeNames[]`. If the stage's step
+   list is one of the mirrored ones, update the copy in `pipeline_graph.h` too —
+   `NodeListsEqual` compares them element by element and fails the build
+   otherwise.
 4. If the step needs a new phase, add it to the phase table. `PhasesCover`
    is a `constexpr` check that the phases tile the step list exactly, so a
    mismatch fails the build rather than misbehaving at runtime.
-5. Run `tools/verify_pipeline_order.py` to confirm nothing moved.
+5. Declare any prerequisite in the step's `depends_on` array. If you also add
+   the step to a stage that could run it *before* that prerequisite — or flag it
+   `requires_hdr_aware` in a stage that is not `hdr_capable` — the build fails:
+   `PrerequisitesPrecedeSteps` and `NoHdrAwareSteps` exist precisely because
+   both mistakes shipped once. Register the `static_assert` for your step table
+   if it is a new one.
+6. Run `tools/verify_pipeline_order.py` to confirm nothing moved.
 
 If the step belongs to a concern owned by another file, register it there
 instead — see the controller and `hdr_state.cpp` registries, and
