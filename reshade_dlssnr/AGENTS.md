@@ -172,9 +172,16 @@ beside the ordered operations of the pre-refactor methods, read from git. Use
 it before and after any reordering:
 
 ```bash
-python tools/verify_pipeline_order.py          # compare against HEAD
-python tools/verify_pipeline_order.py HEAD~1   # compare against an older rev
+python tools/verify_pipeline_order.py            # auto-detect the oracle
+python tools/verify_pipeline_order.py <commit>   # pin a specific revision
 ```
+
+It needs a revision whose `pass_session.cpp` still contains the old
+`OnPresent` / `OnPostDlssEvaluate`. Since the refactor landed, `HEAD` no
+longer qualifies, so with no argument the tool walks back from HEAD until it
+finds one and reports which it chose. Passing a refactored revision explicitly
+is rejected with a clear message rather than printing a meaningless
+comparison.
 
 It reports early-exit guards (frames abandoned inside a step) separately from
 sequential steps, because those legitimately differ between the two stages.

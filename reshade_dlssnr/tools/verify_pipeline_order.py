@@ -9,10 +9,15 @@ Usage (from reshade_dlssnr/):
 
     python tools/verify_pipeline_order.py [rev]
 
-`rev` defaults to HEAD. Pass the commit that still had the monolithic
-PassSession::OnPresent, e.g. if the refactor has since been committed:
+`rev` defaults to the nearest revision whose pass_session.cpp still has the
+monolithic methods. That was HEAD before the refactor landed; now that it has,
+the tool walks back from HEAD and says which revision it chose. To compare
+against the tip of a branch that still holds the old code:
 
-    python tools/verify_pipeline_order.py HEAD~1
+    python tools/verify_pipeline_order.py some-branch
+
+If `rev` is given and turns out to be the refactored tree, the tool says so
+and exits 2 rather than printing a meaningless comparison.
 
 Read the two lists side by side. They will not be textually identical: a step
 that absorbed several operations shows once, and the EnsureHdr / HdrBeginFrame
@@ -53,13 +58,55 @@ def read_git_source(rev):
     return out.stdout.decode('utf-8', 'replace')
 
 
+def find_oracle_revision():
+    """Nearest revision whose pass_session.cpp still has the old methods.
+
+    The default `HEAD` was correct while the refactor was uncommitted. Once
+    it landed, HEAD became the refactored tree and has no
+    PassSession::OnPresent to read. Rather than crash, walk back from HEAD
+    until the methods reappear. Capped so a shallow clone fails loudly
+    instead of spinning.
+    """
+    for depth in range(0, 50):
+        rev = 'HEAD' if depth == 0 else 'HEAD~%d' % depth
+        source = read_git_source(rev)
+        if source is None:
+            return None
+        if 'void PassSession::OnPresent(' in source:
+            return rev
+    return None
+
+
 def main(argv):
-    rev = argv[1] if len(argv) > 1 else 'HEAD'
+    if len(argv) > 1:
+        rev = argv[1]
+        orig = read_git_source(rev)
+        if orig is None:
+            return 1
+        if 'void PassSession::OnPresent(' not in orig:
+            print('%s:%s has no PassSession::OnPresent - it is the refactored '
+                  'tree, not an oracle.' % (rev, ORIG_REL), file=sys.stderr)
+            print('Pass a revision from before the refactor.', file=sys.stderr)
+            return 2
+    else:
+        rev = find_oracle_revision()
+        if rev is None:
+            print('could not find a revision with the pre-refactor methods '
+                  'within 50 commits of HEAD.', file=sys.stderr)
+            print('Pass one explicitly, e.g. '
+                  'python tools/verify_pipeline_order.py <commit>.',
+                  file=sys.stderr)
+            return 2
+        orig = read_git_source(rev)
+        if orig is None:
+            return 1
+        if rev != 'HEAD':
+            print('note: HEAD is the refactored tree, so using %s as the '
+                  'oracle (auto-detected).' % rev)
+            print()
+
     if not os.path.exists(GRAPH):
         print('missing %s' % GRAPH, file=sys.stderr)
-        return 1
-    orig = read_git_source(rev)
-    if orig is None:
         return 1
     graph = read(GRAPH)
 
