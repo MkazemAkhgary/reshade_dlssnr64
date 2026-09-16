@@ -433,14 +433,20 @@ constexpr PipelineNodeId kHistogramRequires[] = {PipelineNodeId::HdrBeginFrame,
                                                  PipelineNodeId::Count};
 
 constexpr PipelineStepDef kHdrSteps[] = {
+    // Passes run.list into HdrState::BeginFrame, so it needs the stage to
+    // supply a command list. PostDLSS does; this step is listed there only.
     {PipelineNodeId::HdrBeginFrame, "HdrBeginFrame", &RunHdrBeginFrame,
-     kHdrBeginRequires, /*requires_hdr_aware=*/true},
+     kHdrBeginRequires, /*required_inputs=*/StageInput::CommandList,
+     /*requires_hdr_aware=*/true},
     {PipelineNodeId::HistogramZero, "HistogramZero", &RunHistogramPlaceholder,
-     kHistogramRequires, /*requires_hdr_aware=*/true},
+     kHistogramRequires, /*required_inputs=*/StageInput::None,
+     /*requires_hdr_aware=*/true},
     {PipelineNodeId::HistogramBuild, "HistogramBuild", &RunHistogramPlaceholder,
-     kHistogramRequires, /*requires_hdr_aware=*/true},
+     kHistogramRequires, /*required_inputs=*/StageInput::None,
+     /*requires_hdr_aware=*/true},
     {PipelineNodeId::HistogramReadback, "HistogramReadback",
-     &RunHistogramPlaceholder, kHistogramRequires, /*requires_hdr_aware=*/true},
+     &RunHistogramPlaceholder, kHistogramRequires, /*required_inputs=*/StageInput::None,
+     /*requires_hdr_aware=*/true},
 };
 
 // HdrBeginFrame declares EnsureComputeEngine as a prerequisite, and this is the
@@ -457,6 +463,17 @@ static_assert(PrerequisitesPrecedeSteps(kPostDlssStepNodes,
                                         kHdrSteps, ArrayCount(kHdrSteps)),
               "an HDR step declares a prerequisite that the PostDLSS stage "
               "lists after it - reorder kPostDlssStepNodes, not this");
+
+// The HDR steps are listed in PostDLSS alone, whose call site supplies the
+// game's command list. HdrBeginFrame reads run.list, so this proves it is
+// never reachable from a stage that passes none.
+static_assert(
+    StageInputsCoverSteps(kPostDlssStepNodes, ArrayCount(kPostDlssStepNodes),
+                          kHdrSteps, ArrayCount(kHdrSteps),
+                          StageInput::CommandList | StageInput::OutputResource |
+                              StageInput::Stage),
+    "an HDR step in the PostDLSS stage needs an input the PostDLSS call site "
+    "does not supply");
 
 }  // namespace
 

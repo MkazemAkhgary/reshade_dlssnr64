@@ -147,7 +147,30 @@ refactor was exactly this — `HdrBeginFrame` listed before the
 `EnsureComputeEngine` it depends on, so HDR was skipped every frame. Hence the
 guards below.
 
-**Compile-time guards.** Three `static_assert` families back the tables, so the
+**Frame inputs.** A step that dereferences a frame input the caller did not
+supply crashes — and because the *same step function* is listed in more than
+one stage, while the call sites differ, moving one line between step tables is
+enough to create it. Present's call site has a swapchain and no command list;
+PostDLSS has the game's command list and no swapchain. Two declarations make
+that checkable:
+
+- `PipelineStepDef::required_inputs` — the `StageInput` bits this step
+  dereferences.
+- `PipelineStageDef::required_inputs` — what this stage's call site promises to
+  supply.
+
+`StageInput` is a bitmask (`CommandList`, `Device`, `Swapchain`,
+`CommandQueue`, `OutputResource`, `Backbuffer`, `Stage`) with `HasInput` and
+`InputsCover` helpers. The `Stage` bit is listed wherever steps read
+`run.stage`; the runner sets it itself, so it is documentation of intent rather
+than a real precondition.
+
+**Declare reads, not writes.** A step that *assigns* `run.list` / `run.device`
+/ `run.backbuffer` is producing those values for later steps, not consuming
+them. `AcquireBackbuffer` writes `run.device` and `run.backbuffer`; requiring
+either on any stage would be wrong, because no caller supplies them.
+
+**Compile-time guards.** Four `static_assert` families back the tables, so the
 mistakes that produced real bugs now fail the build instead of failing at
 runtime:
 
@@ -156,10 +179,26 @@ runtime:
 | `NodeListsEqual` | a stage's step list in `pipeline_graph.cpp` drifting from the copy in the header |
 | `PrerequisitesPrecedeSteps` | a step declaring a prerequisite listed *after* it — the Bug 1 class. Asserted in each TU that owns a step table |
 | `NoHdrAwareSteps` | a `requires_hdr_aware` step in a stage that is not `hdr_capable`, so it could never run — the Bug 3 class |
+| `StageInputsCoverSteps` | a step listed in a stage whose call site does not supply an input it declares. Asserted in each TU that owns a step table |
 
 `PhasesCover` additionally requires a stage's phases to tile its steps exactly,
 with no gap or overlap. A table edit that renumbers steps without re-tiling
 phases is a build error.
+
+**The declaration is the weak link, and that is unavoidable.** The compiler
+cannot see what a function body dereferences, so `StageInputsCoverSteps` proves
+only that *no step is listed in a stage that cannot supply what it declared*
+— it trusts `required_inputs` to be complete. A step that reads `run.list`
+without declaring it passes the guard and still crashes. Declaring inputs
+correctly is the part that takes care; the guard is what stops a *correct*
+declaration from being invalidated by a table edit.
+
+`StageInputsMet` is the matching runtime check: the runner evaluates the stage's
+declaration against the live `PassRun` at stage entry and returns `SkipFrame`
+with a named-input error log rather than letting a step null-dereference
+part-way through the frame. It is not redundant with the compile-time guard —
+the guard checks the *configuration*, this checks that the caller kept its
+promise on the frame in question.
 
 **Stages** carry policy as data rather than as inline branches:
 
@@ -170,17 +209,31 @@ phases is a build error.
 | `owns_submit` | whether this stage submits and waits |
 | `hdr_capable` | a `requires_hdr_aware` step in a non-capable stage is skipped at runtime, and additionally rejected at build time by `NoHdrAwareSteps` |
 | `reads_dlss_output` | input comes from the game's DLSS output |
+| `required_inputs` | the frame inputs this stage's call site promises. Enforced at stage entry by `StageInputsMet` and at build time by `StageInputsCoverSteps` |
 
-Current stages: **PostDLSS** (transient, not owning submit, HDR-capable),
-**Present** (fail, owns submit), **Release** (ignore, owns submit).
+Current stages: **PostDLSS** (transient, not owning submit, HDR-capable,
+supplied `CommandList \| OutputResource`), **Present** (fail, owns submit,
+supplied `Swapchain \| CommandQueue`), **Release** (ignore, owns submit,
+supplied `Swapchain \| CommandQueue`).
 
 **Step ownership in practice.** Most steps live in `pass_session.cpp` as
 static members and reach private state through `run.session`. Two other files
 contribute steps for concerns that belong to them: the controller contributes
-`EnsureHdr` / `WriteToBackbuffer` / `SignalHdrAtPresent` (it owns those
-resources), and `hdr_state.cpp` contributes `HdrBeginFrame`. `FindPipelineStep`
-consults all registries in turn, so a step can be placed next to the code it
-drives without the table caring where it lives.
+`EnsureHdr` / `WriteToDebugBackbuffer` / `SignalHdrAtPresent` (it owns those
+resources), and `hdr_state.cpp` contributes `HdrBeginFrame`. A step can
+therefore sit next to the code it drives without the table caring where it
+lives.
+
+`FindPipelineStep` resolves that by building an index over the four registries
+(`SessionStepFor`, `HdrStepFor`, `DebugStepFor`, `ControllerStepFor`) on first
+use, one slot per node. The scans it replaced were never a measurable cost —
+about 120 lookups per frame — so speed is not the reason. The reason is that
+a linear scan takes the first match and silently ignores a second, so two
+registries claiming the same node produced a step that never ran with no
+diagnostic anywhere. The index detects that case and logs the collision, naming
+which registry won. It also rejects a registry returning a definition whose
+`id` does not match the node it was looked up under, which would otherwise
+dispatch the wrong function.
 
 **Verifying an edit.** `tools/verify_pipeline_order.py` prints the step tables
 beside the ordered operations of the pre-refactor methods, read from git. Use
@@ -526,11 +579,21 @@ stage-level method — the resource's state is only trustworthy at that point.
    `PrerequisitesPrecedeSteps` and `NoHdrAwareSteps` exist precisely because
    both mistakes shipped once. Register the `static_assert` for your step table
    if it is a new one.
-6. Run `tools/verify_pipeline_order.py` to confirm nothing moved.
+6. Set `required_inputs` to every frame input the body dereferences —
+   `run.list`, `run.swapchain`, `run.command_queue`, `run.output_resource`,
+   `run.device`, `run.backbuffer`, `run.stage`. Declare only reads: a step that
+   *assigns* one of those fields is producing it, and requiring it would be
+   wrong. If the step is listed in a stage whose call site does not supply what
+   you declared, `StageInputsCoverSteps` fails the build and names the step.
+   This is the guard against the null-dereference class of table edit, so it is
+   only as good as this declaration — leaving a read undeclared is the one
+   mistake it cannot catch.
+7. Run `tools/verify_pipeline_order.py` to confirm nothing moved.
 
 If the step belongs to a concern owned by another file, register it there
 instead — see the controller and `hdr_state.cpp` registries, and
-`FindPipelineStep` for how they are combined.
+`FindPipelineStep` for how they are combined. Adding it to *two* registries is
+not a silent no-op any more: the index logs which one won.
 
 ### A new UI section
 

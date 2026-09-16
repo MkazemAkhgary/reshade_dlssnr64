@@ -1192,56 +1192,75 @@ PipelineStatus PassSession::StepSubmitAndWait(PassRun& run) {
 // happens.
 constexpr PipelineNodeId kNoDeps[] = {PipelineNodeId::Count};
 
+// Step table.
+//
+// The `required_inputs` field is a claim about which frame inputs the step
+// dereferences. The runner checks the stage's declaration against the live
+// PassRun at stage entry, and StageInputsCoverSteps (asserted below) proves
+// each stage declares at least what its steps need.
+//
+// Only *reads* are declared. A step that assigns run.device or run.backbuffer
+// is producing those for later steps, not consuming them, so requiring them
+// would be wrong — AcquireBackbuffer writes both, and the steps that read them
+// run after it.
 constexpr PipelineStepDef kSessionSteps[] = {
     // -- setup --------------------------------------------------------------
+    // Produces run.device and run.backbuffer; consumes the swapchain and the
+    // queue it records the acquire on.
     {PipelineNodeId::AcquireBackbuffer, "AcquireBackbuffer",
-     &PassSession::StepAcquireBackbuffer, kNoDeps, false},
+     &PassSession::StepAcquireBackbuffer, kNoDeps, StageInput::None, false},
+    // Reads the run's own carriers and writes run.list. In PostDLSS run.list
+    // is already the game's list; this only resolves it for Present.
     {PipelineNodeId::ResolveDevice, "ResolveDevice",
-     &PassSession::StepResolveDevice, kNoDeps, false},
+     &PassSession::StepResolveDevice, kNoDeps, StageInput::Stage, false},
     {PipelineNodeId::EnsureComputeEngine, "EnsureComputeEngine",
-     &PassSession::StepEnsureComputeEngine, kNoDeps, false},
+     &PassSession::StepEnsureComputeEngine, kNoDeps, StageInput::None, false},
     {PipelineNodeId::ResolveWorkingScale, "ResolveWorkingScale",
-     &PassSession::StepResolveWorkingScale, kNoDeps, false},
+     &PassSession::StepResolveWorkingScale, kNoDeps, StageInput::None, false},
     {PipelineNodeId::EnsureFrameResources, "EnsureFrameResources",
-     &PassSession::StepEnsureFrameResources, kNoDeps, false},
+     &PassSession::StepEnsureFrameResources, kNoDeps, StageInput::None, false},
     {PipelineNodeId::SeedResourceStates, "SeedResourceStates",
-     &PassSession::StepSeedResourceStates, kNoDeps, false},
+     &PassSession::StepSeedResourceStates, kNoDeps, StageInput::None, false},
     {PipelineNodeId::SeedGuideStates, "SeedGuideStates",
-     &PassSession::StepSeedGuideStates, kNoDeps, false},
+     &PassSession::StepSeedGuideStates, kNoDeps, StageInput::None, false},
 
     // -- model input --------------------------------------------------------
     {PipelineNodeId::ResolveModelInput, "ResolveModelInput",
-     &PassSession::StepResolveModelInput, kNoDeps, false},
+     &PassSession::StepResolveModelInput, kNoDeps, StageInput::None, false},
     {PipelineNodeId::BuildHdrUniforms, "BuildHdrUniforms",
-     &PassSession::StepBuildHdrUniforms, kNoDeps, true},
+     &PassSession::StepBuildHdrUniforms, kNoDeps, StageInput::None, true},
 
     // -- model evaluation ---------------------------------------------------
     {PipelineNodeId::EnsureFeature, "EnsureFeature", &PassSession::StepEnsureFeature,
-     kNoDeps, false},
+     kNoDeps, StageInput::None, false},
     {PipelineNodeId::SnapshotGuides, "SnapshotGuides",
-     &PassSession::StepSnapshotGuides, kNoDeps, false},
+     &PassSession::StepSnapshotGuides, kNoDeps, StageInput::None, false},
     {PipelineNodeId::PrepareModelInput, "PrepareModelInput",
-     &PassSession::StepPrepareModelInput, kNoDeps, false},
+     &PassSession::StepPrepareModelInput, kNoDeps, StageInput::None, false},
     {PipelineNodeId::FillEvaluateParams, "FillEvaluateParams",
-     &PassSession::StepFillEvaluateParams, kNoDeps, false},
+     &PassSession::StepFillEvaluateParams, kNoDeps, StageInput::None, false},
     {PipelineNodeId::EvaluateFeature, "EvaluateFeature",
-     &PassSession::StepEvaluateFeature, kNoDeps, false},
+     &PassSession::StepEvaluateFeature, kNoDeps, StageInput::None, false},
     {PipelineNodeId::ModelOutputBarrier, "ModelOutputBarrier",
-     &PassSession::StepModelOutputBarrier, kNoDeps, false},
+     &PassSession::StepModelOutputBarrier, kNoDeps, StageInput::None, false},
 
     // -- composition --------------------------------------------------------
     {PipelineNodeId::ComposeModelOutput, "ComposeModelOutput",
-     &PassSession::StepComposeModelOutput, kNoDeps, false},
+     &PassSession::StepComposeModelOutput, kNoDeps, StageInput::None, false},
 
     // -- output -------------------------------------------------------------
     {PipelineNodeId::RenderDebugView, "RenderDebugView",
-     &PassSession::StepRenderDebugView, kNoDeps, false},
+     &PassSession::StepRenderDebugView, kNoDeps, StageInput::None, false},
     {PipelineNodeId::WriteToBackbuffer, "WriteToBackbuffer",
-     &PassSession::StepWriteToBackbuffer, kNoDeps, false},
+     &PassSession::StepWriteToBackbuffer, kNoDeps, StageInput::None, false},
+    // Reads run.list directly. Only safe because it is listed in PostDLSS,
+    // whose call site supplies the game's command list; StageInputsCoverSteps
+    // below turns moving it into Present into a build error.
     {PipelineNodeId::WriteToGameResource, "WriteToGameResource",
-     &PassSession::StepWriteToGameResource, kNoDeps, false},
+     &PassSession::StepWriteToGameResource, kNoDeps,
+     StageInput::CommandList | StageInput::OutputResource, false},
     {PipelineNodeId::SubmitAndWait, "SubmitAndWait", &PassSession::StepSubmitAndWait,
-     kNoDeps, false},
+     kNoDeps, StageInput::None, false},
 };
 
 // Every prerequisite these steps declare must be satisfiable, which means
@@ -1278,6 +1297,35 @@ static_assert(NoHdrAwareSteps(kPresentStepNodes, ArrayCount(kPresentStepNodes),
                               kSessionSteps, ArrayCount(kSessionSteps)),
               "a step in the Present stage is marked requires_hdr_aware, but "
               "Present is not HDR-capable so it would never run");
+
+// Every frame input a step declares must be one its stage's call site
+// actually supplies.
+//
+// This is the guard for the null-dereference class of table edit: the steps
+// are shared between stages, and the two call sites pass different things
+// (Present gets a swapchain and no command list, PostDLSS the reverse), so
+// moving one line between the step tables is enough to hand a step a null
+// pointer it dereferences. StepWriteToGameResource reads run.list, and reaches
+// it safely today only because it is listed in PostDLSS.
+//
+// The declaration on the step is the part the compiler cannot verify, so a
+// step that reads an input without declaring it still passes this check. What
+// it does verify is that no step is listed in a stage that cannot supply it.
+static_assert(
+    StageInputsCoverSteps(kPostDlssStepNodes, ArrayCount(kPostDlssStepNodes),
+                          kSessionSteps, ArrayCount(kSessionSteps),
+                          StageInput::CommandList | StageInput::OutputResource |
+                              StageInput::Stage),
+    "a session step in the PostDLSS stage needs an input the PostDLSS call "
+    "site does not supply");
+
+static_assert(
+    StageInputsCoverSteps(kPresentStepNodes, ArrayCount(kPresentStepNodes),
+                          kSessionSteps, ArrayCount(kSessionSteps),
+                          StageInput::Swapchain | StageInput::CommandQueue |
+                              StageInput::Stage),
+    "a session step in the Present stage needs an input the Present call site "
+    "does not supply");
 
 const PipelineStepDef* SessionStepFor(PipelineNodeId id) {
   for (const PipelineStepDef& def : kSessionSteps) {

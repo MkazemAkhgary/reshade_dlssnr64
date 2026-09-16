@@ -243,6 +243,50 @@ struct PassRun {
 
 using PipelineStepFn = PipelineStatus (*)(PassRun& run);
 
+// ---------------------------------------------------------------------------
+// Stage inputs
+// ---------------------------------------------------------------------------
+
+// The frame inputs a stage requires the caller to supply.
+//
+// Each stage is entered from a different call site with a different set of
+// things available: Present passes a swapchain and command queue but no
+// command list, PostDLSS passes the game's command list and output resource
+// but no swapchain. A step that needs something its stage does not receive
+// dereferences a null pointer — and because the steps are shared across
+// stages, moving one line in a step table is enough to create that.
+//
+// Declaring the requirement on both the step and the stage lets a compile-time
+// check prove the stage supplies everything its steps need, before any of them
+// run. This is the same mechanism as `depends_on`, one level up: depends_on
+// says "another step must have run first", required_inputs says "the caller
+// must have supplied this".
+enum class StageInput : uint32_t {
+  None = 0,
+  CommandList = 1u << 0,      // PassRun::list
+  Device = 1u << 1,           // PassRun::device
+  Swapchain = 1u << 2,        // PassRun::swapchain
+  CommandQueue = 1u << 3,     // PassRun::command_queue
+  OutputResource = 1u << 4,   // PassRun::output_resource
+  Backbuffer = 1u << 5,       // PassRun::backbuffer
+  Stage = 1u << 6,            // PassRun::stage (set by the runner itself)
+};
+
+constexpr StageInput operator|(StageInput a, StageInput b) {
+  return static_cast<StageInput>(static_cast<uint32_t>(a) |
+                                 static_cast<uint32_t>(b));
+}
+
+constexpr bool HasInput(StageInput set, StageInput bit) {
+  return (static_cast<uint32_t>(set) & static_cast<uint32_t>(bit)) != 0;
+}
+
+// True when `provided` covers every bit in `needed`.
+constexpr bool InputsCover(StageInput provided, StageInput needed) {
+  return (static_cast<uint32_t>(provided) & static_cast<uint32_t>(needed)) ==
+         static_cast<uint32_t>(needed);
+}
+
 struct PipelineStepDef {
   PipelineNodeId id;
   const char* name;
@@ -257,6 +301,17 @@ struct PipelineStepDef {
   // Named `depends_on` rather than `requires`: `requires` is a C++20 keyword
   // (it introduces a requires-clause) and cannot be used as a member name.
   const PipelineNodeId* depends_on;
+
+  // The frame inputs this step dereferences. Checked against the stage's
+  // required_inputs at compile time for the stages a step is listed in, and
+  // against the live PassRun by the runner at stage entry.
+  //
+  // Leaving this at None is a claim that the step is safe with every input
+  // null. That claim is not enforced by the language — it is enforced by the
+  // compile-time check, which trusts this field. So a step that dereferences
+  // an input and does not declare it here is a bug this system cannot catch;
+  // declaring it is what makes the rest work.
+  StageInput required_inputs = StageInput::None;
 
   // Set when this step cannot do its work without the HDR path, i.e. it reads
   // `PassRun::hdr` and has no meaningful SDR behaviour. The runner consults it
@@ -323,6 +378,15 @@ struct PipelineStageDef {
 
   // Ceiling on how many passes of this stage may run in one frame.
   uint32_t max_passes = 1;
+
+  // What this stage's call site promises to supply. The runner checks these
+  // against the actual PassRun before the first step runs and refuses to
+  // start the stage if one is missing, rather than letting a step dereference
+  // a null pointer several steps later.
+  //
+  // Stage is listed wherever steps read `run.stage` (which the runner sets
+  // itself, so it is always satisfied — it is listed to document intent).
+  StageInput required_inputs = StageInput::None;
 };
 
 // ---------------------------------------------------------------------------
@@ -473,6 +537,45 @@ constexpr bool NoHdrAwareSteps(const PipelineNodeId* steps, size_t step_count,
                     ? false
                     : NoHdrAwareSteps(steps, step_count, defs,
                                       def_count - 1));
+}
+
+// True when `provided` covers the required_inputs of `def`, which is listed in
+// `steps`.
+//
+// A step only has to be checked against the stages it actually appears in:
+// the histogram placeholders declare no inputs and are in no list, and a
+// definition shared between stages is checked once per stage.
+constexpr bool StepInputsCovered(const PipelineStepDef* def,
+                                 const PipelineNodeId* steps,
+                                 size_t step_count, StageInput provided) {
+  size_t index = 0;
+  return IndexOfNode(steps, step_count, def->id, &index)
+             ? InputsCover(provided, def->required_inputs)
+             : true;
+}
+
+// True when `provided` covers every input required by every step in `defs`
+// that `steps` lists.
+//
+// This is the check that makes a step table edit safe. Moving a step that
+// dereferences `run.list` from the PostDLSS stage (whose call site supplies a
+// command list) into the Present stage (whose call site passes nullptr) used to
+// be an unchecked null dereference several steps into the frame. With this
+// assertion in place it is a build error naming the step.
+//
+// The assertion is only as strong as each step's declared required_inputs: a
+// step that dereferences an input without declaring it passes. The declaration
+// is the part the language cannot verify, so it is where the care has to go.
+constexpr bool StageInputsCoverSteps(const PipelineNodeId* steps,
+                                     size_t step_count,
+                                     const PipelineStepDef* defs,
+                                     size_t def_count, StageInput provided) {
+  return def_count == 0
+             ? true
+             : (StepInputsCovered(defs + def_count - 1, steps, step_count,
+                                  provided) &&
+                StageInputsCoverSteps(steps, step_count, defs, def_count - 1,
+                                      provided));
 }
 
 // ---------------------------------------------------------------------------

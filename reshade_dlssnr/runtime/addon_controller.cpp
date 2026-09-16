@@ -372,14 +372,22 @@ constexpr PipelineNodeId kWriteDebugRequires[] = {PipelineNodeId::Count};
 constexpr PipelineNodeId kSignalHdrRequires[] = {PipelineNodeId::Count};
 
 constexpr PipelineStepDef kControllerSteps[] = {
+    // Reads run.list only to resolve the device, and skips cleanly when it is
+    // null, so it requires nothing: Present and Release both pass no list, and
+    // the step is listed in Release.
     {PipelineNodeId::EnsureHdr, "EnsureHdr", &RunEnsureHdr, kEnsureHdrRequires,
-     /*requires_hdr_aware=*/true},
+     /*required_inputs=*/StageInput::None, /*requires_hdr_aware=*/true},
     {PipelineNodeId::WriteDebugToBackbuffer, "WriteDebugToBackbuffer",
      &RunWriteDebugToBackbuffer, kWriteDebugRequires,
+     /*required_inputs=*/StageInput::Swapchain | StageInput::CommandQueue,
      /*requires_hdr_aware=*/false},
     {PipelineNodeId::SignalHdrAtPresent, "SignalHdrAtPresent",
-     &RunSignalHdrAtPresent, kSignalHdrRequires, /*requires_hdr_aware=*/false},
+     &RunSignalHdrAtPresent, kSignalHdrRequires,
+     /*required_inputs=*/StageInput::CommandQueue, /*requires_hdr_aware=*/false},
 };
+
+constexpr StageInput kReleaseStageInputs =
+    StageInput::Swapchain | StageInput::CommandQueue | StageInput::Stage;
 
 }  // namespace
 
@@ -402,5 +410,15 @@ static_assert(PrerequisitesPrecedeSteps(kReleaseStepNodes,
                                         ArrayCount(kControllerSteps)),
               "a controller step in the Release stage declares a prerequisite "
               "that runs after it, or that the stage never lists");
+
+// The Release stage is entered from RunSingleStage, which supplies the queue
+// and swapchain but no command list. A controller step that reached for
+// run.list without guarding it would dereference null here.
+static_assert(
+    StageInputsCoverSteps(kReleaseStepNodes, ArrayCount(kReleaseStepNodes),
+                          kControllerSteps, ArrayCount(kControllerSteps),
+                          kReleaseStageInputs),
+    "a controller step in the Release stage needs an input the Release call "
+    "site does not supply");
 
 }  // namespace reshade_dlssnr

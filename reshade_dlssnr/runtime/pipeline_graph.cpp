@@ -74,19 +74,88 @@ bool PipelineNodeValid(PipelineNodeId id) {
 //   pass_session.cpp  - setup, input, evaluation, composition, output
 //   hdr_state.cpp     - the histogram sub-steps
 //   debug_view.cpp    - the debug display dispatch
+//   addon_controller.cpp - the HDR lifecycle and backbuffer write
 //
 // They publish their step definitions through SessionStepFor / HdrStepFor /
-// DebugStepFor (declared in pipeline_graph.h) and FindPipelineStep() consults
-// them. Keeping the lookup here means the frame's shape is readable in one
-// file, while the bodies stay next to the state they touch.
+// DebugStepFor / ControllerStepFor (declared in pipeline_graph.h). Keeping the
+// lookup here means the frame's shape is readable in one file, while the
+// bodies stay next to the state they touch.
+//
+// The lookup is indexed by node id rather than scanning the four registries.
+// The cost of the scans was never the point — at ~120 lookups per frame the
+// difference is unmeasurable. What the index buys is a place to notice that
+// two registries claim the same node: the scans took the first match and the
+// second silently never ran, which is the same shape of defect as the
+// mis-flagged steps this file already guards against.
+//
+// Built once on first use. Single-threaded: the registries are constexpr data
+// with static lifetime, and the addon's frame work is serialised behind the
+// controller's mutex, so there is no race to lose.
+
+const PipelineStepDef* const* StepIndex() {
+  static const PipelineStepDef* index[kNodeNameCount + 1] = {};
+  // Which registry supplied each entry, so a duplicate can name the winner
+  // rather than just reporting that a collision happened.
+  static const char* owner[kNodeNameCount + 1] = {};
+  static bool built = false;
+  if (built) return index;
+
+  built = true;
+
+  // Sources, in the order FindPipelineStep used to consult them. The order is
+  // load bearing: on a duplicate the first registry wins, exactly as the
+  // previous if-chain did, so the resolution does not change.
+  struct Source {
+    const char* name;
+    const PipelineStepDef* (*lookup)(PipelineNodeId);
+  };
+  const Source sources[] = {
+      {"pass_session.cpp", &SessionStepFor},
+      {"hdr_state.cpp", &HdrStepFor},
+      {"debug_view.cpp", &DebugStepFor},
+      {"addon_controller.cpp", &ControllerStepFor},
+  };
+
+  for (const Source& source : sources) {
+    for (size_t i = 0; i < kNodeNameCount; ++i) {
+      const PipelineNodeId id = static_cast<PipelineNodeId>(i);
+      const PipelineStepDef* def = source.lookup(id);
+      if (def == nullptr) continue;
+
+      // A definition must describe the node it was found under: a registry
+      // returning a mismatched record would dispatch the wrong function.
+      if (def->id != id) {
+        char message[256];
+        std::snprintf(message, sizeof(message),
+                      "pipeline: %s returned a step for %s naming %s; ignoring "
+                      "it",
+                      source.name, PipelineNodeName(id),
+                      PipelineNodeName(def->id));
+        reshade::log::message(reshade::log::level::error, message);
+        continue;
+      }
+
+      if (index[i] != nullptr) {
+        char message[256];
+        std::snprintf(message, sizeof(message),
+                      "pipeline: %s defines a step for %s, which %s already "
+                      "defines; keeping %s (only one step can run)",
+                      source.name, PipelineNodeName(id), owner[i], owner[i]);
+        reshade::log::message(reshade::log::level::error, message);
+        continue;
+      }
+
+      index[i] = def;
+      owner[i] = source.name;
+    }
+  }
+
+  return index;
+}
 
 const PipelineStepDef* FindPipelineStep(PipelineNodeId id) {
   if (!PipelineNodeValid(id)) return nullptr;
-  if (const PipelineStepDef* def = SessionStepFor(id)) return def;
-  if (const PipelineStepDef* def = HdrStepFor(id)) return def;
-  if (const PipelineStepDef* def = DebugStepFor(id)) return def;
-  if (const PipelineStepDef* def = ControllerStepFor(id)) return def;
-  return nullptr;
+  return StepIndex()[static_cast<size_t>(id)];
 }
 
 // ---------------------------------------------------------------------------
@@ -288,6 +357,10 @@ const PipelineStageDef kPipelineStages[] = {
         /*hdr_capable=*/true,
         /*reads_dlss_output=*/true,
         /*max_passes=*/kMaxPasses,
+        // Entered from OnPostDlssEvaluate: the game's command list and output
+        // resource are supplied, the swapchain and queue are not.
+        /*required_inputs=*/StageInput::CommandList | StageInput::OutputResource |
+            StageInput::Stage,
     },
     {
         /*name=*/"Present",
@@ -302,6 +375,11 @@ const PipelineStageDef kPipelineStages[] = {
         /*hdr_capable=*/false,
         /*reads_dlss_output=*/false,
         /*max_passes=*/kMaxPasses,
+        // Entered from OnPresent: the swapchain and queue are supplied, the
+        // game's command list and output resource are not. Device and
+        // backbuffer are produced by this stage's own steps, not passed in.
+        /*required_inputs=*/StageInput::Swapchain | StageInput::CommandQueue |
+            StageInput::Stage,
     },
     {
         /*name=*/"Release",
@@ -316,6 +394,11 @@ const PipelineStageDef kPipelineStages[] = {
         /*hdr_capable=*/false,
         /*reads_dlss_output=*/false,
         /*max_passes=*/1,
+        // Entered from RunSingleStage, which supplies the queue and swapchain
+        // only. The release work is a backbuffer write and the HDR present
+        // signal, both of which need those.
+        /*required_inputs=*/StageInput::Swapchain | StageInput::CommandQueue |
+            StageInput::Stage,
     },
 };
 
@@ -364,6 +447,86 @@ bool PrerequisitesMet(const PipelineStepDef& def, const PassRun& run) {
   for (const PipelineNodeId* it = def.depends_on;
        *it != PipelineNodeId::Count; ++it) {
     if (!PipelineRunner::IsCompleted(run, *it)) return false;
+  }
+  return true;
+}
+
+// True when the run actually carries `input`.
+//
+// This mirrors the frame-input fields of PassRun. It deliberately reads the
+// live values rather than trusting the stage declaration: the declaration
+// states what the call site promises, and this is what verifies the promise
+// was kept. A stage that declares an input its caller does not supply fails
+// here instead of null-dereferencing inside a step.
+bool InputPresent(StageInput input, const PassRun& run) {
+  switch (input) {
+    case StageInput::CommandList:
+      return run.list != nullptr;
+    case StageInput::Device:
+      return run.device != nullptr;
+    case StageInput::Swapchain:
+      return run.swapchain != nullptr;
+    case StageInput::CommandQueue:
+      return run.command_queue != nullptr;
+    case StageInput::OutputResource:
+      return run.output_resource != nullptr;
+    case StageInput::Backbuffer:
+      return run.backbuffer != nullptr;
+    case StageInput::Stage:
+      return run.stage != nullptr;
+    case StageInput::None:
+      return true;
+  }
+  return true;
+}
+
+// Names the inputs in `set` that `run` does not carry.
+const char* InputName(StageInput input) {
+  switch (input) {
+    case StageInput::CommandList: return "CommandList";
+    case StageInput::Device: return "Device";
+    case StageInput::Swapchain: return "Swapchain";
+    case StageInput::CommandQueue: return "CommandQueue";
+    case StageInput::OutputResource: return "OutputResource";
+    case StageInput::Backbuffer: return "Backbuffer";
+    case StageInput::Stage: return "Stage";
+    case StageInput::None: return "None";
+  }
+  return "?";
+}
+
+void FormatMissingInputs(StageInput required, const PassRun& run, char* out,
+                         size_t out_size) {
+  out[0] = '\0';
+  size_t used = 0;
+  // Individual bits, walked as a fixed list so the set can grow without this
+  // function needing to change shape.
+  const StageInput all[] = {
+      StageInput::CommandList, StageInput::Device,     StageInput::Swapchain,
+      StageInput::CommandQueue, StageInput::OutputResource,
+      StageInput::Backbuffer,  StageInput::Stage,
+  };
+  for (StageInput input : all) {
+    if (!HasInput(required, input) || InputPresent(input, run)) continue;
+    const int n = std::snprintf(out + used, out_size - used, "%s%s",
+                                used == 0 ? "" : ",", InputName(input));
+    if (n <= 0) break;
+    used += static_cast<size_t>(n);
+    if (used >= out_size) break;
+  }
+}
+
+// True when the run supplies everything `stage` declares it requires.
+bool StageInputsMet(const PipelineStageDef& stage, const PassRun& run) {
+  const StageInput all[] = {
+      StageInput::CommandList, StageInput::Device,     StageInput::Swapchain,
+      StageInput::CommandQueue, StageInput::OutputResource,
+      StageInput::Backbuffer,  StageInput::Stage,
+  };
+  for (StageInput input : all) {
+    if (HasInput(stage.required_inputs, input) && !InputPresent(input, run)) {
+      return false;
+    }
   }
   return true;
 }
@@ -460,6 +623,37 @@ PipelineStatus PipelineRunner::RunStage(const PipelineStageDef& stage,
   if (tracing) {
     trace::Line("evt", "RunStage", run.session, "stage=%s steps=%u phases=%u",
                 stage.name, stage.step_count, stage.phase_count);
+  }
+
+  // Refuse to start a stage whose declared inputs the caller did not supply.
+  //
+  // The steps in a stage are shared with other stages, and the call sites
+  // differ in what they pass — Present has a swapchain and no command list,
+  // PostDLSS the reverse. Checking once here means a step that dereferences a
+  // frame input cannot be reached with a null one, so a table edit that moves
+  // a step into a stage whose call site does not provide what it needs fails
+  // immediately and visibly instead of as a null dereference part-way through
+  // the frame.
+  //
+  // Declared inputs are the contract; this is the enforcement. Deduplicated
+  // through the skip log because a mismatch is a static property of the
+  // configuration and would otherwise repeat every frame.
+  if (!StageInputsMet(stage, run)) {
+    char missing[128];
+    FormatMissingInputs(stage.required_inputs, run, missing, sizeof(missing));
+    if (ShouldLogSkip(run.session, stage.name, PipelineNodeId::Idle)) {
+      char message[384];
+      std::snprintf(message, sizeof(message),
+                    "pipeline: stage %s did not run: caller supplied no [%s], "
+                    "which the stage declares it needs",
+                    stage.name, missing);
+      reshade::log::message(reshade::log::level::error, message);
+    }
+    if (tracing) {
+      trace::Line("evt", "RunStage", run.session, "stage=%s ABORT missing=%s",
+                  stage.name, missing);
+    }
+    return PipelineStatus::SkipFrame;
   }
 
   uint32_t step_index = 0;
