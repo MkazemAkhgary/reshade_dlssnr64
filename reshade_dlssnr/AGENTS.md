@@ -44,7 +44,7 @@ reshade_dlssnr/
   runtime/
     addon_controller.h/.cpp      // controller facade; owns runtime + pass sessions + status
     pipeline_graph.h/.cpp        // declarative pipeline: stages, step tables, runner
-    pipeline_trace.h/.cpp        // DLSSNR_TRACE command-stream trace (regression oracle)
+    pipeline_trace.h/.cpp        // DLSSNR_TRACE command-stream trace (debug aid)
     runtime.h/.cpp               // model loading, patching, NGX init, parameter block
     command_context.h/.cpp       // command allocator/list/fence/barrier/state helpers
     feature_lifecycle.h/.cpp     // feature handle creation and rebuild state
@@ -235,30 +235,23 @@ which registry won. It also rejects a registry returning a definition whose
 `id` does not match the node it was looked up under, which would otherwise
 dispatch the wrong function.
 
-**Verifying an edit.** `tools/verify_pipeline_order.py` prints the step tables
-beside the ordered operations of the pre-refactor methods, read from git. Use
-it before and after any reordering:
+**Verifying an edit.** The step tables are the source of truth for order. The
+`static_assert`s above check coverage, prerequisites and declared inputs — not
+relative order, which nothing checks for you. When you reorder a table, read it
+back as a sequence and satisfy yourself that each operation still sits where it
+must run.
 
-```bash
-python tools/verify_pipeline_order.py            # auto-detect the oracle
-python tools/verify_pipeline_order.py <commit>   # pin a specific revision
-```
-
-It needs a revision whose `pass_session.cpp` still contains the old
-`OnPresent` / `OnPostDlssEvaluate`. Since the refactor landed, `HEAD` no
-longer qualifies, so with no argument the tool walks back from HEAD until it
-finds one and reports which it chose. Passing a refactored revision explicitly
-is rejected with a clear message rather than printing a meaningless
-comparison.
-
-It reports early-exit guards (frames abandoned inside a step) separately from
-sequential steps, because those legitimately differ between the two stages.
+The two stages legitimately differ inside their early-exit guards — a frame
+abandoned inside the method — and those live inside `EnsureFeature` rather than
+as steps, so the two tables are not expected to mirror each other.
 
 **Runtime tracing.** `pipeline_trace.cpp` writes a command-stream trace when
-`DLSSNR_TRACE=<path>` is set. Resource pointers are printed as stable
-first-seen indices, not raw addresses, because COM heaps recycle addresses and
-raw pointers would make two runs incomparable. This is the regression oracle
-for the refactor: build the pre-refactor tree, capture a trace, and diff.
+`DLSSNR_TRACE=<path>` is set. It is a debug aid, not a test harness: you reach
+for it when something crashes or behaves unexpectedly and the ReShade log does
+not explain why, because it shows the commands that were actually recorded and
+in what order, rather than what the code intends to do. Resource pointers are
+printed as stable first-seen indices, not raw addresses, so two captures stay
+comparable even though COM heaps recycle addresses between runs.
 
 **Every line names its frame.** A game frame is two streams, not one: the DLSS
 evaluate happens mid-frame and the present happens at the end, so one counter
@@ -284,17 +277,17 @@ SRV/UAV resource ids and the used prefix of the shader params (the trailing
 zeros carry no information). Steps add `TRACE_EVT` lines for decisions (a
 skip, a failure reason) that produce no GPU command.
 
-Diff two captures with:
+Read a capture with:
 
 ```bash
-python tools/diff_trace.py --summary before.log after.log   # counts per op
-python tools/diff_trace.py before.log after.log             # first divergence
+awk '$2 == "cmd" || $2 == "evt" {print $3}' trace.log \
+  | sort | uniq -c | sort -rn        # how many of each operation
 ```
 
-Run `--summary` first. It counts operations by type and flags the difference
-immediately, which is far easier to read than a line diff. A line diff
-desynchronises after the first difference, so only the first one is
-meaningful — the tool says so and prints both sides in context.
+Column 3 is the operation name, so that count is the quickest way to see what
+a frame actually consisted of. To compare a working run against a broken one,
+`diff` the two logs — but only the first divergence is meaningful, since
+everything below it is shifted rather than wrong.
 
 Bound the capture. Traces grow fast — every transition, barrier and dispatch
 is a line — so an unbounded capture from a menu screen is unreadable. Use a
@@ -612,7 +605,9 @@ stage-level method — the resource's state is only trustworthy at that point.
    This is the guard against the null-dereference class of table edit, so it is
    only as good as this declaration — leaving a read undeclared is the one
    mistake it cannot catch.
-7. Run `tools/verify_pipeline_order.py` to confirm nothing moved.
+7. Re-read the stage's step table. The guards check coverage, prerequisites
+   and declared inputs, but nothing checks that the new step sits at the right
+   point in the sequence.
 
 If the step belongs to a concern owned by another file, register it there
 instead — see the controller and `hdr_state.cpp` registries, and
@@ -668,10 +663,10 @@ Static checks that pass today:
 
 - 22 translation units compile clean under `/W3 /permissive- /std:c++20`.
 - The addon links, with `AddonInit` / `AddonUninit` exported.
-- `tools/verify_pipeline_order.py` confirms the step tables reproduce the
-  original operation order.
+- The pipeline guards — `NodeListsEqual`, `PrerequisitesPrecedeSteps`,
+  `NoHdrAwareSteps`, `StageInputsCoverSteps`, `PhasesCover` — hold, and the
+  build fails on them rather than the runtime.
 
-These are all static. The one check that can catch a mistake they cannot is a
-runtime trace diff: build the pre-refactor tree, run both with `DLSSNR_TRACE`
-set, and compare. Resource pointers are emitted as stable first-seen indices
-precisely so the two traces are comparable.
+These are all static, and none of them checks relative order. When a step
+table is reordered, that has to be re-read by hand; see "Verifying an edit"
+above.

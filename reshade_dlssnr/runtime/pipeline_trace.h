@@ -1,11 +1,12 @@
-// Command-stream tracing for verifying behavior-preserving pipeline changes.
+// Command-stream tracing, for inspecting what the addon actually did.
 //
 // This is a development aid, not part of the addon's runtime behavior. It
 // records every GPU-visible command the addon records (transitions, UAV
 // barriers, dispatches, copies, submits) plus every failure reason, into a
-// linear text log. Two builds that produce identical logs produce an
-// identical command stream, which is exactly the property a refactor of the
-// frame pipeline must preserve.
+// linear text log. Reach for it when something crashes or behaves
+// unexpectedly and the ReShade log does not say why: it shows the commands
+// that were actually recorded, in the order they were recorded, rather than
+// what the code intends.
 //
 // Enable with the environment variable DLSSNR_TRACE=<path>, e.g.
 //
@@ -20,10 +21,10 @@
 // diffs. See ResourceId() for the assignment rule.
 //
 // Every line also carries the two frame counters, so a frame reads straight
-// out of the log without matching markers. This weakens the "identical logs"
-// property above: a run that drops a frame shifts every later counter, so a
-// line diff diverges there. That is the useful direction — the divergence
-// names the frame that differs.
+// out of the log without matching markers. A run that drops a frame shifts
+// every later counter, so comparing two captures diverges at that point —
+// which is the useful direction, because the divergence names the frame that
+// differs.
 #pragma once
 
 #include <cstdint>

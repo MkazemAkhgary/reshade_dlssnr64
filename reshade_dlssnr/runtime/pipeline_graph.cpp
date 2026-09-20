@@ -186,7 +186,9 @@ const PipelineStepDef* FindPipelineStep(PipelineNodeId id) {
 //     SkipFrame.
 //   - PostDLSS, on ConsumeJustRebuilt, returns SkipFrame with no submit at all.
 //   - Both stages return early when the codec is not ready; neither submits.
-// Verify with: python tools/verify_pipeline_order.py
+// The guards check coverage and prerequisites, not relative order. Reordering
+// a table is on you: nothing fails the build if a step lands in the wrong
+// place.
 namespace {
 
 constexpr PipelineNodeId kPresentSteps[] = {
