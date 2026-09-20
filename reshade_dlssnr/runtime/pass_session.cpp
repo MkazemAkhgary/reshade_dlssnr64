@@ -779,13 +779,7 @@ PipelineStatus PassSession::StepBuildHdrUniforms(PassRun& run) {
   run.hdr_uniforms.exposure = run.hdr->Exposure();
   run.hdr_uniforms.white_point =
       run.hdr->WhitePoint() * std::max(settings.hdr_highlight_headroom, 0.01f);
-  switch (run.hdr->ResolvedFormat()) {
-    case HdrFormat::ScRgb: run.hdr_uniforms.format = 1; break;
-    case HdrFormat::Hdr10: run.hdr_uniforms.format = 2; break;
-    case HdrFormat::Sdr:
-    case HdrFormat::Auto:
-    default:               run.hdr_uniforms.format = 0; break;
-  }
+  run.hdr_uniforms.format = HdrFormatCode(run.hdr->ResolvedFormat());
   run.hdr_uniforms_ready = true;
   return PipelineStatus::Ok;
 }
@@ -1063,6 +1057,20 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
 // Grade
 // ---------------------------------------------------------------------------
 
+// Which encoding the grade will be reading and writing.
+//
+// One answer for all three grade targets. The composite output and the
+// backbuffer are built from the backbuffer's descriptor; the model input is
+// either that backbuffer, a scratch built from the same descriptor, or the
+// DLSS output clone — which is the resource HdrState detects the format from.
+//
+// A session whose HdrState was never initialized reports SDR, which is right
+// for a stage that does no HDR handling.
+static HdrFormat GradeFormat(const PassRun& run) {
+  if (run.hdr == nullptr) return HdrFormat::Sdr;
+  return run.hdr->ResolvedFormat();
+}
+
 PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
                                          const GradeSettings& grade) {
   PassSession* self = run.session;
@@ -1084,7 +1092,7 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
   if (!model_pipeline::ApplyGrade(
           self->command_, list, run.codec, target,
           self->resources_.GetScratch(kGradeScratchSlot), width, height,
-          grade)) {
+          GradeFormat(run), grade)) {
     self->FailForStep("failed to apply the grade");
     return PipelineStatus::Fail;
   }

@@ -93,6 +93,11 @@ bool ComposeOutput(
 // Where it comes from is the caller's business: a pass uses its grade scratch
 // slot, the Release stage uses the controller's.
 //
+// `format` is the HdrFormat of the target, and the grade needs it: it decodes
+// the image to linear light, grades there, and re-encodes, so it has to know
+// which of the three encodings it is looking at. Every target here tracks the
+// backbuffer's encoding, so the caller resolves it once from HdrState.
+//
 // A disabled grade is a no-op that returns true, so callers do not have to
 // test `enabled` themselves — but they should still skip the resource setup
 // that only a graded frame needs.
@@ -106,6 +111,7 @@ bool ApplyGrade(CommandContext& state,
                 ID3D12Resource* scratch,
                 unsigned int width,
                 unsigned int height,
+                HdrFormat format,
                 const GradeSettings& grade);
 
 }  // namespace reshade_dlssnr::model_pipeline

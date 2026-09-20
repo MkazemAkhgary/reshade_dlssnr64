@@ -114,6 +114,7 @@ bool ApplyGrade(CommandContext& state,
                 ID3D12Resource* scratch,
                 unsigned int width,
                 unsigned int height,
+                HdrFormat format,
                 const GradeSettings& grade) {
   // A disabled grade costs nothing and needs no resources, so callers that
   // would rather not branch on it do not have to.
@@ -133,6 +134,13 @@ bool ApplyGrade(CommandContext& state,
       static_cast<float>(static_cast<int>(grade.luma_mode));
   constants.params[kGradeSlotBase + 3] =
       static_cast<float>(static_cast<int>(grade.chroma_mode));
+  constants.params[kGradeSlotBase + 4] = grade.black_point;
+  constants.params[kGradeSlotBase + 5] = grade.white_point;
+  constants.params[kGradeSlotBase + 6] = grade.contrast;
+  constants.params[kGradeSlotBase + 7] = grade.shadows;
+  constants.params[kGradeSlotBase + 8] = grade.highlights;
+  constants.params[kGradeSlotBase + 9] =
+      static_cast<float>(HdrFormatCode(format));
 
   // Same shape as the input snapshot in StepResolveModelInput: park the source
   // in COPY_SOURCE, land the copy in the scratch, then read the scratch and

@@ -1000,11 +1000,13 @@ const char* const kGradeLumaModeItems[] = {"Gain", "Gamma", "Lift", "Soft"};
 constexpr int kGradeLumaModeCount = 4;
 const char* const kGradeLumaModeTips[] = {
     "Multiply luminance by 2^amount. The classic exposure control: an equal "
-    "push either way, and it clips at white.",
+    "push either way. The grade runs in linear light, so a highlight brighter "
+    "than white scales with everything else instead of being clipped.",
     "Raise luminance to a power. Black stays black and white stays white, so "
     "the effect concentrates in the midtones.",
-    "Offset each pixel by the room it has left in the direction it is going, "
-    "so shadows move further than highlights do.",
+    "Raise the black level. Each pixel moves up by the room above it, or down "
+    "by the room below it when the amount is negative, so nothing crosses an "
+    "end of the range.",
     "A parabolic lift, zero at both ends and strongest at mid grey. The one "
     "to reach for when a large amount would otherwise clip."};
 
@@ -1027,6 +1029,11 @@ const char* const kGradeChromaModeTips[] = {
 // modes are alternatives for the same job, and so are the chroma modes. Only
 // the selected one runs, which is what stops two algorithms from each
 // re-deriving the value the other just changed.
+//
+// Rows are in the order the shader applies them: levels, then shaping, then
+// the luma operator, then chroma. Reading the panel top to bottom is reading
+// the chain, so a level set here is already in force for the operator below
+// it.
 void DrawGradeSection(const char* id,
                       const char* label,
                       const char* tooltip,
@@ -1043,6 +1050,39 @@ void DrawGradeSection(const char* id,
   ImGui::TextUnformatted(label);
 
   WithDisabled(!grade.enabled, [&] {
+    changed |= DrawFloatRow(0, "black_point", "Black Point",
+                            "The linear value that becomes black. Raising it "
+                            "crushes the shadows: everything below it goes to "
+                            "black and the rest is stretched to fill the "
+                            "range. Lowering it lifts black to a dark grey.",
+                            &grade.black_point, nullptr, 0.0f,
+                            kGradeBlackPointMin, kGradeBlackPointMax, 0.0f);
+
+    changed |= DrawFloatRow(0, "white_point", "White Point",
+                            "The linear value that becomes white. Lowering it "
+                            "brightens the whole image rather than only the "
+                            "top end; raising it pulls the highlights down.",
+                            &grade.white_point, nullptr, 1.0f,
+                            kGradeWhitePointMin, kGradeWhitePointMax, 1.0f);
+
+    changed |= DrawFloatRow(0, "contrast", "Contrast",
+                            "Stretches the image around mid grey. Positive "
+                            "steepens, negative flattens.",
+                            &grade.contrast, nullptr, 0.0f, -1.0f, 1.0f, 0.0f);
+
+    changed |= DrawFloatRow(0, "shadows", "Shadows",
+                            "Scales the dark end. Fades out before it reaches "
+                            "white, so it cannot wash the image out on its "
+                            "own.",
+                            &grade.shadows, nullptr, 0.0f, -1.0f, 1.0f, 0.0f);
+
+    changed |= DrawFloatRow(0, "highlights", "Highlights",
+                            "Scales the bright end. Fades out before it "
+                            "reaches black, so it cannot crush the shadows on "
+                            "its own.",
+                            &grade.highlights, nullptr, 0.0f, -1.0f, 1.0f,
+                            0.0f);
+
     int luma_mode = static_cast<int>(grade.luma_mode);
     if (DrawComboRow("luma_mode", "Luma Mode",
                      "Which algorithm brightness uses. These are alternatives "

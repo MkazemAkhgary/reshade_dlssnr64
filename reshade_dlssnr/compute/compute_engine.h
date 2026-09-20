@@ -36,8 +36,8 @@ namespace reshade_dlssnr {
 // writes those slots in the same dispatch, so they need no region.
 //
 //   [0,  kShaderParamCount)  the kShaderParams table (per-pass sliders)
-//   [8,  16)                 the colour grade block
-//   [16, 24)                 the residual edit block
+//   [8,  24)                 the colour grade block
+//   [24, 32)                 the residual edit block
 //   [32, 40)                 the HDR uniforms
 //
 // Gaps between regions are deliberate headroom, not waste: they let a region
@@ -47,8 +47,8 @@ namespace reshade_dlssnr {
 // asserts below prove the regions cannot overlap or run off the end.
 constexpr uint32_t kShaderParamSlotBase = 0;
 constexpr uint32_t kGradeSlotBase = 8;
-constexpr uint32_t kGradeSlotCount = 8;
-constexpr uint32_t kResidualSlotBase = 16;
+constexpr uint32_t kGradeSlotCount = 16;
+constexpr uint32_t kResidualSlotBase = 24;
 constexpr uint32_t kResidualSlotCount = 8;
 constexpr uint32_t kHdrSlotBase = 32;
 constexpr uint32_t kHdrSlotCount = 8;

@@ -65,10 +65,14 @@ std::string PassEnabledKey(uint32_t index) {
   return "Pass" + std::to_string(index + 1) + "Enabled";
 }
 
-float ClampGradeAmount(float v) {
-  if (v < -1.0f) return -1.0f;
-  if (v > 1.0f) return 1.0f;
+float ClampRange(float v, float lo, float hi) {
+  if (v < lo) return lo;
+  if (v > hi) return hi;
   return v;
+}
+
+float ClampGradeAmount(float v) {
+  return ClampRange(v, -1.0f, 1.0f);
 }
 
 // Grade persistence, shared by the per-pass grades and the backbuffer one.
@@ -102,8 +106,26 @@ void LoadGrade(const std::string& prefix, GradeSettings& grade) {
   }
   grade.chroma_mode = static_cast<GradeChromaMode>(chroma_mode);
 
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "BlackPoint").c_str(), grade.black_point);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "WhitePoint").c_str(), grade.white_point);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "Contrast").c_str(), grade.contrast);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "Shadows").c_str(), grade.shadows);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "Highlights").c_str(), grade.highlights);
+
   grade.luma = ClampGradeAmount(grade.luma);
   grade.chroma = ClampGradeAmount(grade.chroma);
+  grade.black_point =
+      ClampRange(grade.black_point, kGradeBlackPointMin, kGradeBlackPointMax);
+  grade.white_point =
+      ClampRange(grade.white_point, kGradeWhitePointMin, kGradeWhitePointMax);
+  grade.contrast = ClampGradeAmount(grade.contrast);
+  grade.shadows = ClampGradeAmount(grade.shadows);
+  grade.highlights = ClampGradeAmount(grade.highlights);
 }
 
 void SaveGrade(const std::string& prefix, const GradeSettings& grade) {
@@ -119,6 +141,16 @@ void SaveGrade(const std::string& prefix, const GradeSettings& grade) {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             (prefix + "ChromaMode").c_str(),
                             static_cast<int>(grade.chroma_mode));
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "BlackPoint").c_str(), grade.black_point);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "WhitePoint").c_str(), grade.white_point);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "Contrast").c_str(), grade.contrast);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "Shadows").c_str(), grade.shadows);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "Highlights").c_str(), grade.highlights);
 }
 
 // Residual edit persistence. One value today; kept beside the grade pair so

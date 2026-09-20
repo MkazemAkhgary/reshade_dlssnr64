@@ -89,6 +89,11 @@ class AddonController {
   // list. Like PresentDebugOutput, this records and leaves the submit to
   // RunSingleStage.
   //
+  // The backbuffer's encoding comes from the controller's own HdrState, which
+  // is the same source the compose uses to encode into it. A controller that
+  // never went through HDR handling reports SDR, and its backbuffer is the
+  // game's own SDR image.
+  //
   // The grade needs somewhere to park the source before overwriting it, and
   // the Release stage has no PassResources, so the scratch lives here.
   void GradeBackbuffer(ComputeEngine& codec,

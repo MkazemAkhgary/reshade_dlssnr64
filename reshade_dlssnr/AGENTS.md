@@ -590,6 +590,7 @@ pins which floats belong to whom:
 |---|---|---|
 | `kShaderParamSlotBase` | 0 | the `kShaderParams` table |
 | `kGradeSlotBase` | 8 | the colour grade block |
+| `kResidualSlotBase` | 24 | the residual edit block |
 | `kHdrSlotBase` | 32 | the HDR uniforms |
 
 `static_assert`s prove the regions cannot overlap or run off the end of the

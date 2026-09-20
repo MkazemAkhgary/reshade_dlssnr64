@@ -172,7 +172,7 @@ void AddonController::GradeBackbuffer(ComputeEngine& codec,
 
   if (!model_pipeline::ApplyGrade(release_command_, list, &codec,
                                   backbuffer.Get(), grade_scratch_.Get(), width,
-                                  height, grade)) {
+                                  height, hdr_.ResolvedFormat(), grade)) {
     TRACE_EVT(this, "grade_backbuffer_failed");
     return;
   }

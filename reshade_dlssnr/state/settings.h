@@ -32,6 +32,20 @@ enum class HdrFormat : int {
   Hdr10 = 3,   // PQ (ST.2084)
 };
 
+// The code the shaders read, which is not the enum's own value: 0 is sRGB,
+// 1 is scRGB and 2 is HDR10. Auto is a request, not an encoding, so it
+// resolves to SDR here — by the time a shader sees a format the resource has
+// already been detected and the enum is no longer Auto.
+inline int HdrFormatCode(HdrFormat format) {
+  switch (format) {
+    case HdrFormat::ScRgb: return 1;
+    case HdrFormat::Hdr10: return 2;
+    case HdrFormat::Auto:
+    case HdrFormat::Sdr:
+    default: return 0;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Residual edit
 // ---------------------------------------------------------------------------
@@ -102,6 +116,11 @@ enum class GradeChromaMode : int {
 
 // One grade. Where it is applied is decided by which field holds it, not by
 // anything in here.
+//
+// The grade runs in linear light, so every value below is a linear-light
+// quantity rather than a display-encoded one. That is what keeps a bright
+// highlight's shape instead of flattening it: the operators act on the light
+// the pixels actually carry.
 struct GradeSettings {
   bool enabled = false;
 
@@ -112,7 +131,34 @@ struct GradeSettings {
 
   GradeLumaMode luma_mode = GradeLumaMode::Gamma;
   GradeChromaMode chroma_mode = GradeChromaMode::Saturation;
+
+  // Levels, applied to linear luma before anything else.
+  //
+  // Black point is the linear value mapped to black. Raising it crushes the
+  // floor — everything below it goes to black and the rest is stretched to
+  // fill the range. Lowering it lifts the floor instead, so black becomes a
+  // dark grey. White point is the linear value mapped to white, so lowering
+  // it brightens the image rather than only touching the top end.
+  float black_point = 0.0f;   // [kGradeBlackPointMin, kGradeBlackPointMax]
+  float white_point = 1.0f;   // [kGradeWhitePointMin, kGradeWhitePointMax]
+
+  // Contrast, a stretch around mid grey. Positive steepens, negative flattens.
+  float contrast = 0.0f;      // [-1, 1]
+
+  // Region-weighted scales. Shadows moves the dark end and highlights the
+  // bright end, each fading out before it reaches the other, so neither can
+  // flatten the image on its own.
+  float shadows = 0.0f;       // [-1, 1]
+  float highlights = 0.0f;    // [-1, 1]
 };
+
+// The two level ranges are named because the loader clamps to them and the UI
+// draws sliders over them: a slider wider than the clamp is a control that
+// springs back when the config is reloaded.
+constexpr float kGradeBlackPointMin = -0.25f;
+constexpr float kGradeBlackPointMax = 0.25f;
+constexpr float kGradeWhitePointMin = 0.2f;
+constexpr float kGradeWhitePointMax = 4.0f;
 
 struct PassSettings {
   int preset = 1;

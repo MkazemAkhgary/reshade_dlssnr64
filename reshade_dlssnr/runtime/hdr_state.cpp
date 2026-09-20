@@ -219,7 +219,7 @@ void HdrState::BeginFrame(CommandContext& cmd,
     std::snprintf(
         msg, sizeof(msg),
         "HDR: DLSS output format=%d detected=%d (0=SDR,1=scRGB,2=HDR10)",
-        static_cast<int>(raw_fmt), static_cast<int>(resolved_format_));
+        static_cast<int>(raw_fmt), HdrFormatCode(resolved_format_));
     reshade::log::message(reshade::log::level::info, msg);
     have_logged_format_ = true;
   }
