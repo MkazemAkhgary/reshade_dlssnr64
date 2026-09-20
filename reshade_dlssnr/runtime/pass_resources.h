@@ -18,9 +18,13 @@ using RetireCallback = void (*)(ID3D12Resource* resource, void* user_data);
 // blend helpers, etc.). Slots are created lazily at whatever size/format
 // is requested and reused across frames until the requested size changes.
 //
-// Slot 0 is reserved for the Post-DLSS multi-pass input snapshot.
-// Slot 1 is reserved for the frame debug output.
-// Slot 2 is reserved for the colour grade's in-place ping-pong.
+// Slot 0 holds the Post-DLSS multi-pass input snapshot and slot 2 the colour
+// grade's in-place ping-pong; slot 1 is free.
+//
+// The frame debug output is deliberately not here. It lives in the
+// controller's FrameDebugContext, because the Release stage copies it to the
+// backbuffer after every pass has finished, so it has to outlive the pass
+// session that rendered it.
 constexpr uint32_t kScratchCount = 4;
 constexpr uint32_t kInputSnapshotSlot = 0;
 constexpr uint32_t kGradeScratchSlot = 2;

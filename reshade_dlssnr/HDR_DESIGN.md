@@ -415,6 +415,11 @@ and adding `EnsureHistogram` / `GetHistogram` to `PassResources`. That is not
 what was built — the histogram is a single buffer owned by the object that
 measures into it, which keeps the scratch pool free for pass textures.
 
+That decision stands, but the pool has since gained a consumer: the colour
+grade took slot 2 for its in-place ping-pong (`kGradeScratchSlot`). Slot 1 is
+unused, and `kScratchCount` is still 4. See `runtime/pass_resources.h` for the
+current list.
+
 ## Edge cases and known limitations
 
 1. **Readback latency.** 3 frames of ring buffer. With the Responsiveness

@@ -560,11 +560,55 @@ tracing is off, because names are only ever read from trace arguments.
 The descriptor layout is fixed: `kSrvCount` SRVs, `kUavCount` UAVs, one CBV.
 Fill unused slots with a repeated valid resource.
 
+The CBV is `ComputeConstants`, and a pass that wants to read it declares the
+whole thing:
+
+```hlsl
+cbuffer Params : register(b0)
+{
+    uint  gWidth;
+    uint  gHeight;
+    float4 gParams[12];   // 16-byte header + 48 floats = the 256-byte ceiling
+};
+```
+
+Declaring a shorter cbuffer is legal — the shader just reads no parameters
+(`kPrepareModelInput` is a pure copy and declares only the header). What you
+must not do is declare `gParams` at a size that does not match, because the
+offsets are what the region map below is about.
+
 ### A new shader parameter
 
 Add one line to `kShaderParams` in `compute/shader_params.h`. It appears
-automatically in the UI, persists to settings, and is available in the
-shader cbuffer at `gParams[i]`.
+automatically in the UI, persists to settings, and lands in the shader at
+`gParams[i]` — written from `constants.params[kShaderParamSlotBase + i]`.
+
+**Read the region map in `compute/compute_engine.h` before you add one.** It
+pins which floats belong to whom:
+
+| Region | Floats | Owner |
+|---|---|---|
+| `kShaderParamSlotBase` | 0 | the `kShaderParams` table |
+| `kGradeSlotBase` | 8 | the colour grade block |
+| `kHdrSlotBase` | 32 | the HDR uniforms |
+
+`static_assert`s prove the regions cannot overlap or run off the end of the
+48-float array, so a parameter that would collide fails the build instead of
+silently overwriting the exposure — which is what used to happen, and produced
+a wrong image with nothing in the log.
+
+Two separate limits, and they are not the same number:
+
+- The **table region** is floats `0..8`. There are seven parameters today, so
+  one more fits and a ninth trips `kShaderParamCount <= kGradeSlotBase`. The
+  message tells you to move `kGradeSlotBase` up, which is the intended fix.
+- `kShaderParamCapacity` in `state/settings.h` is the size of the persisted
+  `params` / `inherit_params` arrays. It is hand-written on purpose rather than
+  derived from the table, so adding a parameter does not resize the saved
+  struct.
+
+Passes with a private layout — the histogram pair, `TonemapForward`,
+`DebugDisplay` — start their own parameters at 0 and are not part of this map.
 
 ### A new debug view
 
