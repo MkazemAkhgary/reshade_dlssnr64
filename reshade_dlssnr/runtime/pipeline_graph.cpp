@@ -35,6 +35,7 @@ const char* const kNodeNames[] = {
     "BuildHdrUniforms",
     "TonemapForward",
     "PrepareModelInput",
+    "GradeModelInput",
     "EnsureFeature",
     "SnapshotGuides",
     "FillEvaluateParams",
@@ -42,10 +43,12 @@ const char* const kNodeNames[] = {
     "ModelOutputBarrier",
     "ComposeModelOutput",
     "ComposeModelOutputHdr",
+    "GradeModelOutput",
     "RenderDebugView",
     "WriteToBackbuffer",
     "WriteToGameResource",
     "SubmitAndWait",
+    "GradeBackbuffer",
     "WriteDebugToBackbuffer",
     "SignalHdrAtPresent",
 };
@@ -202,10 +205,12 @@ constexpr PipelineNodeId kPresentSteps[] = {
     PipelineNodeId::EnsureComputeEngine,
     PipelineNodeId::ResolveModelInput,    // backbuffer -> SRV
     PipelineNodeId::PrepareModelInput,
+    PipelineNodeId::GradeModelInput,
     PipelineNodeId::FillEvaluateParams,
     PipelineNodeId::EvaluateFeature,
     PipelineNodeId::ModelOutputBarrier,
     PipelineNodeId::ComposeModelOutput,
+    PipelineNodeId::GradeModelOutput,
     PipelineNodeId::RenderDebugView,
     PipelineNodeId::WriteToBackbuffer,
     PipelineNodeId::SubmitAndWait,        // includes CleanupFrameState
@@ -216,9 +221,10 @@ constexpr PipelinePhaseDef kPresentPhases[] = {
     {"feature", 5, 2, nullptr},
     {"snapshot", 7, 1, nullptr},
     {"input", 8, 1, nullptr},
-    {"evaluate", 9, 4, nullptr},
-    {"compose", 13, 1, nullptr},
-    {"output", 14, 3, nullptr},
+    {"prepare", 9, 2, nullptr},
+    {"evaluate", 11, 3, nullptr},
+    {"compose", 14, 2, nullptr},
+    {"output", 16, 3, nullptr},
 };
 
 // -- Post-DLSS stage --------------------------------------------------------
@@ -245,10 +251,12 @@ constexpr PipelineNodeId kPostDlssSteps[] = {
     PipelineNodeId::SnapshotGuides,
     PipelineNodeId::BuildHdrUniforms,
     PipelineNodeId::PrepareModelInput,
+    PipelineNodeId::GradeModelInput,
     PipelineNodeId::FillEvaluateParams,
     PipelineNodeId::EvaluateFeature,
     PipelineNodeId::ModelOutputBarrier,
     PipelineNodeId::ComposeModelOutput,
+    PipelineNodeId::GradeModelOutput,
     PipelineNodeId::RenderDebugView,
     PipelineNodeId::WriteToGameResource,  // includes CleanupFrameState
 };
@@ -258,20 +266,22 @@ constexpr PipelinePhaseDef kPostDlssPhases[] = {
                                 // EnsureComputeEngine, HdrBeginFrame
     {"resources", 4, 4, nullptr},
     {"feature", 8, 3, nullptr},
-    {"evaluate", 11, 4, nullptr},
-    {"compose", 15, 1, nullptr},
-    {"output", 16, 3, nullptr},
+    {"prepare", 11, 3, nullptr},
+    {"evaluate", 14, 3, nullptr},
+    {"compose", 17, 2, nullptr},
+    {"output", 19, 2, nullptr},
 };
 
 // -- Release stage ----------------------------------------------------------
 // Was: the tail of AddonController::OnPresent.
 constexpr PipelineNodeId kReleaseSteps[] = {
+    PipelineNodeId::GradeBackbuffer,
     PipelineNodeId::WriteDebugToBackbuffer,
     PipelineNodeId::SignalHdrAtPresent,
 };
 
 constexpr PipelinePhaseDef kReleasePhases[] = {
-    {"present", 0, 2, nullptr},
+    {"present", 0, 3, nullptr},
 };
 
 constexpr size_t kPresentStepCount =

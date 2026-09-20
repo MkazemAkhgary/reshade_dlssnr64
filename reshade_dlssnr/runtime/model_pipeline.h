@@ -5,6 +5,7 @@
 #include "command_context.h"
 #include "compute_engine.h"
 #include "pass_resources.h"
+#include "settings.h"
 
 namespace reshade_dlssnr::model_pipeline {
 
@@ -69,5 +70,35 @@ bool ComposeOutput(
     unsigned int full_height,
     const float* params,
     const HdrUniforms* hdr = nullptr);
+
+// Applies a grade to `target` in place, reading it through `scratch`.
+//
+// In place because every call site wants the result where the original was:
+// the model reads the working input, the compose step publishes the
+// composite, and the Release stage writes the backbuffer. A compute dispatch
+// cannot read and write one resource, so the source is copied into `scratch`
+// first and the dispatch reads that. The copy is the price of grading in
+// place, and it is cheaper than threading an override pointer through every
+// consumer of each of those three images.
+//
+// `scratch` must be a UAV-capable texture at the same size and format as
+// `target`, and must not be one the caller is already using for the frame.
+// Where it comes from is the caller's business: a pass uses its grade scratch
+// slot, the Release stage uses the controller's.
+//
+// A disabled grade is a no-op that returns true, so callers do not have to
+// test `enabled` themselves — but they should still skip the resource setup
+// that only a graded frame needs.
+//
+// Leaves `target` in UNORDERED_ACCESS. The caller transitions it back to
+// whatever its own pipeline expects.
+bool ApplyGrade(CommandContext& state,
+                ID3D12GraphicsCommandList* command_list,
+                ComputeEngine* codec,
+                ID3D12Resource* target,
+                ID3D12Resource* scratch,
+                unsigned int width,
+                unsigned int height,
+                const GradeSettings& grade);
 
 }  // namespace reshade_dlssnr::model_pipeline

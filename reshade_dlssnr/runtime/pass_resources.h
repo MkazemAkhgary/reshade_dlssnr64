@@ -20,8 +20,10 @@ using RetireCallback = void (*)(ID3D12Resource* resource, void* user_data);
 //
 // Slot 0 is reserved for the Post-DLSS multi-pass input snapshot.
 // Slot 1 is reserved for the frame debug output.
+// Slot 2 is reserved for the colour grade's in-place ping-pong.
 constexpr uint32_t kScratchCount = 4;
 constexpr uint32_t kInputSnapshotSlot = 0;
+constexpr uint32_t kGradeScratchSlot = 2;
 
 class PassResources {
  public:

@@ -95,6 +95,8 @@ class PassSession {
   static PipelineStatus StepEvaluateFeature(PassRun& run);
   static PipelineStatus StepModelOutputBarrier(PassRun& run);
   static PipelineStatus StepComposeModelOutput(PassRun& run);
+  static PipelineStatus StepGradeModelInput(PassRun& run);
+  static PipelineStatus StepGradeModelOutput(PassRun& run);
   static PipelineStatus StepRenderDebugView(PassRun& run);
   static PipelineStatus StepWriteToBackbuffer(PassRun& run);
   static PipelineStatus StepWriteToGameResource(PassRun& run);
@@ -110,6 +112,18 @@ class PassSession {
   // left a reason behind, which the status UI relies on. Passing nullptr
   // keeps an existing reason_ rather than blanking it.
   void FailForStep(const char* reason);
+
+  // Grades `target` in place, through the pass's grade scratch slot. A
+  // disabled grade, a missing target or a missing device is a clean no-op, so
+  // the two grade steps do not have to guard those themselves.
+  //
+  // The scratch is sized from the target's own descriptor rather than from the
+  // frame geometry: CopyResource demands identical descriptors, so deriving
+  // the scratch from anything else is exactly how a size or format mismatch
+  // gets in.
+  static PipelineStatus GradeInPlace(PassRun& run,
+                                     ID3D12Resource* target,
+                                     const GradeSettings& grade);
 
   // Fills `run` with this session's owners and the pass-level frame inputs.
   // The runner supplies the rest as steps run.

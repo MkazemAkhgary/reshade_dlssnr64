@@ -701,6 +701,120 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
 }  // namespace
 
+constexpr const char* kApplyGrade = R"(
+cbuffer Params : register(b0)
+{
+    uint  gWidth;
+    uint  gHeight;
+    float4 gParams[12];
+};
+
+// Grade block, at kGradeSlotBase = float 8 = gParams[2]. See the region map
+// in compute_engine.h.
+#define kLuma       gParams[2].x
+#define kChroma     gParams[2].y
+#define kLumaMode   gParams[2].z
+#define kChromaMode gParams[2].w
+
+Texture2D<float4> gSource : register(t0);
+RWTexture2D<float4> gOutput : register(u0);
+SamplerState s0 : register(s0);
+
+static const float3 kLuma709 = float3(0.2126, 0.7152, 0.0722);
+
+// --- Luma ------------------------------------------------------------------
+//
+// Each mode maps a luma to a new luma for an amount in [-1, 1], where 0 means
+// unchanged. They differ in where in the range they act and in what they do
+// at the ends, which is the whole reason the UI has a combo rather than a
+// stack: they are alternatives, not layers.
+
+float GradeLuma(float y, float amount, int mode)
+{
+    if (amount == 0.0)
+        return y;
+
+    if (mode == 0) {
+        // Gain. Exponential so the control is symmetric: +1 doubles and -1
+        // halves. Clips at white, which is what an exposure control does.
+        return y * exp2(amount);
+    } else if (mode == 1) {
+        // Gamma. Endpoints are fixed, so it neither clips nor lifts black and
+        // the effect concentrates in the midtones.
+        return pow(saturate(y), exp2(-amount));
+    } else if (mode == 2) {
+        // Lift. Moves a pixel by the room left in the direction it is going,
+        // so a shadow travels further than a highlight and white stays white.
+        return amount > 0.0 ? lerp(y, 1.0, amount) : y * (1.0 + amount);
+    }
+
+    // Soft. A parabolic lift, zero at both ends and strongest at mid grey, so
+    // the middle opens up while black and white stay put. This is the one to
+    // reach for when a large amount would otherwise clip.
+    return saturate(y + amount * y * (1.0 - y) * 2.0);
+}
+
+// --- Chroma ----------------------------------------------------------------
+
+float3 GradeChroma(float3 c, float amount, int mode)
+{
+    if (amount == 0.0)
+        return c;
+
+    float y = dot(c, kLuma709);
+    float scale = 1.0 + amount;
+
+    if (mode == 0) {
+        // Saturation. A straight blend toward luma, so every pixel moves by
+        // the same factor. The predictable default.
+        return lerp(float3(y, y, y), c, scale);
+    } else if (mode == 1) {
+        // Vibrance. The scale is weighted by how muted the pixel already is:
+        // colours near grey move at full strength and vivid ones at half, so
+        // a vivid pixel still responds to the control instead of being frozen
+        // out of it.
+        float spread = max(max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b)), 0.0);
+        return lerp(float3(y, y, y), c, 1.0 + amount * (1.0 - 0.5 * saturate(spread)));
+    }
+
+    // ChromaGain. Scale only the chroma channels of a YCbCr decomposition, so
+    // luma passes through untouched. Use when saturation must not move
+    // brightness at all.
+    float cb = (c.b - y) / 1.8556;
+    float cr = (c.r - y) / 1.5748;
+    cb *= scale;
+    cr *= scale;
+
+    float3 result;
+    result.r = y + 1.5748 * cr;
+    result.g = y - 0.1873 * cb - 0.4681 * cr;
+    result.b = y + 1.8556 * cb;
+    return result;
+}
+
+[numthreads(8, 8, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= gWidth || id.y >= gHeight)
+        return;
+
+    float2 uv = (float2(id.xy) + 0.5) / float2(gWidth, gHeight);
+    float4 src = gSource.SampleLevel(s0, uv, 0);
+
+    float y = dot(src.rgb, kLuma709);
+    float new_y = GradeLuma(y, kLuma, (int)(kLumaMode + 0.5));
+
+    // Scale all three channels to hit the new luma rather than adding to it,
+    // which keeps hue where it was. A pixel at black has no ratio to scale, so
+    // it takes the value directly — otherwise Lift could never raise it.
+    float3 graded = y > 1e-4 ? src.rgb * (new_y / y) : float3(new_y, new_y, new_y);
+
+    graded = GradeChroma(graded, kChroma, (int)(kChromaMode + 0.5));
+
+    gOutput[id.xy] = float4(saturate(graded), src.a);
+}
+)";
+
 const ComputePassDef kComputePasses[] = {
     {"ZeroHistogram",         kZeroHistogram},
     {"BuildHistogram",        kBuildHistogram},
@@ -709,6 +823,7 @@ const ComputePassDef kComputePasses[] = {
     {"ComposeModelOutput",    kComposeModelOutput},
     {"ComposeModelOutputHdr", kComposeModelOutputHdr},
     {"DebugDisplay",          kDebugDisplay},
+    {"ApplyGrade",            kApplyGrade},
 };
 
 const uint32_t kComputePassCount =

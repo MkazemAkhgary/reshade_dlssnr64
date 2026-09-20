@@ -85,6 +85,17 @@ class AddonController {
       ID3D12CommandQueue* command_queue);
   void EndReleaseCommands(ID3D12CommandQueue* command_queue);
 
+  // Grades the swapchain backbuffer in place, through the Release stage's own
+  // list. Like PresentDebugOutput, this records and leaves the submit to
+  // RunSingleStage.
+  //
+  // The grade needs somewhere to park the source before overwriting it, and
+  // the Release stage has no PassResources, so the scratch lives here.
+  void GradeBackbuffer(ComputeEngine& codec,
+                       ID3D12CommandQueue* command_queue,
+                       IDXGISwapChain* swapchain,
+                       const GradeSettings& grade);
+
   // HDR measurement bring-up, exposed for the EnsureHdr pipeline step. The
   // lazy-init flag spans every pass and frame, so it belongs to the
   // controller rather than to a session.
@@ -151,6 +162,16 @@ class AddonController {
   // "the list is open and has work in it" from "the list was never opened",
   // which is what keeps an idle frame from paying a submit and a GPU wait.
   bool release_list_begun_ = false;
+
+  // Ping-pong target for the backbuffer grade, sized from the backbuffer it
+  // was last used with. Recreated on a size or format change, which is safe
+  // without a retire callback because the Release stage waits for its list at
+  // the end of every frame: the previous frame's use cannot still be in
+  // flight.
+  Microsoft::WRL::ComPtr<ID3D12Resource> grade_scratch_;
+  unsigned int grade_scratch_width_ = 0;
+  unsigned int grade_scratch_height_ = 0;
+  DXGI_FORMAT grade_scratch_format_ = DXGI_FORMAT_UNKNOWN;
 
   // Command context used only for the HDR histogram dispatch (which does
   // not submit — it just records state on the game's list).

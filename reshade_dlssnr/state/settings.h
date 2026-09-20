@@ -38,6 +38,64 @@ enum class ChromaEditMode : int {
   Ratio    = 1,   // per-channel chroma ratio (matches model's direction)
 };
 
+// ---------------------------------------------------------------------------
+// Colour grade
+// ---------------------------------------------------------------------------
+//
+// A brightness/saturation grade the user applies to the image at chosen points
+// in the frame: before the model reads it, after the model writes it, and on
+// the final backbuffer. It is separate from the model's own edit — the model
+// still does its thing, this is a grade on top.
+//
+// Only ONE luma algorithm and ONE chroma algorithm are active at a time, and
+// the combos below select which. That is deliberate: several of these do the
+// same job by different means, and stacking two of them makes each control
+// fight the other, because the second one re-derives the value the first just
+// changed. The combo is the switch between them.
+
+// How the grade changes brightness.
+enum class GradeLumaMode : int {
+  // Multiply luma by 2^amount. The classic exposure control: symmetric
+  // (equal push either way), and it clips at white rather than rolling off.
+  Gain = 0,
+  // Raise normalised luma to a power. Midtone-weighted, so black stays black
+  // and white stays white, and the amount never clips.
+  Gamma = 1,
+  // Additive offset scaled by the remaining headroom. Moves shadows most and
+  // leaves white alone, which is what "lift" means in a grading suite.
+  Lift = 2,
+  // Parabolic lift, zero at both ends and strongest at mid grey. Black and
+  // white stay put while the middle opens up, so a large amount cannot clip.
+  Soft = 3,
+};
+
+// How the grade changes saturation.
+enum class GradeChromaMode : int {
+  // Blend toward luma. Uniform across the image, so a saturated pixel moves
+  // as much as a muted one — which is what makes it the predictable default.
+  Saturation = 0,
+  // Scale by how muted the pixel already is, so colours near grey move and
+  // colours that are already vivid hold back.
+  Vibrance = 1,
+  // Scale the chroma channels only, leaving luma exactly where it was. Use
+  // this when a saturation change should not touch brightness at all.
+  ChromaGain = 2,
+};
+
+// One grade. Where it is applied is decided by which field holds it, not by
+// anything in here.
+struct GradeSettings {
+  bool enabled = false;
+
+  // Both in [-1, 1], 0 = unchanged. The ranges are symmetric so the midpoint
+  // of the slider is the neutral position.
+  float luma = 0.0f;
+  float chroma = 0.0f;
+
+  GradeLumaMode luma_mode = GradeLumaMode::Gamma;
+  GradeChromaMode chroma_mode = GradeChromaMode::Saturation;
+};
+
 struct PassSettings {
   int preset = 1;
 
@@ -55,6 +113,16 @@ struct PassSettings {
   // Where this pass runs. Constraint: if any earlier pass runs at Present,
   // this pass must also run at Present. Enforced at load time and in the UI.
   InjectionStage injection_stage = InjectionStage::Present;
+
+  // Grades applied at this pass's two model boundaries. `grade_input` runs on
+  // the image the model is about to read; `grade_output` on the image it
+  // produced, before that image is published.
+  //
+  // Not inheritable, unlike the fields below. A grade is a statement about
+  // this image at this point, so carrying it into the next pass would apply
+  // it twice rather than extend it.
+  GradeSettings grade_input;
+  GradeSettings grade_output;
 
   // Inheritance flags. Only meaningful for pass index > 0; the root pass
   // ignores them. A true flag makes the corresponding slider use the
@@ -121,6 +189,13 @@ struct Settings {
   // Global multiplier on the model's edit before HDR remap.
   float hdr_edit_strength = 1.0f;
 
+  // ---------------------------------------------------------------------
+  // Final backbuffer grade. Runs once per frame, after every pass, on the
+  // swapchain backbuffer itself — the last thing before the game presents.
+  // Global rather than per-pass because there is one backbuffer.
+  // ---------------------------------------------------------------------
+  GradeSettings grade_backbuffer;
+
   // UI state: which collapsible sections are open. Persisted, and shared
   // across passes — collapsing a section in one tab collapses it in every
   // tab, so the panel keeps a single, consistent shape. `ui_category_open`
@@ -133,6 +208,7 @@ struct Settings {
       true, true, true, true, true, true, true, true};
   bool ui_status_open = true;
   bool ui_hdr_open = true;
+  bool ui_grade_open = true;
   bool ui_hdr_diagnostics_open = false;
 };
 

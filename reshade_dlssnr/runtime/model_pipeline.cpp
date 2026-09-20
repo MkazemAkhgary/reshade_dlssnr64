@@ -105,4 +105,47 @@ bool ComposeOutput(
   return codec->Dispatch(pass_name, command_list, constants, srvs, uavs);
 }
 
+bool ApplyGrade(CommandContext& state,
+                ID3D12GraphicsCommandList* command_list,
+                ComputeEngine* codec,
+                ID3D12Resource* target,
+                ID3D12Resource* scratch,
+                unsigned int width,
+                unsigned int height,
+                const GradeSettings& grade) {
+  // A disabled grade costs nothing and needs no resources, so callers that
+  // would rather not branch on it do not have to.
+  if (!grade.enabled) return true;
+
+  if (codec == nullptr || command_list == nullptr || target == nullptr ||
+      scratch == nullptr) {
+    return false;
+  }
+
+  ComputeConstants constants = {};
+  constants.Width = width;
+  constants.Height = height;
+  constants.params[kGradeSlotBase + 0] = grade.luma;
+  constants.params[kGradeSlotBase + 1] = grade.chroma;
+  constants.params[kGradeSlotBase + 2] =
+      static_cast<float>(static_cast<int>(grade.luma_mode));
+  constants.params[kGradeSlotBase + 3] =
+      static_cast<float>(static_cast<int>(grade.chroma_mode));
+
+  // Same shape as the input snapshot in StepResolveModelInput: park the source
+  // in COPY_SOURCE, land the copy in the scratch, then read the scratch and
+  // write back over the original.
+  state.Transition(command_list, target, D3D12_RESOURCE_STATE_COPY_SOURCE);
+  state.Transition(command_list, scratch, D3D12_RESOURCE_STATE_COPY_DEST);
+  command_list->CopyResource(scratch, target);
+  state.Transition(command_list, scratch,
+                   D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  state.Transition(command_list, target, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+  ID3D12Resource* srvs[kSrvCount] = {scratch, scratch, scratch};
+  ID3D12Resource* uavs[kUavCount] = {target};
+
+  return codec->Dispatch("ApplyGrade", command_list, constants, srvs, uavs);
+}
+
 }  // namespace reshade_dlssnr::model_pipeline

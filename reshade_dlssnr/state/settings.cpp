@@ -65,6 +65,62 @@ std::string PassEnabledKey(uint32_t index) {
   return "Pass" + std::to_string(index + 1) + "Enabled";
 }
 
+float ClampGradeAmount(float v) {
+  if (v < -1.0f) return -1.0f;
+  if (v > 1.0f) return 1.0f;
+  return v;
+}
+
+// Grade persistence, shared by the per-pass grades and the backbuffer one.
+// `prefix` names the grade, e.g. "Pass1Grade.Input.".
+//
+// Modes are stored as ints and range-checked on the way in, so a config
+// written by a build with a different mode list cannot index past the end of
+// the combo's item array.
+void LoadGrade(const std::string& prefix, GradeSettings& grade) {
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "Enabled").c_str(), grade.enabled);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", (prefix + "Luma").c_str(),
+                            grade.luma);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "Chroma").c_str(), grade.chroma);
+
+  int luma_mode = static_cast<int>(grade.luma_mode);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "LumaMode").c_str(), luma_mode);
+  if (luma_mode < 0 || luma_mode > static_cast<int>(GradeLumaMode::Soft)) {
+    luma_mode = static_cast<int>(GradeLumaMode::Gamma);
+  }
+  grade.luma_mode = static_cast<GradeLumaMode>(luma_mode);
+
+  int chroma_mode = static_cast<int>(grade.chroma_mode);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "ChromaMode").c_str(), chroma_mode);
+  if (chroma_mode < 0 ||
+      chroma_mode > static_cast<int>(GradeChromaMode::ChromaGain)) {
+    chroma_mode = static_cast<int>(GradeChromaMode::Saturation);
+  }
+  grade.chroma_mode = static_cast<GradeChromaMode>(chroma_mode);
+
+  grade.luma = ClampGradeAmount(grade.luma);
+  grade.chroma = ClampGradeAmount(grade.chroma);
+}
+
+void SaveGrade(const std::string& prefix, const GradeSettings& grade) {
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "Enabled").c_str(), grade.enabled);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", (prefix + "Luma").c_str(),
+                            grade.luma);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "Chroma").c_str(), grade.chroma);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "LumaMode").c_str(),
+                            static_cast<int>(grade.luma_mode));
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "ChromaMode").c_str(),
+                            static_cast<int>(grade.chroma_mode));
+}
+
 void LoadPassSettings(uint32_t index, PassSettings& pass) {
   const std::string pref = PassPrefix(index);
   const bool inherit_capable = index > 0;
@@ -93,6 +149,8 @@ void LoadPassSettings(uint32_t index, PassSettings& pass) {
   if (injection_stage < 0 || injection_stage > 1) injection_stage = 1;
   pass.injection_stage = static_cast<InjectionStage>(injection_stage);
 
+  LoadGrade(pref + "Grade.Input.", pass.grade_input);
+  LoadGrade(pref + "Grade.Output.", pass.grade_output);
 
   if (inherit_capable) {
     reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
@@ -152,6 +210,8 @@ void SavePassSettings(uint32_t index, const PassSettings& pass) {
                             (pref + "InjectionStage").c_str(),
                             static_cast<int>(pass.injection_stage));
 
+  SaveGrade(pref + "Grade.Input.", pass.grade_input);
+  SaveGrade(pref + "Grade.Output.", pass.grade_output);
 
   if (inherit_capable) {
     reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
@@ -230,10 +290,14 @@ void LoadSettings() {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.EditStrength",
                             g_settings.hdr_edit_strength);
 
+  LoadGrade("Grade.Backbuffer.", g_settings.grade_backbuffer);
+
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.StatusOpen",
                             g_settings.ui_status_open);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.HdrOpen",
                             g_settings.ui_hdr_open);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.GradeOpen",
+                            g_settings.ui_grade_open);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.HdrDiagnosticsOpen",
                             g_settings.ui_hdr_diagnostics_open);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.ModelOpen",
@@ -303,10 +367,14 @@ void SaveSettings() {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.EditStrength",
                             g_settings.hdr_edit_strength);
 
+  SaveGrade("Grade.Backbuffer.", g_settings.grade_backbuffer);
+
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.StatusOpen",
                             g_settings.ui_status_open);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.HdrOpen",
                             g_settings.ui_hdr_open);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.GradeOpen",
+                            g_settings.ui_grade_open);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.HdrDiagnosticsOpen",
                             g_settings.ui_hdr_diagnostics_open);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.ModelOpen",

@@ -992,6 +992,89 @@ void DrawShaderParamSections(uint32_t pass_index,
 // Pass tab body
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Section: Colour grade
+// ---------------------------------------------------------------------------
+
+const char* const kGradeLumaModeItems[] = {"Gain", "Gamma", "Lift", "Soft"};
+constexpr int kGradeLumaModeCount = 4;
+const char* const kGradeLumaModeTips[] = {
+    "Multiply luminance by 2^amount. The classic exposure control: an equal "
+    "push either way, and it clips at white.",
+    "Raise luminance to a power. Black stays black and white stays white, so "
+    "the effect concentrates in the midtones.",
+    "Offset each pixel by the room it has left in the direction it is going, "
+    "so shadows move further than highlights do.",
+    "A parabolic lift, zero at both ends and strongest at mid grey. The one "
+    "to reach for when a large amount would otherwise clip."};
+
+const char* const kGradeChromaModeItems[] = {"Saturation", "Vibrance",
+                                             "Chroma Gain"};
+constexpr int kGradeChromaModeCount = 3;
+const char* const kGradeChromaModeTips[] = {
+    "Blend toward luma, so every pixel moves by the same factor. The "
+    "predictable default.",
+    "Weight the change by how muted a pixel already is: colours near grey "
+    "move at full strength and vivid ones at half, so nothing is frozen out "
+    "of the control.",
+    "Scale the chroma channels only, leaving luminance exactly where it was. "
+    "Use when a saturation change must not move brightness."};
+
+// One grade's controls. `id` scopes the widget names, so the per-pass grades
+// and the backbuffer grade do not collide in ImGui's ID space.
+//
+// The two combos are the point of the section rather than decoration: the luma
+// modes are alternatives for the same job, and so are the chroma modes. Only
+// the selected one runs, which is what stops two algorithms from each
+// re-deriving the value the other just changed.
+void DrawGradeSection(const char* id,
+                      const char* label,
+                      const char* tooltip,
+                      GradeSettings& grade,
+                      bool& changed) {
+  ImGui::PushID(id);
+
+  changed |= DrawCheckboxAtLabel("enabled", &grade.enabled);
+  if (ImGui::IsItemHovered() && tooltip != nullptr) {
+    Tip("%s", tooltip);
+  }
+
+  ImGui::SameLine();
+  ImGui::TextUnformatted(label);
+
+  WithDisabled(!grade.enabled, [&] {
+    int luma_mode = static_cast<int>(grade.luma_mode);
+    if (DrawComboRow("luma_mode", "Luma Mode",
+                     "Which algorithm brightness uses. These are alternatives "
+                     "to each other, not layers.",
+                     &luma_mode, kGradeLumaModeItems, kGradeLumaModeTips,
+                     kGradeLumaModeCount)) {
+      grade.luma_mode = static_cast<GradeLumaMode>(luma_mode);
+      changed = true;
+    }
+
+    changed |= DrawFloatRow(0, "luma", "Brightness",
+                            "Negative darkens, positive brightens.",
+                            &grade.luma, nullptr, 0.0f, -1.0f, 1.0f, 0.0f);
+
+    int chroma_mode = static_cast<int>(grade.chroma_mode);
+    if (DrawComboRow("chroma_mode", "Chroma Mode",
+                     "Which algorithm saturation uses. These are alternatives "
+                     "to each other, not layers.",
+                     &chroma_mode, kGradeChromaModeItems, kGradeChromaModeTips,
+                     kGradeChromaModeCount)) {
+      grade.chroma_mode = static_cast<GradeChromaMode>(chroma_mode);
+      changed = true;
+    }
+
+    changed |= DrawFloatRow(0, "chroma", "Saturation",
+                            "Negative desaturates, positive saturates.",
+                            &grade.chroma, nullptr, 0.0f, -1.0f, 1.0f, 0.0f);
+  });
+
+  ImGui::PopID();
+}
+
 void DrawPassSettingsBody(uint32_t pass_index,
                           Settings& settings,
                           bool& changed) {
@@ -1012,6 +1095,19 @@ void DrawPassSettingsBody(uint32_t pass_index,
     ImGui::Separator();
     DrawModelSection(pass_index, settings, changed);
     DrawShaderParamSections(pass_index, settings, changed);
+    ImGui::Separator();
+    DrawGradeSection(
+        "grade_input", "Grade Model Input",
+        "Grade the image the model reads.\n"
+        "The model edits whatever it is given, so this changes what it "
+        "produces as well as what it sees.",
+        settings.passes[pass_index].grade_input, changed);
+    DrawGradeSection(
+        "grade_output", "Grade Model Output",
+        "Grade the image the model produced, before it is published.\n"
+        "This is the model's result with a grade on top; it does not feed "
+        "back into the model.",
+        settings.passes[pass_index].grade_output, changed);
   });
   ImGui::PopID();
 }
@@ -1090,6 +1186,19 @@ void DrawOverlay(reshade::api::effect_runtime*) {
       }
     }
     ImGui::EndTabBar();
+  }
+  SectionDivider();
+
+  // --- Colour grade (shared across passes) ---
+  if (PersistentHeader("Colour Grade", settings.ui_grade_open, changed)) {
+    DrawGradeSection(
+        "grade_backbuffer", "Grade Backbuffer",
+        "Grade the final image on the swapchain backbuffer, after every pass "
+        "has run.\n"
+        "This is the last step before the game presents, so it applies to "
+        "whatever the passes produced. A debug view replaces the backbuffer "
+        "wholesale, so it is not graded.",
+        settings.grade_backbuffer, changed);
   }
   SectionDivider();
 

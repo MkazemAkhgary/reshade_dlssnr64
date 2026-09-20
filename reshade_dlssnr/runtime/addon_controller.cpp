@@ -11,7 +11,27 @@ namespace reshade_dlssnr {
 
 namespace {
 std::mutex g_direct_mutex;
+
+// Creates a UAV-capable texture matching `desc`.
+//
+// The grade copies its source into this and then dispatches back over the
+// source, so the two descriptors have to match exactly — which is why this
+// takes the source's own descriptor rather than building one from the frame
+// geometry.
+bool CreateUavTexture(ID3D12Device* device, const D3D12_RESOURCE_DESC& desc,
+                      ID3D12Resource** out_resource) {
+  D3D12_HEAP_PROPERTIES heap = {};
+  heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+  D3D12_RESOURCE_DESC resource_desc = desc;
+  resource_desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+  return SUCCEEDED(device->CreateCommittedResource(
+      &heap, D3D12_HEAP_FLAG_NONE, &resource_desc,
+      D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr,
+      IID_PPV_ARGS(out_resource)));
 }
+}  // namespace
 
 AddonController& AddonController::Get() {
   static AddonController direct;
@@ -103,6 +123,64 @@ void AddonController::EndReleaseCommands(ID3D12CommandQueue* command_queue) {
   TRACE_CMD(this, "end_release_commands");
   release_command_.CloseAndSubmit(command_queue);
   release_command_.WaitGpu(command_queue);
+}
+
+void AddonController::GradeBackbuffer(ComputeEngine& codec,
+                                      ID3D12CommandQueue* command_queue,
+                                      IDXGISwapChain* swapchain,
+                                      const GradeSettings& grade) {
+  if (!grade.enabled) return;
+  if (command_queue == nullptr || swapchain == nullptr) return;
+
+  ID3D12GraphicsCommandList* list = BeginReleaseCommands(command_queue);
+  if (list == nullptr) return;
+
+  Microsoft::WRL::ComPtr<IDXGISwapChain3> swapchain3;
+  if (FAILED(swapchain->QueryInterface(IID_PPV_ARGS(&swapchain3))) ||
+      swapchain3 == nullptr) {
+    return;
+  }
+
+  Microsoft::WRL::ComPtr<ID3D12Resource> backbuffer;
+  const UINT idx = swapchain3->GetCurrentBackBufferIndex();
+  if (FAILED(swapchain3->GetBuffer(idx, IID_PPV_ARGS(&backbuffer))) ||
+      backbuffer == nullptr) {
+    return;
+  }
+
+  const D3D12_RESOURCE_DESC desc = backbuffer->GetDesc();
+  const unsigned int width = static_cast<unsigned int>(desc.Width);
+  const unsigned int height = desc.Height;
+
+  if (grade_scratch_ == nullptr || grade_scratch_width_ != width ||
+      grade_scratch_height_ != height || grade_scratch_format_ != desc.Format) {
+    Microsoft::WRL::ComPtr<ID3D12Device> device;
+    if (FAILED(command_queue->GetDevice(IID_PPV_ARGS(&device))) ||
+        device == nullptr) {
+      return;
+    }
+    grade_scratch_.Reset();
+    ID3D12Resource* raw = nullptr;
+    if (!CreateUavTexture(device.Get(), desc, &raw)) return;
+    grade_scratch_.Attach(raw);
+    grade_scratch_width_ = width;
+    grade_scratch_height_ = height;
+    grade_scratch_format_ = desc.Format;
+    TRACE_CMD(this, "create grade_scratch res=%d %ux%u",
+              trace::ResourceId(grade_scratch_.Get()), width, height);
+  }
+
+  if (!model_pipeline::ApplyGrade(release_command_, list, &codec,
+                                  backbuffer.Get(), grade_scratch_.Get(), width,
+                                  height, grade)) {
+    TRACE_EVT(this, "grade_backbuffer_failed");
+    return;
+  }
+
+  // ApplyGrade leaves the target as a UAV. This one is the swapchain's image,
+  // so it goes back to PRESENT before anything else touches it.
+  release_command_.Transition(list, backbuffer.Get(),
+                              D3D12_RESOURCE_STATE_PRESENT);
 }
 
 bool AddonController::EnsureHdr(ID3D12Device* device) {
@@ -333,6 +411,10 @@ void AddonController::Shutdown() {
   }
   release_command_.Shutdown();
   release_list_begun_ = false;
+  grade_scratch_.Reset();
+  grade_scratch_width_ = 0;
+  grade_scratch_height_ = 0;
+  grade_scratch_format_ = DXGI_FORMAT_UNKNOWN;
   pass1_command_.Shutdown();
   codec_.Destroy();
   hdr_.Shutdown();
@@ -375,6 +457,25 @@ PipelineStatus RunEnsureHdr(PassRun& run) {
   return PipelineStatus::Ok;
 }
 
+// Grades the final backbuffer, after every pass has run. The one grade that
+// is not recorded through a pass session: it acts on the swapchain image
+// rather than on a pass's own resources.
+//
+// Listed first in the Release stage on purpose, so the debug-present override
+// below — which replaces the backbuffer wholesale — still wins.
+PipelineStatus RunGradeBackbuffer(PassRun& run) {
+  if (run.settings == nullptr || run.codec == nullptr) return PipelineStatus::Ok;
+
+  const GradeSettings& grade = run.settings->grade_backbuffer;
+  if (!grade.enabled) return PipelineStatus::Ok;
+
+  TRACE_EVT(run.session, "grade_backbuffer luma=%.3f chroma=%.3f", grade.luma,
+            grade.chroma);
+  AddonController::Get().GradeBackbuffer(*run.codec, run.command_queue,
+                                         run.swapchain, grade);
+  return PipelineStatus::Ok;
+}
+
 // Copies the debug image onto the backbuffer, if a pass produced one this
 // frame. This is the last touch before the swapchain present, so it does not
 // interfere with anything the game did.
@@ -403,6 +504,7 @@ PipelineStatus RunSignalHdrAtPresent(PassRun& run) {
 // runtime lookup in ControllerStepFor below and still fail the assertion at
 // the end of this namespace with C2131.
 constexpr PipelineNodeId kEnsureHdrRequires[] = {PipelineNodeId::Count};
+constexpr PipelineNodeId kGradeBackbufferRequires[] = {PipelineNodeId::Count};
 constexpr PipelineNodeId kWriteDebugRequires[] = {PipelineNodeId::Count};
 constexpr PipelineNodeId kSignalHdrRequires[] = {PipelineNodeId::Count};
 
@@ -412,6 +514,10 @@ constexpr PipelineStepDef kControllerSteps[] = {
     // the step is listed in Release.
     {PipelineNodeId::EnsureHdr, "EnsureHdr", &RunEnsureHdr, kEnsureHdrRequires,
      /*required_inputs=*/StageInput::None, /*requires_hdr_aware=*/true},
+    {PipelineNodeId::GradeBackbuffer, "GradeBackbuffer", &RunGradeBackbuffer,
+     kGradeBackbufferRequires,
+     /*required_inputs=*/StageInput::Swapchain | StageInput::CommandQueue,
+     /*requires_hdr_aware=*/false},
     {PipelineNodeId::WriteDebugToBackbuffer, "WriteDebugToBackbuffer",
      &RunWriteDebugToBackbuffer, kWriteDebugRequires,
      /*required_inputs=*/StageInput::Swapchain | StageInput::CommandQueue,

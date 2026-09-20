@@ -1061,6 +1061,74 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
 }
 
 // ---------------------------------------------------------------------------
+// Grade
+// ---------------------------------------------------------------------------
+
+PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
+                                         const GradeSettings& grade) {
+  PassSession* self = run.session;
+  if (self == nullptr) return PipelineStatus::Ok;
+  if (!grade.enabled || target == nullptr) return PipelineStatus::Ok;
+  if (run.device == nullptr || run.codec == nullptr) return PipelineStatus::Ok;
+
+  const D3D12_RESOURCE_DESC desc = target->GetDesc();
+  const unsigned int width = static_cast<unsigned int>(desc.Width);
+  const unsigned int height = desc.Height;
+
+  if (!self->resources_.EnsureScratch(run.device, desc, width, height,
+                                      kGradeScratchSlot)) {
+    self->FailForStep("failed to create the grade scratch texture");
+    return PipelineStatus::Fail;
+  }
+
+  ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
+  if (!model_pipeline::ApplyGrade(
+          self->command_, list, run.codec, target,
+          self->resources_.GetScratch(kGradeScratchSlot), width, height,
+          grade)) {
+    self->FailForStep("failed to apply the grade");
+    return PipelineStatus::Fail;
+  }
+
+  // ApplyGrade leaves the target as a UAV because that is what the dispatch
+  // wrote through. Every caller here goes on to read the image, so it becomes
+  // an SRV.
+  self->command_.Transition(list, target,
+                            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  return PipelineStatus::Ok;
+}
+
+// Grades the image the model is about to read.
+//
+// Deliberately in place on the working input rather than redirected to a new
+// resource: `run.model_color` is what the compose step later reads back as
+// `low_input` to derive the model's residual, so leaving the pointer alone
+// means grading the input conditions the model (it sees a different image and
+// edits that) without also changing what its edit is measured against.
+PipelineStatus PassSession::StepGradeModelInput(PassRun& run) {
+  if (run.pass == nullptr) return PipelineStatus::Ok;
+  const GradeSettings& grade = run.pass->grade_input;
+  if (!grade.enabled) return PipelineStatus::Ok;
+
+  TRACE_EVT(run.session, "grade_model_input pass=%u luma=%.3f chroma=%.3f",
+            run.pass_index, grade.luma, grade.chroma);
+  return GradeInPlace(run, run.model_color, grade);
+}
+
+// Grades the model's own output, before anything publishes it. The composite
+// is what WriteToBackbuffer / WriteToGameResource copy out, so grading it here
+// is what makes the grade visible without touching those steps.
+PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
+  if (run.pass == nullptr || run.session == nullptr) return PipelineStatus::Ok;
+  const GradeSettings& grade = run.pass->grade_output;
+  if (!grade.enabled) return PipelineStatus::Ok;
+
+  TRACE_EVT(run.session, "grade_model_output pass=%u luma=%.3f chroma=%.3f",
+            run.pass_index, grade.luma, grade.chroma);
+  return GradeInPlace(run, run.session->resources_.GetCompositeOutput(), grade);
+}
+
+// ---------------------------------------------------------------------------
 // Output
 // ---------------------------------------------------------------------------
 
@@ -1237,6 +1305,11 @@ constexpr PipelineStepDef kSessionSteps[] = {
      &PassSession::StepSnapshotGuides, kNoDeps, StageInput::None, false},
     {PipelineNodeId::PrepareModelInput, "PrepareModelInput",
      &PassSession::StepPrepareModelInput, kNoDeps, StageInput::None, false},
+    // Records through StageList(), which is the session's own list in Present
+    // and the game's in PostDLSS, so like RenderDebugView it declares no
+    // command list: run.list is not what it reads in Present.
+    {PipelineNodeId::GradeModelInput, "GradeModelInput",
+     &PassSession::StepGradeModelInput, kNoDeps, StageInput::None, false},
     {PipelineNodeId::FillEvaluateParams, "FillEvaluateParams",
      &PassSession::StepFillEvaluateParams, kNoDeps, StageInput::None, false},
     {PipelineNodeId::EvaluateFeature, "EvaluateFeature",
@@ -1247,6 +1320,10 @@ constexpr PipelineStepDef kSessionSteps[] = {
     // -- composition --------------------------------------------------------
     {PipelineNodeId::ComposeModelOutput, "ComposeModelOutput",
      &PassSession::StepComposeModelOutput, kNoDeps, StageInput::None, false},
+    // Grades the composite the compose step just wrote, in place, so the
+    // steps below that copy it out need no change.
+    {PipelineNodeId::GradeModelOutput, "GradeModelOutput",
+     &PassSession::StepGradeModelOutput, kNoDeps, StageInput::None, false},
 
     // -- output -------------------------------------------------------------
     {PipelineNodeId::RenderDebugView, "RenderDebugView",
