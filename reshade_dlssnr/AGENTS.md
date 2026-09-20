@@ -626,12 +626,12 @@ passes, add the corresponding `inherit_*` field and handle it in
 - Project: `reshade_dlssnr.vcxproj`
 - Platform: `Release|x64`
 - Toolset: `v145`
-- Output: `build\Release\reshade_dlssnr_coda.addon64`
+- Output: `build\Release\reshade_dlssnr64.addon64`
 - Link: `d3d12.lib;dxgi.lib;detours.lib;d3dcompiler.lib`
 
 `OutDir` is `$(SolutionDir)build\$(Configuration)\`. The target name is
-`reshade_dlssnr_coda` for this fork (`reshade_dlssnr64` in upstream builds);
-both may be present in `build\Release\`.
+`reshade_dlssnr64`, matching upstream builds; both names may be present in
+`build\Release\` if an older fork build is still lying around.
 
 Builds are done by hand in this workspace, not by an agent: the sandbox blocks
 `MSBuild.exe` as an unrecognised executable, so MSBuild-based builds are not

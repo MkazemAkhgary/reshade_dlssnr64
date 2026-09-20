@@ -48,14 +48,14 @@
     <LinkIncremental>false</LinkIncremental>
     <OutDir>$(SolutionDir)build\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)build\obj\$(ProjectName)\$(Configuration)\</IntDir>
-<TargetName>reshade_dlssnr_coda</TargetName>
+    <TargetName>reshade_dlssnr64</TargetName>
     <TargetExt>.addon64</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <OutDir>$(SolutionDir)build\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)build\obj\$(ProjectName)\$(Configuration)\</IntDir>
-    <TargetName>reshade_dlssnr_coda</TargetName>
+    <TargetName>reshade_dlssnr64</TargetName>
     <TargetExt>.addon64</TargetExt>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">

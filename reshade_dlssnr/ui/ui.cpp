@@ -1023,8 +1023,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   g_show_tooltips = settings.show_tooltips;
   bool changed = false;
 
-  ImGui::Text("%s %s", reshade_dlssnr::kAddonName,
-              reshade_dlssnr::kAddonVersion);
+  ImGui::Text("Version %s", reshade_dlssnr::kAddonVersion);
   ImGui::Separator();
 
   changed |= ImGui::Checkbox("Enable DLSSNR", &settings.enabled);
