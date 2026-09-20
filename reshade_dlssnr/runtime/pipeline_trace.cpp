@@ -1,5 +1,6 @@
 #include "pipeline_trace.h"
 
+#include <atomic>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
@@ -24,10 +25,27 @@ std::mutex& Mutex() {
   return *instance;
 }
 
-FILE* g_file = nullptr;
-bool g_checked = false;
+// Guards g_ids and g_names. Separate from Mutex() because Line() holds the
+// file lock while resolving resource ids, and std::mutex is not recursive.
+std::mutex& MapMutex() {
+  static std::mutex* instance = new std::mutex();
+  return *instance;
+}
+
+std::atomic<FILE*> g_file{nullptr};
+std::atomic<bool> g_checked{false};
 
 uint64_t g_sequence = 0;
+
+// Lines are batched rather than flushed one at a time: a flush per line is a
+// write() syscall per line, which dominates the cost of tracing. The cost of
+// batching is that a crash can lose up to this many lines.
+constexpr uint32_t kFlushLineInterval = 256;
+uint32_t g_lines_since_flush = 0;
+
+// setvbuf buffer for g_file. Must outlive the stream, so it is leaked.
+constexpr size_t kFileBufferSize = 256 * 1024;
+char* g_file_buffer = nullptr;
 
 // Reads an environment variable without tripping the CRT's deprecation warning
 // on getenv. Returns an empty string when unset.
@@ -130,29 +148,35 @@ const char* StateName(D3D12_RESOURCE_STATES state) {
 
 void TraceInit() {
   std::lock_guard<std::mutex> lock(Mutex());
-  if (g_checked) return;
-  g_checked = true;
+  if (g_checked.load(std::memory_order_relaxed)) return;
+  g_checked.store(true, std::memory_order_relaxed);
 
   const std::string path = ReadEnv("DLSSNR_TRACE");
   if (path.empty()) return;
 
-  errno_t open_error = fopen_s(&g_file, path.c_str(), "wb");
-  if (open_error != 0 || g_file == nullptr) {
-    g_file = nullptr;
-    return;
-  }
+  FILE* file = nullptr;
+  errno_t open_error = fopen_s(&file, path.c_str(), "wb");
+  if (open_error != 0 || file == nullptr) return;
 
-  std::fprintf(g_file, "# reshade_dlssnr pipeline trace\n");
-  std::fflush(g_file);
+  // Full buffering with a large buffer, so it is the periodic flush in Line()
+  // that decides when bytes reach the disk rather than the default 4 KiB.
+  if (g_file_buffer == nullptr) g_file_buffer = new char[kFileBufferSize];
+  std::setvbuf(file, g_file_buffer, _IOFBF, kFileBufferSize);
+
+  std::fprintf(file, "# reshade_dlssnr pipeline trace\n");
+  std::fflush(file);
+
+  g_file.store(file, std::memory_order_release);
 }
 
 bool Enabled() {
-  if (!g_checked) TraceInit();
-  return g_file != nullptr;
+  if (!g_checked.load(std::memory_order_relaxed)) TraceInit();
+  return g_file.load(std::memory_order_acquire) != nullptr;
 }
 
 int ResourceId(const void* resource) {
   if (resource == nullptr) return -1;
+  std::lock_guard<std::mutex> lock(MapMutex());
   auto it = g_ids.find(resource);
   if (it != g_ids.end()) return it->second;
   const int id = g_next_id++;
@@ -162,24 +186,43 @@ int ResourceId(const void* resource) {
 
 const char* ResourceName(const void* resource) {
   if (resource == nullptr) return nullptr;
+  std::lock_guard<std::mutex> lock(MapMutex());
   auto it = g_names.find(resource);
   return it != g_names.end() ? it->second.c_str() : nullptr;
 }
 
+const char* ResourceNameOr(const void* resource, const char* fallback) {
+  const char* name = ResourceName(resource);
+  return name != nullptr ? name : fallback;
+}
+
 void NameResource(const void* resource, const char* name) {
   if (resource == nullptr || name == nullptr) return;
-  std::lock_guard<std::mutex> lock(Mutex());
+  // Names are only read from trace arguments, so there is nothing to record
+  // when tracing is off. This also keeps the per-frame backbuffer naming free.
+  if (!Enabled()) return;
+  std::lock_guard<std::mutex> lock(MapMutex());
   g_names[resource] = name;
 }
 
+namespace {
+
+// Assumes Mutex() is held.
+void FlushLocked() {
+  FILE* file = g_file.load(std::memory_order_relaxed);
+  if (file != nullptr) std::fflush(file);
+  g_lines_since_flush = 0;
+}
+
+}  // namespace
+
 void Line(const char* category, const char* function, const void* user_object,
           const char* fmt, ...) {
-  if (g_file == nullptr) return;
-
   std::lock_guard<std::mutex> lock(Mutex());
-  if (g_file == nullptr) return;
+  FILE* file = g_file.load(std::memory_order_relaxed);
+  if (file == nullptr) return;
 
-  std::fprintf(g_file, "%06llu %-3s %-28s obj=%d ",
+  std::fprintf(file, "%06llu %-3s %-28s obj=%d ",
                static_cast<unsigned long long>(g_sequence++),
                category != nullptr ? category : "?",
                function != nullptr ? function : "?",
@@ -187,22 +230,29 @@ void Line(const char* category, const char* function, const void* user_object,
 
   va_list args;
   va_start(args, fmt);
-  std::vfprintf(g_file, fmt, args);
+  std::vfprintf(file, fmt, args);
   va_end(args);
 
-  std::fputc('\n', g_file);
+  std::fputc('\n', file);
 
-  // Flushed per line so a crash still leaves a complete tail. This is a
-  // debug path; the cost is irrelevant next to the GPU work being traced.
-  std::fflush(g_file);
+  // Batched, not per line. Call Flush() at a frame boundary to bound what a
+  // crash can lose to the frames already completed.
+  if (++g_lines_since_flush >= kFlushLineInterval) FlushLocked();
+}
+
+void Flush() {
+  std::lock_guard<std::mutex> lock(Mutex());
+  FlushLocked();
 }
 
 void Shutdown() {
   std::lock_guard<std::mutex> lock(Mutex());
-  if (g_file != nullptr) {
-    std::fclose(g_file);
-    g_file = nullptr;
+  FILE* file = g_file.load(std::memory_order_relaxed);
+  if (file != nullptr) {
+    std::fclose(file);
+    g_file.store(nullptr, std::memory_order_relaxed);
   }
+  g_lines_since_flush = 0;
 }
 
 namespace {

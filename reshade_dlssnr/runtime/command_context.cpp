@@ -99,9 +99,7 @@ void CommandContext::Transition(
     resource_states_[resource] = after;
     TRACE_CMD(this, "transition res=%d(%s) %s -> %s SKIP(same) tracked=%d",
               trace::ResourceId(resource),
-              trace::ResourceName(resource) != nullptr
-                  ? trace::ResourceName(resource)
-                  : "-",
+              trace::ResourceNameOr(resource, "-"),
               trace::StateName(before), trace::StateName(after),
               tracked ? 1 : 0);
     return;
@@ -117,9 +115,7 @@ void CommandContext::Transition(
 
   TRACE_CMD(this, "transition res=%d(%s) %s -> %s tracked=%d",
             trace::ResourceId(resource),
-            trace::ResourceName(resource) != nullptr
-                ? trace::ResourceName(resource)
-                : "-",
+            trace::ResourceNameOr(resource, "-"),
             trace::StateName(before), trace::StateName(after),
             tracked ? 1 : 0);
 
@@ -132,10 +128,7 @@ void CommandContext::SetResourceState(
   if (resource == nullptr) return;
   resource_states_[resource] = state;
   TRACE_CMD(this, "seed res=%d(%s) = %s", trace::ResourceId(resource),
-            trace::ResourceName(resource) != nullptr
-                ? trace::ResourceName(resource)
-                : "-",
-            trace::StateName(state));
+            trace::ResourceNameOr(resource, "-"), trace::StateName(state));
 }
 
 D3D12_RESOURCE_STATES CommandContext::GetResourceState(
@@ -155,9 +148,7 @@ void CommandContext::UavBarrier(
   barrier.UAV.pResource = resource;
   command_list->ResourceBarrier(1, &barrier);
   TRACE_CMD(this, "uav_barrier res=%d(%s)", trace::ResourceId(resource),
-            trace::ResourceName(resource) != nullptr
-                ? trace::ResourceName(resource)
-                : "-");
+            trace::ResourceNameOr(resource, "-"));
 }
 
 void CommandContext::CopyResourceToBackbuffer(
@@ -168,13 +159,9 @@ void CommandContext::CopyResourceToBackbuffer(
 
   TRACE_CMD(this, "copy_to_backbuffer src=%d(%s) dst=%d(%s)",
             trace::ResourceId(source),
-            trace::ResourceName(source) != nullptr
-                ? trace::ResourceName(source)
-                : "-",
+            trace::ResourceNameOr(source, "-"),
             trace::ResourceId(backbuffer),
-            trace::ResourceName(backbuffer) != nullptr
-                ? trace::ResourceName(backbuffer)
-                : "-");
+            trace::ResourceNameOr(backbuffer, "-"));
 
   Transition(command_list, source, D3D12_RESOURCE_STATE_COPY_SOURCE);
   Transition(command_list, backbuffer, D3D12_RESOURCE_STATE_COPY_DEST);

@@ -339,9 +339,19 @@ bool ComputeEngine::Dispatch(
   // Logged before BindAndDispatch so the pass name and constants line up with
   // the transitions that precede and follow it in the trace.
   if (trace::Enabled()) {
-    char params[48 * 10];
+    // Only the used prefix carries information: every param past the last
+    // non-zero one is zero, so formatting them is cost and noise.
+    constexpr uint32_t kParamCapacity =
+        sizeof(constants.params) / sizeof(constants.params[0]);
+    uint32_t param_count = 0;
+    for (uint32_t i = 0; i < kParamCapacity; ++i) {
+      if (constants.params[i] != 0.0f) param_count = i + 1;
+    }
+
+    char params[48 * 10] = {};
     int used = 0;
-    for (uint32_t i = 0; i < 48 && used < static_cast<int>(sizeof(params)) - 12; ++i) {
+    for (uint32_t i = 0;
+         i < param_count && used < static_cast<int>(sizeof(params)) - 12; ++i) {
       const int n = std::snprintf(params + used, sizeof(params) - used,
                                   "%s%.6g", i == 0 ? "" : ",",
                                   static_cast<double>(constants.params[i]));

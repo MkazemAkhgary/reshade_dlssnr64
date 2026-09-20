@@ -524,10 +524,17 @@ frame. Without that, the state a persistent bug produces is the one the dedup
 silences.
 
 The remaining per-frame risk is the `TRACE_*` macros. They are compiled in but
-gate on `trace::Enabled()`, which is a couple of global loads and a branch, so
-a traced call site costs a branch when `DLSSNR_TRACE` is unset. Anything
-expensive added *inside* a trace argument is still paid every frame, so keep
+gate on `trace::Enabled()`, which is a couple of atomic loads and a branch, so
+a traced call site costs a branch when `DLSSNR_TRACE` is unset. The macro's
+arguments sit *inside* that gate, so nothing they compute is paid while tracing
+is off — but every argument is paid every frame while it is on, so keep
 formatting out of the call.
+
+Lines are batched rather than flushed individually. A flush per line is a
+`write()` syscall per line and dominated the cost of tracing; instead the
+writer flushes every `kFlushLineInterval` lines, so call `trace::Flush()` at a
+frame boundary to make that frame durable. `NameResource` is a no-op when
+tracing is off, because names are only ever read from trace arguments.
 
 ---
 

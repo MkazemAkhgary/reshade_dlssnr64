@@ -43,14 +43,23 @@ int ResourceId(const void* resource);
 // Returns nullptr when the resource has no registered role.
 const char* ResourceName(const void* resource);
 
+// ResourceName() with a fallback, in one lookup. Use this rather than testing
+// ResourceName() for null and then calling it again for the value.
+const char* ResourceNameOr(const void* resource, const char* fallback);
+
 // Registers a role name for a resource so later trace lines can print it
-// instead of a bare index. Re-registration overwrites.
+// instead of a bare index. Re-registration overwrites. No-op when tracing is
+// off: names are only ever read from trace arguments.
 void NameResource(const void* resource, const char* name);
 
 // Records one already-formatted line. Used by the TRACE_* macros; the user
 // pointer is included so interleaved threads stay distinguishable.
 void Line(const char* category, const char* function, const void* user_object,
           const char* fmt, ...);
+
+// Flushes buffered lines to disk. Lines are batched rather than flushed
+// individually, so call this at a frame boundary to make the frame durable.
+void Flush();
 
 // Flushes and closes the log. Called from the addon's Shutdown path and from
 // a static destructor, so a crash still leaves a usable tail.
