@@ -37,6 +37,7 @@ namespace reshade_dlssnr {
 //
 //   [0,  kShaderParamCount)  the kShaderParams table (per-pass sliders)
 //   [8,  16)                 the colour grade block
+//   [16, 24)                 the residual edit block
 //   [32, 40)                 the HDR uniforms
 //
 // Gaps between regions are deliberate headroom, not waste: they let a region
@@ -47,6 +48,8 @@ namespace reshade_dlssnr {
 constexpr uint32_t kShaderParamSlotBase = 0;
 constexpr uint32_t kGradeSlotBase = 8;
 constexpr uint32_t kGradeSlotCount = 8;
+constexpr uint32_t kResidualSlotBase = 16;
+constexpr uint32_t kResidualSlotCount = 8;
 constexpr uint32_t kHdrSlotBase = 32;
 constexpr uint32_t kHdrSlotCount = 8;
 
@@ -55,8 +58,11 @@ constexpr uint32_t kParamSlotCount = 48;
 static_assert(kShaderParamCount <= kGradeSlotBase,
               "the kShaderParams table has grown into the grade block - move "
               "kGradeSlotBase up");
-static_assert(kGradeSlotBase + kGradeSlotCount <= kHdrSlotBase,
-              "the grade block has grown into the HDR uniforms - move "
+static_assert(kGradeSlotBase + kGradeSlotCount <= kResidualSlotBase,
+              "the grade block has grown into the residual block - move "
+              "kResidualSlotBase up");
+static_assert(kResidualSlotBase + kResidualSlotCount <= kHdrSlotBase,
+              "the residual block has grown into the HDR uniforms - move "
               "kHdrSlotBase up");
 static_assert(kHdrSlotBase + kHdrSlotCount <= kParamSlotCount,
               "the HDR uniforms have grown past the end of params");

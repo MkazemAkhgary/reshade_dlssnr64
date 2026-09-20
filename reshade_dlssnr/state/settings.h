@@ -32,10 +32,28 @@ enum class HdrFormat : int {
   Hdr10 = 3,   // PQ (ST.2084)
 };
 
-// How the model's chroma edit is transferred back to HDR.
-enum class ChromaEditMode : int {
-  Additive = 0,   // YCbCr delta (predictable, strict hue preservation)
-  Ratio    = 1,   // per-channel chroma ratio (matches model's direction)
+// ---------------------------------------------------------------------------
+// Residual edit
+// ---------------------------------------------------------------------------
+//
+// How the model's edit is carried onto the source image. The model produces an
+// edit at working scale; the compose step applies it to the full-resolution
+// original, and this is what governs that application.
+//
+// The transfer is always a per-channel ratio. An additive transfer was tried
+// and dropped: an RGB delta measured in SDR does not survive the trip back to
+// a wider range, and it produced visible artifacts around high-contrast edges.
+// A ratio is scale-invariant, so the same edit means the same thing whatever
+// the original's range is — which is also why one setting can serve both the
+// SDR and the HDR compose.
+//
+// Per pass, because the model's edit is a statement about what that pass
+// produced.
+struct ResidualSettings {
+  // Scales the edit before it is applied. 0 makes the compose a pass-through
+  // (only the model's own evaluation still runs), 1 applies it at the
+  // magnitude the model produced, above 1 amplifies it.
+  float edit_strength = 1.0f;
 };
 
 // ---------------------------------------------------------------------------
@@ -124,6 +142,11 @@ struct PassSettings {
   GradeSettings grade_input;
   GradeSettings grade_output;
 
+  // How this pass's model edit is carried onto the source. Also not
+  // inheritable, for the same reason as the grades: it describes what this
+  // pass's model produced.
+  ResidualSettings residual;
+
   // Inheritance flags. Only meaningful for pass index > 0; the root pass
   // ignores them. A true flag makes the corresponding slider use the
   // resolved value from the previous pass instead of its own raw value.
@@ -162,10 +185,13 @@ struct Settings {
   // ---------------------------------------------------------------------
   // HDR handling. Shared across passes; only the Post-DLSS path uses it.
   // See HDR_DESIGN.md for the pipeline and the meaning of each control.
+  //
+  // How the model's edit is carried back is NOT here: that is
+  // PassSettings::residual, per pass, and it applies whether or not HDR
+  // handling is on.
   // ---------------------------------------------------------------------
   bool hdr_enable = true;
   HdrFormat hdr_format = HdrFormat::Auto;
-  ChromaEditMode hdr_chroma_mode = ChromaEditMode::Ratio;
 
   // How often the scene's brightness is measured, in frames. 1 measures
   // every frame (most responsive, most GPU work); higher values measure
@@ -186,9 +212,6 @@ struct Settings {
   // intact, at the cost of a slightly flatter overall response.
   float hdr_highlight_headroom = 8.0f;
 
-  // Global multiplier on the model's edit before HDR remap.
-  float hdr_edit_strength = 1.0f;
-
   // ---------------------------------------------------------------------
   // Final backbuffer grade. Runs once per frame, after every pass, on the
   // swapchain backbuffer itself — the last thing before the game presents.
@@ -206,6 +229,7 @@ struct Settings {
   bool ui_category_open[16] = {
       true, true, true, true, true, true, true, true,
       true, true, true, true, true, true, true, true};
+  bool ui_residual_open = true;
   bool ui_status_open = true;
   bool ui_hdr_open = true;
   bool ui_grade_open = true;

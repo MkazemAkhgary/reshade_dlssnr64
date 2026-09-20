@@ -301,19 +301,18 @@ cbuffer Params : register(b0)
 // HDR uniforms, at kHdrSlotBase = float 32 = gParams[8]. See the region map
 // in compute_engine.h. These used to sit at gParams[2], directly above the
 // parameter table, which was free to grow into them.
-#define kExposure        gParams[8].x
-#define kWhitePoint      gParams[8].y
-#define kFormat          gParams[8].z
-#define kEditStrength    gParams[8].w
-#define kChromaMode      gParams[9].x
+//
+// Only the format is left. The residual is a ratio, so the tonemap's exposure
+// and white point cancel out of the compose entirely and are not read here.
+#define kFormat          gParams[8].x
+// Residual block, at kResidualSlotBase = float 16 = gParams[4].
+#define kEditStrength    gParams[4].x
 
 Texture2D<float4> gOriginal    : register(t0);
 Texture2D<float4> gLowInput    : register(t1);
 Texture2D<float4> gLowEnhanced : register(t2);
 RWTexture2D<float4> gOutput    : register(u0);
 SamplerState s0 : register(s0);
-
-static const float3 kLuma709 = float3(0.2126, 0.7152, 0.0722);
 
 // --- Decode / encode, matching TonemapForward ---
 
@@ -383,28 +382,6 @@ float3 EncodeFromLinear(float3 lin)
     }
 }
 
-// --- Extended Reinhard, forward and exact inverse ---
-
-float3 ReinhardForward(float3 x, float W)
-{
-    float W2 = max(W * W, 1e-6);
-    return x * (1.0 + x / W2) / (1.0 + x);
-}
-
-// Closed-form inverse of ReinhardForward. Solving:
-//   s(1+x) = x + x²/W²
-//   x²/W² + (1-s)x - s = 0
-//   x = [-(1-s)W² + sqrt((1-s)²W⁴ + 4sW²)] / 2
-float3 ReinhardInverse(float3 s, float W)
-{
-    float W2 = max(W * W, 1e-6);
-    s = saturate(s);
-    float3 om = 1.0 - s;
-    float3 disc = om * om * W2 * W2 + 4.0 * s * W2;
-    float3 num = -om * W2 + sqrt(max(disc, 0.0));
-    return num * 0.5;
-}
-
 // --- Soft compression, identical to ComposeModelOutput ---
 
 float SoftCompress(float x, float max_pos, float max_neg, float knee)
@@ -468,57 +445,22 @@ float3 BlendYCbCr(float3 original, float3 edited,
     return result;
 }
 
-// Additive mode: the model's edit is an RGB delta in sRGB. Applied to the
-// reconstructed full-res SDR, then inverse-tonemapped back to HDR.
-float3 ComposeAdditive(float3 src_lin, float3 low_in, float3 low_out) {
-    float3 residual;
-    if (kSoftCompression != 0) {
-        float in_luma  = max(dot(low_in, kLuma709), 1e-6);
-        float out_luma = max(dot(low_out, kLuma709), 1e-6);
-
-        float residual_luma = safe_log(out_luma) - safe_log(in_luma);
-        float3 residual_chroma =
-            safe_log3(low_out) - safe_log(out_luma) -
-            safe_log3(low_in)  + safe_log(in_luma);
-
-        residual_luma = SoftCompress(
-            residual_luma, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
-        residual_chroma.x = SoftCompress(
-            residual_chroma.x, kSoftMaxChroma, kSoftMaxChroma, kSoftKnee);
-        residual_chroma.y = SoftCompress(
-            residual_chroma.y, kSoftMaxChroma, kSoftMaxChroma, kSoftKnee);
-        residual_chroma.z = SoftCompress(
-            residual_chroma.z, kSoftMaxChroma, kSoftMaxChroma, kSoftKnee);
-
-        float edited_luma = in_luma * exp(residual_luma);
-        float3 edited_chroma =
-            exp(safe_log3(low_in) - safe_log(in_luma) + residual_chroma);
-        float3 edited_rgb = edited_luma * edited_chroma;
-
-        residual = edited_rgb - low_in;
-    } else {
-        residual = low_out - low_in;
-    }
-    residual *= kEditStrength;
-
-    float3 sdr_orig = LinearToSrgb(
-        ReinhardForward(src_lin * kExposure, kWhitePoint));
-    float3 edited_sdr = saturate(sdr_orig + residual);
-    float3 edited_sdr_lin = SrgbToLinear(edited_sdr);
-    return ReinhardInverse(edited_sdr_lin, kWhitePoint) / kExposure;
-}
-
-// Ratio mode: the model's edit is a per-channel multiplicative ratio in
-// linear SDR. Applied directly to the HDR linear. Soft compression (when
-// enabled) clamps the ratio delta per channel. This preserves relative
-// brightness changes exactly but can amplify noise where the SDR input is
-// near zero.
+// The model's edit is a per-channel multiplicative ratio in linear SDR,
+// applied directly to the HDR linear. A ratio is scale-invariant, so it means
+// the same thing here as it does in the SDR compose.
+//
+// It preserves relative brightness changes exactly, but can amplify noise
+// where the SDR input is near zero: the ratio has a small denominator there.
 float3 ComposeRatio(float3 src_lin, float3 low_in, float3 low_out) {
     float3 sdr_in_lin = SrgbToLinear(low_in);
     float3 sdr_out_lin = SrgbToLinear(low_out);
 
     const float eps = 1e-4;
     float3 ratio = (sdr_out_lin + eps) / (sdr_in_lin + eps);
+    // Same guard as the SDR compose: where the model's input was near black
+    // this ratio has a small denominator and can otherwise reach thousands,
+    // blowing those pixels out. Bound it to 16x either way.
+    ratio = clamp(ratio, 1.0 / 16.0, 16.0);
     float3 ratio_delta = ratio - 1.0;
 
     if (kSoftCompression != 0) {
@@ -548,12 +490,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     float3 src_lin = DecodeToLinear(orig_hdr.rgb);
 
-    float3 edited_src_lin;
-    if (kChromaMode < 0.5) {
-        edited_src_lin = ComposeAdditive(src_lin, low_in, low_out);
-    } else {
-        edited_src_lin = ComposeRatio(src_lin, low_in, low_out);
-    }
+    float3 edited_src_lin = ComposeRatio(src_lin, low_in, low_out);
 
     // Blend original and edited in linear space using luma / chroma
     // strengths. Chroma is interpolated in normalized space so that
@@ -584,6 +521,9 @@ cbuffer Params : register(b0)
 #define kSoftMaxDarken    gParams[1].x
 #define kSoftMaxChroma    gParams[1].y
 #define kSoftKnee         gParams[1].z
+// Residual block, at kResidualSlotBase = float 16 = gParams[4]. See the region
+// map in compute_engine.h.
+#define kEditStrength     gParams[4].x
 
 Texture2D<float4> gOriginal : register(t0);
 Texture2D<float4> gLowInput : register(t1);
@@ -660,7 +600,9 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float3 in_rgb = low_input.rgb;
     float3 out_rgb = low_enhanced.rgb;
 
-    float3 residual;
+    // The model's edit as a per-channel ratio, held in log space so the
+    // compression sliders can bound it on both sides of 1.0.
+    float3 residual_log;
     if (kSoftCompression != 0) {
         float in_luma = max(dot(in_rgb, float3(0.2126, 0.7152, 0.0722)), 1e-6);
         float out_luma = max(dot(out_rgb, float3(0.2126, 0.7152, 0.0722)), 1e-6);
@@ -679,17 +621,24 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         residual_chroma.z = SoftCompress(
             residual_chroma.z, kSoftMaxChroma, kSoftMaxChroma, kSoftKnee);
 
-        float edited_luma = in_luma * exp(residual_luma);
-        float3 edited_chroma =
-            exp(safe_log3(in_rgb) - safe_log(in_luma) + residual_chroma);
-        float3 edited_rgb = edited_luma * edited_chroma;
-
-        residual = edited_rgb - in_rgb;
+        residual_log = residual_luma + residual_chroma;
     } else {
-        residual = out_rgb - in_rgb;
+        residual_log = safe_log3(out_rgb) - safe_log3(in_rgb);
     }
 
-    float3 edited = original.rgb + residual;
+    // A ratio has a small denominator wherever the model's input was near
+    // black, so an unguarded log residual can reach hundreds and blow those
+    // pixels out. Bound it to a change no real edit should need — 16x either
+    // way — which only ever bites in exactly that near-black case. The
+    // compression sliders bound it further when they are on.
+    const float kMaxLogRatio = 2.7725887;  // log(16)
+    residual_log = clamp(residual_log, -kMaxLogRatio, kMaxLogRatio);
+
+    // A ratio is scale-invariant, so the same edit means the same thing
+    // whatever range the original is in. Scaling the log raises the ratio to
+    // the strength, which is the ratio-space analogue of scaling a delta: 0
+    // leaves the image alone, 1 applies the model's own edit.
+    float3 edited = original.rgb * exp(residual_log * kEditStrength);
 
     float3 final_rgb = BlendYCbCr(original.rgb, edited,
                                   kLumaStrength, kChromaStrength);

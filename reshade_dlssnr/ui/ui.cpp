@@ -1075,6 +1075,42 @@ void DrawGradeSection(const char* id,
   ImGui::PopID();
 }
 
+// ---------------------------------------------------------------------------
+// Section: Residual edit
+// ---------------------------------------------------------------------------
+//
+// How this pass's model edit is carried onto the source image. Per pass,
+// because the edit is a statement about what this pass's model produced.
+//
+// This used to sit in the shared HDR section as "Chroma Edit" and "Edit
+// Strength", which was wrong twice over: it is not HDR-specific (the transfer
+// runs whether or not HDR handling is on), and it is not global.
+//
+// No enable checkbox. 0 is a pass-through and 1 is the model's own magnitude,
+// so the slider already has both an off position and a neutral one; a
+// checkbox on top would only duplicate the 0 end of it.
+void DrawResidualSection(uint32_t pass_index,
+                         Settings& settings,
+                         bool& changed) {
+  PassSettings& pass = settings.passes[pass_index];
+
+  IndentScope indent;
+  if (!PersistentSubHeader("Residual Edit", settings.ui_residual_open,
+                           changed)) {
+    return;
+  }
+
+  changed |= DrawFloatRow(
+      pass_index, "edit_strength", "Edit Strength",
+      "Scales the model's edit before it is carried onto the source.\n"
+      "0 makes the compose a pass-through: the model still runs, its edit is "
+      "just not applied. 1 applies the edit at the magnitude the model "
+      "produced. Above 1 amplifies it.\n"
+      "The edit is applied as a per-channel ratio, which is scale-invariant, "
+      "so this behaves the same whether or not HDR handling is on.",
+      &pass.residual.edit_strength, nullptr, 0.0f, 0.0f, 2.0f, 1.0f);
+}
+
 void DrawPassSettingsBody(uint32_t pass_index,
                           Settings& settings,
                           bool& changed) {
@@ -1095,6 +1131,7 @@ void DrawPassSettingsBody(uint32_t pass_index,
     ImGui::Separator();
     DrawModelSection(pass_index, settings, changed);
     DrawShaderParamSections(pass_index, settings, changed);
+    DrawResidualSection(pass_index, settings, changed);
     ImGui::Separator();
     DrawGradeSection(
         "grade_input", "Grade Model Input",
@@ -1283,25 +1320,6 @@ void DrawOverlay(reshade::api::effect_runtime*) {
         settings.hdr_format = static_cast<HdrFormat>(fmt);
       }
 
-      // Chroma edit group.
-      {
-        static const char* kChromaNames[] = {"Additive", "Ratio"};
-        static const char* kChromaTips[] = {
-            "Treat the model's output as a colour offset on top of the "
-            "source. Safe everywhere; the amount of change is bounded by "
-            "how far apart the two images are in SDR.",
-            "Treat the model's output as a brightness ratio applied to the "
-            "source. More faithful to the model's relative changes, but "
-            "can look noisy in very dark areas where the ratio has a "
-            "small denominator."};
-        int mode = static_cast<int>(settings.hdr_chroma_mode);
-        changed |= DrawGroupRow(
-            "hdr_chroma_mode", "Chroma Edit",
-            "How the model's colour changes are carried back to HDR.",
-            kChromaNames, kChromaTips, 2, &mode, nullptr);
-        settings.hdr_chroma_mode = static_cast<ChromaEditMode>(mode);
-      }
-
       // Range is reversed: dragging right goes toward 1 frame, matching
       // the "more = more aggressive" feel of the other sliders.
       changed |= DrawIntRow(
@@ -1343,15 +1361,6 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           "can flatten bright areas.",
           &settings.hdr_highlight_headroom, nullptr, 0.0f,
           0.25f, 16.0f, 8.0f);
-
-      changed |= DrawFloatRow(
-          0, "hdr_edit_strength", "Edit Strength",
-          "Scales the model's edit before it is applied to the HDR image.\n"
-          "0 makes the HDR path a pass-through (only the SDR round trip "
-          "runs). 1 applies the model's edit at its natural magnitude. "
-          "Above 1 amplifies it.",
-          &settings.hdr_edit_strength, nullptr, 0.0f,
-          0.0f, 2.0f, 1.0f);
     });
 
     // Diagnostics: raw measurement values, for scenes where the exposure

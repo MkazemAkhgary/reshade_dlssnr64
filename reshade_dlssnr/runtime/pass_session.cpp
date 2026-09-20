@@ -779,8 +779,6 @@ PipelineStatus PassSession::StepBuildHdrUniforms(PassRun& run) {
   run.hdr_uniforms.exposure = run.hdr->Exposure();
   run.hdr_uniforms.white_point =
       run.hdr->WhitePoint() * std::max(settings.hdr_highlight_headroom, 0.01f);
-  run.hdr_uniforms.edit_strength = settings.hdr_edit_strength;
-  run.hdr_uniforms.chroma_mode = static_cast<uint32_t>(settings.hdr_chroma_mode);
   switch (run.hdr->ResolvedFormat()) {
     case HdrFormat::ScRgb: run.hdr_uniforms.format = 1; break;
     case HdrFormat::Hdr10: run.hdr_uniforms.format = 2; break;
@@ -1051,9 +1049,10 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
       run.hdr_uniforms_ready ? &run.hdr_uniforms : nullptr;
 
   if (!model_pipeline::ComposeOutput(
-          self->command_, self->StageList(run, self->command_), self->resources_, run.codec, original,
-          run.model_color, run.model_output, run.width, run.height,
-          run.pass->params, hdr_ptr)) {
+          self->command_, self->StageList(run, self->command_),
+          self->resources_, run.codec, original, run.model_color,
+          run.model_output, run.width, run.height, run.pass->params,
+          run.pass->residual.edit_strength, hdr_ptr)) {
     self->FailForStep("failed to compose model output");
     return PipelineStatus::Fail;
   }

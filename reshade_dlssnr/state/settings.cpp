@@ -121,6 +121,22 @@ void SaveGrade(const std::string& prefix, const GradeSettings& grade) {
                             static_cast<int>(grade.chroma_mode));
 }
 
+// Residual edit persistence. One value today; kept beside the grade pair so
+// the per-pass key layout stays in one place.
+void LoadResidual(const std::string& prefix, ResidualSettings& residual) {
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "EditStrength").c_str(),
+                            residual.edit_strength);
+  if (residual.edit_strength < 0.0f) residual.edit_strength = 0.0f;
+  if (residual.edit_strength > 2.0f) residual.edit_strength = 2.0f;
+}
+
+void SaveResidual(const std::string& prefix, const ResidualSettings& residual) {
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "EditStrength").c_str(),
+                            residual.edit_strength);
+}
+
 void LoadPassSettings(uint32_t index, PassSettings& pass) {
   const std::string pref = PassPrefix(index);
   const bool inherit_capable = index > 0;
@@ -148,6 +164,8 @@ void LoadPassSettings(uint32_t index, PassSettings& pass) {
                             (pref + "InjectionStage").c_str(), injection_stage);
   if (injection_stage < 0 || injection_stage > 1) injection_stage = 1;
   pass.injection_stage = static_cast<InjectionStage>(injection_stage);
+
+  LoadResidual(pref + "Residual.", pass.residual);
 
   LoadGrade(pref + "Grade.Input.", pass.grade_input);
   LoadGrade(pref + "Grade.Output.", pass.grade_output);
@@ -210,6 +228,8 @@ void SavePassSettings(uint32_t index, const PassSettings& pass) {
                             (pref + "InjectionStage").c_str(),
                             static_cast<int>(pass.injection_stage));
 
+  SaveResidual(pref + "Residual.", pass.residual);
+
   SaveGrade(pref + "Grade.Input.", pass.grade_input);
   SaveGrade(pref + "Grade.Output.", pass.grade_output);
 
@@ -266,12 +286,6 @@ void LoadSettings() {
   if (hdr_format < 0 || hdr_format > 3) hdr_format = 0;
   g_settings.hdr_format = static_cast<HdrFormat>(hdr_format);
 
-  int chroma_mode = static_cast<int>(g_settings.hdr_chroma_mode);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.ChromaMode",
-                            chroma_mode);
-  if (chroma_mode < 0 || chroma_mode > 1) chroma_mode = 1;
-  g_settings.hdr_chroma_mode = static_cast<ChromaEditMode>(chroma_mode);
-
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.MeasureInterval",
                             g_settings.hdr_measure_interval);
   if (g_settings.hdr_measure_interval < 1) g_settings.hdr_measure_interval = 1;
@@ -287,8 +301,6 @@ void LoadSettings() {
       g_settings.hdr_highlight_headroom < 0.25f) {
     g_settings.hdr_highlight_headroom = 8.0f;
   }
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.EditStrength",
-                            g_settings.hdr_edit_strength);
 
   LoadGrade("Grade.Backbuffer.", g_settings.grade_backbuffer);
 
@@ -302,6 +314,8 @@ void LoadSettings() {
                             g_settings.ui_hdr_diagnostics_open);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.ModelOpen",
                             g_settings.ui_model_open);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.ResidualOpen",
+                            g_settings.ui_residual_open);
   for (uint32_t j = 0; j < kShaderParamCount; ++j) {
     const std::string key = "UI.CategoryOpen" + std::to_string(j);
     reshade::get_config_value(nullptr, "RESHADE_DLSSNR", key.c_str(),
@@ -354,8 +368,6 @@ void SaveSettings() {
                             g_settings.hdr_enable);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Format",
                             static_cast<int>(g_settings.hdr_format));
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.ChromaMode",
-                            static_cast<int>(g_settings.hdr_chroma_mode));
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.MeasureInterval",
                             g_settings.hdr_measure_interval);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Midtone",
@@ -364,8 +376,6 @@ void SaveSettings() {
                             g_settings.hdr_white_percentile);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.HighlightHeadroom",
                             g_settings.hdr_highlight_headroom);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.EditStrength",
-                            g_settings.hdr_edit_strength);
 
   SaveGrade("Grade.Backbuffer.", g_settings.grade_backbuffer);
 
@@ -379,6 +389,8 @@ void SaveSettings() {
                             g_settings.ui_hdr_diagnostics_open);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.ModelOpen",
                             g_settings.ui_model_open);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.ResidualOpen",
+                            g_settings.ui_residual_open);
   for (uint32_t j = 0; j < kShaderParamCount; ++j) {
     const std::string key = "UI.CategoryOpen" + std::to_string(j);
     reshade::set_config_value(nullptr, "RESHADE_DLSSNR", key.c_str(),

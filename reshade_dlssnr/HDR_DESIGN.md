@@ -17,6 +17,31 @@ display-referred SDR backbuffer and is unchanged.
 **Starting point:** one curve type (Extended Reinhard) with an invertible
 closed form. More curves can be added later without changing the pipeline.
 
+## Superseded
+
+This document records the HDR design as it was built. Two parts of it no longer
+describe the code:
+
+- **`ChromaEditMode` and the additive transfer are gone.** Additive chroma
+  transfer produced artifacts around high-contrast edges and was dropped. The
+  model's edit is now always carried back as a per-channel ratio, on both the
+  SDR and the HDR compose, because a ratio is scale-invariant and so means the
+  same thing whatever range the original is in. `ComposeAdditive` and the
+  Reinhard pair it used are deleted from the compose shader — `kTonemapForward`
+  still uses `ReinhardForward` for the HDR → SDR normalise.
+- **`Chroma Edit` and `Edit Strength` are no longer HDR settings.** They were
+  global fields on `Settings`; the transfer choice is gone entirely, and Edit
+  Strength is now `PassSettings::residual.edit_strength`, drawn in a per-pass
+  "Residual Edit" section. It applies whether or not HDR handling is on, which
+  is the point: how the edit is carried back was never an HDR question.
+
+One consequence worth knowing: `ComposeOutput` now writes only `format` into
+the HDR block, and `ComposeRatio` reads neither the exposure nor the white
+point. The compose is therefore exposure-independent — it applies the ratio to
+the source's own values. Exposure still changes what the *model* sees, and so
+still changes what the model produces, but it no longer enters the compose
+arithmetic at all.
+
 ## Module layout
 
 ### New: `runtime/hdr_state.{h,cpp}`

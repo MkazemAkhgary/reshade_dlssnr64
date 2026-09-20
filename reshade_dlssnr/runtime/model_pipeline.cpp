@@ -69,6 +69,7 @@ bool ComposeOutput(
     unsigned int full_width,
     unsigned int full_height,
     const float* params,
+    float edit_strength,
     const HdrUniforms* hdr) {
   if (codec == nullptr || command_list == nullptr || original == nullptr ||
       low_input == nullptr || low_enhanced == nullptr || params == nullptr) {
@@ -81,15 +82,16 @@ bool ComposeOutput(
   for (uint32_t i = 0; i < kShaderParamCount; ++i) {
     constants.params[kShaderParamSlotBase + i] = params[i];
   }
+  // Written for both paths. How the edit is carried back is not an HDR
+  // concern; it only used to be stored here.
+  constants.params[kResidualSlotBase + 0] = edit_strength;
 
   const char* pass_name = "ComposeModelOutput";
   if (hdr != nullptr) {
     pass_name = "ComposeModelOutputHdr";
-    constants.params[kHdrSlotBase + 0] = hdr->exposure;
-    constants.params[kHdrSlotBase + 1] = hdr->white_point;
-    constants.params[kHdrSlotBase + 2] = static_cast<float>(hdr->format);
-    constants.params[kHdrSlotBase + 3] = hdr->edit_strength;
-    constants.params[kHdrSlotBase + 4] = static_cast<float>(hdr->chroma_mode);
+    // Only the format: the residual is a ratio, so the tonemap's exposure and
+    // white point cancel out of the compose entirely.
+    constants.params[kHdrSlotBase + 0] = static_cast<float>(hdr->format);
   }
 
   state.Transition(command_list, original,

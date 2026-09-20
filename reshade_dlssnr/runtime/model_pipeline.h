@@ -16,21 +16,20 @@ namespace reshade_dlssnr::model_pipeline {
 // `format` follows the shader convention: 0 = SDR sRGB, 1 = scRGB linear,
 // 2 = HDR10 PQ.
 //
-// These are written to ComputeConstants::params at kHdrSlotBase, in this
-// order, so they occupy five consecutive floats. The shader side spells the
-// same offset out as `gParams[8]` and `gParams[9].x` in
-// kComposeModelOutputHdr; see the region map in compute_engine.h before
-// changing either.
+// PrepareInput writes all three to ComputeConstants::params at kHdrSlotBase,
+// in this order, so they occupy three consecutive floats. The shader side
+// spells that out as `gParams[0]` in kTonemapForward, which keeps its own
+// layout.
+//
+// ComposeOutput uses only `format`, written at kHdrSlotBase + 0 and read as
+// `gParams[8].x` in kComposeModelOutputHdr. Exposure and white point are
+// deliberately not part of the compose: the residual is a ratio, so the
+// tonemap's exposure cancels out and changing it cannot change the composed
+// image. See the region map in compute_engine.h before changing any of this.
 struct HdrUniforms {
   float exposure = 1.0f;
   float white_point = 4.0f;
   uint32_t format = 0;
-  float edit_strength = 1.0f;
-  // How the model's edit is transferred back to HDR:
-  //   0 = additive (RGB delta in SDR, then inverse-tonemapped)
-  //   1 = ratio (multiplicative per-channel in linear SDR, applied
-  //       directly to the HDR linear)
-  uint32_t chroma_mode = 1;
 };
 
 // Prepares the model input. With `hdr == nullptr`, resamples `full_input`
@@ -54,10 +53,17 @@ bool PrepareInput(
     const HdrUniforms* hdr = nullptr);
 
 // Composes the model output into PassResources::GetCompositeOutput().
-// Callers then decide where to copy it. With `hdr == nullptr`, dispatches
-// the SDR composition. With `hdr != nullptr`, dispatches the HDR
-// composition, which inverse-tonemaps the model's SDR edit back into the
-// HDR source's own range and encoding.
+// Callers then decide where to copy it.
+//
+// The model's edit is carried onto `original` as a per-channel ratio, which
+// is scale-invariant and therefore means the same thing whatever the
+// original's range is. `edit_strength` scales it before application; 0 makes
+// the compose a pass-through.
+//
+// With `hdr == nullptr`, dispatches the SDR composition, which applies the
+// ratio in the source's own sRGB-encoded space. With `hdr != nullptr`,
+// dispatches the HDR composition, which decodes to linear, applies the ratio
+// there, and re-encodes to the source's format.
 bool ComposeOutput(
     CommandContext& state,
     ID3D12GraphicsCommandList* command_list,
@@ -69,6 +75,7 @@ bool ComposeOutput(
     unsigned int full_width,
     unsigned int full_height,
     const float* params,
+    float edit_strength = 1.0f,
     const HdrUniforms* hdr = nullptr);
 
 // Applies a grade to `target` in place, reading it through `scratch`.
