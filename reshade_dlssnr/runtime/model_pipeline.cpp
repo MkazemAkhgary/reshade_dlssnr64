@@ -79,17 +79,17 @@ bool ComposeOutput(
   constants.Width = full_width;
   constants.Height = full_height;
   for (uint32_t i = 0; i < kShaderParamCount; ++i) {
-    constants.params[i] = params[i];
+    constants.params[kShaderParamSlotBase + i] = params[i];
   }
 
   const char* pass_name = "ComposeModelOutput";
   if (hdr != nullptr) {
     pass_name = "ComposeModelOutputHdr";
-    constants.params[8]  = hdr->exposure;
-    constants.params[9]  = hdr->white_point;
-    constants.params[10] = static_cast<float>(hdr->format);
-    constants.params[11] = hdr->edit_strength;
-    constants.params[12] = static_cast<float>(hdr->chroma_mode);
+    constants.params[kHdrSlotBase + 0] = hdr->exposure;
+    constants.params[kHdrSlotBase + 1] = hdr->white_point;
+    constants.params[kHdrSlotBase + 2] = static_cast<float>(hdr->format);
+    constants.params[kHdrSlotBase + 3] = hdr->edit_strength;
+    constants.params[kHdrSlotBase + 4] = static_cast<float>(hdr->chroma_mode);
   }
 
   state.Transition(command_list, original,

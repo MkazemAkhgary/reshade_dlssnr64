@@ -9,6 +9,16 @@ namespace reshade_dlssnr {
 
 constexpr uint32_t kMaxPasses = 3;
 
+// Storage capacity for PassSettings::params and ::inherit_params.
+//
+// Deliberately larger than kShaderParamCount, and deliberately not derived
+// from it. Sizing the storage from the table would resize PassSettings every
+// time a parameter is added, and an array that is merely big enough today
+// truncates silently once the table outgrows it: the index is not bounds
+// checked, so the write lands on whatever field follows. The static_assert
+// in settings.cpp is what keeps the two in step.
+constexpr uint32_t kShaderParamCapacity = 32;
+
 enum class InjectionStage : int {
   PostDLSS = 0,
   Present = 1,
@@ -54,10 +64,10 @@ struct PassSettings {
   bool inherit_local_tone = false;
   bool inherit_local_structure = false;
   bool inherit_skin_structure = false;
-  bool inherit_params[16] = {};
+  bool inherit_params[kShaderParamCapacity] = {};
 
   // Dynamic shader parameter values, indexed by kShaderParams order.
-  float params[16] = {};
+  float params[kShaderParamCapacity] = {};
 
 };
 

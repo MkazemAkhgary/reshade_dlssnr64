@@ -14,6 +14,12 @@ namespace reshade_dlssnr::model_pipeline {
 //
 // `format` follows the shader convention: 0 = SDR sRGB, 1 = scRGB linear,
 // 2 = HDR10 PQ.
+//
+// These are written to ComputeConstants::params at kHdrSlotBase, in this
+// order, so they occupy five consecutive floats. The shader side spells the
+// same offset out as `gParams[8]` and `gParams[9].x` in
+// kComposeModelOutputHdr; see the region map in compute_engine.h before
+// changing either.
 struct HdrUniforms {
   float exposure = 1.0f;
   float white_point = 4.0f;

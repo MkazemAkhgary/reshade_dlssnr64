@@ -13,7 +13,53 @@
 #include <thread>
 #include <unordered_map>
 
+#include "shader_params.h"
+
 namespace reshade_dlssnr {
+
+// ---------------------------------------------------------------------------
+// ComputeConstants::params region map
+// ---------------------------------------------------------------------------
+//
+// `params` is one flat float array, and a single dispatch can have more than
+// one consumer writing it: ComposeModelOutputHdr receives both the
+// kShaderParams table (copied in by the caller) and the HDR uniforms. Those
+// shared regions are pinned here rather than left to each caller's literal
+// indices, because the previous arrangement — the table filling [0, N) and
+// the HDR uniforms hardcoded at [8..12] — was safe only while N was 7. The
+// eighth parameter would have overwritten the exposure with no diagnostic
+// anywhere: the shader still compiles, the dispatch still succeeds, and the
+// image is simply wrong.
+//
+// Passes whose parameters are theirs alone — DebugDisplay, TonemapForward,
+// the histogram passes — keep their own layout starting at 0. Nothing else
+// writes those slots in the same dispatch, so they need no region.
+//
+//   [0,  kShaderParamCount)  the kShaderParams table (per-pass sliders)
+//   [8,  16)                 the colour grade block
+//   [32, 40)                 the HDR uniforms
+//
+// Gaps between regions are deliberate headroom, not waste: they let a region
+// grow a little before anything else has to move.
+//
+// So: a consumer that shares a dispatch takes a base from here, and the
+// asserts below prove the regions cannot overlap or run off the end.
+constexpr uint32_t kShaderParamSlotBase = 0;
+constexpr uint32_t kGradeSlotBase = 8;
+constexpr uint32_t kGradeSlotCount = 8;
+constexpr uint32_t kHdrSlotBase = 32;
+constexpr uint32_t kHdrSlotCount = 8;
+
+constexpr uint32_t kParamSlotCount = 48;
+
+static_assert(kShaderParamCount <= kGradeSlotBase,
+              "the kShaderParams table has grown into the grade block - move "
+              "kGradeSlotBase up");
+static_assert(kGradeSlotBase + kGradeSlotCount <= kHdrSlotBase,
+              "the grade block has grown into the HDR uniforms - move "
+              "kHdrSlotBase up");
+static_assert(kHdrSlotBase + kHdrSlotCount <= kParamSlotCount,
+              "the HDR uniforms have grown past the end of params");
 
 // Size and alignment are pinned to 256 bytes for two reasons: the CBV
 // created in BindAndDispatch hardcodes SizeInBytes = 256, and the D3D12
@@ -26,12 +72,14 @@ struct alignas(256) ComputeConstants {
   uint32_t pad0 = 0;
   uint32_t pad1 = 0;
 
-  // Dynamic shader parameters, indexed by kShaderParams order.
-  // Must align with HLSL `float4 gParams[12]` (16-byte boundary). Each
-  // parameter occupies one float; four parameters fill one float4. 48
-  // floats leaves headroom for future effects without ever hitting the
-  // 256-byte CBV ceiling (16-byte header + 48*4 = 208 bytes used).
-  float params[48] = {};
+  // Dynamic shader parameters. Consumers write one region of this array
+  // rather than the whole thing; the region map is at the top of this header.
+  //
+  // Must align with HLSL `float4 gParams[12]`, i.e. 48 floats: one float per
+  // parameter, four parameters per float4. 48 floats leaves headroom for
+  // future effects without reaching the 256-byte CBV ceiling (16-byte header
+  // + 48*4 = 208 bytes used).
+  float params[kParamSlotCount] = {};
 };
 static_assert(sizeof(ComputeConstants) <= 256, "Constants must fit in a 256-byte CBV");
 

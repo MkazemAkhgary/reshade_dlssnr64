@@ -8,6 +8,13 @@
 
 namespace reshade_dlssnr {
 
+// The parameter table is written into PassSettings::params by index, and that
+// index is not bounds checked. This is the check that the storage is big
+// enough for the table.
+static_assert(kShaderParamCount <= kShaderParamCapacity,
+              "kShaderParams has outgrown PassSettings storage - raise "
+              "kShaderParamCapacity in settings.h");
+
 namespace {
 Settings g_settings;
 

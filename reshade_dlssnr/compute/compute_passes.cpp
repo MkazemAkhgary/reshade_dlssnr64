@@ -22,7 +22,7 @@ cbuffer Params : register(b0)
 {
     uint  gWidth;
     uint  gHeight;
-    float4 gParams[4];
+    float4 gParams[12];
 };
 
 // gParams[0].x = encoding format (0 = SDR sRGB, 1 = scRGB linear, 2 = HDR10 PQ)
@@ -116,7 +116,7 @@ cbuffer Params : register(b0)
 {
     uint  gWidth;
     uint  gHeight;
-    float4 gParams[4];
+    float4 gParams[12];
 };
 
 // gParams[0].x = display mode (0 color, 1 motion, 2 depth)
@@ -167,7 +167,7 @@ cbuffer Params : register(b0)
 {
     uint  gWidth;
     uint  gHeight;
-    float4 gParams[4];
+    float4 gParams[12];
 };
 
 // gParams[0].x = exposure
@@ -287,7 +287,7 @@ cbuffer Params : register(b0)
 {
     uint  gWidth;
     uint  gHeight;
-    float4 gParams[4];
+    float4 gParams[12];
 };
 
 // User shader params (identical to ComposeModelOutput):
@@ -298,12 +298,14 @@ cbuffer Params : register(b0)
 #define kSoftMaxDarken   gParams[1].x
 #define kSoftMaxChroma   gParams[1].y
 #define kSoftKnee        gParams[1].z
-// HDR uniforms:
-#define kExposure        gParams[2].x
-#define kWhitePoint      gParams[2].y
-#define kFormat          gParams[2].z
-#define kEditStrength    gParams[2].w
-#define kChromaMode      gParams[3].x
+// HDR uniforms, at kHdrSlotBase = float 32 = gParams[8]. See the region map
+// in compute_engine.h. These used to sit at gParams[2], directly above the
+// parameter table, which was free to grow into them.
+#define kExposure        gParams[8].x
+#define kWhitePoint      gParams[8].y
+#define kFormat          gParams[8].z
+#define kEditStrength    gParams[8].w
+#define kChromaMode      gParams[9].x
 
 Texture2D<float4> gOriginal    : register(t0);
 Texture2D<float4> gLowInput    : register(t1);
@@ -572,7 +574,7 @@ cbuffer Params : register(b0)
 {
     uint  gWidth;
     uint  gHeight;
-    float4 gParams[4];
+    float4 gParams[12];
 };
 
 #define kLumaStrength     gParams[0].x
