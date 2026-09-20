@@ -62,7 +62,47 @@ PipelineStatus AddonController::RunSingleStage(
   run.command_queue = command_queue;
   run.swapchain = swapchain;
 
-  return PipelineRunner::RunStage(stage, run);
+  const PipelineStatus status = PipelineRunner::RunStage(stage, run);
+
+  // The stage owns its list, and this is the single submit point: every step
+  // that recorded has had its turn by now. A frame in which nothing recorded
+  // never opened the list, and this is a no-op.
+  EndReleaseCommands(command_queue);
+
+  return status;
+}
+
+ID3D12GraphicsCommandList* AddonController::BeginReleaseCommands(
+    ID3D12CommandQueue* command_queue) {
+  if (release_list_begun_) return release_command_.GetCommandList();
+  if (command_queue == nullptr) return nullptr;
+
+  Microsoft::WRL::ComPtr<ID3D12Device> device;
+  if (FAILED(command_queue->GetDevice(IID_PPV_ARGS(&device))) ||
+      device == nullptr) {
+    return nullptr;
+  }
+  if (!release_command_.Ensure(device.Get())) return nullptr;
+
+  // Reset and clear once per frame, so the state a step seeds is the state
+  // the list starts from. A later caller in the same frame must not do this
+  // again — it would discard the commands already recorded.
+  release_command_.Reset();
+  release_command_.ClearState();
+  release_list_begun_ = true;
+
+  TRACE_CMD(this, "begin_release_commands queue=%d",
+            trace::ResourceId(command_queue));
+  return release_command_.GetCommandList();
+}
+
+void AddonController::EndReleaseCommands(ID3D12CommandQueue* command_queue) {
+  if (!release_list_begun_) return;
+  release_list_begun_ = false;
+
+  TRACE_CMD(this, "end_release_commands");
+  release_command_.CloseAndSubmit(command_queue);
+  release_command_.WaitGpu(command_queue);
 }
 
 bool AddonController::EnsureHdr(ID3D12Device* device) {
@@ -173,12 +213,6 @@ void AddonController::PresentDebugOutput(
     return;
   }
 
-  Microsoft::WRL::ComPtr<ID3D12Device> device;
-  if (FAILED(command_queue->GetDevice(IID_PPV_ARGS(&device))) ||
-      device == nullptr) {
-    return;
-  }
-
   Microsoft::WRL::ComPtr<ID3D12Resource> backbuffer;
   const UINT idx = swapchain3->GetCurrentBackBufferIndex();
   if (FAILED(swapchain3->GetBuffer(idx, IID_PPV_ARGS(&backbuffer))) ||
@@ -204,23 +238,19 @@ void AddonController::PresentDebugOutput(
     return;
   }
 
-  if (!debug_command_.Ensure(device.Get())) return;
+  // Records onto the Release stage's list rather than submitting here, so
+  // anything else the stage records rides in the same submit. The checks
+  // above come first on purpose: a debug image that cannot be copied must
+  // not open a list.
+  ID3D12GraphicsCommandList* list = BeginReleaseCommands(command_queue);
+  if (list == nullptr) return;
 
-  debug_command_.Reset();
-  debug_command_.ClearState();
-  debug_command_.SetResourceState(backbuffer.Get(),
-                                  D3D12_RESOURCE_STATE_PRESENT);
-  debug_command_.SetResourceState(debug.output.Get(),
-                                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-
-  ID3D12GraphicsCommandList* list = debug_command_.GetCommandList();
-  debug_command_.CopyResourceToBackbuffer(list, debug.output.Get(),
-                                          backbuffer.Get());
-
-  debug_command_.GetCommandList()->Close();
-  ID3D12CommandList* lists[] = {debug_command_.GetCommandList()};
-  command_queue->ExecuteCommandLists(1, lists);
-  debug_command_.WaitGpu(command_queue);
+  release_command_.SetResourceState(backbuffer.Get(),
+                                    D3D12_RESOURCE_STATE_PRESENT);
+  release_command_.SetResourceState(debug.output.Get(),
+                                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  release_command_.CopyResourceToBackbuffer(list, debug.output.Get(),
+                                            backbuffer.Get());
 }
 
 HdrSnapshot AddonController::GetHdrSnapshot() const {
@@ -301,7 +331,8 @@ void AddonController::Shutdown() {
   for (auto& pass : passes_) {
     pass.Shutdown(runtime_);
   }
-  debug_command_.Shutdown();
+  release_command_.Shutdown();
+  release_list_begun_ = false;
   pass1_command_.Shutdown();
   codec_.Destroy();
   hdr_.Shutdown();
@@ -418,6 +449,11 @@ static_assert(PrerequisitesPrecedeSteps(kReleaseStepNodes,
 // The Release stage is entered from RunSingleStage, which supplies the queue
 // and swapchain but no command list. A controller step that reached for
 // run.list without guarding it would dereference null here.
+//
+// A release step that needs to record GPU work does not get a list through
+// run.list at all: it opens the stage's own list with BeginReleaseCommands,
+// which returns null when the list cannot be created and lets the step skip.
+// So the queue, not the list, is what a recording step must declare.
 static_assert(
     StageInputsCoverSteps(kReleaseStepNodes, ArrayCount(kReleaseStepNodes),
                           kControllerSteps, ArrayCount(kControllerSteps),

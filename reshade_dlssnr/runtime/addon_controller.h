@@ -67,6 +67,24 @@ class AddonController {
       IDXGISwapChain* swapchain,
       const FrameDebugContext& debug);
 
+  // -- The Release stage's command list -------------------------------------
+  //
+  // The Release stage runs after the game has submitted, so it cannot borrow
+  // the game's list the way PostDLSS does, and RunSingleStage has no session
+  // to own one the way Present does. These two are that list.
+  //
+  // BeginReleaseCommands opens it on first use in a frame and returns it;
+  // later calls in the same frame hand back the same open list, so several
+  // release steps record into a single submit. EndReleaseCommands closes,
+  // submits and waits.
+  //
+  // A frame in which nothing records never opens the list, so it pays neither
+  // the submit nor the wait — which is the point, because the wait is a full
+  // GPU sync at present time and this stage runs on every frame.
+  ID3D12GraphicsCommandList* BeginReleaseCommands(
+      ID3D12CommandQueue* command_queue);
+  void EndReleaseCommands(ID3D12CommandQueue* command_queue);
+
   // HDR measurement bring-up, exposed for the EnsureHdr pipeline step. The
   // lazy-init flag spans every pass and frame, so it belongs to the
   // controller rather than to a session.
@@ -108,7 +126,9 @@ class AddonController {
       IDXGISwapChain* swapchain);
 
   // Runs a stage once, outside the per-pass loop. Used for the Release stage,
-  // whose steps act on the swapchain rather than on a game resource.
+  // whose steps act on the swapchain rather than on a game resource. It is
+  // also the submit point for that stage's own command list; see
+  // BeginReleaseCommands.
   PipelineStatus RunSingleStage(
       const PipelineStageDef& stage,
       ID3D12CommandQueue* command_queue,
@@ -123,8 +143,14 @@ class AddonController {
   FrameDebugContext frame_debug_;
   HdrState hdr_;
 
-  // Command context used only for the final debug-present copy.
-  CommandContext debug_command_;
+  // The Release stage's command list, opened on demand by
+  // BeginReleaseCommands and submitted by EndReleaseCommands.
+  CommandContext release_command_;
+
+  // True between BeginReleaseCommands and EndReleaseCommands. Distinguishes
+  // "the list is open and has work in it" from "the list was never opened",
+  // which is what keeps an idle frame from paying a submit and a GPU wait.
+  bool release_list_begun_ = false;
 
   // Command context used only for the HDR histogram dispatch (which does
   // not submit — it just records state on the game's list).

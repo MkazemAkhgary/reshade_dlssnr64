@@ -397,8 +397,11 @@ const PipelineStageDef kPipelineStages[] = {
         /*reads_dlss_output=*/false,
         /*max_passes=*/1,
         // Entered from RunSingleStage, which supplies the queue and swapchain
-        // only. The release work is a backbuffer write and the HDR present
-        // signal, both of which need those.
+        // only. The stage owns a command list but opens it on demand rather
+        // than being handed one, so it is not a declared input — the same
+        // shape as Present, which produces run.list from its own session.
+        // The release work is a backbuffer write and the HDR present signal,
+        // both of which need the queue and the swapchain.
         /*required_inputs=*/StageInput::Swapchain | StageInput::CommandQueue |
             StageInput::Stage,
     },
