@@ -729,67 +729,74 @@ static const float3 kLuma709 = float3(0.2126, 0.7152, 0.0722);
 // at the ends, which is the whole reason the UI has a combo rather than a
 // stack: they are alternatives, not layers.
 
+// Single return with an initialised local rather than an early return per
+// mode: fxc's flow analysis reports X4000 on the multi-return form even though
+// every path returns a value, and that same warning code is real elsewhere.
 float GradeLuma(float y, float amount, int mode)
 {
-    if (amount == 0.0)
-        return y;
+    float graded = y;  // amount 0, and any mode not named below
 
-    if (mode == 0) {
-        // Gain. Exponential so the control is symmetric: +1 doubles and -1
-        // halves. Clips at white, which is what an exposure control does.
-        return y * exp2(amount);
-    } else if (mode == 1) {
-        // Gamma. Endpoints are fixed, so it neither clips nor lifts black and
-        // the effect concentrates in the midtones.
-        return pow(saturate(y), exp2(-amount));
-    } else if (mode == 2) {
-        // Lift. Moves a pixel by the room left in the direction it is going,
-        // so a shadow travels further than a highlight and white stays white.
-        return amount > 0.0 ? lerp(y, 1.0, amount) : y * (1.0 + amount);
+    if (amount != 0.0) {
+        if (mode == 0) {
+            // Gain. Exponential so the control is symmetric: +1 doubles and -1
+            // halves. Clips at white, which is what an exposure control does.
+            graded = y * exp2(amount);
+        } else if (mode == 1) {
+            // Gamma. Endpoints are fixed, so it neither clips nor lifts black
+            // and the effect concentrates in the midtones.
+            graded = pow(saturate(y), exp2(-amount));
+        } else if (mode == 2) {
+            // Lift. Moves a pixel by the room left in the direction it is
+            // going, so a shadow travels further than a highlight and white
+            // stays white.
+            graded = amount > 0.0 ? lerp(y, 1.0, amount) : y * (1.0 + amount);
+        } else {
+            // Soft. A parabolic lift, zero at both ends and strongest at mid
+            // grey, so the middle opens up while black and white stay put.
+            // This is the one to reach for when a large amount would clip.
+            graded = saturate(y + amount * y * (1.0 - y) * 2.0);
+        }
     }
 
-    // Soft. A parabolic lift, zero at both ends and strongest at mid grey, so
-    // the middle opens up while black and white stay put. This is the one to
-    // reach for when a large amount would otherwise clip.
-    return saturate(y + amount * y * (1.0 - y) * 2.0);
+    return graded;
 }
 
 // --- Chroma ----------------------------------------------------------------
 
 float3 GradeChroma(float3 c, float amount, int mode)
 {
-    if (amount == 0.0)
-        return c;
+    float3 graded = c;  // amount 0
 
-    float y = dot(c, kLuma709);
-    float scale = 1.0 + amount;
+    if (amount != 0.0) {
+        float y = dot(c, kLuma709);
+        float scale = 1.0 + amount;
 
-    if (mode == 0) {
-        // Saturation. A straight blend toward luma, so every pixel moves by
-        // the same factor. The predictable default.
-        return lerp(float3(y, y, y), c, scale);
-    } else if (mode == 1) {
-        // Vibrance. The scale is weighted by how muted the pixel already is:
-        // colours near grey move at full strength and vivid ones at half, so
-        // a vivid pixel still responds to the control instead of being frozen
-        // out of it.
-        float spread = max(max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b)), 0.0);
-        return lerp(float3(y, y, y), c, 1.0 + amount * (1.0 - 0.5 * saturate(spread)));
+        if (mode == 0) {
+            // Saturation. A straight blend toward luma, so every pixel moves
+            // by the same factor. The predictable default.
+            graded = lerp(float3(y, y, y), c, scale);
+        } else if (mode == 1) {
+            // Vibrance. The scale is weighted by how muted the pixel already
+            // is: colours near grey move at full strength and vivid ones at
+            // half, so a vivid pixel still responds to the control instead of
+            // being frozen out of it.
+            float spread =
+                max(max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b)), 0.0);
+            graded = lerp(float3(y, y, y), c,
+                          1.0 + amount * (1.0 - 0.5 * saturate(spread)));
+        } else {
+            // ChromaGain. Scale only the chroma channels of a YCbCr
+            // decomposition, so luma passes through untouched. Use when
+            // saturation must not move brightness at all.
+            float cb = (c.b - y) / 1.8556 * scale;
+            float cr = (c.r - y) / 1.5748 * scale;
+            graded.r = y + 1.5748 * cr;
+            graded.g = y - 0.1873 * cb - 0.4681 * cr;
+            graded.b = y + 1.8556 * cb;
+        }
     }
 
-    // ChromaGain. Scale only the chroma channels of a YCbCr decomposition, so
-    // luma passes through untouched. Use when saturation must not move
-    // brightness at all.
-    float cb = (c.b - y) / 1.8556;
-    float cr = (c.r - y) / 1.5748;
-    cb *= scale;
-    cr *= scale;
-
-    float3 result;
-    result.r = y + 1.5748 * cr;
-    result.g = y - 0.1873 * cb - 0.4681 * cr;
-    result.b = y + 1.8556 * cb;
-    return result;
+    return graded;
 }
 
 [numthreads(8, 8, 1)]
