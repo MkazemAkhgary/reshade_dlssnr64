@@ -89,6 +89,7 @@ void AddonController::OnPresent(
   // cleared is forgotten and a recurring one logs again. Present is the one
   // entry point that runs every frame, so the counter belongs here.
   PipelineRunner::BeginSkipLogFrame();
+  trace::BeginFrame(trace::FrameStream::Present);
 
   TRACE_EVT(this, "controller_enter stage=Present fmt_before=%d",
             static_cast<int>(backbuffer_format_));
@@ -114,6 +115,7 @@ void AddonController::OnPresent(
   RefreshStatus(settings);
   frame_debug_.Reset();
   TRACE_EVT(this, "controller_exit stage=Present");
+  trace::EndFrame(trace::FrameStream::Present);
 }
 
 void AddonController::OnPostDlssEvaluate(
@@ -125,6 +127,7 @@ void AddonController::OnPostDlssEvaluate(
   if (!settings.enabled) return;
   if (command_list == nullptr || output_resource == nullptr) return;
 
+  trace::BeginFrame(trace::FrameStream::PostDlss);
   TRACE_EVT(this, "controller_enter stage=PostDLSS hdr_init=%d guides_out=%d",
             hdr_initialized_ ? 1 : 0, 0);
 
@@ -155,6 +158,7 @@ void AddonController::OnPostDlssEvaluate(
 
   RefreshStatus(settings);
   TRACE_EVT(this, "controller_exit stage=PostDLSS");
+  trace::EndFrame(trace::FrameStream::PostDlss);
 }
 
 void AddonController::PresentDebugOutput(

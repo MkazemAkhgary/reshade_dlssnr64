@@ -260,12 +260,29 @@ first-seen indices, not raw addresses, because COM heaps recycle addresses and
 raw pointers would make two runs incomparable. This is the regression oracle
 for the refactor: build the pre-refactor tree, capture a trace, and diff.
 
+**Every line names its frame.** A game frame is two streams, not one: the DLSS
+evaluate happens mid-frame and the present happens at the end, so one counter
+would label the other stream's lines with the wrong frame. `BeginFrame` /
+`EndFrame` in `AddonController` therefore keep a counter per `FrameStream`,
+printed on every line as `d=` (PostDlss) and `p=` (Present), and emit a `frm`
+marker line whose END names the sequence range the frame spans:
+
+```bash
+grep ' frm ' trace.log                  # every boundary
+grep 'frm.*PostDLSS.*BEGIN' trace.log   # every DLSS-evaluate frame start
+```
+
+`d` counts evaluate calls, not frames, so it advances more than once per frame
+if the game calls DLSS more than once. `EndFrame` also flushes, so a frame that
+completed is on disk even if the process then crashes.
+
 Coverage is deliberately at the choke points rather than in the steps, so a
 new step is traced without being instrumented: every `Transition`,
 `UavBarrier` and copy goes through `CommandContext`, and every shader dispatch
 through `ComputeEngine::Dispatch` — the latter logs the pass name, grid,
-SRV/UAV resource ids and all 48 shader params. Steps add `TRACE_EVT` lines for
-decisions (a skip, a failure reason) that produce no GPU command.
+SRV/UAV resource ids and the used prefix of the shader params (the trailing
+zeros carry no information). Steps add `TRACE_EVT` lines for decisions (a
+skip, a failure reason) that produce no GPU command.
 
 Diff two captures with:
 

@@ -37,6 +37,26 @@ std::atomic<bool> g_checked{false};
 
 uint64_t g_sequence = 0;
 
+// One entry per FrameStream. `counter` is printed on every line as d=/p=;
+// `begin_sequence` records the sequence number of the matching BEGIN marker,
+// so EndFrame can name the range the frame spans.
+struct FrameState {
+  uint64_t counter = 0;
+  uint64_t begin_sequence = 0;
+};
+
+constexpr size_t kFrameStreamCount = 2;
+FrameState g_frames[kFrameStreamCount];
+
+FrameState& FrameStateFor(FrameStream stream) {
+  const size_t index = static_cast<size_t>(stream);
+  return g_frames[index < kFrameStreamCount ? index : 0];
+}
+
+const char* FrameStreamName(FrameStream stream) {
+  return stream == FrameStream::Present ? "Present" : "PostDLSS";
+}
+
 // Lines are batched rather than flushed one at a time: a flush per line is a
 // write() syscall per line, which dominates the cost of tracing. The cost of
 // batching is that a crash can lose up to this many lines.
@@ -214,6 +234,28 @@ void FlushLocked() {
   g_lines_since_flush = 0;
 }
 
+// Assumes Mutex() is held. Writes the columns every line shares, and returns
+// the sequence number assigned to this line.
+uint64_t WritePrefixLocked(FILE* file, const char* category,
+                           const char* function, const void* user_object) {
+  const uint64_t sequence = g_sequence++;
+  std::fprintf(file, "%06llu %-3s %-28s obj=%d d=%04llu p=%04llu ",
+               static_cast<unsigned long long>(sequence),
+               category != nullptr ? category : "?",
+               function != nullptr ? function : "?",
+               ResourceId(user_object),
+               static_cast<unsigned long long>(
+                   FrameStateFor(FrameStream::PostDlss).counter),
+               static_cast<unsigned long long>(
+                   FrameStateFor(FrameStream::Present).counter));
+  return sequence;
+}
+
+// Assumes Mutex() is held.
+void AfterLineLocked() {
+  if (++g_lines_since_flush >= kFlushLineInterval) FlushLocked();
+}
+
 }  // namespace
 
 void Line(const char* category, const char* function, const void* user_object,
@@ -222,11 +264,7 @@ void Line(const char* category, const char* function, const void* user_object,
   FILE* file = g_file.load(std::memory_order_relaxed);
   if (file == nullptr) return;
 
-  std::fprintf(file, "%06llu %-3s %-28s obj=%d ",
-               static_cast<unsigned long long>(g_sequence++),
-               category != nullptr ? category : "?",
-               function != nullptr ? function : "?",
-               ResourceId(user_object));
+  WritePrefixLocked(file, category, function, user_object);
 
   va_list args;
   va_start(args, fmt);
@@ -234,10 +272,42 @@ void Line(const char* category, const char* function, const void* user_object,
   va_end(args);
 
   std::fputc('\n', file);
+  AfterLineLocked();
+}
 
-  // Batched, not per line. Call Flush() at a frame boundary to bound what a
-  // crash can lose to the frames already completed.
-  if (++g_lines_since_flush >= kFlushLineInterval) FlushLocked();
+uint64_t BeginFrame(FrameStream stream) {
+  if (!Enabled()) return 0;
+
+  std::lock_guard<std::mutex> lock(Mutex());
+  FILE* file = g_file.load(std::memory_order_relaxed);
+  FrameState& frame = FrameStateFor(stream);
+  ++frame.counter;
+  if (file == nullptr) return frame.counter;
+
+  frame.begin_sequence =
+      WritePrefixLocked(file, "frm", FrameStreamName(stream), nullptr);
+  std::fputs("BEGIN\n", file);
+  AfterLineLocked();
+  return frame.counter;
+}
+
+void EndFrame(FrameStream stream) {
+  if (!Enabled()) return;
+
+  std::lock_guard<std::mutex> lock(Mutex());
+  FILE* file = g_file.load(std::memory_order_relaxed);
+  if (file == nullptr) return;
+
+  FrameState& frame = FrameStateFor(stream);
+  WritePrefixLocked(file, "frm", FrameStreamName(stream), nullptr);
+  // g_sequence has already advanced past this line, so its own number is the
+  // previous one.
+  std::fprintf(file, "END seq=%06llu..%06llu\n",
+               static_cast<unsigned long long>(frame.begin_sequence),
+               static_cast<unsigned long long>(g_sequence - 1));
+  // The frame boundary is where the batch is committed, so a frame that
+  // finished is always on disk.
+  FlushLocked();
 }
 
 void Flush() {

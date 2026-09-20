@@ -13,11 +13,17 @@
 //
 // The file is truncated on first use per process. When the variable is unset
 // (the normal case) TraceInit() short-circuits and every macro below compiles
-// to nothing observable — a single predictable branch on a global bool.
+// to nothing observable — a single predictable branch on a global.
 //
 // The resource pointer is printed as a stable index rather than a raw address:
 // COM heaps reuse addresses between runs, so raw pointers produce spurious
 // diffs. See ResourceId() for the assignment rule.
+//
+// Every line also carries the two frame counters, so a frame reads straight
+// out of the log without matching markers. This weakens the "identical logs"
+// property above: a run that drops a frame shifts every later counter, so a
+// line diff diverges there. That is the useful direction — the divergence
+// names the frame that differs.
 #pragma once
 
 #include <cstdint>
@@ -58,8 +64,39 @@ void Line(const char* category, const char* function, const void* user_object,
           const char* fmt, ...);
 
 // Flushes buffered lines to disk. Lines are batched rather than flushed
-// individually, so call this at a frame boundary to make the frame durable.
+// individually; EndFrame calls this, so a frame boundary is durable without
+// the caller doing anything.
 void Flush();
+
+// ---------------------------------------------------------------------------
+// Frame boundaries
+// ---------------------------------------------------------------------------
+//
+// A game frame is not one stream. The DLSS evaluate happens mid-frame and the
+// present happens at the end, so a single counter incremented at either point
+// labels the other stream's lines with the wrong frame. Each entry point gets
+// its own counter, printed on every line as `d=` (PostDlss) and `p=` (Present).
+//
+// BeginFrame/EndFrame also emit a `frm` marker line, so frames are greppable
+// and each END names the line range the frame spans:
+//
+//   grep ' frm '                 every boundary
+//   grep 'frm.*BEGIN'            every frame start
+//
+// Neither counter is a game-frame number when the game calls DLSS more than
+// once per frame; `d` counts evaluate calls, not frames.
+enum class FrameStream : uint32_t {
+  PostDlss = 0,
+  Present = 1,
+};
+
+// Emits the BEGIN marker for `stream` and increments its counter. Returns the
+// new counter value, which every subsequent line carries until EndFrame.
+uint64_t BeginFrame(FrameStream stream);
+
+// Emits the END marker for `stream`, naming the line range the frame spans,
+// and flushes so the frame is durable.
+void EndFrame(FrameStream stream);
 
 // Flushes and closes the log. Called from the addon's Shutdown path and from
 // a static destructor, so a crash still leaves a usable tail.
