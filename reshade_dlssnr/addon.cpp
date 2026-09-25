@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "addon_controller.h"
+#include "crash_trace.h"
 #include "d3d12_hooks.h"
 #include "dlss_guides.h"
 #include "nvngx_hook_compat.h"
@@ -17,8 +18,16 @@
 
 namespace {
 
+// Roughly two seconds at 60 fps: long enough to cover a device that is not
+// ready at init_device, short enough that a permanent failure stops costing
+// an allocator and a command list per frame.
+constexpr int kMaxDeviceHookRetries = 120;
+
 bool g_initialized = false;
-HMODULE g_nvngx_dlss_module = nullptr;
+bool g_ngx_hooked = false;
+bool g_ngx_hook_warned = false;
+int g_ngx_hook_presents = 0;
+int g_device_hook_retries = 0;
 
 
 void PinAddonModule() {
@@ -56,6 +65,32 @@ void OnPresent(
     return;
   }
 
+  // Two installs that can miss the first time: nvngx_dlss.dll is not loaded
+  // when the addon starts, and the device hook runs at init_device. Retry
+  // both here, once per present, until each reports success.
+  if (!g_ngx_hooked) {
+    g_ngx_hooked = reshade_dlssnr::ngx_hook_compat::TryHookNgx();
+
+    // The DLSS Output stage is dead without this hook, and it used to fail
+    // silently. Say so once it is clear the module is not coming.
+    if (!g_ngx_hooked && ++g_ngx_hook_presents > kMaxDeviceHookRetries &&
+        !g_ngx_hook_warned) {
+      g_ngx_hook_warned = true;
+      reshade::log::message(
+          reshade::log::level::warning,
+          "nvngx_dlss.dll never appeared; the DLSS Output stage cannot run");
+    }
+  }
+
+  // Installing creates a throwaway allocator and command list, so a retry
+  // that never succeeds would allocate one pair per frame forever. Cap it.
+  if (!reshade_dlssnr::D3D12Hooks::Get().Installed() &&
+      g_device_hook_retries < kMaxDeviceHookRetries) {
+    ++g_device_hook_retries;
+    reshade_dlssnr::D3D12Hooks::Get().InstallEarlyHooks(
+        reinterpret_cast<ID3D12Device*>(device->get_native()));
+  }
+
   auto* native_command_queue = reinterpret_cast<ID3D12CommandQueue*>(command_queue->get_native());
   auto* native_swapchain = reinterpret_cast<IDXGISwapChain*>(swapchain->get_native());
 
@@ -70,26 +105,17 @@ void Attach(HMODULE module) {
   reshade_dlssnr::LoadSettings();
   PinAddonModule();
 
+  // First thing installed, so a fault during any of the rest is reported.
+  reshade_dlssnr::crash_trace::Install();
+
   reshade::register_event<reshade::addon_event::init_device>(OnInitDevice);
   reshade::register_event<reshade::addon_event::present>(OnPresent);
   reshade::register_overlay("ReShade DLSSNR", reshade_dlssnr::DrawOverlay);
 
-  HMODULE nvngx_dlss = GetModuleHandleW(L"nvngx_dlss.dll");
-  if (nvngx_dlss == nullptr) {
-    nvngx_dlss = LoadLibraryW(L"nvngx_dlss.dll");
-  }
-
-  if (nvngx_dlss != nullptr) {
-    if (reshade_dlssnr::local_vtable::Hook(
-            nvngx_dlss,
-            reshade_dlssnr::ngx_hook_compat::DLSS_HOOKS)) {
-      g_nvngx_dlss_module = nvngx_dlss;
-    }
-  } else {
-    reshade::log::message(
-        reshade::log::level::warning,
-        "nvngx_dlss.dll not loaded; hook skipped");
-  }
+  // nvngx_dlss.dll is loaded on demand, either by the game directly or by
+  // Streamline from the game's own directory. It is usually not there yet at
+  // addon init, so the hook is retried from OnPresent until it lands.
+  g_ngx_hooked = reshade_dlssnr::ngx_hook_compat::TryHookNgx();
 
   g_initialized = true;
 }
@@ -97,12 +123,8 @@ void Attach(HMODULE module) {
 void Detach() {
   if (!g_initialized) return;
 
-  if (g_nvngx_dlss_module != nullptr) {
-    reshade_dlssnr::local_vtable::Unhook(
-        g_nvngx_dlss_module,
-        reshade_dlssnr::ngx_hook_compat::DLSS_HOOKS);
-    g_nvngx_dlss_module = nullptr;
-  }
+  reshade_dlssnr::ngx_hook_compat::UnhookNgx();
+  g_ngx_hooked = false;
 
   reshade_dlssnr::AddonController::Get().Shutdown();
   reshade_dlssnr::DlssGuides::Get().Clear();
