@@ -19,8 +19,8 @@
 #include "d3d12_hooks.h"
 #include "dlss_guides.h"
 #include "local_vtable.h"
+#include "proxy_unwrap.h"
 #include "settings.h"
-#include "streamline_compat.h"
 
 namespace reshade_dlssnr::ngx_hook_compat {
 
@@ -34,18 +34,20 @@ static decltype(&NVSDK_NGX_D3D12_CreateFeature) real_NVSDK_NGX_D3D12_CreateFeatu
 static inline std::unordered_map<unsigned int, NVSDK_NGX_Feature> g_handle_to_feature;
 static inline std::mutex g_handle_to_feature_mutex;
 
-// Logged once: a Streamline build that proxies the command list is the whole
-// reason this file has to unwrap anything, so it is worth one line.
-static void LogCommandListProxyOnce(bool is_proxy) {
+// Logged once: whether the game's command list had to be resolved. ReShade
+// always wraps, so on any host this should say "unwrapped" -- if it ever says
+// otherwise, the resolution stopped working and every restore is a no-op
+// again, silently.
+static void LogCommandListProxyOnce(bool was_proxy) {
   static bool logged = false;
   if (logged) return;
   logged = true;
 
   reshade::log::message(
       reshade::log::level::info,
-      is_proxy
-          ? "NVIDIA Streamline proxies the command list; recording on the native interface"
-          : "NVIDIA Streamline does not proxy the command list");
+      was_proxy
+          ? "Command list resolved to the interface our D3D12 hooks recorded"
+          : "Command list is already the interface our D3D12 hooks recorded");
 }
 
 static void LogOnce(bool& flag, reshade::log::level level, const char* message) {
@@ -117,17 +119,18 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
     reshade::log::message(reshade::log::level::info, message);
   }
 
-  // With Streamline 1.x the game's command list is an interposer proxy:
-  // recording through it runs Streamline's registered after-hooks (its proxy
-  // ResourceBarrier does exactly that) from the middle of its own evaluate,
-  // and its state tracking then restores a state we changed. The proxy is not
-  // opaque -- QueryInterface with a fixed IID returns what it wraps -- so
-  // unwrap it and record on the native list instead. Our vtable hooks sit on
-  // d3d12.dll either way, which is also why the tracker is keyed by the
-  // native pointer and the restore below has to use the same one.
+  // The command list the game hands us is ReShade's wrapper, and under
+  // Streamline 1.x that wrapper sits around an interposer proxy. Neither is
+  // the object our vtable hooks were installed on, and the state tracker is
+  // keyed by what those hooks see -- so resolve to that chain here, once, and
+  // use it for everything we do.
+  //
+  // Recording through a Streamline proxy is also unsafe in its own right: its
+  // ResourceBarrier runs Streamline's registered after-hooks from the middle
+  // of its own evaluate. Resolving avoids that too.
   bool is_proxy = false;
   Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> native_list =
-      sl_compat::Native(command_list, &is_proxy);
+      proxy_unwrap::NativeChain(command_list, &is_proxy);
   LogCommandListProxyOnce(is_proxy);
 
   ID3D12GraphicsCommandList* work_list =
