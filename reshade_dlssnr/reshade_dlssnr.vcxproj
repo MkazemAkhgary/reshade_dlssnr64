@@ -132,8 +132,10 @@
     <ClInclude Include="hooks\dlss_guides.h" />
     <ClInclude Include="hooks\local_vtable.h" />
     <ClInclude Include="hooks\nvngx_hook_compat.h" />
+    <ClInclude Include="hooks\streamline_compat.h" />
     <ClInclude Include="runtime\addon_controller.h" />
     <ClInclude Include="runtime\command_context.h" />
+    <ClInclude Include="runtime\crash_trace.h" />
     <ClInclude Include="runtime\debug_view.h" />
     <ClInclude Include="runtime\d3d12_utils.h" />
     <ClInclude Include="runtime\frame_debug_context.h" />
