@@ -1,5 +1,7 @@
 #include "d3d12_hooks.h"
 
+#include <cstdio>
+
 #include <wrl/client.h>
 
 #include <detours.h>
@@ -14,6 +16,43 @@ namespace reshade_dlssnr {
 namespace {
 
 bool g_logged_interposer_state = false;
+
+// Names the module owning a hooked slot, once. A crash inside a hook that
+// called into this module is otherwise attributed to "the game" or "the
+// model", and the module is the whole explanation.
+void LogHookedModuleOnce(const void* address) {
+  static bool logged = false;
+  if (logged || address == nullptr) return;
+  logged = true;
+
+  HMODULE module = nullptr;
+  if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                             GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                         static_cast<LPCWSTR>(address), &module) == 0 ||
+      module == nullptr) {
+    return;
+  }
+
+  wchar_t path[MAX_PATH] = {};
+  if (GetModuleFileNameW(module, path, MAX_PATH) == 0) return;
+
+  const wchar_t* name = path;
+  for (const wchar_t* p = path; *p != L'\0'; ++p) {
+    if (*p == L'\\') name = p + 1;
+  }
+
+  char message[MAX_PATH + 64];
+  int at = std::snprintf(message, sizeof(message),
+                         "D3D12 command list hooks installed on ");
+  for (const wchar_t* p = name; *p != L'\0' && at > 0 &&
+                               static_cast<size_t>(at) + 1 < sizeof(message);
+       ++p) {
+    message[at++] = (*p < 128) ? static_cast<char>(*p) : '?';
+  }
+  message[at] = '\0';
+
+  reshade::log::message(reshade::log::level::info, message);
+}
 
 // One line at install time, so a Streamline build gone wrong is visible in
 // the log without adding anything to the per-frame path.
@@ -286,6 +325,13 @@ bool D3D12Hooks::InstallEarlyHooks(ID3D12Device* device) {
   command_list->Close();
   command_list->Release();
   command_allocator->Release();
+
+  // Which module owns the functions we just captured decides everything about
+  // how the hooks behave, and it is not obvious from the outside: the slot can
+  // hold d3d12.dll's implementation, ReShade's wrapper, or -- with the D3D12
+  // debug layer enabled -- a thunk in d3d12SDKLayers.dll, which is not built
+  // to be driven through a third-party hook chain at all.
+  LogHookedModuleOnce(g_original_set_pipeline_state);
 
   DetourTransactionBegin();
   DetourUpdateThread(GetCurrentThread());
