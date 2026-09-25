@@ -132,6 +132,7 @@
     <ClInclude Include="hooks\dlss_guides.h" />
     <ClInclude Include="hooks\local_vtable.h" />
     <ClInclude Include="hooks\nvngx_hook_compat.h" />
+    <ClInclude Include="hooks\proxy_unwrap.h" />
     <ClInclude Include="hooks\streamline_compat.h" />
     <ClInclude Include="runtime\addon_controller.h" />
     <ClInclude Include="runtime\command_context.h" />

@@ -67,6 +67,7 @@ reshade_dlssnr/
     dlss_guides.h/.cpp           // DLSS depth/motion/output capture
     local_vtable.h               // minimal Detours vtable hook wrapper
     nvngx_hook_compat.h          // hooks NVSDK_NGX Create/Evaluate
+    proxy_unwrap.h               // ReShade + Streamline proxy unwrapping
     streamline_compat.h          // Streamline interposer proxy unwrapping
 
   state/
@@ -413,24 +414,44 @@ a `float3x3` and `float3` is correct; `m * v` componentwise is a silent error.
 
 ### Pipeline
 
-**Everything this pass creates must come from the native device.** A second
-`NVSDK_NGX_D3D12_CreateFeature` for feature 18 kills the process inside
-`nvngx_dlssnr.dll`'s own entry point — nothing to catch, nothing to report —
-but **only on a Streamline 1.x host**. The same two features coexist happily on
-a 2.x host, so the model does hold two; the difference is the environment, and
-the one structural difference is proxies.
+**Two pointers, one object — and the tracker only knows one of them.** This is
+the mistake that made `RestoreCommandList` a no-op for its whole life.
 
-Streamline 1.x proxies the device, the command queue and the command list
+The vtable hooks in `d3d12_hooks.cpp` are installed on a command list created
+from the **unwrapped** device, so they intercept the unwrapped chain and record
+state under unwrapped pointers. The game, however, hands us ReShade's
+**wrapper**, and on a 1.x host that wrapper sits around a Streamline proxy.
+Every lookup missed, so the game's descriptor heaps, root signature and PSO
+stayed clobbered after each of our passes and nothing said so.
+
+`proxy_unwrap::NativeChain()` resolves ReShade first, then Streamline, and the
+NGX hook resolves the game's command list once and uses that pointer for
+everything — guides, the Post-DLSS passes, and the restore. Both layers answer
+the same way (a fixed IID for the object underneath), and the order is forced:
+each layer only answers for the object it itself wraps.
+
+If the once-logged `Command list resolved to the interface our D3D12 hooks
+recorded` ever stops saying "resolved", the resolution has broken and every
+restore is silently a no-op again.
+
+**Nothing here may create objects on a device other than the one the game
+uses.** Streamline 1.x proxies the device, queue and command list
 unconditionally; 2.x proxies only what a feature needs, and its default flags
 disable command list state tracking entirely. So on a 1.x host
 `command_queue->GetDevice()` hands back the *proxy* device, and a session that
-builds its command list on it gets an SL proxy list — which then goes to NGX.
+builds its command list on it gets a proxy list — which then goes to NGX.
 `PassSession::AcquireBackbuffer` and the PostDLSS branch of
-`StepResolveDevice` therefore both resolve through `sl_compat::Native()` before
-anything is created from the result.
+`StepResolveDevice` resolve through `sl_compat::Native()` before anything is
+created from the result.
 
-The one line to read when a multi-pass bug looks host-specific is
-`DLSSNR pass: Present device ..., command queue ...`, logged once.
+`DLSSNR pass: Present device ..., command queue ...` is logged once; it says
+"native" only in the sense of "not a Streamline proxy", which is a different
+question from whether the object is a ReShade wrapper.
+
+**A second DLSSNR feature is fine.** Two passes chained at the same stage, and
+a third at the other stage, all create and evaluate their own feature. An
+earlier note here claimed the second `CreateFeature` kills the process; that
+was wrong — the crash it was describing was the pointer mismatch above.
 
 **The feature must be built at full frame resolution**, never at working-scale
 resolution. Working scale only affects the per-frame evaluation size, which
