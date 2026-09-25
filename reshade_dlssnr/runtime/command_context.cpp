@@ -1,9 +1,39 @@
 #include "command_context.h"
 
+#include <cstdio>
+
+#include <reshade.hpp>
+
 #include "d3d12_utils.h"
 #include "pipeline_trace.h"
 
 namespace reshade_dlssnr {
+
+namespace {
+
+// Most D3D12 entry points return void, so a call the runtime rejected leaves
+// no trace at all: the device is simply removed and the game finds out at its
+// next Present. Logged once per distinct failure, because a removed device
+// stays removed and would otherwise repeat every frame.
+void LogFailureOnce(const char* what, HRESULT result) {
+  if (SUCCEEDED(result)) return;
+
+  static const char* reported[8] = {};
+  static int reported_count = 0;
+  for (int i = 0; i < reported_count; ++i) {
+    if (reported[i] == what) return;
+  }
+  if (reported_count >= 8) return;
+  reported[reported_count++] = what;
+
+  char message[192];
+  std::snprintf(message, sizeof(message),
+                "DLSSNR command context: %s failed with 0x%08lX", what,
+                static_cast<unsigned long>(result));
+  reshade::log::message(reshade::log::level::error, message);
+}
+
+}  // namespace
 
 bool CommandContext::Ensure(ID3D12Device* device) {
   if (command_allocator_ != nullptr) return true;
@@ -49,8 +79,13 @@ bool CommandContext::Ensure(ID3D12Device* device) {
 
 void CommandContext::Reset() {
   if (command_allocator_ != nullptr && command_list_ != nullptr) {
-    command_allocator_->Reset();
-    command_list_->Reset(command_allocator_.Get(), nullptr);
+    // Both of these fail rather than corrupt anything when the allocator is
+    // still referenced by work the GPU has not finished -- which is a bug on
+    // our side, and one that shows up as a removed device several frames
+    // later rather than here.
+    LogFailureOnce("command allocator reset", command_allocator_->Reset());
+    LogFailureOnce("command list reset",
+                   command_list_->Reset(command_allocator_.Get(), nullptr));
   }
 }
 
@@ -61,10 +96,22 @@ void CommandContext::ClearState() {
 void CommandContext::CloseAndSubmit(ID3D12CommandQueue* command_queue) {
   if (command_list_ == nullptr || command_queue == nullptr) return;
 
-  command_list_->Close();
+  LogFailureOnce("command list close", command_list_->Close());
+
   ID3D12CommandList* lists[] = {command_list_.Get()};
   command_queue->ExecuteCommandLists(1, lists);
   TRACE_CMD(this, "close_and_submit queue=%d", trace::ResourceId(command_queue));
+
+  // ExecuteCommandLists returns void, so the only way to learn that it was
+  // rejected is to ask the device afterwards. This is the call that turns an
+  // invalid command into a removed device, so it is the one worth watching.
+  ID3D12Device* device = nullptr;
+  if (SUCCEEDED(command_list_->GetDevice(IID_PPV_ARGS(&device))) &&
+      device != nullptr) {
+    LogFailureOnce("device removed after execute_command_lists",
+                   device->GetDeviceRemovedReason());
+    device->Release();
+  }
 }
 
 void CommandContext::WaitGpu(ID3D12CommandQueue* command_queue) {
