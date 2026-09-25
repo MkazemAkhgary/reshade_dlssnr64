@@ -23,6 +23,7 @@ void D3D12StateTracker::UntrackCommandList(ID3D12GraphicsCommandList* command_li
   pipeline_states_.erase(command_list);
   signatures_.erase(command_list);
   root_states_.erase(command_list);
+  root_state_owner_.erase(command_list);
 }
 
 void D3D12StateTracker::SetDescriptorHeaps(ID3D12GraphicsCommandList* command_list, UINT count, ID3D12DescriptorHeap* const* heaps) {
@@ -44,6 +45,18 @@ void D3D12StateTracker::SetPipelineState(ID3D12GraphicsCommandList* command_list
   pipeline_states_.insert_or_assign(command_list, pipeline_state);
 }
 
+RootState& D3D12StateTracker::RootSlotLocked(ID3D12GraphicsCommandList* command_list, UINT index) {
+  auto& table = root_states_[command_list];
+  // The parameter count is only known for root signatures we saw being
+  // created, so a table sized from an unknown count starts empty and is grown
+  // here. Dropping the write instead would leave the game's root state
+  // unrestored after our passes.
+  if (index >= table.size()) {
+    table.resize(static_cast<size_t>(index) + 1);
+  }
+  return table[index];
+}
+
 void D3D12StateTracker::SetComputeRootSignature(ID3D12GraphicsCommandList* command_list, ID3D12RootSignature* root_signature) {
   if (command_list == nullptr || root_signature == nullptr) return;
 
@@ -51,7 +64,18 @@ void D3D12StateTracker::SetComputeRootSignature(ID3D12GraphicsCommandList* comma
     std::unique_lock<std::shared_mutex> lock(root_parameter_count_mutex_);
     UINT count = root_parameter_count_[root_signature];
     std::unique_lock<std::shared_mutex> root_lock(root_states_mutex_);
-    root_states_[command_list].resize(count);
+
+    auto owner = root_state_owner_.find(command_list);
+    auto& table = root_states_[command_list];
+    if (owner == root_state_owner_.end() || owner->second != root_signature) {
+      // A different signature is being bound. The recorded entries describe
+      // the previous one's layout, and replaying them would write root
+      // parameters this signature may not even have.
+      table.assign(count, RootState{});
+      root_state_owner_[command_list] = root_signature;
+    } else if (table.size() < count) {
+      table.resize(count);
+    }
   }
 
   std::unique_lock<std::shared_mutex> lock(root_signature_mutex_);
@@ -69,70 +93,58 @@ void D3D12StateTracker::SetComputeRootDescriptorTable(ID3D12GraphicsCommandList*
   if (command_list == nullptr || base_descriptor.ptr == 0) return;
 
   std::unique_lock<std::shared_mutex> lock(root_states_mutex_);
-  auto& table = root_states_[command_list];
-  if (index < table.size()) {
-    table[index].type = RootEntryType::Table;
-    table[index].rootDescriptorTable = base_descriptor;
-  }
+  RootState& slot = RootSlotLocked(command_list, index);
+  slot.type = RootEntryType::Table;
+  slot.rootDescriptorTable = base_descriptor;
 }
 
 void D3D12StateTracker::SetComputeRoot32BitConstants(ID3D12GraphicsCommandList* command_list, UINT index, UINT count, const void* data, UINT offset) {
   if (command_list == nullptr || data == nullptr) return;
 
   std::unique_lock<std::shared_mutex> lock(root_states_mutex_);
-  auto& table = root_states_[command_list];
-  if (index < table.size()) {
-    table[index].type = RootEntryType::Constants;
-    table[index].Num32BitValues = count;
-    table[index].DestOffset = offset;
-    const auto* src = static_cast<const uint32_t*>(data);
-    table[index].Data.assign(src, src + count);
-  }
+  RootState& slot = RootSlotLocked(command_list, index);
+  slot.type = RootEntryType::Constants;
+  slot.Num32BitValues = count;
+  slot.DestOffset = offset;
+  const auto* src = static_cast<const uint32_t*>(data);
+  slot.Data.assign(src, src + count);
 }
 
 void D3D12StateTracker::SetComputeRoot32BitConstant(ID3D12GraphicsCommandList* command_list, UINT index, UINT value, UINT offset) {
   if (command_list == nullptr) return;
 
   std::unique_lock<std::shared_mutex> lock(root_states_mutex_);
-  auto& table = root_states_[command_list];
-  if (index < table.size()) {
-    table[index].type = RootEntryType::Constant;
-    table[index].DestOffset = offset;
-    table[index].Data.assign(1, value);
-  }
+  RootState& slot = RootSlotLocked(command_list, index);
+  slot.type = RootEntryType::Constant;
+  slot.DestOffset = offset;
+  slot.Data.assign(1, value);
 }
 
 void D3D12StateTracker::SetComputeRootConstantBufferView(ID3D12GraphicsCommandList* command_list, UINT index, D3D12_GPU_VIRTUAL_ADDRESS address) {
   if (command_list == nullptr) return;
 
   std::unique_lock<std::shared_mutex> lock(root_states_mutex_);
-  auto& table = root_states_[command_list];
-  if (index < table.size()) {
-    table[index].type = RootEntryType::CBV;
-    table[index].bufferLocation = address;
-  }
+  RootState& slot = RootSlotLocked(command_list, index);
+  slot.type = RootEntryType::CBV;
+  slot.bufferLocation = address;
 }
 
 void D3D12StateTracker::SetComputeRootShaderResourceView(ID3D12GraphicsCommandList* command_list, UINT index, D3D12_GPU_VIRTUAL_ADDRESS address) {
   if (command_list == nullptr) return;
 
   std::unique_lock<std::shared_mutex> lock(root_states_mutex_);
-  auto& table = root_states_[command_list];
-  if (index < table.size()) {
-    table[index].type = RootEntryType::SRV;
-    table[index].bufferLocation = address;
-  }
+  RootState& slot = RootSlotLocked(command_list, index);
+  slot.type = RootEntryType::SRV;
+  slot.bufferLocation = address;
 }
 
 void D3D12StateTracker::SetComputeRootUnorderedAccessView(ID3D12GraphicsCommandList* command_list, UINT index, D3D12_GPU_VIRTUAL_ADDRESS address) {
   if (command_list == nullptr) return;
 
   std::unique_lock<std::shared_mutex> lock(root_states_mutex_);
-  auto& table = root_states_[command_list];
-  if (index < table.size()) {
-    table[index].type = RootEntryType::UAV;
-    table[index].bufferLocation = address;
-  }
+  RootState& slot = RootSlotLocked(command_list, index);
+  slot.type = RootEntryType::UAV;
+  slot.bufferLocation = address;
 }
 
 bool D3D12StateTracker::HasState(ID3D12GraphicsCommandList* command_list) const {

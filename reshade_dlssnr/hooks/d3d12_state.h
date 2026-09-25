@@ -83,6 +83,10 @@ class D3D12StateTracker {
   D3D12StateTracker() = default;
   ~D3D12StateTracker() = default;
 
+  // Root slot `index`, growing the table when the root signature's parameter
+  // count is still unknown. Caller must hold root_states_mutex_.
+  RootState& RootSlotLocked(ID3D12GraphicsCommandList* command_list, UINT index);
+
   D3D12StateTracker(const D3D12StateTracker&) = delete;
   D3D12StateTracker& operator=(const D3D12StateTracker&) = delete;
 
@@ -97,6 +101,12 @@ class D3D12StateTracker {
 
   mutable std::shared_mutex root_states_mutex_;
   std::unordered_map<ID3D12GraphicsCommandList*, std::vector<RootState>> root_states_;
+
+  // Which root signature the recorded root entries were made under. Binding a
+  // different one invalidates them: index 3 of one signature is not index 3
+  // of the next, and replaying the old entries against the new signature
+  // writes root parameters the shader never declared.
+  std::unordered_map<ID3D12GraphicsCommandList*, ID3D12RootSignature*> root_state_owner_;
 
   mutable std::shared_mutex root_parameter_count_mutex_;
   std::unordered_map<ID3D12RootSignature*, UINT> root_parameter_count_;
