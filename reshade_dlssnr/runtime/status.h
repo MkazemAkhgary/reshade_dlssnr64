@@ -43,9 +43,10 @@ struct StatusSnapshot {
   // DLSS guides: depth and motion captured from the game's DLSS eval.
   bool guides_valid = false;
 
-  // Post-DLSS path blocked. Set when the NGX hook skipped the DLSS Output
-  // passes because re-entering NGX would be unsafe (Streamline loaded
-  // without HookStreamline=1). Cleared once the condition goes away.
+  // Post-DLSS path blocked. Set when the NGX hook could not run the DLSS
+  // Output passes because the D3D12 command list hooks are not installed,
+  // so the game's command list state could not be put back afterwards.
+  // Cleared once the condition goes away.
   bool post_dlss_blocked = false;
   char post_dlss_block_reason[kStatusTextLength] = {};
 

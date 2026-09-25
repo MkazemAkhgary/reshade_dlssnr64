@@ -1,12 +1,11 @@
 // RenoDX-compatible NVSDK_NGX_D3D12 hook bridge for guide capture.
 #pragma once
 
-#include <d3d11.h>
 #include <d3d12.h>
-#include <nvsdk_ngx.h>
 #include <windows.h>
+#include <wrl/client.h>
 
-#include <cassert>
+#include <cstdio>
 #include <mutex>
 #include <tuple>
 #include <unordered_map>
@@ -21,8 +20,13 @@
 #include "dlss_guides.h"
 #include "local_vtable.h"
 #include "settings.h"
+#include "streamline_compat.h"
 
 namespace reshade_dlssnr::ngx_hook_compat {
+
+// Installing the D3D12 hooks allocates a command allocator and a command
+// list, so a retry that never succeeds must not run forever.
+constexpr int kMaxHookInstallRetries = 120;
 
 static decltype(&NVSDK_NGX_D3D12_EvaluateFeature) real_NVSDK_NGX_D3D12_EvaluateFeature = nullptr;
 static decltype(&NVSDK_NGX_D3D12_CreateFeature) real_NVSDK_NGX_D3D12_CreateFeature = nullptr;
@@ -30,35 +34,45 @@ static decltype(&NVSDK_NGX_D3D12_CreateFeature) real_NVSDK_NGX_D3D12_CreateFeatu
 static inline std::unordered_map<unsigned int, NVSDK_NGX_Feature> g_handle_to_feature;
 static inline std::mutex g_handle_to_feature_mutex;
 
-// Post-DLSS edits re-enter NGX from inside the game's own EvaluateFeature
-// call. When the game goes through NVIDIA Streamline and ReShade isn't the
-// one owning sl.interposer's entry point, that re-entry happens in the
-// middle of Streamline's dispatch and crashes. ReShade only registers that
-// hook when [INSTALL] HookStreamline=1, so the value here is exactly the
-// condition we need — read once, since ReShade reads its global config
-// only at load.
-static bool HookStreamlineEnabled() {
-  static const bool enabled = [] {
-    bool v = false;
-    reshade::get_config_value(nullptr, "INSTALL", "HookStreamline", v);
-    return v;
-  }();
-  return enabled;
+// Logged once: a Streamline build that proxies the command list is the whole
+// reason this file has to unwrap anything, so it is worth one line.
+static void LogCommandListProxyOnce(bool is_proxy) {
+  static bool logged = false;
+  if (logged) return;
+  logged = true;
+
+  reshade::log::message(
+      reshade::log::level::info,
+      is_proxy
+          ? "NVIDIA Streamline proxies the command list; recording on the native interface"
+          : "NVIDIA Streamline does not proxy the command list");
 }
 
-// Whether the game is loading through Streamline. Cached once: in
-// practice the game loads sl.interposer.dll at process start, long before
-// its first DLSS evaluation, so a single check on the first call is
-// sufficient and keeps the per-frame path off the loader lock.
-static bool StreamlineLoaded() {
-  static const bool loaded =
-      GetModuleHandleW(L"sl.interposer.dll") != nullptr;
-  return loaded;
+static void LogOnce(bool& flag, reshade::log::level level, const char* message) {
+  if (flag) return;
+  flag = true;
+  reshade::log::message(level, message);
 }
 
-// True when running a Post-DLSS pass would re-enter NGX unsafely.
-static bool PostDlssUnsafe() {
-  return StreamlineLoaded() && !HookStreamlineEnabled();
+// The vtable hooks are installed at device init, but they are what lets us
+// put the game's command list state back after a Post-DLSS pass, so try again
+// here if the first attempt did not take.
+static bool EnsureHooks(ID3D12GraphicsCommandList* command_list) {
+  if (D3D12Hooks::Get().Installed()) return true;
+  if (command_list == nullptr) return false;
+
+  static int retries = 0;
+  if (retries >= kMaxHookInstallRetries) return false;
+  ++retries;
+
+  ID3D12Device* device = nullptr;
+  if (FAILED(command_list->GetDevice(IID_PPV_ARGS(&device))) || device == nullptr) {
+    return false;
+  }
+
+  const bool installed = D3D12Hooks::Get().InstallEarlyHooks(device);
+  device->Release();
+  return installed;
 }
 
 static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_CreateFeature(
@@ -84,8 +98,40 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
     PFN_NVSDK_NGX_ProgressCallback callback) {
   D3D12Hooks::Get().SetTrackingEnabled(false);
 
+  // Streamline's own evaluate path is what called us, so hand it back exactly
+  // the command list it passed in. Everything we do ourselves goes through the
+  // native interface below.
   NVSDK_NGX_Result result = real_NVSDK_NGX_D3D12_EvaluateFeature(
       command_list, feature_handle, parameters, callback);
+
+  // Whether this hook fires at all, and what NGX returned. Without it, "no
+  // Post-DLSS" and "no evaluate ever arrived" look identical -- a distinction
+  // that cost a whole debugging round.
+  static bool logged_first = false;
+  if (!logged_first) {
+    logged_first = true;
+    char message[128];
+    std::snprintf(message, sizeof(message),
+                  "NGX evaluate hook fired (result=%d)",
+                  static_cast<int>(result));
+    reshade::log::message(reshade::log::level::info, message);
+  }
+
+  // With Streamline 1.x the game's command list is an interposer proxy:
+  // recording through it runs Streamline's registered after-hooks (its proxy
+  // ResourceBarrier does exactly that) from the middle of its own evaluate,
+  // and its state tracking then restores a state we changed. The proxy is not
+  // opaque -- QueryInterface with a fixed IID returns what it wraps -- so
+  // unwrap it and record on the native list instead. Our vtable hooks sit on
+  // d3d12.dll either way, which is also why the tracker is keyed by the
+  // native pointer and the restore below has to use the same one.
+  bool is_proxy = false;
+  Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> native_list =
+      sl_compat::Native(command_list, &is_proxy);
+  LogCommandListProxyOnce(is_proxy);
+
+  ID3D12GraphicsCommandList* work_list =
+      native_list != nullptr ? native_list.Get() : command_list;
 
   if (result == NVSDK_NGX_Result_Success && feature_handle != nullptr && parameters != nullptr) {
     NVSDK_NGX_Feature feature_id = NVSDK_NGX_Feature_Reserved0;
@@ -99,32 +145,31 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
     }
 
     if (feature_id == NVSDK_NGX_Feature_SuperSampling) {
-      DlssGuides::Get().Capture(command_list, parameters, feature_id);
+      if (!EnsureHooks(work_list)) {
+        AddonController::Get().SetPostDlssBlocked(
+            "Post-DLSS disabled: D3D12 command list hooks are not installed");
+      } else {
+        DlssGuides::Get().Capture(work_list, parameters, feature_id);
 
-      const Settings& settings = GetSettings();
-      if (settings.enabled) {
-        bool any_post_dlss = false;
-        for (uint32_t i = 0; i < kMaxPasses; ++i) {
-          if (settings.pass_enabled[i] &&
-              settings.passes[i].injection_stage == InjectionStage::PostDLSS) {
-            any_post_dlss = true;
-            break;
+        const Settings& settings = GetSettings();
+        if (settings.enabled) {
+          bool any_post_dlss = false;
+          for (uint32_t i = 0; i < kMaxPasses; ++i) {
+            if (settings.pass_enabled[i] &&
+                settings.passes[i].injection_stage == InjectionStage::PostDLSS) {
+              any_post_dlss = true;
+              break;
+            }
           }
-        }
 
-        if (any_post_dlss && PostDlssUnsafe()) {
-          // Skip rather than crash. The controller surfaces this in the
-          // Status section so the cause is visible without the log.
-          AddonController::Get().SetPostDlssBlocked(
-              "Post-DLSS disabled: set HookStreamline=1 in ReShade.ini");
-        } else {
           AddonController::Get().SetPostDlssBlocked(nullptr);
+
           if (any_post_dlss) {
             ID3D12Resource* output = nullptr;
             if (parameters->Get(NVSDK_NGX_Parameter_Output, &output) ==
                     NVSDK_NGX_Result_Success &&
                 output != nullptr) {
-              AddonController::Get().OnPostDlssEvaluate(command_list, output);
+              AddonController::Get().OnPostDlssEvaluate(work_list, output);
             }
           }
         }
@@ -132,7 +177,7 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
     }
   }
 
-  D3D12Hooks::Get().RestoreCommandList(command_list);
+  D3D12Hooks::Get().RestoreCommandList(work_list);
   D3D12Hooks::Get().SetTrackingEnabled(true);
 
   return result;
@@ -144,5 +189,35 @@ static const std::vector<HookItem> DLSS_HOOKS = {
     {"NVSDK_NGX_D3D12_CreateFeature", (void**)&real_NVSDK_NGX_D3D12_CreateFeature, (void*)&hooked_NVSDK_NGX_D3D12_CreateFeature},
     {"NVSDK_NGX_D3D12_EvaluateFeature", (void**)&real_NVSDK_NGX_D3D12_EvaluateFeature, (void*)&hooked_NVSDK_NGX_D3D12_EvaluateFeature},
 };
+
+// Installs the NGX hooks. Safe to call until it succeeds.
+static bool TryHookNgx() {
+  if (real_NVSDK_NGX_D3D12_EvaluateFeature != nullptr) return true;
+
+  HMODULE nvngx_dlss = GetModuleHandleW(L"nvngx_dlss.dll");
+  if (nvngx_dlss == nullptr) {
+    // nvngx_dlss.dll is loaded on demand, so load it to get the hook in place
+    // ahead of the first CreateFeature -- a feature created before this
+    // attaches would never be recognised and nothing would run. Checking
+    // GetModuleHandle first means an instance Streamline has already loaded is
+    // never shadowed by a second copy.
+    nvngx_dlss = LoadLibraryW(L"nvngx_dlss.dll");
+  }
+  if (nvngx_dlss == nullptr) return false;
+
+  if (!local_vtable::Hook(nvngx_dlss, DLSS_HOOKS)) return false;
+
+  static bool logged = false;
+  LogOnce(logged, reshade::log::level::info,
+          "Hooked NVSDK_NGX_D3D12_CreateFeature/EvaluateFeature in nvngx_dlss.dll");
+  return true;
+}
+
+static void UnhookNgx() {
+  HMODULE nvngx_dlss = GetModuleHandleW(L"nvngx_dlss.dll");
+  if (nvngx_dlss == nullptr) return;
+
+  local_vtable::Unhook(nvngx_dlss, DLSS_HOOKS);
+}
 
 }  // namespace reshade_dlssnr::ngx_hook_compat

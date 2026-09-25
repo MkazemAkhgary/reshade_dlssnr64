@@ -28,11 +28,6 @@ constexpr float kResetButtonWidth = 24.0f;
 // setting even from helpers that never see the current Settings.
 bool g_show_tooltips = true;
 
-// Set once the user clicks the HookStreamline fix. The setting is read by
-// ReShade only at load, so the flag is used to keep showing "restart
-// required" for the rest of the session.
-bool g_hookstreamline_fix_applied = false;
-
 // Variadic tooltip that no-ops when tooltips are off. All tooltip calls
 // in this file route through here.
 void Tip(const char* fmt, ...) {
@@ -647,29 +642,14 @@ void DrawStatusSection(Settings& settings, bool& changed) {
   }
 
   // Post-DLSS block notice. Deliberately outside the two-column table so
-  // it reads as an alarm rather than another data field, and so it can
-  // carry an action button without breaking the cell layout.
+  // it reads as an alarm rather than another data field. There is no action
+  // button: the only condition that blocks Post-DLSS is the addon failing to
+  // install its own D3D12 hooks, which nothing in the UI can fix.
   if (snap.post_dlss_blocked) {
     ImGui::Spacing();
     bullet(false);
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(snap.post_dlss_block_reason);
-
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Fix")) {
-      reshade::set_config_value(nullptr, "INSTALL", "HookStreamline", 1);
-      g_hookstreamline_fix_applied = true;
-    }
-    if (ImGui::IsItemHovered()) {
-      Tip("Writes HookStreamline=1 to ReShade.ini.");
-    }
-
-    if (g_hookstreamline_fix_applied) {
-      ImGui::Indent();
-      ImGui::TextColored(ImVec4(0.9f, 0.8f, 0.3f, 1.0f),
-                         "Restart the game for the change to take effect.");
-      ImGui::Unindent();
-    }
   }
 
   // Global retry: one button resets every failed pass. Replaces the
