@@ -1,14 +1,40 @@
 #include "d3d12_hooks.h"
 
+#include <wrl/client.h>
+
 #include <detours.h>
 
 #include <reshade.hpp>
 
 #include "d3d12_state.h"
+#include "streamline_compat.h"
 
 namespace reshade_dlssnr {
 
 namespace {
+
+bool g_logged_interposer_state = false;
+
+// One line at install time, so a Streamline build gone wrong is visible in
+// the log without adding anything to the per-frame path.
+void LogInterposerStateOnce(bool device_is_proxy) {
+  if (g_logged_interposer_state) return;
+  g_logged_interposer_state = true;
+
+  if (!sl_compat::InterposerPresent()) {
+    reshade::log::message(
+        reshade::log::level::info,
+        "NVIDIA Streamline not present; hooking the game's D3D12 interfaces directly");
+  } else if (device_is_proxy) {
+    reshade::log::message(
+        reshade::log::level::info,
+        "NVIDIA Streamline proxies the D3D12 device; hooks installed on the native interfaces");
+  } else {
+    reshade::log::message(
+        reshade::log::level::info,
+        "NVIDIA Streamline present without D3D12 proxies; hooking the game's D3D12 interfaces directly");
+  }
+}
 
 using PFN_SetDescriptorHeaps = void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, UINT, ID3D12DescriptorHeap* const*);
 using PFN_SetPipelineState = void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, ID3D12PipelineState*);
@@ -183,8 +209,21 @@ bool D3D12Hooks::InstallEarlyHooks(ID3D12Device* device) {
   if (device == nullptr) return false;
   if (g_hooked_command_lists && g_hooked_device) return true;
 
+  // Streamline 1.x always hands the host a proxy device, and detouring the
+  // proxy's vtable entries instead of d3d12.dll's puts us inside Streamline's
+  // own command list bookkeeping: its restorePipeline calls the very methods
+  // we would have patched, and a ResourceBarrier on the proxy runs
+  // Streamline's registered after-hooks from the middle of its evaluate.
+  // Streamline 2.x only proxies when a feature asks for it. Resolve to the
+  // native device either way, so the hooks always land on d3d12.dll.
+  bool device_is_proxy = false;
+  Microsoft::WRL::ComPtr<ID3D12Device> native_device =
+      sl_compat::Native(device, &device_is_proxy);
+  if (native_device == nullptr) return false;
+  LogInterposerStateOnce(device_is_proxy);
+
   if (!g_hooked_device) {
-    void** device_vtable = *reinterpret_cast<void***>(device);
+    void** device_vtable = *reinterpret_cast<void***>(native_device.Get());
     if (device_vtable != nullptr) {
       g_original_create_root_signature =
           reinterpret_cast<PFN_CreateRootSignature>(device_vtable[16]);
@@ -207,13 +246,13 @@ bool D3D12Hooks::InstallEarlyHooks(ID3D12Device* device) {
   ID3D12CommandAllocator* command_allocator = nullptr;
   ID3D12GraphicsCommandList* command_list = nullptr;
 
-  if (FAILED(device->CreateCommandAllocator(
+  if (FAILED(native_device->CreateCommandAllocator(
           D3D12_COMMAND_LIST_TYPE_DIRECT,
           IID_PPV_ARGS(&command_allocator)))) {
     return false;
   }
 
-  if (FAILED(device->CreateCommandList(
+  if (FAILED(native_device->CreateCommandList(
           0,
           D3D12_COMMAND_LIST_TYPE_DIRECT,
           command_allocator,
@@ -230,6 +269,9 @@ bool D3D12Hooks::InstallEarlyHooks(ID3D12Device* device) {
     return false;
   }
 
+  // ID3D12GraphicsCommandList vtable slots. ID3D12Object contributes seven
+  // (the three IUnknown methods plus four Get/SetPrivateData and SetName),
+  // so the command list methods start at 9, not 5.
   g_original_set_pipeline_state = reinterpret_cast<PFN_SetPipelineState>(vtable[25]);
   g_original_set_descriptor_heaps = reinterpret_cast<PFN_SetDescriptorHeaps>(vtable[28]);
   g_original_set_compute_root_signature = reinterpret_cast<PFN_SetComputeRootSignature>(vtable[29]);
@@ -267,12 +309,19 @@ bool D3D12Hooks::InstallEarlyHooks(ID3D12Device* device) {
   return false;
 }
 
+bool D3D12Hooks::Installed() const {
+  return g_hooked_command_lists;
+}
+
 void D3D12Hooks::SetTrackingEnabled(bool enabled) {
   g_tracking_enabled = enabled;
 }
 
 void D3D12Hooks::RestoreCommandList(ID3D12GraphicsCommandList* command_list) {
-  if (command_list == nullptr) return;
+  // Nothing was recorded if the hooks never went in, so there is nothing to
+  // put back. Returning here rather than calling the unhooked originals also
+  // keeps the tracker from being consulted on the Present path.
+  if (command_list == nullptr || !g_hooked_command_lists) return;
 
   const auto heaps = D3D12StateTracker::Get().GetDescriptorHeaps(command_list);
   if (heaps.NumDescriptorHeaps > 0 && heaps.Heaps[0] != nullptr) {

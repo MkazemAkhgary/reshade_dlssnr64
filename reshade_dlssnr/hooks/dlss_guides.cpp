@@ -3,6 +3,7 @@
 #include <reshade.hpp>
 
 #include "d3d12_utils.h"
+#include "streamline_compat.h"
 
 namespace reshade_dlssnr {
 
@@ -141,8 +142,18 @@ void DlssGuides::Capture(
     return;
   }
 
-  ID3D12Device* device = nullptr;
-  if (FAILED(command_list->GetDevice(IID_PPV_ARGS(&device))) || device == nullptr) {
+  // A Streamline command list proxy reports its proxy device here, and
+  // creating our clones through it would put them under Streamline's
+  // resource tracking. Unwrap before allocating anything.
+  ID3D12Device* queried_device = nullptr;
+  if (FAILED(command_list->GetDevice(IID_PPV_ARGS(&queried_device))) ||
+      queried_device == nullptr) {
+    state_.valid = false;
+    return;
+  }
+  Microsoft::WRL::ComPtr<ID3D12Device> device = sl_compat::Native(queried_device);
+  queried_device->Release();
+  if (device == nullptr) {
     state_.valid = false;
     return;
   }
@@ -181,7 +192,7 @@ void DlssGuides::Capture(
                             : depth->GetDesc().Format)) {
     RetireResource(depth_clone_);
     depth_clone_.Attach(
-        CreateGuideClone(device, depth, &depth_width_, &depth_height_, &depth_format_));
+        CreateGuideClone(device.Get(), depth, &depth_width_, &depth_height_, &depth_format_));
   }
 
   if (motion_clone_ == nullptr ||
@@ -192,12 +203,11 @@ void DlssGuides::Capture(
                              : motion->GetDesc().Format)) {
     RetireResource(motion_clone_);
     motion_clone_.Attach(
-        CreateGuideClone(device, motion, &motion_width_, &motion_height_, &motion_format_));
+        CreateGuideClone(device.Get(), motion, &motion_width_, &motion_height_, &motion_format_));
   }
 
   if (depth_clone_ == nullptr || motion_clone_ == nullptr) {
     state_.valid = false;
-    device->Release();
     return;
   }
 
@@ -231,7 +241,7 @@ void DlssGuides::Capture(
                                     : output->GetDesc().Format)) {
       RetireResource(dlss_output_clone_);
       dlss_output_clone_.Attach(CreateGuideClone(
-          device, output, &dlss_output_width_, &dlss_output_height_,
+          device.Get(), output, &dlss_output_width_, &dlss_output_height_,
           &dlss_output_format_));
     }
 
@@ -263,8 +273,6 @@ void DlssGuides::Capture(
   state_.mv_scale_y = mv_scale_y;
   state_.depth_inverted = (create_flags & NVSDK_NGX_DLSS_Feature_Flags_DepthInverted) != 0;
   state_.valid = true;
-
-  device->Release();
 }
 
 void DlssGuides::RetireResource(Microsoft::WRL::ComPtr<ID3D12Resource>& resource) {

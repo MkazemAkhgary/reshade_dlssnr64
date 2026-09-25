@@ -12,7 +12,14 @@ class D3D12Hooks {
  public:
   static D3D12Hooks& Get();
 
+  // Installs the command-list and device vtable hooks. Idempotent; returns
+  // true once both are in place.
   bool InstallEarlyHooks(ID3D12Device* device);
+
+  // True once the command-list hooks are live. Nothing is tracked before
+  // that, so there is nothing for RestoreCommandList to put back.
+  bool Installed() const;
+
   void SetTrackingEnabled(bool enabled);
   void RestoreCommandList(ID3D12GraphicsCommandList* command_list);
 
