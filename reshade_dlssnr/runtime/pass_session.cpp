@@ -284,9 +284,10 @@ void PassSession::CleanupFrameState(ID3D12GraphicsCommandList* command_list) {
 }
 
 void PassSession::SubmitAndWait() {
-  command_.GetCommandList()->Close();
-  ID3D12CommandList* lists[] = {command_.GetCommandList()};
-  command_queue_->ExecuteCommandLists(1, lists);
+  // Through CommandContext, so the submit goes through the one place that
+  // reports what the runtime said about it. ExecuteCommandLists returns void
+  // and a rejected call shows up as a removed device somewhere else entirely.
+  command_.CloseAndSubmit(command_queue_);
   command_.WaitGpu(command_queue_);
   guides_->ReleaseRetiredGameResources();
 }
