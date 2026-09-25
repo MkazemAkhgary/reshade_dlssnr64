@@ -35,6 +35,12 @@ std::mutex& MapMutex() {
 std::atomic<FILE*> g_file{nullptr};
 std::atomic<bool> g_checked{false};
 
+// Set by DLSSNR_TRACE_FLUSH=1. Off by default: a flush per line is a write()
+// per line. On, it means a crash loses nothing, which is the only way to see
+// which step died -- the Present stage in particular can crash before it has
+// written the kFlushLineInterval lines that would otherwise commit the batch.
+std::atomic<bool> g_flush_every_line{false};
+
 uint64_t g_sequence = 0;
 
 // One entry per FrameStream. `counter` is printed on every line as d=/p=;
@@ -174,6 +180,9 @@ void TraceInit() {
   const std::string path = ReadEnv("DLSSNR_TRACE");
   if (path.empty()) return;
 
+  g_flush_every_line.store(ReadEnv("DLSSNR_TRACE_FLUSH") == "1",
+                           std::memory_order_relaxed);
+
   FILE* file = nullptr;
   errno_t open_error = fopen_s(&file, path.c_str(), "wb");
   if (open_error != 0 || file == nullptr) return;
@@ -253,6 +262,10 @@ uint64_t WritePrefixLocked(FILE* file, const char* category,
 
 // Assumes Mutex() is held.
 void AfterLineLocked() {
+  if (g_flush_every_line.load(std::memory_order_relaxed)) {
+    FlushLocked();
+    return;
+  }
   if (++g_lines_since_flush >= kFlushLineInterval) FlushLocked();
 }
 

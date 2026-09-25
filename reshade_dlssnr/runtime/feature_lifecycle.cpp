@@ -55,6 +55,15 @@ bool FeatureLifecycle::EnsureFeature(
   parameter_block.SetUInt("VisibilityNodeMask", 1u);
   ApplyModelTuningParams(parameter_block, pass);
 
+  // Logged before the call, not after: a crash inside the model's
+  // CreateFeature is otherwise indistinguishable from one just after it,
+  // because the only line either path produced was the success message.
+  {
+    std::string msg = "DLSSNR EnsureFeature: creating feature at ";
+    msg += std::to_string(width) + "x" + std::to_string(height);
+    reshade::log::message(reshade::log::level::info, msg.c_str());
+  }
+
   const NVSDK_NGX_Result result = runtime.CreateFeature(
       command_list,
       static_cast<NVSDK_NGX_Feature>(18),
@@ -79,10 +88,10 @@ bool FeatureLifecycle::EnsureFeature(
 }
 
 void FeatureLifecycle::ReleaseFeature(NgxRuntime& runtime) {
-  if (feature_handle_ != nullptr) {
-    runtime.ReleaseFeature(feature_handle_);
-    feature_handle_ = nullptr;
-  }
+  if (feature_handle_ == nullptr) return;
+
+  runtime.ReleaseFeature(feature_handle_);
+  feature_handle_ = nullptr;
 }
 
 void FeatureLifecycle::Shutdown(NgxRuntime& runtime) {
