@@ -21,6 +21,7 @@ void D3D12StateTracker::UntrackCommandList(ID3D12GraphicsCommandList* command_li
 
   descriptor_heaps_.erase(command_list);
   pipeline_states_.erase(command_list);
+  state_objects_.erase(command_list);
   signatures_.erase(command_list);
   root_states_.erase(command_list);
   root_state_owner_.erase(command_list);
@@ -55,6 +56,13 @@ RootState& D3D12StateTracker::RootSlotLocked(ID3D12GraphicsCommandList* command_
     table.resize(static_cast<size_t>(index) + 1);
   }
   return table[index];
+}
+
+void D3D12StateTracker::SetPipelineState1(ID3D12GraphicsCommandList* command_list, ID3D12StateObject* state_object) {
+  if (command_list == nullptr) return;
+
+  std::unique_lock<std::shared_mutex> lock(state_objects_mutex_);
+  state_objects_.insert_or_assign(command_list, state_object);
 }
 
 void D3D12StateTracker::SetComputeRootSignature(ID3D12GraphicsCommandList* command_list, ID3D12RootSignature* root_signature) {
@@ -182,6 +190,13 @@ ID3D12PipelineState* D3D12StateTracker::GetPipelineState(ID3D12GraphicsCommandLi
   std::shared_lock<std::shared_mutex> lock(pipeline_states_mutex_);
   auto it = pipeline_states_.find(command_list);
   if (it == pipeline_states_.end()) return nullptr;
+  return it->second;
+}
+
+ID3D12StateObject* D3D12StateTracker::GetPipelineState1(ID3D12GraphicsCommandList* command_list) const {
+  std::shared_lock<std::shared_mutex> lock(state_objects_mutex_);
+  auto it = state_objects_.find(command_list);
+  if (it == state_objects_.end()) return nullptr;
   return it->second;
 }
 

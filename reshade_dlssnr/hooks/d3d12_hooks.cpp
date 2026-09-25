@@ -77,6 +77,7 @@ void LogInterposerStateOnce(bool device_is_proxy) {
 
 using PFN_SetDescriptorHeaps = void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, UINT, ID3D12DescriptorHeap* const*);
 using PFN_SetPipelineState = void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, ID3D12PipelineState*);
+using PFN_SetPipelineState1 = void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList4*, ID3D12StateObject*);
 using PFN_SetComputeRootSignature = void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, ID3D12RootSignature*);
 using PFN_SetGraphicsRootSignature = void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, ID3D12RootSignature*);
 using PFN_SetComputeRootDescriptorTable = void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, UINT, D3D12_GPU_DESCRIPTOR_HANDLE);
@@ -93,6 +94,7 @@ struct RootRestoreHook {
 
 PFN_SetDescriptorHeaps g_original_set_descriptor_heaps = nullptr;
 PFN_SetPipelineState g_original_set_pipeline_state = nullptr;
+PFN_SetPipelineState1 g_original_set_pipeline_state1 = nullptr;
 PFN_SetComputeRootSignature g_original_set_compute_root_signature = nullptr;
 PFN_SetGraphicsRootSignature g_original_set_graphics_root_signature = nullptr;
 PFN_SetComputeRootDescriptorTable g_original_set_compute_root_descriptor_table = nullptr;
@@ -109,6 +111,7 @@ bool g_tracking_enabled = true;
 
 thread_local bool g_in_set_descriptor_heaps = false;
 thread_local bool g_in_set_pipeline_state = false;
+thread_local bool g_in_set_pipeline_state1 = false;
 thread_local bool g_in_set_compute_root_signature = false;
 thread_local bool g_in_set_graphics_root_signature = false;
 thread_local bool g_in_set_compute_root_descriptor_table = false;
@@ -130,6 +133,14 @@ void STDMETHODCALLTYPE HookedSetPipelineState(ID3D12GraphicsCommandList* command
     D3D12StateTracker::Get().SetPipelineState(command_list, pipeline_state);
   }
   g_original_set_pipeline_state(command_list, pipeline_state);
+}
+
+void STDMETHODCALLTYPE HookedSetPipelineState1(ID3D12GraphicsCommandList4* command_list, ID3D12StateObject* state_object) {
+  if (g_tracking_enabled && !g_in_set_pipeline_state1 && command_list != nullptr) {
+    D3D12StateTracker::Get().SetPipelineState1(
+        reinterpret_cast<ID3D12GraphicsCommandList*>(command_list), state_object);
+  }
+  g_original_set_pipeline_state1(command_list, state_object);
 }
 
 void STDMETHODCALLTYPE HookedSetComputeRootSignature(ID3D12GraphicsCommandList* command_list, ID3D12RootSignature* root_signature) {
@@ -322,6 +333,20 @@ bool D3D12Hooks::InstallEarlyHooks(ID3D12Device* device) {
   g_original_set_compute_root_srv = reinterpret_cast<PFN_SetComputeRootShaderResourceView>(vtable[39]);
   g_original_set_compute_root_uav = reinterpret_cast<PFN_SetComputeRootUnorderedAccessView>(vtable[41]);
 
+  // SetPipelineState1 lives on ID3D12GraphicsCommandList4, whose vtable
+  // continues the base one, so its slot has to be read from that interface:
+  // 75, after the 60 base slots. Not every command list exposes GCL4, so a
+  // failed query skips the hook rather than guessing a slot.
+  Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> command_list4;
+  if (SUCCEEDED(command_list->QueryInterface(IID_PPV_ARGS(&command_list4))) &&
+      command_list4 != nullptr) {
+    void** vtable4 = *reinterpret_cast<void***>(command_list4.Get());
+    if (vtable4 != nullptr) {
+      g_original_set_pipeline_state1 =
+          reinterpret_cast<PFN_SetPipelineState1>(vtable4[75]);
+    }
+  }
+
   command_list->Close();
   command_list->Release();
   command_allocator->Release();
@@ -337,6 +362,9 @@ bool D3D12Hooks::InstallEarlyHooks(ID3D12Device* device) {
   DetourUpdateThread(GetCurrentThread());
 
   DetourAttach(reinterpret_cast<void**>(&g_original_set_pipeline_state), HookedSetPipelineState);
+  if (g_original_set_pipeline_state1 != nullptr) {
+    DetourAttach(reinterpret_cast<void**>(&g_original_set_pipeline_state1), HookedSetPipelineState1);
+  }
   DetourAttach(reinterpret_cast<void**>(&g_original_set_descriptor_heaps), HookedSetDescriptorHeaps);
   DetourAttach(reinterpret_cast<void**>(&g_original_set_compute_root_signature), HookedSetComputeRootSignature);
   DetourAttach(reinterpret_cast<void**>(&g_original_set_graphics_root_signature), HookedSetGraphicsRootSignature);
@@ -413,6 +441,15 @@ void D3D12Hooks::RestoreCommandList(ID3D12GraphicsCommandList* command_list) {
   ID3D12PipelineState* pipeline_state = D3D12StateTracker::Get().GetPipelineState(command_list);
   if (pipeline_state != nullptr) {
     g_original_set_pipeline_state(command_list, pipeline_state);
+  }
+
+  // Last in the sequence, and last for a reason: a state object and a pipeline
+  // state are alternatives for the same slot, so whichever was set most
+  // recently is the one in force. Streamline's restore list puts it here too.
+  ID3D12StateObject* state_object = D3D12StateTracker::Get().GetPipelineState1(command_list);
+  if (state_object != nullptr && g_original_set_pipeline_state1 != nullptr) {
+    g_original_set_pipeline_state1(
+        reinterpret_cast<ID3D12GraphicsCommandList4*>(command_list), state_object);
   }
 }
 

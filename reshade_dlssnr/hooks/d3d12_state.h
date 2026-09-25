@@ -55,6 +55,11 @@ class D3D12StateTracker {
 
   void SetDescriptorHeaps(ID3D12GraphicsCommandList* command_list, UINT count, ID3D12DescriptorHeap* const* heaps);
   void SetPipelineState(ID3D12GraphicsCommandList* command_list, ID3D12PipelineState* pipeline_state);
+  // Ray tracing pipeline state. Streamline's manual-hooking guide lists it
+  // alongside SetPipelineState as state the host has to put back after an
+  // evaluate, and it lives on ID3D12GraphicsCommandList4 rather than on the
+  // base interface.
+  void SetPipelineState1(ID3D12GraphicsCommandList* command_list, ID3D12StateObject* state_object);
   void SetComputeRootSignature(ID3D12GraphicsCommandList* command_list, ID3D12RootSignature* root_signature);
   void SetGraphicsRootSignature(ID3D12GraphicsCommandList* command_list, ID3D12RootSignature* root_signature);
 
@@ -73,6 +78,7 @@ class D3D12StateTracker {
 
   DescriptorHeapState GetDescriptorHeaps(ID3D12GraphicsCommandList* command_list) const;
   ID3D12PipelineState* GetPipelineState(ID3D12GraphicsCommandList* command_list) const;
+  ID3D12StateObject* GetPipelineState1(ID3D12GraphicsCommandList* command_list) const;
   SignatureEntry GetSignature(ID3D12GraphicsCommandList* command_list) const;
   const std::vector<RootState>* GetRootState(ID3D12GraphicsCommandList* command_list) const;
 
@@ -95,6 +101,9 @@ class D3D12StateTracker {
 
   mutable std::shared_mutex pipeline_states_mutex_;
   std::unordered_map<ID3D12GraphicsCommandList*, ID3D12PipelineState*> pipeline_states_;
+
+  mutable std::shared_mutex state_objects_mutex_;
+  std::unordered_map<ID3D12GraphicsCommandList*, ID3D12StateObject*> state_objects_;
 
   mutable std::shared_mutex root_signature_mutex_;
   std::unordered_map<ID3D12GraphicsCommandList*, SignatureEntry> signatures_;
