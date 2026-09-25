@@ -17,75 +17,63 @@ namespace reshade_dlssnr::local_vtable {
 
 using HookItem = std::tuple<const char*, void**, void*>;
 
+// Attaches every export in `hooks` in one transaction.
+//
+// All-or-nothing: a target that cannot be resolved, a DetourAttach that fails
+// or a commit that fails all leave the module untouched and *real == nullptr.
+// That matters because the callers retry -- the NGX hook is re-attempted on
+// every Present until nvngx_dlss.dll shows up -- and a half-attached table
+// would let a later call detour a target twice.
+//
+// An entry whose *real is already set is skipped rather than re-attached.
 static bool Hook(HMODULE module, const std::vector<HookItem>& hooks) {
   if (module == nullptr) return false;
 
-  bool any_hooked = false;
-  bool transaction_started = false;
-  bool commit_failed = false;
+  // Indices into `hooks` whose *real this call filled in, so a failure can
+  // undo exactly what it did.
+  std::vector<size_t> attached;
 
-  for (const auto& [name, real, hook] : hooks) {
-    if (real == nullptr || hook == nullptr) continue;
+  auto begin_transaction = []() -> bool {
+    if (DetourTransactionBegin() != NO_ERROR) return false;
+    if (DetourUpdateThread(GetCurrentThread()) == NO_ERROR) return true;
+    DetourTransactionAbort();
+    return false;
+  };
+
+  auto rollback = [&hooks, &attached]() {
+    for (size_t index : attached) {
+      *std::get<1>(hooks[index]) = nullptr;
+    }
+  };
+
+  for (size_t i = 0; i < hooks.size(); ++i) {
+    const auto& [name, real, hook] = hooks[i];
+    if (real == nullptr || hook == nullptr || *real != nullptr) continue;
 
     FARPROC proc = GetProcAddress(module, name);
     if (proc == nullptr) continue;
 
-    assert(*real == nullptr);
+    if (attached.empty() && !begin_transaction()) return false;
 
     *real = reinterpret_cast<void*>(proc);
+    attached.push_back(i);
 
-    if (!transaction_started) {
-      if (DetourTransactionBegin() != NO_ERROR) {
-        *real = nullptr;
-        continue;
-      }
-      if (DetourUpdateThread(GetCurrentThread()) != NO_ERROR) {
-        DetourTransactionAbort();
-        *real = nullptr;
-        continue;
-      }
-      transaction_started = true;
-    }
-
-    if (DetourAttach(reinterpret_cast<void**>(real), hook) == NO_ERROR) {
-      any_hooked = true;
-    } else {
+    if (DetourAttach(real, hook) != NO_ERROR) {
       DetourTransactionAbort();
-      *real = nullptr;
-      transaction_started = false;
-      commit_failed = true;
-      break;
+      rollback();
+      return false;
     }
   }
 
-  if (transaction_started && !commit_failed) {
-    if (DetourTransactionCommit() != NO_ERROR) {
-      DetourTransactionAbort();
-      commit_failed = true;
-    }
+  if (attached.empty()) return false;
+
+  if (DetourTransactionCommit() != NO_ERROR) {
+    DetourTransactionAbort();
+    rollback();
+    return false;
   }
 
-  if (commit_failed) {
-    // Rollback any hooks attached in this transaction.
-    for (const auto& [name, real, hook] : hooks) {
-      if (real == nullptr || *real == nullptr || hook == nullptr) continue;
-
-      if (DetourTransactionBegin() != NO_ERROR) continue;
-      if (DetourUpdateThread(GetCurrentThread()) != NO_ERROR) {
-        DetourTransactionAbort();
-        continue;
-      }
-      if (DetourDetach(reinterpret_cast<void**>(real), hook) == NO_ERROR) {
-        DetourTransactionCommit();
-        *real = nullptr;
-      } else {
-        DetourTransactionAbort();
-      }
-    }
-    any_hooked = false;
-  }
-
-  return any_hooked;
+  return true;
 }
 
 static void Unhook(HMODULE module, const std::vector<HookItem>& hooks) {
