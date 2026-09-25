@@ -47,6 +47,7 @@ reshade_dlssnr/
     pipeline_trace.h/.cpp        // DLSSNR_TRACE command-stream trace (debug aid)
     runtime.h/.cpp               // model loading, patching, NGX init, parameter block
     command_context.h/.cpp       // command allocator/list/fence/barrier/state helpers
+    crash_trace.h                // first-chance fault log (faulting module + offset)
     feature_lifecycle.h/.cpp     // feature handle creation and rebuild state
     model_pipeline.h/.cpp        // prepare input, compose output, HDR variants
     pass_resources.h/.cpp        // per-pass textures + scratch pool
@@ -66,6 +67,7 @@ reshade_dlssnr/
     dlss_guides.h/.cpp           // DLSS depth/motion/output capture
     local_vtable.h               // minimal Detours vtable hook wrapper
     nvngx_hook_compat.h          // hooks NVSDK_NGX Create/Evaluate
+    streamline_compat.h          // Streamline interposer proxy unwrapping
 
   state/
     settings.h/.cpp              // persistent settings, up to kMaxPasses passes
@@ -249,7 +251,13 @@ as steps, so the two tables are not expected to mirror each other.
 `DLSSNR_TRACE=<path>` is set. It is a debug aid, not a test harness: you reach
 for it when something crashes or behaves unexpectedly and the ReShade log does
 not explain why, because it shows the commands that were actually recorded and
-in what order, rather than what the code intends to do. Resource pointers are
+in what order, rather than what the code intends to do.
+
+Set `DLSSNR_TRACE_FLUSH=1` alongside it when chasing a crash. Lines are
+batched and only committed every 256 lines or at a frame boundary, so a crash
+loses everything back to the last commit — which is how a stage that dies on
+its first step can leave no trace at all. The knob flushes every line, so the
+last line in the file is the last thing that happened. Resource pointers are
 printed as stable first-seen indices, not raw addresses, so two captures stay
 comparable even though COM heaps recycle addresses between runs.
 
@@ -329,6 +337,61 @@ as stale. `CommandContext::UavBarrier` handles this.
 They only record commands. This is why the retry path releases the NGX feature
 rather than trying to synchronize.
 
+### NVIDIA Streamline
+
+The game may be running its DLSS through Streamline, which replaces the D3D
+entry points the game links against and hands it **proxy** objects. Whether it
+does depends on the version:
+
+| Version | Device / command list proxies |
+|---|---|
+| 1.0.0 - 1.1.1 | Always. Command list state tracking is unconditional in 1.0.0 and on by default in 1.1.x. |
+| 2.0.0+ | Only what a feature asks for. The 2.x default flags include `eDisableCLStateTracking`, so a default 2.x host gets no command list proxy. |
+
+**Never operate on a Streamline proxy.** The 2.x guide, section 5.3, says it
+plainly: "Third party libraries SHOULD NOT use SL proxies to avoid app
+instability." Three concrete ways it breaks us:
+
+1. The proxy's `ResourceBarrier` dispatches Streamline's registered
+   after-hooks. Recording our barriers through it runs plugin code from the
+   middle of Streamline's own evaluate.
+2. The command list proxy's `GetDevice` returns the *proxy device*, so
+   anything we allocate goes under Streamline's resource tracking.
+3. A proxy we detour puts us inside Streamline's state tracking: its
+   `restorePipeline` calls the very methods we patched.
+
+**Unwrap instead.** `sl_compat::Native()` in `hooks/streamline_compat.h`
+resolves any proxy to what it wraps, via QueryInterface with the fixed IID
+`{ADEC44E2-61F0-45C3-AD9F-1B37379284FF}`. That IID is handled by every
+interposer proxy from 1.0.0 through 2.14.1, so one probe covers the whole
+range; on anything that is not a proxy it fails harmlessly and the interface
+comes back unchanged.
+
+Two consequences worth remembering:
+
+- **The vtable hooks are installed on the native device**, so the tracker is
+  keyed by the *native* command list pointer. `RestoreCommandList` must be
+  given the same native pointer the hooks saw, or the lookup misses and the
+  game's state is never put back.
+- **The `command_list` handed to NGX is passed through untouched.** Only our
+  own work uses the unwrapped list. Swapping what Streamline passes to its own
+  NGX call is not ours to change.
+
+**The NGX hook must be in place before the first `CreateFeature`.**
+`nvngx_dlss.dll` is loaded on demand, and the feature is created once,
+immediately after it is loaded. A hook that attaches later never sees that
+call, and since the handle-to-feature map is built from it, every evaluate
+afterwards is unrecognised and silently ignored — no log, no status, nothing.
+
+`TryHookNgx()` therefore loads the module when nothing else has: it checks
+`GetModuleHandle` first, so an instance Streamline has already loaded is never
+shadowed by a second copy, and only then falls back to `LoadLibrary`.
+`OnPresent` retries while the module is still absent.
+
+The alternative — never loading, only polling from `OnPresent` — was tried and
+is up to a frame too late whenever Streamline loads NGX and creates the feature
+between two presents.
+
 ### HLSL
 
 **`groupshared` declarations must be at global scope**, not inside the shader
@@ -349,6 +412,25 @@ until the signatures were corrected.
 a `float3x3` and `float3` is correct; `m * v` componentwise is a silent error.
 
 ### Pipeline
+
+**Everything this pass creates must come from the native device.** A second
+`NVSDK_NGX_D3D12_CreateFeature` for feature 18 kills the process inside
+`nvngx_dlssnr.dll`'s own entry point — nothing to catch, nothing to report —
+but **only on a Streamline 1.x host**. The same two features coexist happily on
+a 2.x host, so the model does hold two; the difference is the environment, and
+the one structural difference is proxies.
+
+Streamline 1.x proxies the device, the command queue and the command list
+unconditionally; 2.x proxies only what a feature needs, and its default flags
+disable command list state tracking entirely. So on a 1.x host
+`command_queue->GetDevice()` hands back the *proxy* device, and a session that
+builds its command list on it gets an SL proxy list — which then goes to NGX.
+`PassSession::AcquireBackbuffer` and the PostDLSS branch of
+`StepResolveDevice` therefore both resolve through `sl_compat::Native()` before
+anything is created from the result.
+
+The one line to read when a multi-pass bug looks host-specific is
+`DLSSNR pass: Present device ..., command queue ...`, logged once.
 
 **The feature must be built at full frame resolution**, never at working-scale
 resolution. Working scale only affects the per-frame evaluation size, which
@@ -496,6 +578,17 @@ engine through the `PassRun`.
 ---
 
 ## Logging and Status
+
+**A crash inside a module we do not own leaves no log.** Everything logged is
+written by code that ran *before* the fault, so a fault in `nvngx_dlssnr.dll`
+or the NGX core produces a log that says what we were about to do and nothing
+about where it died. `runtime/crash_trace.h` closes that gap: a vectored
+exception handler that appends one line naming the faulting instruction's
+module and offset, plus a short stack, to `%TEMP%\dlssnr_crash.txt`. It is
+built on raw Win32 on purpose — no CRT, no `reshade::log`, no allocation —
+because it runs while the process is already broken, and it returns
+`EXCEPTION_CONTINUE_SEARCH` so the game's own crash handling is unchanged.
+Reach for it before theorising about a fault that only reproduces in one game.
 
 **Log** is a historical record: lifecycle events (addon attach/detach,
 feature creation, format detection changes, first-time errors), not per-frame
