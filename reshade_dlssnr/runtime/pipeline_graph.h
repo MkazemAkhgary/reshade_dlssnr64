@@ -203,6 +203,14 @@ struct PassRun {
   // acquire) borrow it rather than re-querying.
   Microsoft::WRL::ComPtr<IDXGISwapChain3> swapchain3;
 
+  // The owners of `device` and `backbuffer`. Both are resolved from a local
+  // ComPtr inside a step, so without these the raw pointers above would refer
+  // to an object whose only reference died when that step returned. They
+  // happen to survive on the game's own references, which is exactly the kind
+  // of accident that stops being true on some other game.
+  Microsoft::WRL::ComPtr<ID3D12Device> device_owner;
+  Microsoft::WRL::ComPtr<ID3D12Resource> backbuffer_owner;
+
   DlssGuideState guides = {};
   bool guides_valid = false;
   bool is_first_pass = false;

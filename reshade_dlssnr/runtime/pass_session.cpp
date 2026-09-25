@@ -12,12 +12,33 @@
 #include "ngx_model_params.h"
 #include "pipeline_graph.h"
 #include "pipeline_trace.h"
+#include "streamline_compat.h"
 
 namespace reshade_dlssnr {
 
 namespace {
 std::mutex g_session_mutex;
+
+// One line, because it is the difference between two very different worlds:
+// Streamline 1.x proxies the device and the command queue unconditionally, so
+// anything we create from them is an SL proxy, while a 2.x host on its default
+// flags has no proxies at all.
+void LogPresentInterfacesOnce(bool device_is_proxy, ID3D12CommandQueue* queue) {
+  static bool logged = false;
+  if (logged) return;
+  logged = true;
+
+  bool queue_is_proxy = false;
+  sl_compat::Native(queue, &queue_is_proxy);
+
+  char message[192];
+  std::snprintf(message, sizeof(message),
+                "DLSSNR pass: Present device %s, command queue %s",
+                device_is_proxy ? "is an SL proxy" : "is native",
+                queue_is_proxy ? "is an SL proxy" : "is native");
+  reshade::log::message(reshade::log::level::info, message);
 }
+}  // namespace
 
 void PassSession::Fail(const char* reason) {
   failed_ = true;
@@ -29,6 +50,13 @@ void PassSession::Fail(const char* reason) {
   // dereference it.
   reshade::log::message(reshade::log::level::error,
                         reason != nullptr ? reason : "DLSSNR pass failed");
+}
+
+void PassSession::ReleaseFeature(NgxRuntime& runtime) {
+  std::lock_guard<std::mutex> lock(g_session_mutex);
+
+  if (!feature_.HasFeature()) return;
+  feature_.ReleaseFeature(runtime);
 }
 
 void PassSession::Retry(NgxRuntime& runtime) {
@@ -93,6 +121,25 @@ bool PassSession::AcquireBackbuffer(
         "DLSSNR pass: could not retrieve device from command queue");
     return false;
   }
+
+  // Streamline 1.x proxies the command queue, and a proxy queue reports its
+  // *proxy* device here. Building the session's command list on that device
+  // would make our list an SL proxy too -- the 2.x guide is explicit that a
+  // third party must not use them, and it is the one structural difference
+  // between a 1.x host and a 2.x one. Resolve to the native device so every
+  // object this pass creates belongs to d3d12.dll.
+  bool device_is_proxy = false;
+  Microsoft::WRL::ComPtr<ID3D12Device> native_device =
+      sl_compat::Native(out_device.Get(), &device_is_proxy);
+  if (native_device == nullptr) {
+    reshade::log::message(
+        reshade::log::level::error,
+        "DLSSNR pass: could not resolve the native device");
+    return false;
+  }
+
+  out_device = native_device;
+  LogPresentInterfacesOnce(device_is_proxy, command_queue);
 
   const UINT back_buffer_index = out_swapchain3->GetCurrentBackBufferIndex();
   if (FAILED(out_swapchain3->GetBuffer(
@@ -484,8 +531,10 @@ PipelineStatus PassSession::StepAcquireBackbuffer(PassRun& run) {
   }
 
   run.swapchain3 = swapchain3;
-  run.device = device.Get();
-  run.backbuffer = backbuffer.Get();
+  run.device_owner = device;
+  run.backbuffer_owner = backbuffer;
+  run.device = run.device_owner.Get();
+  run.backbuffer = run.backbuffer_owner.Get();
   run.desc = desc;
   run.width = static_cast<unsigned int>(desc.Width);
   run.height = static_cast<unsigned int>(desc.Height);
@@ -516,7 +565,18 @@ PipelineStatus PassSession::StepResolveDevice(PassRun& run) {
                 self->pass_index_);
       return PipelineStatus::SkipFrame;
     }
-    run.device = device.Get();
+
+    // A Streamline proxy list reports its proxy device here, and creating our
+    // textures on that would put them under Streamline's resource tracking.
+    device = sl_compat::Native(device.Get());
+    if (device == nullptr) {
+      TRACE_EVT(self, "SKIP stage=PostDLSS pass=%u reason=no_native_device",
+                self->pass_index_);
+      return PipelineStatus::SkipFrame;
+    }
+
+    run.device_owner = device;
+    run.device = run.device_owner.Get();
 
     if (run.runtime == nullptr) return PipelineStatus::SkipFrame;
     if (!run.runtime->Initialize(run.device)) {
@@ -801,6 +861,12 @@ PipelineStatus PassSession::StepEnsureFeature(PassRun& run) {
   // The list this stage records on: its own for Present, the game's for
   // PostDLSS.
   ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
+
+  // Brackets the call so a crash inside it is attributable rather than just
+  // "somewhere in this step".
+  TRACE_EVT(self, "ensure_feature stage=%s pass=%u list=%p %ux%u",
+            run.stage != nullptr ? run.stage->name : "?", self->pass_index_,
+            static_cast<const void*>(list), run.width, run.height);
 
   if (!self->feature_.EnsureFeature(*run.runtime, *run.pass, list, run.width,
                               run.height)) {

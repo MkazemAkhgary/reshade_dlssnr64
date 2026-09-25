@@ -53,6 +53,13 @@ class PassSession {
 
   void Shutdown(NgxRuntime& runtime);
 
+  // Drops this pass's NGX feature without touching its failure state.
+  //
+  // The addon can only hold one DLSSNR feature at a time, so a pass the user
+  // has disabled must give the slot up -- otherwise enabling a different pass
+  // could never take it. Called by the controller for disabled passes.
+  void ReleaseFeature(NgxRuntime& runtime);
+
   // Clears a previous failure and re-arms the pass for the next frame.
   // Releases the NGX feature so the retry starts from a clean handle,
   // regardless of what specifically went wrong. No-op if the pass has not
