@@ -166,6 +166,25 @@ inline LONG CALLBACK Handler(EXCEPTION_POINTERS* info) {
     out = detail::Append(out, end, "\r\n    ");
     out = detail::AppendModule(out, end, frames[i]);
   }
+
+  // The registers, because the fault address alone does not say what the call
+  // was. x64 passes the first four arguments in rcx/rdx/r8/r9, and for a COM
+  // method rcx is `this` -- so a fault at `this + small offset` is only
+  // readable if you can see whether `this` was null, and which object it was.
+  out = detail::Append(out, end, "\r\n  ctx rip=");
+  out = detail::AppendHex(out, end, info->ContextRecord->Rip);
+  out = detail::Append(out, end, " rsp=");
+  out = detail::AppendHex(out, end, info->ContextRecord->Rsp);
+  out = detail::Append(out, end, " rcx=");
+  out = detail::AppendHex(out, end, info->ContextRecord->Rcx);
+  out = detail::Append(out, end, " rdx=");
+  out = detail::AppendHex(out, end, info->ContextRecord->Rdx);
+  out = detail::Append(out, end, " r8=");
+  out = detail::AppendHex(out, end, info->ContextRecord->R8);
+  out = detail::Append(out, end, " r9=");
+  out = detail::AppendHex(out, end, info->ContextRecord->R9);
+  out = detail::Append(out, end, " tid=");
+  out = detail::AppendDec(out, end, GetCurrentThreadId());
   out = detail::Append(out, end, "\r\n");
   *out = '\0';
 
