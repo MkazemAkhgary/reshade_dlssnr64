@@ -434,6 +434,16 @@ If the once-logged `Command list resolved to the interface our D3D12 hooks
 recorded` ever stops saying "resolved", the resolution has broken and every
 restore is silently a no-op again.
 
+**The tracker holds references, not pointers.** It remembers root signatures,
+pipeline states, state objects and descriptor heaps so they can be put back
+after our pass, and the game releases all of those whenever it likes — a
+swapchain resize tears down and rebuilds the lot. Storing raw pointers meant
+the restore could hand the driver one that was already gone, which reads as an
+access violation at a small offset inside `nvwgf2umx.dll` and looks like a
+driver bug rather than ours. `ReplaceCom` takes a reference on store and drops
+the old one; `HookedReset` calls `UntrackCommandList` so the lifetime is one
+recording rather than the whole process.
+
 **Nothing here may create objects on a device other than the one the game
 uses.** Streamline 1.x proxies the device, queue and command list
 unconditionally; 2.x proxies only what a feature needs, and its default flags
