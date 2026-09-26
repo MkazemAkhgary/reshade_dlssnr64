@@ -160,9 +160,16 @@ void AddonController::GradeBackbuffer(ComputeEngine& codec,
       return;
     }
     grade_scratch_.Reset();
+    grade_scratch_out_.Reset();
     ID3D12Resource* raw = nullptr;
     if (!CreateUavTexture(device.Get(), desc, &raw)) return;
     grade_scratch_.Attach(raw);
+    raw = nullptr;
+    if (!CreateUavTexture(device.Get(), desc, &raw)) {
+      grade_scratch_.Reset();
+      return;
+    }
+    grade_scratch_out_.Attach(raw);
     grade_scratch_width_ = width;
     grade_scratch_height_ = height;
     grade_scratch_format_ = desc.Format;
@@ -170,29 +177,39 @@ void AddonController::GradeBackbuffer(ComputeEngine& codec,
               trace::ResourceId(grade_scratch_.Get()), width, height);
   }
 
-  // The image arrives in PRESENT and ApplyGrade takes it from there, the same
-  // way PresentDebugOutput seeds its copy. Without this the first transition
-  // infers a state from the resource's flags, which for a swapchain image is
-  // not PRESENT -- and a barrier whose Before does not match is an invalid
-  // call, which removes the device rather than reporting anything.
+  // The backbuffer goes in as a copy source and comes back as a copy
+  // destination, and never as a UAV. ApplyGrade grades `target` in place, so
+  // it is handed the two textures we own: the source is parked in
+  // grade_scratch_out_ first, and the result is copied back afterwards.
   release_command_.SetResourceState(backbuffer.Get(),
                                     D3D12_RESOURCE_STATE_PRESENT);
+  release_command_.Transition(list, backbuffer.Get(),
+                              D3D12_RESOURCE_STATE_COPY_SOURCE);
+  release_command_.Transition(list, grade_scratch_out_.Get(),
+                              D3D12_RESOURCE_STATE_COPY_DEST);
+  list->CopyResource(grade_scratch_out_.Get(), backbuffer.Get());
 
-  const bool graded =
-      model_pipeline::ApplyGrade(release_command_, list, &codec,
-                                 backbuffer.Get(), grade_scratch_.Get(), width,
-                                 height, hdr_.ResolvedFormat(), grade);
+  const bool graded = model_pipeline::ApplyGrade(
+      release_command_, list, &codec, grade_scratch_out_.Get(),
+      grade_scratch_.Get(), width, height, hdr_.ResolvedFormat(), grade);
+
   if (!graded) {
     TRACE_EVT(this, "grade_backbuffer_failed");
     reshade::log::message(
         reshade::log::level::error,
         "DLSSNR: backbuffer grade failed; returning the swapchain image to PRESENT");
+  } else {
+    release_command_.Transition(list, grade_scratch_out_.Get(),
+                                D3D12_RESOURCE_STATE_COPY_SOURCE);
+    release_command_.Transition(list, backbuffer.Get(),
+                                D3D12_RESOURCE_STATE_COPY_DEST);
+    list->CopyResource(backbuffer.Get(), grade_scratch_out_.Get());
   }
 
-  // Always, including on failure. ApplyGrade leaves the target as a UAV, so
-  // returning early here left the swapchain's image in a state the game's next
-  // Present rejects -- which removes the device with DXGI_ERROR_INVALID_CALL
-  // and hides the grade failure that actually happened.
+  // Always, including on failure. Returning early would leave the swapchain's
+  // image in a state the game's next Present rejects -- which removes the
+  // device with DXGI_ERROR_INVALID_CALL and hides the grade failure that
+  // actually happened.
   release_command_.Transition(list, backbuffer.Get(),
                               D3D12_RESOURCE_STATE_PRESENT);
 }
@@ -426,6 +443,7 @@ void AddonController::Shutdown() {
   release_command_.Shutdown();
   release_list_begun_ = false;
   grade_scratch_.Reset();
+  grade_scratch_out_.Reset();
   grade_scratch_width_ = 0;
   grade_scratch_height_ = 0;
   grade_scratch_format_ = DXGI_FORMAT_UNKNOWN;
