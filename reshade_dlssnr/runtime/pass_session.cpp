@@ -52,13 +52,6 @@ void PassSession::Fail(const char* reason) {
                         reason != nullptr ? reason : "DLSSNR pass failed");
 }
 
-void PassSession::ReleaseFeature(NgxRuntime& runtime) {
-  std::lock_guard<std::mutex> lock(g_session_mutex);
-
-  if (!feature_.HasFeature()) return;
-  feature_.ReleaseFeature(runtime);
-}
-
 void PassSession::Retry(NgxRuntime& runtime) {
   std::lock_guard<std::mutex> lock(g_session_mutex);
 

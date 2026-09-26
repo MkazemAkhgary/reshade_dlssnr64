@@ -212,15 +212,6 @@ void AddonController::OnPresent(
   TRACE_EVT(this, "controller_enter stage=Present fmt_before=%d",
             static_cast<int>(backbuffer_format_));
 
-  // Only one DLSSNR feature can exist at a time (see AGENTS.md), so a pass the
-  // user has disabled has to give the slot up -- otherwise enabling a
-  // different pass could never take it. Present is the one entry point that
-  // runs every frame, so the check belongs here. No-op for a pass with no
-  // feature.
-  for (uint32_t i = 0; i < kMaxPasses; ++i) {
-    if (!settings.pass_enabled[i]) passes_[i].ReleaseFeature(runtime_);
-  }
-
   // Refresh the cached backbuffer format. Used by the debug output buffer
   // so it is always created in a format the backbuffer copy can accept.
   RefreshBackbufferFormat(swapchain);
