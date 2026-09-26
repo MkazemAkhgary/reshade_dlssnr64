@@ -884,10 +884,10 @@ Three symptoms reported by the user, recorded so they are not lost. None has
 been reproduced or diagnosed, so treat everything below as the observation
 only — the causes are unknown, and the parenthetical guesses are unverified.
 
-**Flicker with three passes, TLOU1 only.** Not present in TLOU2. The case that
-was actually tested is all three passes set to the **DLSS Output** target.
-Whether two passes flicker, and whether the stage a pass runs at matters, are
-both untested.
+**Flicker with three passes at DLSS Output.** Occurs in both TLOU1 and TLOU2,
+and only when three enabled passes all target the DLSS Output stage — any other
+configuration shows none. It is transient: about five flickers after the third
+pass is enabled, and then it stops.
 
 **Debug view frames skipped.** With a debug view selected, occasional frames
 show the image with the debug view off. Both games. Intermittent, and only
