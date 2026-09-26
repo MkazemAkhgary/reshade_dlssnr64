@@ -441,6 +441,10 @@ bool ComputeEngine::Init(ID3D12Device* device) {
   return true;
 }
 
+ComputeEngine::~ComputeEngine() {
+  Destroy();
+}
+
 void ComputeEngine::Destroy() {
   // Stop and join first: the worker reads device_ and root_signature_ and
   // writes passes_, all of which are torn down below.

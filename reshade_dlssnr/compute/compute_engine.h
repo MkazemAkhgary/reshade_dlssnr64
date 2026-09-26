@@ -146,6 +146,15 @@ class ComputeEngine {
       uint32_t threads_y = 0,
       uint32_t threads_z = 0);
 
+  // Stops and joins the background compile.
+  //
+  // A std::thread destroyed while still joinable calls std::terminate, so this
+  // cannot be left to the caller: AddonController is a function-local static
+  // whose destructor runs at process exit, and it is reachable without
+  // Shutdown() having run. Destroy() is idempotent, so joining here as well is
+  // free.
+  ~ComputeEngine();
+
   void Destroy();
 
   bool IsInit() const { return device_ != nullptr; }
