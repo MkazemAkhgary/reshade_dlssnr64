@@ -254,13 +254,11 @@ for it when something crashes or behaves unexpectedly and the ReShade log does
 not explain why, because it shows the commands that were actually recorded and
 in what order, rather than what the code intends to do.
 
-Set `DLSSNR_TRACE_FLUSH=1` alongside it when chasing a crash. Lines are
-batched and only committed every 256 lines or at a frame boundary, so a crash
-loses everything back to the last commit — which is how a stage that dies on
-its first step can leave no trace at all. The knob flushes every line, so the
-last line in the file is the last thing that happened. Resource pointers are
-printed as stable first-seen indices, not raw addresses, so two captures stay
-comparable even though COM heaps recycle addresses between runs.
+Every line is flushed as it is written, so the last line in the file is the
+last thing that happened and a crash cannot lose the tail. The cost is a
+write() per line, which only applies while tracing is on. Resource pointers
+are printed as stable first-seen indices, not raw addresses, so two captures
+stay comparable even though COM heaps recycle addresses between runs.
 
 **Every line names its frame.** A game frame is two streams, not one: the DLSS
 evaluate happens mid-frame and the present happens at the end, so one counter
@@ -399,8 +397,9 @@ what it changed after an evaluate. Ours is in `D3D12Hooks::RestoreCommandList`:
 
 **The D3D12 debug layer cannot be used with the addon.** With it enabled the
 captured vtable slots hold `d3d12SDKLayers.dll` thunks, and driving those
-through a hook chain faults inside the layer. `DLSSNR_D3D12_DEBUG` exists but
-is not usable for this.
+through a hook chain faults inside the layer. An env var used to enable it for
+diagnosis and has been removed, because a knob that cannot work is worse than
+none.
 
 **The NGX hook must be in place before the first `CreateFeature`.**
 `nvngx_dlss.dll` is loaded on demand, and the feature is created once,
@@ -863,3 +862,19 @@ Static checks that pass today:
 These are all static, and none of them checks relative order. When a step
 table is reordered, that has to be re-read by hand; see "Verifying an edit"
 above.
+
+## Known gaps
+
+**Resource states of game-owned resources are guessed.** `DlssGuides::Capture`
+and `PassSession::SeedResourceStates` call `InferResourceState`, which reads a
+resource's creation flags. For the game's depth, motion vectors and DLSS output
+that is an approximation, and a wrong guess is a barrier whose `Before` does not
+match — the debug layer reports it as `RESOURCE_BARRIER_BEFORE_AFTER_MISMATCH`.
+
+The correct fix is to record the state from the game's own `ResourceBarrier`
+calls. `D3D12Hooks` already has the command list hooked, so it is vtable slot 26
+plus a small map of watched resources. Not done because it adds a lookup to
+every barrier in the frame, and because no reported failure has been traced to
+it — the debug layer's mismatches were mostly on the game's own passes, which
+this addon never touches.
+
