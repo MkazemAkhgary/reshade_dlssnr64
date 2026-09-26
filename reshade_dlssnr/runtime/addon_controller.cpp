@@ -170,15 +170,29 @@ void AddonController::GradeBackbuffer(ComputeEngine& codec,
               trace::ResourceId(grade_scratch_.Get()), width, height);
   }
 
-  if (!model_pipeline::ApplyGrade(release_command_, list, &codec,
-                                  backbuffer.Get(), grade_scratch_.Get(), width,
-                                  height, hdr_.ResolvedFormat(), grade)) {
+  // The image arrives in PRESENT and ApplyGrade takes it from there, the same
+  // way PresentDebugOutput seeds its copy. Without this the first transition
+  // infers a state from the resource's flags, which for a swapchain image is
+  // not PRESENT -- and a barrier whose Before does not match is an invalid
+  // call, which removes the device rather than reporting anything.
+  release_command_.SetResourceState(backbuffer.Get(),
+                                    D3D12_RESOURCE_STATE_PRESENT);
+
+  const bool graded =
+      model_pipeline::ApplyGrade(release_command_, list, &codec,
+                                 backbuffer.Get(), grade_scratch_.Get(), width,
+                                 height, hdr_.ResolvedFormat(), grade);
+  if (!graded) {
     TRACE_EVT(this, "grade_backbuffer_failed");
-    return;
+    reshade::log::message(
+        reshade::log::level::error,
+        "DLSSNR: backbuffer grade failed; returning the swapchain image to PRESENT");
   }
 
-  // ApplyGrade leaves the target as a UAV. This one is the swapchain's image,
-  // so it goes back to PRESENT before anything else touches it.
+  // Always, including on failure. ApplyGrade leaves the target as a UAV, so
+  // returning early here left the swapchain's image in a state the game's next
+  // Present rejects -- which removes the device with DXGI_ERROR_INVALID_CALL
+  // and hides the grade failure that actually happened.
   release_command_.Transition(list, backbuffer.Get(),
                               D3D12_RESOURCE_STATE_PRESENT);
 }
