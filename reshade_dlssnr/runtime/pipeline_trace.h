@@ -3,10 +3,10 @@
 // This is a development aid, not part of the addon's runtime behavior. It
 // records every GPU-visible command the addon records (transitions, UAV
 // barriers, dispatches, copies, submits) plus every failure reason, into a
-// linear text log. Reach for it when something crashes or behaves
-// unexpectedly and the ReShade log does not say why: it shows the commands
-// that were actually recorded, in the order they were recorded, rather than
-// what the code intends.
+// linear text log, and every settings change (`cfg`) alongside them. Reach for
+// it when something crashes or behaves unexpectedly and the ReShade log does
+// not say why: it shows the commands that were actually recorded, in the order
+// they were recorded, rather than what the code intends.
 //
 // Enable with the environment variable DLSSNR_TRACE=<path>, e.g.
 //
@@ -124,5 +124,21 @@ const char* StateName(D3D12_RESOURCE_STATES state);
   do {                                                               \
     if (::reshade_dlssnr::trace::Enabled()) {                        \
       ::reshade_dlssnr::trace::Line("evt", __func__, (obj), __VA_ARGS__); \
+    }                                                                \
+  } while (0)
+
+// Record a settings change. Written by state/settings.cpp, which serializes
+// the settings and emits the fields that differ from the previous snapshot:
+//
+//   init <name> <value>             once, at LoadSettings
+//   set <name> <old> -> <new>       on every SaveSettings
+//
+// `grep ' cfg '` isolates them, so a change in behavior can be read against
+// the frame counters (`d=`/`p=`) of the frame it happened on.
+#define TRACE_CFG(...)                                               \
+  do {                                                               \
+    if (::reshade_dlssnr::trace::Enabled()) {                        \
+      ::reshade_dlssnr::trace::Line("cfg", "Settings", nullptr,      \
+                                    __VA_ARGS__);                    \
     }                                                                \
   } while (0)

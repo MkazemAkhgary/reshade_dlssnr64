@@ -296,6 +296,22 @@ a frame actually consisted of. To compare a working run against a broken one,
 `diff` the two logs — but only the first divergence is meaningful, since
 everything below it is shifted rather than wrong.
 
+**Settings changes are traced too**, as `cfg` lines. The UI writes into
+`GetSettings()` in place, so `SaveSettings()` is the one point where a change is
+complete; `state/settings.cpp` serializes the settings there and emits the
+fields that differ from the previous snapshot:
+
+```bash
+grep ' cfg ' trace.log                   # init baseline, then every change
+```
+
+Every field once at load (`init <name> <value>`), then `set <name> <old> ->
+<new>` per save — one line per frame while a slider is dragged, which is what
+makes the frame counters on those lines useful. `resolved[i].` fields are the
+inheritance-applied values the runtime reads, so a change to pass 1 shows up on
+pass 2 as well. UI-only state (collapsed sections, tooltips) is not traced;
+`active_pass` and `debug_view` are, because they change what is rendered.
+
 Bound the capture. Traces grow fast — every transition, barrier and dispatch
 is a line — so an unbounded capture from a menu screen is unreadable. Use a
 fixed, short, deterministic scene: same save, same camera, same duration for
