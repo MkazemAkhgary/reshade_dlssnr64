@@ -426,10 +426,16 @@ void D3D12Hooks::RestoreCommandList(ID3D12GraphicsCommandList* command_list) {
           g_original_set_compute_root_descriptor_table(command_list, i, state.rootDescriptorTable);
           break;
         case RootEntryType::Constant:
-          g_original_set_compute_root_32bit_constant(command_list, i, state.Data[0], state.DestOffset);
+          // The recorded Data is what carries the value; an entry without it
+          // is not something to hand the runtime a dangling pointer for.
+          if (!state.Data.empty()) {
+            g_original_set_compute_root_32bit_constant(command_list, i, state.Data[0], state.DestOffset);
+          }
           break;
         case RootEntryType::Constants:
-          g_original_set_compute_root_32bit_constants(command_list, i, state.Num32BitValues, state.Data.data(), state.DestOffset);
+          if (!state.Data.empty()) {
+            g_original_set_compute_root_32bit_constants(command_list, i, state.Num32BitValues, state.Data.data(), state.DestOffset);
+          }
           break;
         case RootEntryType::CBV:
           g_original_set_compute_root_cbv(command_list, i, state.bufferLocation);

@@ -136,6 +136,10 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
   ID3D12GraphicsCommandList* work_list =
       native_list != nullptr ? native_list.Get() : command_list;
 
+  // Set when a Post-DLSS pass actually recorded onto this list, which is the
+  // only condition under which the state below needs putting back.
+  bool recorded_pass = false;
+
   if (result == NVSDK_NGX_Result_Success && feature_handle != nullptr && parameters != nullptr) {
     NVSDK_NGX_Feature feature_id = NVSDK_NGX_Feature_Reserved0;
 
@@ -173,6 +177,7 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
                     NVSDK_NGX_Result_Success &&
                 output != nullptr) {
               AddonController::Get().OnPostDlssEvaluate(work_list, output);
+              recorded_pass = true;
             }
           }
         }
@@ -180,7 +185,18 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
     }
   }
 
-  D3D12Hooks::Get().RestoreCommandList(work_list);
+  // Only put the state back when we recorded over it.
+  //
+  // The tracker's record for a command list is only as fresh as the last time
+  // the game set that state, and it holds raw pointers it does not own. With
+  // every pass disabled there is nothing to restore, so replaying it re-issues
+  // pointers the game released long ago -- which is a fault inside the driver,
+  // not a harmless no-op. With a pass enabled the game recorded its own state
+  // on this list earlier in the same frame, so the replay is both necessary
+  // and current.
+  if (recorded_pass) {
+    D3D12Hooks::Get().RestoreCommandList(work_list);
+  }
   D3D12Hooks::Get().SetTrackingEnabled(true);
 
   return result;
