@@ -42,8 +42,15 @@ bool FeatureLifecycle::EnsureFeature(
     return false;
   }
 
-  params->Reset();
-
+  // Deliberately no params->Reset() here.
+  //
+  // This is the NGX *capability* block: one process-global object obtained from
+  // _nvngx.dll, shared with every other NGX user in the process -- including
+  // Streamline's sl.common, which holds the same object (ctx.ngxContext.params,
+  // from NVSDK_NGX_D3D12_GetCapabilityParameters) for the life of the process.
+  // Reset() wipes it wholesale, so emptying it to set our own keys empties
+  // theirs too. Every key this addon reads is written before it is read, so
+  // nothing here needs the block cleared first.
   parameter_block.SetUInt("DLSSNR.Width", width);
   parameter_block.SetUInt("DLSSNR.Height", height);
   parameter_block.SetUInt("DLSSNR.InputWidth", width);
