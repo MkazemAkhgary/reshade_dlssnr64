@@ -35,12 +35,6 @@ std::mutex& MapMutex() {
 std::atomic<FILE*> g_file{nullptr};
 std::atomic<bool> g_checked{false};
 
-// Set by DLSSNR_TRACE_FLUSH=1. Off by default: a flush per line is a write()
-// per line. On, it means a crash loses nothing, which is the only way to see
-// which step died -- the Present stage in particular can crash before it has
-// written the kFlushLineInterval lines that would otherwise commit the batch.
-std::atomic<bool> g_flush_every_line{false};
-
 uint64_t g_sequence = 0;
 
 // One entry per FrameStream. `counter` is printed on every line as d=/p=;
@@ -62,12 +56,6 @@ FrameState& FrameStateFor(FrameStream stream) {
 const char* FrameStreamName(FrameStream stream) {
   return stream == FrameStream::Present ? "Present" : "PostDLSS";
 }
-
-// Lines are batched rather than flushed one at a time: a flush per line is a
-// write() syscall per line, which dominates the cost of tracing. The cost of
-// batching is that a crash can lose up to this many lines.
-constexpr uint32_t kFlushLineInterval = 256;
-uint32_t g_lines_since_flush = 0;
 
 // setvbuf buffer for g_file. Must outlive the stream, so it is leaked.
 constexpr size_t kFileBufferSize = 256 * 1024;
@@ -180,9 +168,6 @@ void TraceInit() {
   const std::string path = ReadEnv("DLSSNR_TRACE");
   if (path.empty()) return;
 
-  g_flush_every_line.store(ReadEnv("DLSSNR_TRACE_FLUSH") == "1",
-                           std::memory_order_relaxed);
-
   FILE* file = nullptr;
   errno_t open_error = fopen_s(&file, path.c_str(), "wb");
   if (open_error != 0 || file == nullptr) return;
@@ -240,7 +225,6 @@ namespace {
 void FlushLocked() {
   FILE* file = g_file.load(std::memory_order_relaxed);
   if (file != nullptr) std::fflush(file);
-  g_lines_since_flush = 0;
 }
 
 // Assumes Mutex() is held. Writes the columns every line shares, and returns
@@ -261,12 +245,12 @@ uint64_t WritePrefixLocked(FILE* file, const char* category,
 }
 
 // Assumes Mutex() is held.
+//
+// Every line reaches the disk immediately. The cost is a write() per line,
+// which only applies while tracing is on -- and the alternative loses the tail
+// of the trace, which is the part that says where a crash happened.
 void AfterLineLocked() {
-  if (g_flush_every_line.load(std::memory_order_relaxed)) {
-    FlushLocked();
-    return;
-  }
-  if (++g_lines_since_flush >= kFlushLineInterval) FlushLocked();
+  FlushLocked();
 }
 
 }  // namespace
@@ -335,7 +319,6 @@ void Shutdown() {
     std::fclose(file);
     g_file.store(nullptr, std::memory_order_relaxed);
   }
-  g_lines_since_flush = 0;
 }
 
 namespace {
