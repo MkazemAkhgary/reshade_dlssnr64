@@ -79,6 +79,7 @@ void LogInterposerStateOnce(bool device_is_proxy) {
 using PFN_SetDescriptorHeaps = void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, UINT, ID3D12DescriptorHeap* const*);
 using PFN_SetPipelineState = void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, ID3D12PipelineState*);
 using PFN_SetPipelineState1 = void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList4*, ID3D12StateObject*);
+using PFN_Reset = HRESULT(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, ID3D12CommandAllocator*, ID3D12PipelineState*);
 using PFN_SetComputeRootSignature = void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, ID3D12RootSignature*);
 using PFN_SetGraphicsRootSignature = void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, ID3D12RootSignature*);
 using PFN_SetComputeRootDescriptorTable = void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, UINT, D3D12_GPU_DESCRIPTOR_HANDLE);
@@ -96,6 +97,7 @@ struct RootRestoreHook {
 PFN_SetDescriptorHeaps g_original_set_descriptor_heaps = nullptr;
 PFN_SetPipelineState g_original_set_pipeline_state = nullptr;
 PFN_SetPipelineState1 g_original_set_pipeline_state1 = nullptr;
+PFN_Reset g_original_reset = nullptr;
 PFN_SetComputeRootSignature g_original_set_compute_root_signature = nullptr;
 PFN_SetGraphicsRootSignature g_original_set_graphics_root_signature = nullptr;
 PFN_SetComputeRootDescriptorTable g_original_set_compute_root_descriptor_table = nullptr;
@@ -142,6 +144,18 @@ void STDMETHODCALLTYPE HookedSetPipelineState1(ID3D12GraphicsCommandList4* comma
         reinterpret_cast<ID3D12GraphicsCommandList*>(command_list), state_object);
   }
   g_original_set_pipeline_state1(command_list, state_object);
+}
+
+HRESULT STDMETHODCALLTYPE HookedReset(ID3D12GraphicsCommandList* command_list, ID3D12CommandAllocator* allocator, ID3D12PipelineState* initial_state) {
+  // A reset command list has no state, and everything the tracker holds for it
+  // belongs to the recording that just ended. Dropping it here does two things:
+  // it keeps the held references from accumulating for the life of the
+  // process, and it stops a later restore from replaying a previous
+  // recording's objects.
+  if (command_list != nullptr) {
+    D3D12StateTracker::Get().UntrackCommandList(command_list);
+  }
+  return g_original_reset(command_list, allocator, initial_state);
 }
 
 void STDMETHODCALLTYPE HookedSetComputeRootSignature(ID3D12GraphicsCommandList* command_list, ID3D12RootSignature* root_signature) {
@@ -333,6 +347,7 @@ bool D3D12Hooks::InstallEarlyHooks(ID3D12Device* device) {
   g_original_set_compute_root_cbv = reinterpret_cast<PFN_SetComputeRootConstantBufferView>(vtable[37]);
   g_original_set_compute_root_srv = reinterpret_cast<PFN_SetComputeRootShaderResourceView>(vtable[39]);
   g_original_set_compute_root_uav = reinterpret_cast<PFN_SetComputeRootUnorderedAccessView>(vtable[41]);
+  g_original_reset = reinterpret_cast<PFN_Reset>(vtable[10]);
 
   // SetPipelineState1 lives on ID3D12GraphicsCommandList4, whose vtable
   // continues the base one, so its slot has to be read from that interface:
@@ -363,6 +378,7 @@ bool D3D12Hooks::InstallEarlyHooks(ID3D12Device* device) {
   DetourUpdateThread(GetCurrentThread());
 
   DetourAttach(reinterpret_cast<void**>(&g_original_set_pipeline_state), HookedSetPipelineState);
+  DetourAttach(reinterpret_cast<void**>(&g_original_reset), HookedReset);
   if (g_original_set_pipeline_state1 != nullptr) {
     DetourAttach(reinterpret_cast<void**>(&g_original_set_pipeline_state1), HookedSetPipelineState1);
   }
