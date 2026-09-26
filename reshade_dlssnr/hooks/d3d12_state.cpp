@@ -2,6 +2,34 @@
 
 namespace reshade_dlssnr {
 
+namespace {
+
+// Stores a COM pointer, taking a reference and dropping the old one.
+//
+// The tracker remembers the state a command list had so it can be put back
+// after our pass, and that memory has to outlive the recording. The game
+// releases root signatures, pipeline states and heaps whenever it likes -- a
+// swapchain resize tears down and rebuilds all of them -- so holding the raw
+// pointer meant the restore could hand the driver one that was already gone.
+// That reads as an access violation at a small offset inside nvwgf2umx, which
+// is exactly what it looked like.
+template <typename T>
+void ReplaceCom(T*& slot, T* value) {
+  if (slot == value) return;
+  if (value != nullptr) value->AddRef();
+  if (slot != nullptr) slot->Release();
+  slot = value;
+}
+
+void ReleaseHeaps(DescriptorHeapState& state) {
+  for (ID3D12DescriptorHeap*& heap : state.Heaps) {
+    ReplaceCom(heap, static_cast<ID3D12DescriptorHeap*>(nullptr));
+  }
+  state.NumDescriptorHeaps = 0;
+}
+
+}  // namespace
+
 D3D12StateTracker& D3D12StateTracker::Get() {
   static D3D12StateTracker tracker;
   return tracker;
@@ -16,34 +44,72 @@ void D3D12StateTracker::TrackCommandList(ID3D12GraphicsCommandList* command_list
   root_states_.try_emplace(command_list);
 }
 
+// Drops everything held for a command list and releases the references. Called
+// when the list is reset, because a reset list has no state and the recording
+// that follows is a new one -- which is also what keeps the references from
+// accumulating for the life of the process.
 void D3D12StateTracker::UntrackCommandList(ID3D12GraphicsCommandList* command_list) {
   if (command_list == nullptr) return;
 
-  descriptor_heaps_.erase(command_list);
-  pipeline_states_.erase(command_list);
-  state_objects_.erase(command_list);
-  signatures_.erase(command_list);
-  root_states_.erase(command_list);
-  root_state_owner_.erase(command_list);
+  {
+    std::unique_lock<std::shared_mutex> lock(descriptor_heaps_mutex_);
+    auto it = descriptor_heaps_.find(command_list);
+    if (it != descriptor_heaps_.end()) {
+      ReleaseHeaps(it->second);
+      descriptor_heaps_.erase(it);
+    }
+  }
+  {
+    std::unique_lock<std::shared_mutex> lock(pipeline_states_mutex_);
+    auto it = pipeline_states_.find(command_list);
+    if (it != pipeline_states_.end()) {
+      ReplaceCom(it->second, static_cast<ID3D12PipelineState*>(nullptr));
+      pipeline_states_.erase(it);
+    }
+  }
+  {
+    std::unique_lock<std::shared_mutex> lock(state_objects_mutex_);
+    auto it = state_objects_.find(command_list);
+    if (it != state_objects_.end()) {
+      ReplaceCom(it->second, static_cast<ID3D12StateObject*>(nullptr));
+      state_objects_.erase(it);
+    }
+  }
+  {
+    std::unique_lock<std::shared_mutex> lock(root_signature_mutex_);
+    auto it = signatures_.find(command_list);
+    if (it != signatures_.end()) {
+      ReplaceCom(it->second.compute, static_cast<ID3D12RootSignature*>(nullptr));
+      ReplaceCom(it->second.graphics, static_cast<ID3D12RootSignature*>(nullptr));
+      signatures_.erase(it);
+    }
+  }
+  {
+    std::unique_lock<std::shared_mutex> lock(root_states_mutex_);
+    root_states_.erase(command_list);
+    root_state_owner_.erase(command_list);
+  }
 }
 
 void D3D12StateTracker::SetDescriptorHeaps(ID3D12GraphicsCommandList* command_list, UINT count, ID3D12DescriptorHeap* const* heaps) {
   if (command_list == nullptr || heaps == nullptr) return;
 
   std::unique_lock<std::shared_mutex> lock(descriptor_heaps_mutex_);
-  DescriptorHeapState state {};
-  state.NumDescriptorHeaps = count;
-  for (UINT i = 0; i < count && i < 2; ++i) {
-    state.Heaps[i] = heaps[i];
+  DescriptorHeapState& state = descriptor_heaps_[command_list];
+  // The count is recorded as given so the trace tells the truth, but only two
+  // heaps are ever kept -- the restore clamps to what is actually stored.
+  const UINT kept = count < 2 ? count : 2;
+  for (UINT i = 0; i < 2; ++i) {
+    ReplaceCom(state.Heaps[i], i < kept ? heaps[i] : nullptr);
   }
-  descriptor_heaps_.insert_or_assign(command_list, state);
+  state.NumDescriptorHeaps = count;
 }
 
 void D3D12StateTracker::SetPipelineState(ID3D12GraphicsCommandList* command_list, ID3D12PipelineState* pipeline_state) {
   if (command_list == nullptr) return;
 
   std::unique_lock<std::shared_mutex> lock(pipeline_states_mutex_);
-  pipeline_states_.insert_or_assign(command_list, pipeline_state);
+  ReplaceCom(pipeline_states_[command_list], pipeline_state);
 }
 
 RootState& D3D12StateTracker::RootSlotLocked(ID3D12GraphicsCommandList* command_list, UINT index) {
@@ -62,7 +128,7 @@ void D3D12StateTracker::SetPipelineState1(ID3D12GraphicsCommandList* command_lis
   if (command_list == nullptr) return;
 
   std::unique_lock<std::shared_mutex> lock(state_objects_mutex_);
-  state_objects_.insert_or_assign(command_list, state_object);
+  ReplaceCom(state_objects_[command_list], state_object);
 }
 
 void D3D12StateTracker::SetComputeRootSignature(ID3D12GraphicsCommandList* command_list, ID3D12RootSignature* root_signature) {
@@ -87,14 +153,14 @@ void D3D12StateTracker::SetComputeRootSignature(ID3D12GraphicsCommandList* comma
   }
 
   std::unique_lock<std::shared_mutex> lock(root_signature_mutex_);
-  signatures_[command_list].compute = root_signature;
+  ReplaceCom(signatures_[command_list].compute, root_signature);
 }
 
 void D3D12StateTracker::SetGraphicsRootSignature(ID3D12GraphicsCommandList* command_list, ID3D12RootSignature* root_signature) {
   if (command_list == nullptr || root_signature == nullptr) return;
 
   std::unique_lock<std::shared_mutex> lock(root_signature_mutex_);
-  signatures_[command_list].graphics = root_signature;
+  ReplaceCom(signatures_[command_list].graphics, root_signature);
 }
 
 void D3D12StateTracker::SetComputeRootDescriptorTable(ID3D12GraphicsCommandList* command_list, UINT index, D3D12_GPU_DESCRIPTOR_HANDLE base_descriptor) {
