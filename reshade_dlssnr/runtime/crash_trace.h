@@ -17,6 +17,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <exception>
 
 namespace reshade_dlssnr::crash_trace {
 
@@ -26,6 +27,9 @@ namespace detail {
 constexpr int kMaxReports = 8;
 
 inline std::atomic<int> g_reported{0};
+
+// The terminate handler that was installed before us, so ours can chain.
+inline std::terminate_handler g_previous_terminate = nullptr;
 
 inline char* Append(char* out, char* end, const char* text) {
   while (*text != '\0' && out + 1 < end) *out++ = *text++;
@@ -195,12 +199,32 @@ inline LONG CALLBACK Handler(EXCEPTION_POINTERS* info) {
   return EXCEPTION_CONTINUE_SEARCH;
 }
 
+// abort() and std::terminate reach the kernel through __fastfail, which
+// bypasses vectored exception handling entirely -- so a crash of that kind
+// leaves nothing in this file at all, which is exactly why the exit crash had
+// to be caught with a debugger attached. A terminate handler does see it.
+inline void OnTerminate() {
+  char buffer[160];
+  char* out = buffer;
+  char* const end = buffer + sizeof(buffer) - 2;
+
+  out = detail::Append(out, end, "terminate called (abort, not a fault) tid=");
+  out = detail::AppendDec(out, end, GetCurrentThreadId());
+  out = detail::Append(out, end, "\r\n");
+  *out = '\0';
+  detail::Write(buffer);
+
+  // Chained, so the game's own handling and the usual abort still happen.
+  if (detail::g_previous_terminate != nullptr) detail::g_previous_terminate();
+}
+
 // Idempotent. Called once from Attach().
 inline void Install() {
   static bool installed = false;
   if (installed) return;
   installed = true;
   AddVectoredExceptionHandler(1, Handler);
+  detail::g_previous_terminate = std::set_terminate(OnTerminate);
 }
 
 }  // namespace reshade_dlssnr::crash_trace
