@@ -119,15 +119,10 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
     reshade::log::message(reshade::log::level::info, message);
   }
 
-  // The command list the game hands us is ReShade's wrapper, and under
-  // Streamline 1.x that wrapper sits around an interposer proxy. Neither is
-  // the object our vtable hooks were installed on, and the state tracker is
-  // keyed by what those hooks see -- so resolve to that chain here, once, and
-  // use it for everything we do.
-  //
-  // Recording through a Streamline proxy is also unsafe in its own right: its
-  // ResourceBarrier runs Streamline's registered after-hooks from the middle
-  // of its own evaluate. Resolving avoids that too.
+  // The game's list is a ReShade wrapper, over an interposer proxy on 1.x. The
+  // tracker is keyed by what the vtable hooks see, so resolve once here.
+  // Recording through a proxy is also unsafe: its ResourceBarrier runs
+  // Streamline's after-hooks from inside its own evaluate.
   bool is_proxy = false;
   Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> native_list =
       proxy_unwrap::NativeChain(command_list, &is_proxy);
@@ -185,15 +180,8 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
     }
   }
 
-  // Only put the state back when we recorded over it.
-  //
-  // The tracker's record for a command list is only as fresh as the last time
-  // the game set that state, and it holds raw pointers it does not own. With
-  // every pass disabled there is nothing to restore, so replaying it re-issues
-  // pointers the game released long ago -- which is a fault inside the driver,
-  // not a harmless no-op. With a pass enabled the game recorded its own state
-  // on this list earlier in the same frame, so the replay is both necessary
-  // and current.
+  // Only after a pass ran. Otherwise the replay re-issues pointers from a
+  // record the game has moved on from, which faults inside the driver.
   if (recorded_pass) {
     D3D12Hooks::Get().RestoreCommandList(work_list);
   }

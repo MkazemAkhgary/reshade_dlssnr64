@@ -200,10 +200,7 @@ bool PassSession::FillEvaluateParams(
     return false;
   }
 
-  // No params->Reset() before filling these in. The block is the process-global
-  // NGX capability object, shared with Streamline's sl.common, and this runs on
-  // every evaluate -- so resetting it here was clearing their entries once per
-  // frame. Every key this function reads is one it has just written.
+  // No Reset(): the block is shared with Streamline's sl.common.
 
   NgxParameterBlock& block = runtime.Parameters();
 

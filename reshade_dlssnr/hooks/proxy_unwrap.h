@@ -1,22 +1,15 @@
 // Asking a proxy for the object underneath it.
 //
-// Two layers can sit between the addon and d3d12.dll, and they use the same
-// trick -- a QueryInterface with a fixed IID that returns the original:
+// Two layers can sit between the addon and d3d12.dll, and both answer a
+// QueryInterface with a fixed IID that returns the original:
 //
-//   ReShade    wraps every D3D12 object it hands the game, and answers
-//              IID_UnwrappedObject {7F2C9A11-3B4E-4D6A-812F-5E9CD37A1B42}
-//              with it. Handled by the command list, device, command queue,
-//              descriptor heap, pipeline library and swapchain wrappers
-//              (ReShade's com_utils.hpp and source/d3d12/*.cpp).
-//   Streamline hands the game proxies on 1.x and answers its base-interface
-//              IID with it. See streamline_compat.h.
+//   ReShade    IID_UnwrappedObject {7F2C9A11-3B4E-4D6A-812F-5E9CD37A1B42},
+//              handled by every D3D12 wrapper (ReShade's com_utils.hpp).
+//   Streamline its base-interface IID, on 1.x. See streamline_compat.h.
 //
-// Both matter for the same reason. The vtable hooks in d3d12_hooks.cpp are
-// installed on a command list created from the *unwrapped* device, so they
-// intercept the unwrapped chain and record state under unwrapped pointers.
-// The game, meanwhile, hands us its own wrappers. Resolving here is what makes
-// those the same object -- without it every tracker lookup misses and the
-// restore silently does nothing.
+// The vtable hooks are installed on the unwrapped chain, so the tracker records
+// unwrapped pointers while the game hands us wrappers. Resolving here is what
+// makes those the same object.
 #pragma once
 
 #include <d3d12.h>

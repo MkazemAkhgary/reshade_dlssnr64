@@ -4,15 +4,9 @@ namespace reshade_dlssnr {
 
 namespace {
 
-// Stores a COM pointer, taking a reference and dropping the old one.
-//
-// The tracker remembers the state a command list had so it can be put back
-// after our pass, and that memory has to outlive the recording. The game
-// releases root signatures, pipeline states and heaps whenever it likes -- a
-// swapchain resize tears down and rebuilds all of them -- so holding the raw
-// pointer meant the restore could hand the driver one that was already gone.
-// That reads as an access violation at a small offset inside nvwgf2umx, which
-// is exactly what it looked like.
+// Takes a reference on store. The game releases these objects whenever it likes
+// -- a swapchain resize rebuilds them all -- and replaying a freed one reads as
+// a driver access violation.
 template <typename T>
 void ReplaceCom(T*& slot, T* value) {
   if (slot == value) return;

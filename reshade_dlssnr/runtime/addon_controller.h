@@ -175,12 +175,8 @@ class AddonController {
   // flight.
   Microsoft::WRL::ComPtr<ID3D12Resource> grade_scratch_;
 
-  // The grade needs somewhere to write, and it cannot be the backbuffer: a
-  // swapchain image is created without D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS
-  // and a dispatch that names it as a UAV is an invalid command -- which fails
-  // the list's Close() and removes the device rather than reporting anything.
-  // So the grade runs between two textures we own and the result is copied
-  // back.
+  // The grade writes here, not to the backbuffer: a swapchain image has no
+  // ALLOW_UNORDERED_ACCESS, and naming it as a UAV is an invalid command.
   Microsoft::WRL::ComPtr<ID3D12Resource> grade_scratch_out_;
   unsigned int grade_scratch_width_ = 0;
   unsigned int grade_scratch_height_ = 0;

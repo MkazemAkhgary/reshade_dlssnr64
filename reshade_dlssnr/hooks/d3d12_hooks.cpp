@@ -367,11 +367,8 @@ bool D3D12Hooks::InstallEarlyHooks(ID3D12Device* device) {
   command_list->Release();
   command_allocator->Release();
 
-  // Which module owns the functions we just captured decides everything about
-  // how the hooks behave, and it is not obvious from the outside: the slot can
-  // hold d3d12.dll's implementation, ReShade's wrapper, or -- with the D3D12
-  // debug layer enabled -- a thunk in d3d12SDKLayers.dll, which is not built
-  // to be driven through a third-party hook chain at all.
+  // Names the module owning the captured slots. With the D3D12 debug layer on
+  // it is a d3d12SDKLayers thunk, which cannot be driven through a hook chain.
   LogHookedModuleOnce(g_original_set_pipeline_state);
 
   DetourTransactionBegin();
@@ -414,13 +411,8 @@ void D3D12Hooks::RestoreCommandList(ID3D12GraphicsCommandList* command_list) {
   // keeps the tracker from being consulted on the Present path.
   if (command_list == nullptr || !g_hooked_command_lists) return;
 
-  // Diagnostic: DLSSNR_NO_RESTORE=1 skips the replay entirely.
-  //
-  // A command list that fails its own Close() with E_INVALIDARG is a list the
-  // runtime considers inconsistent, and this is the only thing that writes to
-  // the game's list after our pass has finished. Skipping it is the one
-  // experiment that separates "what we put back is wrong" from "what our pass
-  // left behind is wrong" -- and those need different fixes.
+  // DLSSNR_NO_RESTORE=1 separates "the replay is wrong" from "the pass left
+  // something behind", which need different fixes.
   static const bool restore_disabled = [] {
     char* value = nullptr;
     size_t length = 0;
@@ -447,12 +439,9 @@ void D3D12Hooks::RestoreCommandList(ID3D12GraphicsCommandList* command_list) {
     g_original_set_descriptor_heaps(command_list, heap_count, heaps.Heaps);
   }
 
-  // Only the compute signature. Our own passes bind one -- ComputeEngine's --
-  // and that is the slot this has to put back; the graphics signature is not
-  // ours to touch, and the root entries below belong to the compute one. The
-  // two are independent slots, which is why this is not "whichever was bound
-  // last": replaying compute indices against a graphics signature addresses
-  // parameters it does not have and faults in the driver.
+  // Only the compute signature: that is the slot our passes bind, and the
+  // entries below belong to it. Replaying them against a graphics signature
+  // addresses parameters it does not have and faults in the driver.
   const auto signatures = D3D12StateTracker::Get().GetSignatures(command_list);
   if (signatures.compute != nullptr) {
     g_original_set_compute_root_signature(command_list, signatures.compute);

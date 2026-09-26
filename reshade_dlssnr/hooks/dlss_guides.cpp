@@ -39,15 +39,8 @@ ID3D12Resource* GetResource(const NVSDK_NGX_Parameter* params, const char* a, co
 
 namespace {
 
-// One line per distinct set of guide dimensions.
-//
-// Whether a guide lines up with the game's view is decided by numbers that are
-// all in the parameter block and none of which the addon reads: the render
-// dimensions DLSS was told, the size of each resource it was handed, and the
-// subrect bases. When a game renders into a larger texture and points DLSS at
-// a region of it, a capture that copies the whole resource is offset from the
-// view -- and the debug view, which crops to the whole resource, shows it.
-// Guessing which of those differs has cost enough; this prints them.
+// One line per distinct set. The render size, each resource's size and the
+// subrect bases decide whether a guide lines up with the game's view.
 void LogGuideGeometryOnce(const NVSDK_NGX_Parameter* params,
                           const D3D12_RESOURCE_DESC& depth,
                           const D3D12_RESOURCE_DESC& motion,

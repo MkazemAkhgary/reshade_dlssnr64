@@ -11,10 +11,8 @@ namespace reshade_dlssnr {
 
 namespace {
 
-// Most D3D12 entry points return void, so a call the runtime rejected leaves
-// no trace at all: the device is simply removed and the game finds out at its
-// next Present. Logged once per distinct failure, because a removed device
-// stays removed and would otherwise repeat every frame.
+// Most D3D12 entry points return void, so a rejected call leaves no trace.
+// Logged once per distinct failure; a removed device stays removed.
 void LogFailureOnce(const char* what, HRESULT result) {
   if (SUCCEEDED(result)) return;
 
