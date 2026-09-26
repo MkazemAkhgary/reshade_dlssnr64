@@ -378,6 +378,30 @@ Two consequences worth remembering:
   own work uses the unwrapped list. Swapping what Streamline passes to its own
   NGX call is not ours to change.
 
+**The NGX capability block is not ours.** `NVSDK_NGX_D3D12_GetCapabilityParameters`
+returns one process-global object, and `sl.common` holds the same one
+(`ctx.ngxContext.params`) for the life of the process — the same call in v1.1.1
+and v2.14.1. Calling `Reset()` on it to clear our own keys clears theirs too.
+
+**Restoring command list state** (2.x guide section 7.0). The host puts back
+what it changed after an evaluate. Ours is in `D3D12Hooks::RestoreCommandList`:
+
+- Only the **compute** root signature and root entries. `SetComputeRoot*` and
+  `SetGraphicsRoot*` address the same index numbers in two *different*
+  signatures, so replaying compute entries after binding a graphics signature
+  addresses parameters it does not have and faults in the driver.
+- `SetPipelineState1` is on the list too, and lives on `ID3D12GraphicsCommandList4`
+  (slot 75), not the base interface.
+- Only after a pass actually recorded on the list. Otherwise it replays a record
+  the game has moved on from.
+- Held as references, not pointers: the game releases these objects whenever it
+  likes, and a swapchain resize rebuilds them all.
+
+**The D3D12 debug layer cannot be used with the addon.** With it enabled the
+captured vtable slots hold `d3d12SDKLayers.dll` thunks, and driving those
+through a hook chain faults inside the layer. `DLSSNR_D3D12_DEBUG` exists but
+is not usable for this.
+
 **The NGX hook must be in place before the first `CreateFeature`.**
 `nvngx_dlss.dll` is loaded on demand, and the feature is created once,
 immediately after it is loaded. A hook that attaches later never sees that
