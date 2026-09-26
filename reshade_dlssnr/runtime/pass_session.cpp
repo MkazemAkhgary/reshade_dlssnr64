@@ -34,8 +34,8 @@ void LogPresentInterfacesOnce(bool device_is_proxy, ID3D12CommandQueue* queue) {
   char message[192];
   std::snprintf(message, sizeof(message),
                 "DLSSNR pass: Present device %s, command queue %s",
-                device_is_proxy ? "is an SL proxy" : "is native",
-                queue_is_proxy ? "is an SL proxy" : "is native");
+                device_is_proxy ? "was a Streamline proxy" : "is not a Streamline proxy",
+                queue_is_proxy ? "was a Streamline proxy" : "is not a Streamline proxy");
   reshade::log::message(reshade::log::level::info, message);
 }
 }  // namespace

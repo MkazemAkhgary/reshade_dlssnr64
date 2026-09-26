@@ -151,9 +151,22 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
         AddonController::Get().SetPostDlssBlocked(
             "Post-DLSS disabled: D3D12 command list hooks are not installed");
       } else {
-        DlssGuides::Get().Capture(work_list, parameters, feature_id);
-
         const Settings& settings = GetSettings();
+
+        // The guides feed the pass pipeline and the debug view, and both only
+        // run when a pass is enabled. With none enabled this was a clone and a
+        // set of barriers every frame for nothing.
+        bool any_pass_enabled = false;
+        for (uint32_t i = 0; i < kMaxPasses; ++i) {
+          if (settings.pass_enabled[i]) {
+            any_pass_enabled = true;
+            break;
+          }
+        }
+        if (any_pass_enabled) {
+          DlssGuides::Get().Capture(work_list, parameters, feature_id);
+        }
+
         if (settings.enabled) {
           bool any_post_dlss = false;
           for (uint32_t i = 0; i < kMaxPasses; ++i) {
