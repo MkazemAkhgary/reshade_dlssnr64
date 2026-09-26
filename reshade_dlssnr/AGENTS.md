@@ -878,3 +878,35 @@ every barrier in the frame, and because no reported failure has been traced to
 it — the debug layer's mismatches were mostly on the game's own passes, which
 this addon never touches.
 
+## Reported, not investigated
+
+Three symptoms reported by the user, recorded so they are not lost. None has
+been reproduced or diagnosed, so treat everything below as the observation
+only — the causes are unknown, and the parenthetical guesses are unverified.
+
+**Flicker with all three passes enabled, TLOU1 only.** Not present in TLOU2.
+Three passes means both stages are populated, so both write the frame: the
+Post-DLSS passes through `WriteToGameResource` and the Present pass through
+`WriteToBackbuffer`. Worth checking first whether the flicker is every other
+frame, and whether it correlates with a stage returning `SkipFrame` after a
+rebuild — the `SkipFrame` path exists to avoid presenting a half-built frame,
+so a frame that skips while the other stage still writes is a candidate.
+
+**Debug view frames skipped.** With a debug view selected, occasional frames
+show the image with the debug view off. Both games. Intermittent, and only
+after the addon has been reconfigured for a while. `RenderDebugView` has several
+early returns that silently leave the frame un-debugged — `!codec.IsReady()`,
+a null source, `content_w`/`content_h` of zero, or the debug output resource
+being recreated by `FrameDebugContext` — and `MaybeRenderDebug` only renders for
+the active pass. Any one of those skipping a single frame looks exactly like
+this. "After fiddling for a while" points at a rebuild rather than a per-frame
+race.
+
+**Grading the model output is too extreme in HDR.** The backbuffer grade is
+fine; the model-output grade needs a conversion the addon does not currently
+apply. `model_pipeline::ApplyGrade` takes an `HdrFormat` and the pipeline
+already has `TonemapForward`/`TonemapInverse` around it, so the likely question
+is which space the grade levels are applied in and whether the HDR remap runs
+before or after them.
+
+
