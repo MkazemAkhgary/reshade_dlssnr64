@@ -160,6 +160,16 @@ const char* StateName(D3D12_RESOURCE_STATES state) {
   return buffer[0] != '\0' ? buffer : "UNKNOWN";
 }
 
+const char* StatePairName(D3D12_RESOURCE_STATES before,
+                          D3D12_RESOURCE_STATES after) {
+  // Both states have to be copied out of StateName's buffer one at a time.
+  static thread_local char pair[192];
+  char first[96];
+  std::snprintf(first, sizeof(first), "%s", StateName(before));
+  std::snprintf(pair, sizeof(pair), "%s -> %s", first, StateName(after));
+  return pair;
+}
+
 void TraceInit() {
   std::lock_guard<std::mutex> lock(Mutex());
   if (g_checked.load(std::memory_order_relaxed)) return;

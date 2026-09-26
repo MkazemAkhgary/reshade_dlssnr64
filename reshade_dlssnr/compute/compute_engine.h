@@ -113,7 +113,27 @@ static_assert(sizeof(ComputeConstants) <= 256, "Constants must fit in a 256-byte
 // signature, descriptor heap, and BindAndDispatch loop scale with it
 // automatically. Grid size is derived from constants.Width/Height using
 // a fixed 8x8 thread group (see BindAndDispatch).
-constexpr uint32_t kDescriptorRingSize = 16;
+
+// Ring depth for the per-dispatch descriptor and constant slots.
+//
+// Both are written by the CPU while the command is recorded and read by the
+// GPU when it executes, so a slot may only be rewritten once the dispatch that
+// used it has run. The passes record onto the *game's* command list, which is
+// submitted whenever the game gets round to it, so the ring has to cover every
+// frame the CPU can be ahead of the GPU.
+//
+// At 16 slots it covered barely two frames' worth: two passes fitted (6
+// dispatches per frame, 8 with the HDR histogram) and three did not (9 and 11),
+// so the third pass made the ring overwrite constants a pending dispatch was
+// still going to read.
+constexpr uint32_t kMaxFramesInFlight = 16;  // DXGI's maximum swapchain buffers
+// Worst case for one frame: every pass records a tonemap, two grades, a
+// compose and a debug view, and the HDR histogram adds two more. The
+// static_assert in pass_session.cpp ties the literal to kMaxPasses.
+constexpr uint32_t kMaxDispatchesPerFrame = 3 * 5 + 2;
+constexpr uint32_t kDescriptorRingSize =
+    kMaxFramesInFlight * kMaxDispatchesPerFrame;
+
 constexpr uint32_t kSrvCount = 3;
 constexpr uint32_t kUavCount = 1;
 constexpr uint32_t kCbvCount = 1;
@@ -174,7 +194,12 @@ class ComputeEngine {
   uint32_t descriptor_size_ = 0;
   uint32_t heap_index_ = 0;
 
-  Microsoft::WRL::ComPtr<ID3D12Resource> constant_buffers_[kDescriptorRingSize];
+  // One upload buffer holding every slot's constants, one kConstantStride
+  // block per slot. A single allocation rather than one resource per slot,
+  // because a committed resource costs 64 KB whatever its size and the ring is
+  // deep on purpose.
+  static constexpr uint32_t kConstantStride = 256;  // CBV alignment requirement
+  Microsoft::WRL::ComPtr<ID3D12Resource> constants_;
 
   struct CachedPass {
     Microsoft::WRL::ComPtr<ID3D12PipelineState> pso;
@@ -201,7 +226,9 @@ class ComputeEngine {
   bool CompilePipeline(const char* hlsl, ID3D12PipelineState** out_pso);
   void CreateShaderResourceView(ID3D12Resource* resource, D3D12_CPU_DESCRIPTOR_HANDLE handle);
   void CreateUnorderedAccessView(ID3D12Resource* resource, D3D12_CPU_DESCRIPTOR_HANDLE handle);
-  void CreateConstantBufferView(ID3D12Resource* resource, const void* data, size_t size, D3D12_CPU_DESCRIPTOR_HANDLE handle);
+  void CreateConstantBufferView(ID3D12Resource* resource, uint64_t offset,
+                                const void* data, size_t size,
+                                D3D12_CPU_DESCRIPTOR_HANDLE handle);
   DXGI_FORMAT TypedFormat(DXGI_FORMAT format) const;
 
   bool BindAndDispatch(

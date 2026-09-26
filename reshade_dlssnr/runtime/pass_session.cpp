@@ -1471,6 +1471,14 @@ static_assert(
     "a session step in the Present stage needs an input the Present call site "
     "does not supply");
 
+// The dispatch ring has to hold one whole frame at the maximum pass count: its
+// descriptors and constants are written when the command is recorded and read
+// when it executes, so a slot reused too early hands a pending dispatch another
+// dispatch's resources. See kDescriptorRingSize in compute_engine.h.
+static_assert(kMaxDispatchesPerFrame >= kMaxPasses * 5 + 2,
+              "kMaxDispatchesPerFrame no longer covers a frame at kMaxPasses - "
+              "raise it, and kDescriptorRingSize with it");
+
 const PipelineStepDef* SessionStepFor(PipelineNodeId id) {
   for (const PipelineStepDef& def : kSessionSteps) {
     if (def.id == id) return &def;

@@ -90,18 +90,19 @@ void ComputeEngine::CreateUnorderedAccessView(ID3D12Resource* resource, D3D12_CP
   device_->CreateUnorderedAccessView(resource, nullptr, &desc, handle);
 }
 
-void ComputeEngine::CreateConstantBufferView(ID3D12Resource* resource, const void* data, size_t size, D3D12_CPU_DESCRIPTOR_HANDLE handle) {
+void ComputeEngine::CreateConstantBufferView(ID3D12Resource* resource, uint64_t offset, const void* data, size_t size, D3D12_CPU_DESCRIPTOR_HANDLE handle) {
   void* mapped = nullptr;
   D3D12_RANGE read_range = {};
   if (SUCCEEDED(resource->Map(0, &read_range, &mapped))) {
-    memcpy(mapped, data, size);
-    D3D12_RANGE write_range = {0, size};
+    memcpy(static_cast<uint8_t*>(mapped) + offset, data, size);
+    D3D12_RANGE write_range = {static_cast<SIZE_T>(offset),
+                               static_cast<SIZE_T>(offset + size)};
     resource->Unmap(0, &write_range);
   }
 
   D3D12_CONSTANT_BUFFER_VIEW_DESC desc = {};
-  desc.BufferLocation = resource->GetGPUVirtualAddress();
-  desc.SizeInBytes = 256;
+  desc.BufferLocation = resource->GetGPUVirtualAddress() + offset;
+  desc.SizeInBytes = kConstantStride;
   device_->CreateConstantBufferView(&desc, handle);
 }
 
@@ -147,8 +148,8 @@ bool ComputeEngine::BindAndDispatch(
   D3D12_CPU_DESCRIPTOR_HANDLE cbv_handle = cpu_handle;
   cbv_handle.ptr += static_cast<SIZE_T>(kSrvCount + kUavCount) *
                     descriptor_size_;
-  CreateConstantBufferView(
-      constant_buffers_[slot].Get(), &constants, sizeof(constants), cbv_handle);
+  CreateConstantBufferView(constants_.Get(), slot * kConstantStride, &constants,
+                           sizeof(constants), cbv_handle);
 
   // Thread-group grid. Callers can override for passes whose grid is not
   // tied to the frame size; the built-in 8×8 group passes use the default.
@@ -407,7 +408,7 @@ bool ComputeEngine::Init(ID3D12Device* device) {
   D3D12_RESOURCE_DESC buffer_desc = {};
   buffer_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
   buffer_desc.Alignment = 0;
-  buffer_desc.Width = sizeof(ComputeConstants);
+  buffer_desc.Width = kDescriptorRingSize * kConstantStride;
   buffer_desc.Height = 1;
   buffer_desc.DepthOrArraySize = 1;
   buffer_desc.MipLevels = 1;
@@ -416,16 +417,11 @@ bool ComputeEngine::Init(ID3D12Device* device) {
   buffer_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
   buffer_desc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
-  for (uint32_t i = 0; i < kDescriptorRingSize; ++i) {
-    if (FAILED(device->CreateCommittedResource(
-            &heap_props,
-            D3D12_HEAP_FLAG_NONE,
-            &buffer_desc,
-            D3D12_RESOURCE_STATE_GENERIC_READ,
-            nullptr,
-            IID_PPV_ARGS(constant_buffers_[i].GetAddressOf())))) {
-      return false;
-    }
+  if (FAILED(device->CreateCommittedResource(
+          &heap_props, D3D12_HEAP_FLAG_NONE, &buffer_desc,
+          D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
+          IID_PPV_ARGS(constants_.GetAddressOf())))) {
+    return false;
   }
 
   ready_.store(false, std::memory_order_relaxed);
@@ -456,9 +452,7 @@ void ComputeEngine::Destroy() {
     worker_.join();
   }
 
-  for (auto& buffer : constant_buffers_) {
-    buffer.Reset();
-  }
+  constants_.Reset();
 
   {
     std::lock_guard<std::mutex> lock(passes_mutex_);

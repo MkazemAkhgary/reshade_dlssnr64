@@ -352,6 +352,17 @@ as stale. `CommandContext::UavBarrier` handles this.
 They only record commands. This is why the retry path releases the NGX feature
 rather than trying to synchronize.
 
+**The dispatch ring must cover every frame the CPU can be ahead.** A dispatch's
+descriptors and constants are written by the CPU as the command is recorded and
+read by the GPU when it executes, so a slot may only be rewritten once that
+dispatch has run. The Post-DLSS passes record onto the game's command list and
+nothing on that path waits on the GPU, so the ring depth is the only thing
+between a deep CPU lead and a dispatch reading another dispatch's resources.
+`kDescriptorRingSize` is derived from DXGI's maximum swapchain depth and the
+worst-case dispatches per frame. At 16 slots it covered two passes (6 dispatches
+per frame, 8 with the HDR histogram) and not three (9 and 11), which is what
+made a third pass flicker.
+
 ### NVIDIA Streamline
 
 The game may be running its DLSS through Streamline, which replaces the D3D

@@ -158,11 +158,10 @@ void CommandContext::Transition(
   barrier.Transition.StateAfter = after;
   command_list->ResourceBarrier(1, &barrier);
 
-  TRACE_CMD(this, "transition res=%d(%s) %s -> %s tracked=%d",
+  TRACE_CMD(this, "transition res=%d(%s) %s tracked=%d",
             trace::ResourceId(resource),
             trace::ResourceNameOr(resource, "-"),
-            trace::StateName(before), trace::StateName(after),
-            tracked ? 1 : 0);
+            trace::StatePairName(before, after), tracked ? 1 : 0);
 
   resource_states_[resource] = after;
 }

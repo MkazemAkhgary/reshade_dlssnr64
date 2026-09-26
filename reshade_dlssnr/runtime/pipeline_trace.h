@@ -105,7 +105,16 @@ void Shutdown();
 
 // Formats a D3D12_RESOURCE_STATES value as a short stable string. Bit flags
 // are combined as "A|B"; the common single-flag states get their bare name.
+//
+// Returns a shared per-thread buffer, so only one result can be live at a
+// time: two calls in one argument list both print the second state. Use
+// StatePairName() for a transition.
 const char* StateName(D3D12_RESOURCE_STATES state);
+
+// Formats a transition as "before -> after". StateName() cannot be called
+// twice for this, which is why the pair has its own entry point.
+const char* StatePairName(D3D12_RESOURCE_STATES before,
+                          D3D12_RESOURCE_STATES after);
 
 }  // namespace reshade_dlssnr::trace
 
