@@ -1,5 +1,7 @@
 #include "dlss_guides.h"
 
+#include <cstdio>
+
 #include <reshade.hpp>
 
 #include "d3d12_utils.h"
@@ -31,6 +33,84 @@ ID3D12Resource* GetResource(const NVSDK_NGX_Parameter* params, const char* a, co
   }
 
   return nullptr;
+}
+
+}  // namespace
+
+namespace {
+
+// One line per distinct set of guide dimensions.
+//
+// Whether a guide lines up with the game's view is decided by numbers that are
+// all in the parameter block and none of which the addon reads: the render
+// dimensions DLSS was told, the size of each resource it was handed, and the
+// subrect bases. When a game renders into a larger texture and points DLSS at
+// a region of it, a capture that copies the whole resource is offset from the
+// view -- and the debug view, which crops to the whole resource, shows it.
+// Guessing which of those differs has cost enough; this prints them.
+void LogGuideGeometryOnce(const NVSDK_NGX_Parameter* params,
+                          const D3D12_RESOURCE_DESC& depth,
+                          const D3D12_RESOURCE_DESC& motion,
+                          const D3D12_RESOURCE_DESC& output) {
+  auto get_uint = [params](const char* name) -> unsigned int {
+    unsigned int value = 0;
+    params->Get(name, &value);
+    return value;
+  };
+  auto get_int = [params](const char* name) -> int {
+    int value = 0;
+    params->Get(name, &value);
+    return value;
+  };
+
+  const unsigned int render_w = get_uint(NVSDK_NGX_Parameter_Width);
+  const unsigned int render_h = get_uint(NVSDK_NGX_Parameter_Height);
+  const int output_subrects = get_int(NVSDK_NGX_Parameter_DLSS_Enable_Output_Subrects);
+
+  struct Key {
+    unsigned int render_w, render_h, depth_w, depth_h, motion_w, motion_h, output_w, output_h;
+    unsigned int color_x, color_y, depth_x, depth_y, mv_x, mv_y, out_x, out_y;
+    int output_subrects;
+  };
+  const Key key = {
+      render_w, render_h,
+      static_cast<unsigned int>(depth.Width), static_cast<unsigned int>(depth.Height),
+      static_cast<unsigned int>(motion.Width), static_cast<unsigned int>(motion.Height),
+      static_cast<unsigned int>(output.Width), static_cast<unsigned int>(output.Height),
+      get_uint(NVSDK_NGX_Parameter_DLSS_Input_Color_Subrect_Base_X),
+      get_uint(NVSDK_NGX_Parameter_DLSS_Input_Color_Subrect_Base_Y),
+      get_uint(NVSDK_NGX_Parameter_DLSS_Input_Depth_Subrect_Base_X),
+      get_uint(NVSDK_NGX_Parameter_DLSS_Input_Depth_Subrect_Base_Y),
+      get_uint(NVSDK_NGX_Parameter_DLSS_Input_MV_SubrectBase_X),
+      get_uint(NVSDK_NGX_Parameter_DLSS_Input_MV_SubrectBase_Y),
+      get_uint(NVSDK_NGX_Parameter_DLSS_Output_Subrect_Base_X),
+      get_uint(NVSDK_NGX_Parameter_DLSS_Output_Subrect_Base_Y),
+      output_subrects};
+
+  static Key last = {};
+  static bool logged = false;
+  if (logged && key.render_w == last.render_w && key.render_h == last.render_h &&
+      key.depth_w == last.depth_w && key.depth_h == last.depth_h &&
+      key.motion_w == last.motion_w && key.motion_h == last.motion_h &&
+      key.output_w == last.output_w && key.output_h == last.output_h &&
+      key.color_x == last.color_x && key.color_y == last.color_y &&
+      key.depth_x == last.depth_x && key.depth_y == last.depth_y &&
+      key.mv_x == last.mv_x && key.mv_y == last.mv_y && key.out_x == last.out_x &&
+      key.out_y == last.out_y && key.output_subrects == last.output_subrects) {
+    return;
+  }
+  last = key;
+  logged = true;
+
+  char message[384];
+  std::snprintf(
+      message, sizeof(message),
+      "DLSS guides: render=%ux%u depth=%ux%u mv=%ux%u output=%ux%u "
+      "bases color=(%u,%u) depth=(%u,%u) mv=(%u,%u) out=(%u,%u) out_subrects=%d",
+      render_w, render_h, key.depth_w, key.depth_h, key.motion_w, key.motion_h,
+      key.output_w, key.output_h, key.color_x, key.color_y, key.depth_x,
+      key.depth_y, key.mv_x, key.mv_y, key.out_x, key.out_y, output_subrects);
+  reshade::log::message(reshade::log::level::info, message);
 }
 
 }  // namespace
@@ -231,6 +311,11 @@ void DlssGuides::Capture(
   ID3D12Resource* output = GetResource(
       params, NVSDK_NGX_Parameter_Output, "DLSSD.Output");
   const bool output_fresh = (output != nullptr);
+
+  if (output != nullptr) {
+    LogGuideGeometryOnce(params, depth->GetDesc(), motion->GetDesc(),
+                         output->GetDesc());
+  }
 
   if (output != nullptr) {
     if (dlss_output_clone_ == nullptr ||
