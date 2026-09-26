@@ -238,16 +238,17 @@ void DlssGuides::Capture(
     return;
   }
 
-  unsigned int guide_width = 0;
-  unsigned int guide_height = 0;
-  params->Get(NVSDK_NGX_Parameter_Width, &guide_width);
-  params->Get(NVSDK_NGX_Parameter_Height, &guide_height);
-
-  if (guide_width == 0 || guide_height == 0) {
-    D3D12_RESOURCE_DESC depth_desc = depth->GetDesc();
-    guide_width = static_cast<unsigned int>(depth_desc.Width);
-    guide_height = static_cast<unsigned int>(depth_desc.Height);
-  }
+  // The guides' extent is the size of the resources we hand the model, not the
+  // size DLSS was told to render at. On a DLSS Quality render those differ --
+  // a 1707x960 render against a 2560x1440 depth -- and describing a 2560x1440
+  // texture as 1707x960 makes the model sample the wrong region of it, which
+  // is the ghosting. It also made the debug view crop to that region, which is
+  // why the guides looked offset from the game's view in one game and not the
+  // other: the other renders at native resolution, where the two agree.
+  const unsigned int guide_width =
+      static_cast<unsigned int>(depth->GetDesc().Width);
+  const unsigned int guide_height =
+      static_cast<unsigned int>(depth->GetDesc().Height);
 
   unsigned int create_flags = 0;
   params->Get(NVSDK_NGX_Parameter_DLSS_Feature_Create_Flags, &create_flags);
