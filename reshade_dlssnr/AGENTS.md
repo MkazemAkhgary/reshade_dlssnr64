@@ -884,13 +884,10 @@ Three symptoms reported by the user, recorded so they are not lost. None has
 been reproduced or diagnosed, so treat everything below as the observation
 only — the causes are unknown, and the parenthetical guesses are unverified.
 
-**Flicker with all three passes enabled, TLOU1 only.** Not present in TLOU2.
-Three passes means both stages are populated, so both write the frame: the
-Post-DLSS passes through `WriteToGameResource` and the Present pass through
-`WriteToBackbuffer`. Worth checking first whether the flicker is every other
-frame, and whether it correlates with a stage returning `SkipFrame` after a
-rebuild — the `SkipFrame` path exists to avoid presenting a half-built frame,
-so a frame that skips while the other stage still writes is a candidate.
+**Flicker with three passes, TLOU1 only.** Not present in TLOU2. The case that
+was actually tested is all three passes set to the **DLSS Output** target.
+Whether two passes flicker, and whether the stage a pass runs at matters, are
+both untested.
 
 **Debug view frames skipped.** With a debug view selected, occasional frames
 show the image with the debug view off. Both games. Intermittent, and only
