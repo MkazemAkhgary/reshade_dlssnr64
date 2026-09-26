@@ -360,8 +360,9 @@ nothing on that path waits on the GPU, so the ring depth is the only thing
 between a deep CPU lead and a dispatch reading another dispatch's resources.
 `kDescriptorRingSize` is derived from DXGI's maximum swapchain depth and the
 worst-case dispatches per frame. At 16 slots it covered two passes (6 dispatches
-per frame, 8 with the HDR histogram) and not three (9 and 11), which is what
-made a third pass flicker.
+per frame, 8 with the HDR histogram) and not three (9 and 11) — and a third pass
+at the DLSS Output stage flickered until the ring was sized for a frame instead
+of a pass (`64fdc60`).
 
 ### NVIDIA Streamline
 
@@ -907,23 +908,11 @@ this addon never touches.
 
 ## Reported, not investigated
 
-Three symptoms reported by the user, recorded so they are not lost. Two are
-still undiagnosed: treat those as the observation only, and the guesses with
-them as unverified. The flicker has a diagnosis and a fix that is waiting on a
-live run to confirm.
-
-**Flicker with three passes at DLSS Output.** Occurs in both TLOU1 and TLOU2,
-and only when three enabled passes all target the DLSS Output stage — any other
-configuration shows none. It is transient: about five flickers after the third
-pass is enabled, and then it stops.
-
-Diagnosed from a trace of the third pass being enabled. The dispatch ring was
-sized for barely two frames: two passes record 6 dispatches per frame (8 with
-the HDR histogram) and three record 9 (11 with it), against 16 slots. Fixed by
-deriving `kDescriptorRingSize` from the swapchain depth and the worst-case
-dispatches per frame (`64fdc60`) — see the ring note under *D3D12 / GPU*. Not
-yet confirmed against a live run: if it recurs, the ring is not the whole story
-and the next step is to gate slot reuse on the GPU's progress with a fence.
+Symptoms reported by the user, recorded so they are not lost. Neither has been
+reproduced or diagnosed, so treat everything below as the observation only —
+the causes are unknown, and the parenthetical guesses are unverified. (A third
+symptom, the flicker with three passes at DLSS Output, was the dispatch ring;
+see *D3D12 / GPU*.)
 
 **Debug view frames skipped.** With a debug view selected, occasional frames
 show the image with the debug view off. Both games. Intermittent, and only
@@ -935,10 +924,10 @@ the active pass. Any one of those skipping a single frame looks exactly like
 this. "After fiddling for a while" points at a rebuild rather than a per-frame
 race.
 
-The dispatch-ring fix above is a candidate for this one too: a slot reused
-before its dispatch ran hands that dispatch another dispatch's resources, which
-renders into the wrong target — and a debug view whose output never lands looks
-exactly like a frame with the view off.
+The dispatch ring is a candidate for this one too: a slot reused before its
+dispatch ran hands that dispatch another dispatch's resources, which renders
+into the wrong target — and a debug view whose output never lands looks exactly
+like a frame with the view off. The ring is fixed; this has not been retested.
 
 **Grading the model output is too extreme in HDR.** The backbuffer grade is
 fine; the model-output grade needs a conversion the addon does not currently

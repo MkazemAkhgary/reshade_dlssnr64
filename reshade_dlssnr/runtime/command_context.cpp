@@ -142,11 +142,10 @@ void CommandContext::Transition(
 
   if (before == after) {
     resource_states_[resource] = after;
-    TRACE_CMD(this, "transition res=%d(%s) %s -> %s SKIP(same) tracked=%d",
+    TRACE_CMD(this, "transition res=%d(%s) %s SKIP(same) tracked=%d",
               trace::ResourceId(resource),
               trace::ResourceNameOr(resource, "-"),
-              trace::StateName(before), trace::StateName(after),
-              tracked ? 1 : 0);
+              trace::StateName(before), tracked ? 1 : 0);
     return;
   }
 
