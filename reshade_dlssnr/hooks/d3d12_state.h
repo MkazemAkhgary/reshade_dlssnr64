@@ -30,15 +30,15 @@ struct RootState {
   std::vector<uint32_t> Data;
 };
 
-enum class SignatureEntryType {
-  Invalid,
-  Compute,
-  Graphics,
-};
-
-struct SignatureEntry {
-  SignatureEntryType type = SignatureEntryType::Invalid;
-  ID3D12RootSignature* ptr = nullptr;
+// D3D12 keeps a graphics and a compute root signature bound at the same time,
+// and each has its own root parameters: SetComputeRoot* and SetGraphicsRoot*
+// address the same index numbers in two different signatures. The tracker only
+// observes the compute calls, so only that slot has root entries -- but the two
+// have to be kept apart, because replaying compute indices against a graphics
+// signature addresses parameters it does not have, and the driver faults.
+struct SignatureState {
+  ID3D12RootSignature* compute = nullptr;
+  ID3D12RootSignature* graphics = nullptr;
 };
 
 struct DescriptorHeapState {
@@ -79,7 +79,7 @@ class D3D12StateTracker {
   DescriptorHeapState GetDescriptorHeaps(ID3D12GraphicsCommandList* command_list) const;
   ID3D12PipelineState* GetPipelineState(ID3D12GraphicsCommandList* command_list) const;
   ID3D12StateObject* GetPipelineState1(ID3D12GraphicsCommandList* command_list) const;
-  SignatureEntry GetSignature(ID3D12GraphicsCommandList* command_list) const;
+  SignatureState GetSignatures(ID3D12GraphicsCommandList* command_list) const;
   const std::vector<RootState>* GetRootState(ID3D12GraphicsCommandList* command_list) const;
 
   void SetRootParameterCount(ID3D12RootSignature* root_signature, UINT count);
@@ -106,7 +106,7 @@ class D3D12StateTracker {
   std::unordered_map<ID3D12GraphicsCommandList*, ID3D12StateObject*> state_objects_;
 
   mutable std::shared_mutex root_signature_mutex_;
-  std::unordered_map<ID3D12GraphicsCommandList*, SignatureEntry> signatures_;
+  std::unordered_map<ID3D12GraphicsCommandList*, SignatureState> signatures_;
 
   mutable std::shared_mutex root_states_mutex_;
   std::unordered_map<ID3D12GraphicsCommandList*, std::vector<RootState>> root_states_;

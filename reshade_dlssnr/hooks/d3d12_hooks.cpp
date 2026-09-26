@@ -398,15 +398,23 @@ void D3D12Hooks::RestoreCommandList(ID3D12GraphicsCommandList* command_list) {
   if (command_list == nullptr || !g_hooked_command_lists) return;
 
   const auto heaps = D3D12StateTracker::Get().GetDescriptorHeaps(command_list);
-  if (heaps.NumDescriptorHeaps > 0 && heaps.Heaps[0] != nullptr) {
-    g_original_set_descriptor_heaps(command_list, heaps.NumDescriptorHeaps, heaps.Heaps);
+  // Clamped to what was actually stored: the tracker records the real count but
+  // only keeps the first two heaps, so passing the raw count through would hand
+  // the runtime whatever follows the array.
+  const UINT heap_count = heaps.NumDescriptorHeaps > 2 ? 2 : heaps.NumDescriptorHeaps;
+  if (heap_count > 0 && heaps.Heaps[0] != nullptr) {
+    g_original_set_descriptor_heaps(command_list, heap_count, heaps.Heaps);
   }
 
-  const auto signature = D3D12StateTracker::Get().GetSignature(command_list);
-  if (signature.type == SignatureEntryType::Compute && signature.ptr != nullptr) {
-    g_original_set_compute_root_signature(command_list, signature.ptr);
-  } else if (signature.type == SignatureEntryType::Graphics && signature.ptr != nullptr) {
-    g_original_set_graphics_root_signature(command_list, signature.ptr);
+  // Only the compute signature. Our own passes bind one -- ComputeEngine's --
+  // and that is the slot this has to put back; the graphics signature is not
+  // ours to touch, and the root entries below belong to the compute one. The
+  // two are independent slots, which is why this is not "whichever was bound
+  // last": replaying compute indices against a graphics signature addresses
+  // parameters it does not have and faults in the driver.
+  const auto signatures = D3D12StateTracker::Get().GetSignatures(command_list);
+  if (signatures.compute != nullptr) {
+    g_original_set_compute_root_signature(command_list, signatures.compute);
   }
 
   const auto* root_state = D3D12StateTracker::Get().GetRootState(command_list);

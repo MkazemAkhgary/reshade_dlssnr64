@@ -87,14 +87,14 @@ void D3D12StateTracker::SetComputeRootSignature(ID3D12GraphicsCommandList* comma
   }
 
   std::unique_lock<std::shared_mutex> lock(root_signature_mutex_);
-  signatures_.insert_or_assign(command_list, SignatureEntry { SignatureEntryType::Compute, root_signature });
+  signatures_[command_list].compute = root_signature;
 }
 
 void D3D12StateTracker::SetGraphicsRootSignature(ID3D12GraphicsCommandList* command_list, ID3D12RootSignature* root_signature) {
   if (command_list == nullptr || root_signature == nullptr) return;
 
   std::unique_lock<std::shared_mutex> lock(root_signature_mutex_);
-  signatures_.insert_or_assign(command_list, SignatureEntry { SignatureEntryType::Graphics, root_signature });
+  signatures_[command_list].graphics = root_signature;
 }
 
 void D3D12StateTracker::SetComputeRootDescriptorTable(ID3D12GraphicsCommandList* command_list, UINT index, D3D12_GPU_DESCRIPTOR_HANDLE base_descriptor) {
@@ -200,7 +200,7 @@ ID3D12StateObject* D3D12StateTracker::GetPipelineState1(ID3D12GraphicsCommandLis
   return it->second;
 }
 
-SignatureEntry D3D12StateTracker::GetSignature(ID3D12GraphicsCommandList* command_list) const {
+SignatureState D3D12StateTracker::GetSignatures(ID3D12GraphicsCommandList* command_list) const {
   std::shared_lock<std::shared_mutex> lock(root_signature_mutex_);
   auto it = signatures_.find(command_list);
   if (it == signatures_.end()) return {};
