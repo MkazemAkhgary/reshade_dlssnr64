@@ -1,10 +1,8 @@
 #include <windows.h>
 
-#include <d3d12sdklayers.h>
 #include <imgui.h>
 #include <reshade.hpp>
 
-#include <cstdlib>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -101,37 +99,9 @@ void OnPresent(
       native_swapchain);
 }
 
-// Opt-in D3D12 debug layer, for when a failure has to be named rather than
-// guessed at. The layer has to be enabled *before* D3D12CreateDevice, and
-// ReShade does not enable it, so an injected DLL is the only place it can
-// happen. Off by default: it makes games crawl and floods the debug output.
-void EnableDebugLayerIfRequested() {
-  char* value = nullptr;
-  size_t length = 0;
-  if (_dupenv_s(&value, &length, "DLSSNR_D3D12_DEBUG") != 0 || value == nullptr) {
-    return;
-  }
-  const bool requested = length > 1 && value[0] == '1';
-  std::free(value);
-  if (!requested) return;
-
-  Microsoft::WRL::ComPtr<ID3D12Debug> debug;
-  if (FAILED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))) || debug == nullptr) {
-    reshade::log::message(
-        reshade::log::level::warning,
-        "D3D12 debug layer requested but unavailable; install the Graphics Tools feature");
-    return;
-  }
-
-  debug->EnableDebugLayer();
-  reshade::log::message(reshade::log::level::info,
-                        "D3D12 debug layer enabled; expect validation output and a large slowdown");
-}
-
 void Attach(HMODULE module) {
   if (g_initialized) return;
 
-  EnableDebugLayerIfRequested();
   reshade_dlssnr::LoadSettings();
   PinAddonModule();
 
