@@ -1,6 +1,7 @@
 #include "d3d12_hooks.h"
 
 #include <cstdio>
+#include <cstdlib>
 
 #include <wrl/client.h>
 
@@ -396,6 +397,30 @@ void D3D12Hooks::RestoreCommandList(ID3D12GraphicsCommandList* command_list) {
   // put back. Returning here rather than calling the unhooked originals also
   // keeps the tracker from being consulted on the Present path.
   if (command_list == nullptr || !g_hooked_command_lists) return;
+
+  // Diagnostic: DLSSNR_NO_RESTORE=1 skips the replay entirely.
+  //
+  // A command list that fails its own Close() with E_INVALIDARG is a list the
+  // runtime considers inconsistent, and this is the only thing that writes to
+  // the game's list after our pass has finished. Skipping it is the one
+  // experiment that separates "what we put back is wrong" from "what our pass
+  // left behind is wrong" -- and those need different fixes.
+  static const bool restore_disabled = [] {
+    char* value = nullptr;
+    size_t length = 0;
+    if (_dupenv_s(&value, &length, "DLSSNR_NO_RESTORE") != 0 || value == nullptr) {
+      return false;
+    }
+    const bool set = length > 1 && value[0] == '1';
+    std::free(value);
+    if (set) {
+      reshade::log::message(
+          reshade::log::level::info,
+          "DLSSNR_NO_RESTORE is set: command list state is NOT being restored");
+    }
+    return set;
+  }();
+  if (restore_disabled) return;
 
   const auto heaps = D3D12StateTracker::Get().GetDescriptorHeaps(command_list);
   // Clamped to what was actually stored: the tracker records the real count but
