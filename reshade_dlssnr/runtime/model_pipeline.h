@@ -21,11 +21,11 @@ namespace reshade_dlssnr::model_pipeline {
 // spells that out as `gParams[0]` in kTonemapForward, which keeps its own
 // layout.
 //
-// ComposeOutput uses only `format`, written at kHdrSlotBase + 0 and read as
-// `gParams[8].x` in kComposeModelOutputHdr. Exposure and white point are
-// deliberately not part of the compose: the residual is a ratio, so the
-// tonemap's exposure cancels out and changing it cannot change the composed
-// image. See the region map in compute_engine.h before changing any of this.
+// ComposeOutput writes all three at kHdrSlotBase + 0/1/2, read as
+// gParams[8].xyz in kComposeModelOutputHdr. Exposure and white point are read
+// because the compose inverts the tonemap on the model's output: the model
+// saw the tonemapped image, so the ratio it implies is in that domain. See
+// the region map in compute_engine.h before changing any of this.
 struct HdrUniforms {
   float exposure = 1.0f;
   float white_point = 4.0f;
