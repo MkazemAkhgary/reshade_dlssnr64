@@ -38,7 +38,8 @@ namespace reshade_dlssnr {
 //   [0,  kShaderParamCount)  the kShaderParams table (per-pass sliders)
 //   [8,  24)                 the colour grade block
 //   [24, 32)                 the residual edit block
-//   [32, 40)                 the HDR uniforms
+//   [32, 36)                 the HDR uniforms
+//   [36, 48)                 the FSR EASU constants
 //
 // Gaps between regions are deliberate headroom, not waste: they let a region
 // grow a little before anything else has to move.
@@ -51,7 +52,9 @@ constexpr uint32_t kGradeSlotCount = 16;
 constexpr uint32_t kResidualSlotBase = 24;
 constexpr uint32_t kResidualSlotCount = 8;
 constexpr uint32_t kHdrSlotBase = 32;
-constexpr uint32_t kHdrSlotCount = 8;
+constexpr uint32_t kHdrSlotCount = 4;
+constexpr uint32_t kEasuSlotBase = 36;
+constexpr uint32_t kEasuSlotCount = 12;
 
 constexpr uint32_t kParamSlotCount = 48;
 
@@ -64,8 +67,11 @@ static_assert(kGradeSlotBase + kGradeSlotCount <= kResidualSlotBase,
 static_assert(kResidualSlotBase + kResidualSlotCount <= kHdrSlotBase,
               "the residual block has grown into the HDR uniforms - move "
               "kHdrSlotBase up");
-static_assert(kHdrSlotBase + kHdrSlotCount <= kParamSlotCount,
-              "the HDR uniforms have grown past the end of params");
+static_assert(kHdrSlotBase + kHdrSlotCount <= kEasuSlotBase,
+              "the HDR uniforms have grown into the EASU constants - move "
+              "kEasuSlotBase up");
+static_assert(kEasuSlotBase + kEasuSlotCount <= kParamSlotCount,
+              "the EASU constants have grown past the end of params");
 
 // Size and alignment are pinned to 256 bytes for two reasons: the CBV
 // created in BindAndDispatch hardcodes SizeInBytes = 256, and the D3D12
