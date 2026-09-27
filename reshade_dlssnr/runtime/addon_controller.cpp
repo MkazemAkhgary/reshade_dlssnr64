@@ -497,6 +497,7 @@ PipelineStatus RunEnsureHdr(PassRun& run) {
 // below — which replaces the backbuffer wholesale — still wins.
 PipelineStatus RunGradeBackbuffer(PassRun& run) {
   if (run.settings == nullptr || run.codec == nullptr) return PipelineStatus::Ok;
+  if (!run.settings->enabled) return PipelineStatus::Ok;
 
   const GradeSettings& grade = run.settings->grade_backbuffer;
   if (!grade.enabled) return PipelineStatus::Ok;
