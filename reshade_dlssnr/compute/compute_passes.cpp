@@ -728,6 +728,35 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float3 low_out = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
                               easu_con3, 1);
 
+    // RCAS on the EASU result. Neighbors come from a bilinear sample rather
+    // than a second EASU: the four extra EASU invocations per texture would
+    // cost more than the sharpening is worth, and RCAS only uses them for
+    // local contrast. The center is the EASU value, so nothing is lost where
+    // it matters most.
+    if (kRcasEnabled > 0.5) {
+        const float2 texel = float2(kEasuCon1.x, kEasuCon1.y);
+
+        float3 b_in = gLowInput.SampleLevel(s0,
+            uv + float2(0.0, -texel.y), 0).rgb;
+        float3 d_in = gLowInput.SampleLevel(s0,
+            uv + float2(-texel.x, 0.0), 0).rgb;
+        float3 f_in = gLowInput.SampleLevel(s0,
+            uv + float2(texel.x, 0.0), 0).rgb;
+        float3 h_in = gLowInput.SampleLevel(s0,
+            uv + float2(0.0, texel.y), 0).rgb;
+        low_in = FsrRcasF(b_in, d_in, low_in, f_in, h_in, kRcasStrength);
+
+        float3 b_out = gLowEnhanced.SampleLevel(s0,
+            uv + float2(0.0, -texel.y), 0).rgb;
+        float3 d_out = gLowEnhanced.SampleLevel(s0,
+            uv + float2(-texel.x, 0.0), 0).rgb;
+        float3 f_out = gLowEnhanced.SampleLevel(s0,
+            uv + float2(texel.x, 0.0), 0).rgb;
+        float3 h_out = gLowEnhanced.SampleLevel(s0,
+            uv + float2(0.0, texel.y), 0).rgb;
+        low_out = FsrRcasF(b_out, d_out, low_out, f_out, h_out, kRcasStrength);
+    }
+
     float3 src_lin = DecodeToLinear(orig_hdr.rgb);
 
     float3 edited_src_lin = ComposeRatio(src_lin, low_in, low_out,
