@@ -458,7 +458,7 @@ cbuffer Params : register(b0)
 {
     uint  gWidth;
     uint  gHeight;
-    float4 gParams[13];
+    float4 gParams[16];
 };
 
 // User shader params (identical to ComposeModelOutput):
@@ -875,172 +875,6 @@ float3 ReinhardForward(float3 x, float W) {
     return x * (1.0 + x / W2) / (1.0 + x);
 }
 
-// ---------------------------------------------------------------------------
-// Colour grade, forward and inverse
-// ---------------------------------------------------------------------------
-//
-// The compose reads the input grade the model's image went through. Without
-// it, the ratio measured between the graded working input and the model's
-// output is applied to an ungraded source, which is the domain mismatch that
-// made a gamma on the model input carry through to the composed image.
-//
-// Every operator below matches ApplyGrade's. Only the two whose inverse is
-// implicit - Shape, and the vibrance chroma mode - iterate; the rest are
-// closed form.
-
-static const float kMidGreyLinear = 0.2140;
-static const float kShapeMax = 0.5;
-
-float ApplyLevelsFwd(float y) {
-    float span = max(kGradeWhitePoint - kGradeBlackPoint, 0.05);
-    return max(y - kGradeBlackPoint, 0.0) / span;
-}
-float ApplyLevelsInv(float y) {
-    float span = max(kGradeWhitePoint - kGradeBlackPoint, 0.05);
-    return y * span + kGradeBlackPoint;
-}
-float ApplyContrastFwd(float y) {
-    if (kGradeContrast == 0.0) return y;
-    return max(kMidGreyLinear + (y - kMidGreyLinear) * exp2(kGradeContrast), 0.0);
-}
-float ApplyContrastInv(float y) {
-    if (kGradeContrast == 0.0) return y;
-    return kMidGreyLinear + (y - kMidGreyLinear) / exp2(kGradeContrast);
-}
-float ShadowWeight(float y) {
-    float t = saturate(y);
-    return exp(-t * t * 6.0);
-}
-float HighlightWeight(float y) {
-    float t = 1.0 - saturate(y);
-    return exp(-t * t * 6.0);
-}
-float ShapeFwd(float y, float amount, float weight) {
-    return y * (1.0 + amount * kShapeMax * weight);
-}
-// Newton on y*(1 + a*k*W(y)) - y_out = 0. The weight depends on the input,
-// so this is the one operator with no closed-form inverse.
-float ShapeInv(float y_out, float amount, bool is_highlight) {
-    if (amount == 0.0) return y_out;
-    float y = y_out;
-    for (int i = 0; i < 4; ++i) {
-        float t = is_highlight ? (1.0 - saturate(y)) : saturate(y);
-        float w = exp(-t * t * 6.0);
-        float f = y * (1.0 + amount * kShapeMax * w) - y_out;
-        float dW = -12.0 * t * w * (is_highlight ? -1.0 : 1.0);
-        float df = 1.0 + amount * kShapeMax * (w + y * dW);
-        if (abs(df) < 1e-6) break;
-        y -= f / df;
-    }
-    return y;
-}
-float GradeLumaFwd(float y, float amount, int mode) {
-    if (amount == 0.0) return y;
-    if (mode == 0) return y * exp2(amount);
-    if (mode == 1) return pow(max(y, 0.0), exp2(-amount));
-    if (mode == 2) {
-        float lift = amount * 0.5;
-        float room = lift > 0.0 ? max(1.0 - y, 0.0) : y;
-        return y + lift * room;
-    }
-    return y + amount * y * max(1.0 - y, 0.0);
-}
-float GradeLumaInv(float y, float amount, int mode) {
-    if (amount == 0.0) return y;
-    if (mode == 0) return y / exp2(amount);
-    if (mode == 1) return pow(max(y, 0.0), exp2(amount));
-    if (mode == 2) {
-        float lift = amount * 0.5;
-        return (lift > 0.0) ? (y - lift) / max(1.0 - lift, 1e-3)
-                            : y / max(1.0 + lift, 1e-3);
-    }
-    // Soft: solve -a*y^2 + (1+a)*y - y_out = 0 for the root the forward
-    // direction could have produced.
-    float a = amount;
-    float disc = (1.0 + a) * (1.0 + a) - 4.0 * a * y;
-    if (disc < 0.0) return y;
-    float sq = sqrt(disc);
-    float r1 = ((1.0 + a) - sq) / (2.0 * a);
-    float r2 = ((1.0 + a) + sq) / (2.0 * a);
-    return (a > 0.0) ? r1 : r2;
-}
-
-float3 GradeLinearFwd(float3 lin) {
-    const float3 kL = float3(0.2126, 0.7152, 0.0722);
-    float y = dot(lin, kL);
-    float ny = ApplyLevelsFwd(y);
-    ny = ApplyContrastFwd(ny);
-    ny = ShapeFwd(ny, kGradeShadows, ShadowWeight(ny));
-    ny = ShapeFwd(ny, kGradeHighlights, HighlightWeight(ny));
-    ny = GradeLumaFwd(ny, kGradeLuma, (int)(kGradeLumaMode + 0.5));
-    float sy = (y > 0.0) ? y : 1.0;
-    float3 c = lin * (ny / sy);
-
-    if (kGradeChroma != 0.0) {
-        float cy = dot(c, kL);
-        float g = 1.0 + kGradeChroma;
-        int mode = (int)(kGradeChromaMode + 0.5);
-        if (mode == 0) {
-            c = lerp(float3(cy, cy, cy), c, g);
-        } else if (mode == 1) {
-            float spread = max(max(c.r, c.g), c.b) - min(min(c.r, c.g), c.b);
-            c = lerp(float3(cy, cy, cy), c,
-                     1.0 + kGradeChroma * (1.0 - 0.5 * saturate(spread)));
-        } else {
-            float cb = (c.b - cy) / 1.8556 * g;
-            float cr = (c.r - cy) / 1.5748 * g;
-            c.r = cy + 1.5748 * cr;
-            c.g = cy - 0.1873 * cb - 0.4681 * cr;
-            c.b = cy + 1.8556 * cb;
-        }
-    }
-    return c;
-}
-
-float3 GradeLinearInv(float3 lin) {
-    const float3 kL = float3(0.2126, 0.7152, 0.0722);
-
-    // Chroma was applied last, so it comes off first.
-    float3 c = lin;
-    if (kGradeChroma != 0.0) {
-        float cy = dot(c, kL);
-        float g = 1.0 + kGradeChroma;
-        int mode = (int)(kGradeChromaMode + 0.5);
-        float3 gray = float3(cy, cy, cy);
-        if (mode == 0) {
-            c = gray + (c - gray) / max(g, 1e-3);
-        } else if (mode == 1) {
-            // spread scales by the same factor the lerp does, so the fixed
-            // point is found by iterating on the spread of the input.
-            float spread_out = max(max(c.r, c.g), c.b) - min(min(c.r, c.g), c.b);
-            float spread_in = spread_out;
-            for (int i = 0; i < 3; ++i) {
-                float k = 1.0 + kGradeChroma * (1.0 - 0.5 * saturate(spread_in));
-                spread_in = spread_out / max(k, 1e-3);
-            }
-            float k = 1.0 + kGradeChroma * (1.0 - 0.5 * saturate(spread_in));
-            c = gray + (c - gray) / max(k, 1e-3);
-        } else {
-            float cb = (c.b - cy) / 1.8556 / max(g, 1e-3);
-            float cr = (c.r - cy) / 1.5748 / max(g, 1e-3);
-            c.r = cy + 1.5748 * cr;
-            c.g = cy - 0.1873 * cb - 0.4681 * cr;
-            c.b = cy + 1.8556 * cb;
-        }
-    }
-
-    // Luma operators in reverse order.
-    float ny = dot(c, kL);
-    float y = ny;
-    y = GradeLumaInv(y, kGradeLuma, (int)(kGradeLumaMode + 0.5));
-    y = ShapeInv(y, kGradeHighlights, true);
-    y = ShapeInv(y, kGradeShadows, false);
-    y = ApplyContrastInv(y);
-    y = ApplyLevelsInv(y);
-    float sny = (ny > 0.0) ? ny : 1.0;
-    return c * (y / sny);
-}
-
 // The model's edit as a per-channel delta ratio in linear SDR, measured
 // between the two working-scale images the model saw. Delta alone: the caller
 // decides which domain to apply it in.
@@ -1153,7 +987,7 @@ cbuffer Params : register(b0)
 {
     uint  gWidth;
     uint  gHeight;
-    float4 gParams[12];
+    float4 gParams[16];
 };
 
 #define kLumaStrength     gParams[0].x
@@ -1280,7 +1114,23 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     // whatever range the original is in. Scaling the log raises the ratio to
     // the strength, which is the ratio-space analogue of scaling a delta: 0
     // leaves the image alone, 1 applies the model's own edit.
-    float3 edited = original.rgb * exp(residual_log * kEditStrength);
+    // The model saw the image after GradeModelInput, so the ratio is
+    // measured in the graded domain. Apply the same grade to the original
+    // before the edit, un-grade the result, and the compose is the same
+    // statement the model made rather than a differently-shaped one.
+    const bool graded = (kGradeEnabled > 0.5);
+
+    float3 edited;
+    if (graded) {
+        // The SDR path has no tonemap; the model's domain is the sRGB-encoded
+        // image it saw, so the grade and the ratio act on that encoding
+        // directly.
+        float3 graded_original = GradeLinearFwd(original.rgb);
+        float3 graded_edited = graded_original * exp(residual_log * kEditStrength);
+        edited = GradeLinearInv(graded_edited);
+    } else {
+        edited = original.rgb * exp(residual_log * kEditStrength);
+    }
 
     float3 final_rgb = BlendYCbCr(original.rgb, edited,
                                   kLumaStrength, kChromaStrength);
