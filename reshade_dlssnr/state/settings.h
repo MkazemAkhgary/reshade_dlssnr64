@@ -68,6 +68,24 @@ struct ResidualSettings {
   // (only the model's own evaluation still runs), 1 applies it at the
   // magnitude the model produced, above 1 amplifies it.
   float edit_strength = 1.0f;
+
+  // How much of the edit's chroma lands relative to its luma. 1 keeps the
+  // model's per-channel delta intact; 0 leaves only the luma part and takes
+  // hue out of the edit entirely, which is the setting for a scene where the
+  // model's chroma shift reads as wrong.
+  float chroma_strength = 1.0f;
+
+  // Response curve on the edit. 1 is the model's own curve; below 1 amplifies
+  // small edits, above 1 compresses them. Shape only: 0 magnitude stays 0.
+  float edit_gamma = 1.0f;
+
+  // Region weighting. Both reduce the edit where they apply, so the residual
+  // stays visible in the midtones and stops fighting whatever the model did
+  // at the ends of the range.
+  //   highlight_protect: 1 removes the edit entirely above SDR white.
+  //   shadow_protect: 1 removes the edit entirely below SDR black.
+  float highlight_protect = 0.0f;
+  float shadow_protect = 0.0f;
 };
 
 // ---------------------------------------------------------------------------

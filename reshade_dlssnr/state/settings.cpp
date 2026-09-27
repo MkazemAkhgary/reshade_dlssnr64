@@ -163,14 +163,46 @@ void LoadResidual(const std::string& prefix, ResidualSettings& residual) {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             (prefix + "EditStrength").c_str(),
                             residual.edit_strength);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "ChromaStrength").c_str(),
+                            residual.chroma_strength);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "EditGamma").c_str(),
+                            residual.edit_gamma);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "HighlightProtect").c_str(),
+                            residual.highlight_protect);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "ShadowProtect").c_str(),
+                            residual.shadow_protect);
   if (residual.edit_strength < 0.0f) residual.edit_strength = 0.0f;
   if (residual.edit_strength > 2.0f) residual.edit_strength = 2.0f;
+  if (residual.chroma_strength < 0.0f) residual.chroma_strength = 0.0f;
+  if (residual.chroma_strength > 1.0f) residual.chroma_strength = 1.0f;
+  if (residual.edit_gamma < 0.25f) residual.edit_gamma = 0.25f;
+  if (residual.edit_gamma > 4.0f) residual.edit_gamma = 4.0f;
+  if (residual.highlight_protect < 0.0f) residual.highlight_protect = 0.0f;
+  if (residual.highlight_protect > 1.0f) residual.highlight_protect = 1.0f;
+  if (residual.shadow_protect < 0.0f) residual.shadow_protect = 0.0f;
+  if (residual.shadow_protect > 1.0f) residual.shadow_protect = 1.0f;
 }
 
 void SaveResidual(const std::string& prefix, const ResidualSettings& residual) {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             (prefix + "EditStrength").c_str(),
                             residual.edit_strength);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "ChromaStrength").c_str(),
+                            residual.chroma_strength);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "EditGamma").c_str(),
+                            residual.edit_gamma);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "HighlightProtect").c_str(),
+                            residual.highlight_protect);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "ShadowProtect").c_str(),
+                            residual.shadow_protect);
 }
 
 void LoadPassSettings(uint32_t index, PassSettings& pass) {
@@ -419,6 +451,14 @@ void AppendPass(Snapshot& snap, const std::string& prefix,
   Append(snap, prefix + ".injection_stage", StageText(pass.injection_stage));
   Append(snap, prefix + ".residual.edit_strength",
          FloatText(pass.residual.edit_strength));
+  Append(snap, prefix + ".residual.chroma_strength",
+         FloatText(pass.residual.chroma_strength));
+  Append(snap, prefix + ".residual.edit_gamma",
+         FloatText(pass.residual.edit_gamma));
+  Append(snap, prefix + ".residual.highlight_protect",
+         FloatText(pass.residual.highlight_protect));
+  Append(snap, prefix + ".residual.shadow_protect",
+         FloatText(pass.residual.shadow_protect));
   AppendGrade(snap, prefix + ".grade_input", pass.grade_input);
   AppendGrade(snap, prefix + ".grade_output", pass.grade_output);
   Append(snap, prefix + ".inherit.working_scale",
