@@ -1175,6 +1175,49 @@ void DrawPassSettingsBody(uint32_t pass_index,
 
 }  // namespace
 
+// Permutes settings.passes, settings.pass_enabled and settings.active_pass so
+// position i holds the pass that was at order[i]. Re-applies what the pass
+// body assumes about positions: pass 0 is the inheritance root and has no
+// flags, and a Present pass forces every later pass to Present as well.
+void ApplyPassReorder(Settings& settings, const int* order, bool& changed) {
+  PassSettings new_passes[kMaxPasses];
+  bool new_enabled[kMaxPasses];
+  for (uint32_t i = 0; i < kMaxPasses; ++i) {
+    new_passes[i] = settings.passes[order[i]];
+    new_enabled[i] = settings.pass_enabled[order[i]];
+  }
+  for (uint32_t i = 0; i < kMaxPasses; ++i) {
+    settings.passes[i] = new_passes[i];
+    settings.pass_enabled[i] = new_enabled[i];
+  }
+
+  // active_pass names a pass, not a position, so it follows its data.
+  const int old_active = settings.active_pass;
+  for (uint32_t i = 0; i < kMaxPasses; ++i) {
+    if (order[i] == old_active) {
+      settings.active_pass = static_cast<int>(i);
+      break;
+    }
+  }
+
+  settings.passes[0].inherit_working_scale = false;
+  settings.passes[0].inherit_intensity = false;
+  settings.passes[0].inherit_local_tone = false;
+  settings.passes[0].inherit_local_structure = false;
+  settings.passes[0].inherit_skin_structure = false;
+  for (uint32_t i = 0; i < kShaderParamCount; ++i) {
+    settings.passes[0].inherit_params[i] = false;
+  }
+
+  for (uint32_t i = 1; i < kMaxPasses; ++i) {
+    if (settings.passes[i - 1].injection_stage == InjectionStage::Present) {
+      settings.passes[i].injection_stage = InjectionStage::Present;
+    }
+  }
+
+  changed = true;
+}
+
 void DrawOverlay(reshade::api::effect_runtime*) {
   Settings& settings = GetSettings();
   g_show_tooltips = settings.show_tooltips;
