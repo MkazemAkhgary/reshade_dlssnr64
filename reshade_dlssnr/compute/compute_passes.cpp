@@ -456,16 +456,21 @@ float ReinhardInverse(float y, float W) {
     return 0.5 * (sqrt(max(u * u + 4.0 * W2 * y, 0.0)) - u);
 }
 
-// The model saw a tonemapped image, so the ratio it implies is in the
-// tonemapped domain. Invert the tonemap on the model's output first, or the
-// edit is applied through a curve the model never saw.
+// Inverting both sides, rather than the output against the unbounded
+// source, is what makes this work at clipped highlights. LinearToSrgb
+// saturates, so a clipped pixel inverts to the white point regardless of
+// how bright the source was; dividing that by the source collapses the
+// pixel to a fixed value in every channel, which is grey. Dividing by the
+// inverted input instead leaves the ratio at 1 there, and the highlight
+// survives.
 float3 ComposeRatio(float3 src_lin, float3 low_in, float3 low_out,
                     float exposure, float W) {
-    float3 sdr_out_lin = SrgbToLinear(low_out);
-    float3 h_out_est = ReinhardInverse(sdr_out_lin, W) / max(exposure, 1e-6);
+    float inv_exposure = 1.0 / max(exposure, 1e-6);
+    float3 h_in_est = ReinhardInverse(SrgbToLinear(low_in), W) * inv_exposure;
+    float3 h_out_est = ReinhardInverse(SrgbToLinear(low_out), W) * inv_exposure;
 
     const float eps = 1e-4;
-    float3 ratio = (h_out_est + eps) / (max(src_lin, 0.0) + eps);
+    float3 ratio = (h_out_est + eps) / (h_in_est + eps);
     // Same guard as the SDR compose: where the model's input was near black
     // this ratio has a small denominator and can otherwise reach thousands,
     // blowing those pixels out. Bound it to 16x either way.
