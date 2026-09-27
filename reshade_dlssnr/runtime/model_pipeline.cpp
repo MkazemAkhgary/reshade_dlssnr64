@@ -95,6 +95,28 @@ bool ComposeOutput(
     constants.params[kHdrSlotBase + 0] = static_cast<float>(hdr->format);
     constants.params[kHdrSlotBase + 1] = hdr->exposure;
     constants.params[kHdrSlotBase + 2] = hdr->white_point;
+
+    // FsrEasuCon with inputViewport == inputSize: the working-scale textures
+    // are sampled 1:1, so viewport and texture size coincide. con3 is not
+    // stored; the compose derives it from con1.y.
+    const D3D12_RESOURCE_DESC low_desc = low_enhanced->GetDesc();
+    const float in_w = static_cast<float>(low_desc.Width);
+    const float in_h = static_cast<float>(low_desc.Height);
+    const float out_w = static_cast<float>(full_width);
+    const float out_h = static_cast<float>(full_height);
+
+    constants.params[kEasuSlotBase + 0] = in_w / out_w;
+    constants.params[kEasuSlotBase + 1] = in_h / out_h;
+    constants.params[kEasuSlotBase + 2] = 0.5f * in_w / out_w - 0.5f;
+    constants.params[kEasuSlotBase + 3] = 0.5f * in_h / out_h - 0.5f;
+    constants.params[kEasuSlotBase + 4] = 1.0f / in_w;
+    constants.params[kEasuSlotBase + 5] = 1.0f / in_h;
+    constants.params[kEasuSlotBase + 6] = 1.0f / in_w;
+    constants.params[kEasuSlotBase + 7] = -1.0f / in_h;
+    constants.params[kEasuSlotBase + 8] = -1.0f / in_w;
+    constants.params[kEasuSlotBase + 9] = 2.0f / in_h;
+    constants.params[kEasuSlotBase + 10] = 1.0f / in_w;
+    constants.params[kEasuSlotBase + 11] = 2.0f / in_h;
   }
 
   state.Transition(command_list, original,
