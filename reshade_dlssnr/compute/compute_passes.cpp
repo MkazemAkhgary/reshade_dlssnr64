@@ -180,17 +180,23 @@ float3 GradeLinearInv(float3 lin) {
 }
 )";
 
+// Clears both halves of the two-histogram buffer in one dispatch. See
+// kBuildHistogram for the split.
 constexpr const char* kZeroHistogram = R"(
 RWBuffer<uint> gHistogram : register(u0);
 
-[numthreads(256, 1, 1)]
+[numthreads(512, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
-    if (id.x < 256u)
+    if (id.x < 512u)
         gHistogram[id.x] = 0u;
 }
 )";
 
+// Two histograms packed into one buffer: [0, 256) global (excluding sky,
+// which is at the far end of the depth range), [256, 512) skin only. The
+// CPU side uses the global one for the white point and either one for the
+// exposure median, preferring skin when enough of it is present.
 constexpr const char* kBuildHistogram = R"(
 cbuffer Params : register(b0)
 {
@@ -202,14 +208,21 @@ cbuffer Params : register(b0)
 // gParams[0].x = encoding format (0 = SDR sRGB, 1 = scRGB linear, 2 = HDR10 PQ)
 // gParams[0].y = luma min log2 (histogram range low edge)
 // gParams[0].z = luma max log2 (histogram range high edge)
-#define kFormat       gParams[0].x
-#define kLumaMinLog2  gParams[0].y
-#define kLumaMaxLog2  gParams[0].z
+// gParams[1].x = depth available (1 = yes, 0 = no)
+// gParams[1].y = depth inverted (1 = 0 is far, 0 = 0 is near)
+#define kFormat         gParams[0].x
+#define kLumaMinLog2    gParams[0].y
+#define kLumaMaxLog2    gParams[0].z
+#define kHasDepth       gParams[1].x
+#define kDepthInverted  gParams[1].y
 
 Texture2D<float4> gSource : register(t0);
+Texture2D<float4> gDepth  : register(t1);
 RWBuffer<uint>    gHistogram : register(u0);
+SamplerState      s0 : register(s0);
 
 static const float3 kLuma709 = float3(0.2126, 0.7152, 0.0722);
+static const uint kHistogramHalf = 256u;
 
 float3 SrgbToLinear(float3 v)
 {
@@ -233,25 +246,44 @@ float3 PqToNits(float3 v)
     return 10000.0 * pow(num / max(den, 1e-6), 1.0 / m1);
 }
 
-float LinearLuma(float3 c)
+float3 DecodeToLinear(float3 c)
 {
     int fmt = (int)(kFormat + 0.5);
-    if (fmt == 1) {
-        // scRGB: already linear
-        return dot(max(c, 0.0), kLuma709);
-    } else if (fmt == 2) {
-        // HDR10 PQ: decode to nits, normalize to scRGB units (1.0 == 80 nits)
-        float3 nits = PqToNits(c);
-        return dot(max(nits, 0.0), kLuma709) / 80.0;
-    } else {
-        // SDR: sRGB-encoded
-        return dot(SrgbToLinear(c), kLuma709);
-    }
+    if (fmt == 1) return max(c, 0.0);
+    if (fmt == 2) return PqToNits(c) / 80.0;
+    return SrgbToLinear(c);
 }
 
-// Shared-memory histogram, one per workgroup. Declared at global scope:
-// HLSL requires groupshared storage to be declared outside a function.
-groupshared uint gSharedHist[256];
+// Skin detection in hue space, using a gamma 2.2 encoding. Hue is preserved
+// across encoding changes for saturated colors, and 15-45 degrees covers
+// the skin tones of every ethnicity. The saturation floor keeps white and
+// near-white from being counted, which matters most on bright scenes.
+bool IsSkin(float3 lin)
+{
+    float3 p = pow(max(lin, 1e-6), 1.0 / 2.2);
+    float mx = max(p.r, max(p.g, p.b));
+    float mn = min(p.r, min(p.g, p.b));
+    float d = mx - mn;
+    if (d < 1e-5 || mx < 1e-5) return false;
+    if (d / mx < 0.15) return false;
+
+    float h;
+    if (mx == p.r) h = 60.0 * ((p.g - p.b) / d);
+    else if (mx == p.g) h = 60.0 * ((p.b - p.r) / d + 2.0);
+    else h = 60.0 * ((p.r - p.g) / d + 4.0);
+    if (h < 0.0) h += 360.0;
+    return h >= 15.0 && h <= 45.0;
+}
+
+// Sky is at the far end of the depth range; which end that is depends on
+// the game's convention, reported by the guide.
+bool IsSky(float d)
+{
+    return kDepthInverted > 0.5 ? (d < 0.05) : (d > 0.95);
+}
+
+// One shared histogram per workgroup, sized for both halves.
+groupshared uint gSharedHist[512];
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 gid : SV_GroupID,
@@ -259,26 +291,38 @@ void CSMain(uint3 gid : SV_GroupID,
             uint3 dtid : SV_DispatchThreadID)
 {
     const uint lidx = gtid.x + gtid.y * 8u;
-    for (uint i = lidx; i < 256u; i += 64u)
+    for (uint i = lidx; i < 512u; i += 64u)
         gSharedHist[i] = 0u;
     GroupMemoryBarrierWithGroupSync();
 
     if (dtid.x < gWidth && dtid.y < gHeight) {
         float3 c = gSource.Load(int3(dtid.xy, 0)).rgb;
-        float luma = LinearLuma(c);
+        float3 lin = DecodeToLinear(c);
+        float luma = dot(max(lin, 0.0), kLuma709);
 
-        // Bin by log2 luminance.
         float l2 = log2(max(luma, 1e-8));
         float span = max(kLumaMaxLog2 - kLumaMinLog2, 1e-4);
         float t = saturate((l2 - kLumaMinLog2) / span);
         uint bin = min((uint)(t * 255.0 + 0.5), 255u);
 
-        InterlockedAdd(gSharedHist[bin], 1u);
+        bool sky = false;
+        if (kHasDepth > 0.5) {
+            float2 uv = (float2(dtid.xy) + 0.5) / float2(gWidth, gHeight);
+            float d = gDepth.SampleLevel(s0, uv, 0).r;
+            sky = IsSky(d);
+        }
+        if (!sky) {
+            InterlockedAdd(gSharedHist[bin], 1u);
+        }
+
+        if (IsSkin(lin)) {
+            InterlockedAdd(gSharedHist[kHistogramHalf + bin], 1u);
+        }
     }
 
     GroupMemoryBarrierWithGroupSync();
 
-    for (uint i = lidx; i < 256u; i += 64u) {
+    for (uint i = lidx; i < 512u; i += 64u) {
         if (gSharedHist[i] > 0u)
             InterlockedAdd(gHistogram[i], gSharedHist[i]);
     }
