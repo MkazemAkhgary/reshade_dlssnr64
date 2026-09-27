@@ -6,6 +6,7 @@
 #include "dlss_guides.h"
 #include "pipeline_graph.h"
 #include "pipeline_trace.h"
+#include "settings.h"
 
 namespace reshade_dlssnr {
 
@@ -260,6 +261,20 @@ void AddonController::OnPresent(
   }
 
   RunSingleStage(PipelineReleaseStage(), command_queue, swapchain);
+
+  // Drain both of DlssGuides' queues. ReleaseRetiredGameResources is what
+  // PassResources::Dispose routes into via RetireResourceCallback, so a frame
+  // with only PostDLSS passes never reaches PassSession::SubmitAndWait and
+  // never releases anything; every working-scale change disposes both working
+  // textures, so without a frame-end drain the queue grows without bound.
+  // ReleaseRetiredResources holds the guide clones, replaced on a resolution
+  // or format change; they accumulate over a session for the same reason.
+  //
+  // RunSingleStage ends in EndReleaseCommands, which submits and waits, so the
+  // GPU is idle here and every resource on both queues was last referenced by
+  // a submitted command list.
+  DlssGuides::Get().ReleaseRetiredGameResources();
+  DlssGuides::Get().ReleaseRetiredResources();
 
   RefreshStatus(settings);
   frame_debug_.Reset();
