@@ -206,6 +206,10 @@ struct PassSettings {
   // Dynamic shader parameter values, indexed by kShaderParams order.
   float params[kShaderParamCapacity] = {};
 
+  // Display name for the pass tab. Purely cosmetic; empty means use the
+  // positional default ("Pass N").
+  char custom_name[64] = {};
+
 };
 
 struct Settings {
