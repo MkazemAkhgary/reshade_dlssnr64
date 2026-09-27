@@ -457,15 +457,24 @@ float3 BlendYCbCr(float3 original, float3 edited,
 // ---------------------------------------------------------------------------
 // FSR 1.0 EASU + RCAS
 // Copyright (c) 2021 Advanced Micro Devices, Inc. MIT license.
-// Ported from ffx_fsr1.h. Gather callbacks read the model's enhanced output;
-// swap them to gLowInput to upsample the model's input instead.
+// Ported from ffx_fsr1.h. The gather source is selected by `channel`
+// (0 = model input, 1 = model output) so one implementation serves both.
 // ---------------------------------------------------------------------------
 
 static const float FSR_RCAS_LIMIT = 0.25 - (1.0 / 16.0);
 
-float4 FsrEasuRF(float2 p) { return gLowEnhanced.GatherRed(s0, p); }
-float4 FsrEasuGF(float2 p) { return gLowEnhanced.GatherGreen(s0, p); }
-float4 FsrEasuBF(float2 p) { return gLowEnhanced.GatherBlue(s0, p); }
+float4 FsrGatherR(float2 p, int ch) {
+    return ch == 0 ? gLowInput.GatherRed(s0, p)
+                   : gLowEnhanced.GatherRed(s0, p);
+}
+float4 FsrGatherG(float2 p, int ch) {
+    return ch == 0 ? gLowInput.GatherGreen(s0, p)
+                   : gLowEnhanced.GatherGreen(s0, p);
+}
+float4 FsrGatherB(float2 p, int ch) {
+    return ch == 0 ? gLowInput.GatherBlue(s0, p)
+                   : gLowEnhanced.GatherBlue(s0, p);
+}
 
 void FsrEasuTapF(inout float3 aC, inout float aW, float2 off, float2 dir,
                  float2 len, float lob, float clp, float3 c) {
@@ -513,27 +522,28 @@ void FsrEasuSetF(inout float2 dir, inout float len, float2 pp,
     len += lenY * w;
 }
 
-float3 FsrEasuF(uint2 ip, float4 con0, float4 con1, float4 con2, float2 con3) {
+float3 FsrEasuF(uint2 ip, float4 con0, float4 con1, float4 con2, float2 con3,
+                int channel) {
     float2 pp = float2(ip) * con0.xy + con0.zw;
     float2 fp = floor(pp);
     pp -= fp;
     float2 p0 = fp * con1.xy + con1.zw;
     float2 p1 = p0 + con2.xy;
     float2 p2 = p0 + con2.zw;
-    float2 p3 = p0 + con3.xy;
+    float2 p3 = p0 + con3;
 
-    float4 bczzR = FsrEasuRF(p0);
-    float4 bczzG = FsrEasuGF(p0);
-    float4 bczzB = FsrEasuBF(p0);
-    float4 ijfeR = FsrEasuRF(p1);
-    float4 ijfeG = FsrEasuGF(p1);
-    float4 ijfeB = FsrEasuBF(p1);
-    float4 klhgR = FsrEasuRF(p2);
-    float4 klhgG = FsrEasuGF(p2);
-    float4 klhgB = FsrEasuBF(p2);
-    float4 zzonR = FsrEasuRF(p3);
-    float4 zzonG = FsrEasuGF(p3);
-    float4 zzonB = FsrEasuBF(p3);
+    float4 bczzR = FsrGatherR(p0, channel);
+    float4 bczzG = FsrGatherG(p0, channel);
+    float4 bczzB = FsrGatherB(p0, channel);
+    float4 ijfeR = FsrGatherR(p1, channel);
+    float4 ijfeG = FsrGatherG(p1, channel);
+    float4 ijfeB = FsrGatherB(p1, channel);
+    float4 klhgR = FsrGatherR(p2, channel);
+    float4 klhgG = FsrGatherG(p2, channel);
+    float4 klhgB = FsrGatherB(p2, channel);
+    float4 zzonR = FsrGatherR(p3, channel);
+    float4 zzonG = FsrGatherG(p3, channel);
+    float4 zzonB = FsrGatherB(p3, channel);
 
     float4 bczzL = bczzB * 0.5 + (bczzR * 0.5 + bczzG);
     float4 ijfeL = ijfeB * 0.5 + (ijfeR * 0.5 + ijfeG);
