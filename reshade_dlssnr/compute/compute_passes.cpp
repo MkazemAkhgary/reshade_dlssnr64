@@ -14,11 +14,14 @@ namespace {
 // pass because the operators are the same and drift between copies is
 // invisible until the image is wrong.
 constexpr const char* kGradePrelude = R"(
+// 13 float4s = 52 floats, matching kParamSlotCount in compute_engine.h. The
+// array has to cover the highest slot any pass reads: the RCAS block at
+// kRcasSlotBase = 48 = gParams[12].
 cbuffer Params : register(b0)
 {
     uint  gWidth;
     uint  gHeight;
-    float4 gParams[16];
+    float4 gParams[13];
 };
 
 #define kGradeEnabled    gParams[2].x
@@ -454,12 +457,8 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 )";
 
 constexpr const char* kComposeModelOutputHdr = R"(
-cbuffer Params : register(b0)
-{
-    uint  gWidth;
-    uint  gHeight;
-    float4 gParams[16];
-};
+// The constant buffer is declared in kGradePrelude, which is prepended to this
+// source. Only the pass-specific macros belong here.
 
 // User shader params (identical to ComposeModelOutput):
 #define kLumaStrength    gParams[0].x
@@ -983,12 +982,8 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 )";
 
 constexpr const char* kComposeModelOutput = R"(
-cbuffer Params : register(b0)
-{
-    uint  gWidth;
-    uint  gHeight;
-    float4 gParams[16];
-};
+// The constant buffer is declared in kGradePrelude, which is prepended to this
+// source. Only the pass-specific macros belong here.
 
 #define kLumaStrength     gParams[0].x
 #define kChromaStrength   gParams[0].y
