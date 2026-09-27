@@ -1186,7 +1186,6 @@ void DrawPassSettingsBody(uint32_t pass_index,
   }
 
   // Move buttons
-  bool moved = false;
   {
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Order");
