@@ -49,6 +49,10 @@ struct HdrSnapshot {
   // frame was skin. Diagnostics only.
   float skin_fraction = 0.0f;
   bool target_is_skin = false;
+  // Fraction of the frame the depth filter kept. Zero when there is no
+  // depth guide; the histogram is the full frame in that case.
+  float depth_filter_survived = 0.0f;
+  int metering_source = 0;  // HdrState::MeteringSource, as an int for the UI
 };
 
 // Maps a DXGI format to the HdrFormat the shaders should treat it as. The
@@ -57,6 +61,14 @@ HdrFormat DetectFormatFromDxgi(DXGI_FORMAT format);
 
 class HdrState {
  public:
+  // Which histogram the exposure median was drawn from. Reported in the
+  // diagnostics and used to explain the current exposure.
+  enum class MeteringSource {
+    FullFrame = 0,
+    DepthFiltered = 1,
+    Skin = 2,
+  };
+
   bool Ensure(ID3D12Device* device);
   void Shutdown();
 
@@ -126,6 +138,8 @@ class HdrState {
   uint32_t last_samples_ = 0;
   float skin_fraction_ = 0.0f;
   bool target_is_skin_ = false;
+  float depth_filter_survived_ = 0.0f;
+  MeteringSource metering_source_ = MeteringSource::FullFrame;
 };
 
 }  // namespace reshade_dlssnr
