@@ -18,11 +18,10 @@
 
 namespace reshade_dlssnr {
 
-namespace {
-
 // Defined below, but used by DrawPassSettingsBody's move buttons.
 void ApplyPassReorder(Settings& settings, const int* order, bool& changed);
 
+namespace {
 
 constexpr float kControlLabelWidth = 220.0f;
 constexpr float kResetButtonWidth = 24.0f;
