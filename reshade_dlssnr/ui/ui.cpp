@@ -1182,7 +1182,7 @@ void DrawPassSettingsBody(uint32_t pass_index,
     const bool can_move_right = pass_index + 1 < kMaxPasses;
 
     WithDisabled(!can_move_left, [&] {
-      if (ImGui::Button("◀", ImVec2(30, 0)) && can_move_left) {
+      if (ImGui::Button("<", ImVec2(30, 0)) && can_move_left) {
         int order[kMaxPasses];
         for (uint32_t i = 0; i < kMaxPasses; ++i) order[i] = i;
         std::swap(order[pass_index - 1], order[pass_index]);
@@ -1195,7 +1195,7 @@ void DrawPassSettingsBody(uint32_t pass_index,
     ImGui::SameLine();
 
     WithDisabled(!can_move_right, [&] {
-      if (ImGui::Button("▶", ImVec2(30, 0)) && can_move_right) {
+      if (ImGui::Button(">", ImVec2(30, 0)) && can_move_right) {
         int order[kMaxPasses];
         for (uint32_t i = 0; i < kMaxPasses; ++i) order[i] = i;
         std::swap(order[pass_index], order[pass_index + 1]);
@@ -1343,15 +1343,16 @@ void DrawOverlay(reshade::api::effect_runtime*) {
 
   if (ImGui::BeginTabBar("PassTabs")) {
     for (uint32_t i = 0; i < kMaxPasses; ++i) {
-      // The stable ID is the position, not the name, so renaming a pass
-      // changes the visible label without recreating the tab and losing
-      // the open state.
+      // ### rather than ##: ImHashStr resets at ###, so the ID is the suffix
+      // and the display name can change without the tab losing its open
+      // state. ## would hash the whole label and renaming would recreate
+      // the tab.
       char label[96];
       if (settings.passes[i].custom_name[0] != '\0') {
-        std::snprintf(label, sizeof(label), "%s##PassTab%u",
+        std::snprintf(label, sizeof(label), "%s###PassTab%u",
                       settings.passes[i].custom_name, i);
       } else {
-        std::snprintf(label, sizeof(label), "Pass %u##PassTab%u", i + 1, i);
+        std::snprintf(label, sizeof(label), "Pass %u###PassTab%u", i + 1, i);
       }
       if (ImGui::BeginTabItem(label)) {
         // The open tab determines which pass's debug view is rendered.
