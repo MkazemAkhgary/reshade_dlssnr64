@@ -1117,18 +1117,27 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
 // Grade
 // ---------------------------------------------------------------------------
 
-// Which encoding the grade will be reading and writing.
-//
-// One answer for all three grade targets. The composite output and the
-// backbuffer are built from the backbuffer's descriptor; the model input is
-// either that backbuffer, a scratch built from the same descriptor, or the
-// DLSS output clone — which is the resource HdrState detects the format from.
-//
-// A session whose HdrState was never initialized reports SDR, which is right
-// for a stage that does no HDR handling.
-static HdrFormat GradeFormat(const PassRun& run) {
-  if (run.hdr == nullptr) return HdrFormat::Sdr;
-  return run.hdr->ResolvedFormat();
+// Every grade target carries the encoding its own format says, except the
+// model input under HDR: TonemapForward wrote sRGB into a resource whose
+// format still describes the DLSS output, so the format would lie.
+static HdrFormat FormatFromResource(ID3D12Resource* resource) {
+  if (resource == nullptr) return HdrFormat::Sdr;
+  switch (resource->GetDesc().Format) {
+    case DXGI_FORMAT_R16G16B16A16_FLOAT:
+    case DXGI_FORMAT_R11G11B10_FLOAT:
+      return HdrFormat::ScRgb;
+    case DXGI_FORMAT_R10G10B10A2_UNORM:
+      return HdrFormat::Hdr10;
+    default:
+      return HdrFormat::Sdr;
+  }
+}
+
+static HdrFormat GradeFormat(const PassRun& run, ID3D12Resource* target) {
+  if (run.hdr_uniforms_ready && target == run.model_color) {
+    return HdrFormat::Sdr;
+  }
+  return FormatFromResource(target);
 }
 
 PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
@@ -1152,7 +1161,7 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
   if (!model_pipeline::ApplyGrade(
           self->command_, list, run.codec, target,
           self->resources_.GetScratch(kGradeScratchSlot), width, height,
-          GradeFormat(run), grade)) {
+          GradeFormat(run, target), grade)) {
     self->FailForStep("failed to apply the grade");
     return PipelineStatus::Fail;
   }
