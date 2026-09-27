@@ -1051,10 +1051,14 @@ float RollOff(float x)
 // Per channel, because that is what keeps each channel inside the ceiling: a
 // luma-preserving rolloff can leave one channel above it and hand the encode
 // a value it will clip anyway.
-float3 PrepareForOutput(float3 lin)
+//
+// Gated on `luma_raised`: at defaults the grade did not move the pixel, so
+// rolling it off would turn this into an encode that darkens every highlight
+// in the image. Only the pixels the grade itself brightened are rolled off.
+float3 PrepareForOutput(float3 lin, bool luma_raised)
 {
     int fmt = (int)(kFormat + 0.5);
-    if (fmt == 0) {
+    if (fmt == 0 && luma_raised) {
         lin.r = RollOff(lin.r);
         lin.g = RollOff(lin.g);
         lin.b = RollOff(lin.b);
@@ -1227,14 +1231,22 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     new_y = Shape(new_y, kHighlights, HighlightWeight(new_y));
     new_y = GradeLuma(new_y, kLuma, (int)(kLumaMode + 0.5));
 
+    // True when the grade raised this pixel's luma. At defaults new_y == y
+    // for every pixel, so this is false everywhere and the roll-off below is
+    // skipped, which is what makes the grade a strict no-op at its defaults.
+    // When the grade does brighten a pixel, the roll-off keeps it from
+    // hard-clipping at the encoder's saturate.
+    const bool luma_raised = new_y > y;
+
     // Scale all three channels to hit the new luma rather than adding to it,
-    // which keeps hue where it was. A pixel at black has no ratio to scale, so
-    // it takes the value directly — otherwise a lift could never raise it.
-    float3 graded = y > 1e-4 ? lin * (new_y / y) : float3(new_y, new_y, new_y);
+    // which keeps hue where it was. A pixel at black has no ratio to scale,
+    // so it uses 1: the multiply then yields zero rather than NaN.
+    float safe_y = (y > 0.0) ? y : 1.0;
+    float3 graded = lin * (new_y / safe_y);
 
     graded = GradeChroma(graded, kChroma, (int)(kChromaMode + 0.5));
 
-    gOutput[id.xy] = float4(PrepareForOutput(graded), src.a);
+    gOutput[id.xy] = float4(PrepareForOutput(graded, luma_raised), src.a);
 }
 )";
 
