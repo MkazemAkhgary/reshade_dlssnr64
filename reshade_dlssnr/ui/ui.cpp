@@ -1338,6 +1338,14 @@ void DrawOverlay(reshade::api::effect_runtime*) {
     }
     g_pending_move = PendingMove::None;
     ApplyPassReorder(settings, order, changed);
+
+    // SaveSettings calls RecomputeResolved, and the resolved view is what the
+    // inherited-value rows below read. Without this the frame of the move
+    // shows the old predecessors; every frame after it, when the end-of-frame
+    // save runs, shows the new ones. Persist here so the first frame agrees
+    // with the rest.
+    SaveSettings();
+    changed = false;
   }
 
   ImGui::Text("Version %s", reshade_dlssnr::kAddonVersion);
