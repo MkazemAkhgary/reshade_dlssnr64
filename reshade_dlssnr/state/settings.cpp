@@ -189,7 +189,6 @@ void LoadPassSettings(uint32_t index, PassSettings& pass) {
                             (pref + "AutoMask").c_str(), pass.auto_mask);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             (pref + "SkinStructure").c_str(), pass.skin_structure);
-  if (pass.skin_structure == 0.0f) pass.skin_structure = 1.0f;
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             (pref + "Intensity").c_str(), pass.intensity);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
