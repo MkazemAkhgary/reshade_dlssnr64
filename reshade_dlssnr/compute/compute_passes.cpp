@@ -449,10 +449,13 @@ float3 BlendYCbCr(float3 original, float3 edited,
     return result;
 }
 
-// Inverse of ReinhardForward for a fixed W, positive root.
-float ReinhardInverse(float y, float W) {
+// Inverse of ReinhardForward for a fixed W, positive root. The signature must
+// be float3 -> float3 for the same reason as ReinhardForward: a float
+// parameter makes HLSL read only .x and broadcast, which collapses the ratio
+// to a uniform scale and kills chroma transfer entirely.
+float3 ReinhardInverse(float3 y, float W) {
     float W2 = max(W * W, 1e-6);
-    float u = W2 * (1.0 - y);
+    float3 u = W2 * (1.0 - y);
     return 0.5 * (sqrt(max(u * u + 4.0 * W2 * y, 0.0)) - u);
 }
 
