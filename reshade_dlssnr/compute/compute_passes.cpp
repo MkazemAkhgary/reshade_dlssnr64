@@ -303,6 +303,11 @@ cbuffer Params : register(b0)
 #define kFormat          gParams[8].x
 #define kExposure        gParams[8].y
 #define kWhitePoint      gParams[8].z
+// FSR EASU constants, at kEasuSlotBase = float 36 = gParams[9]. con3 is
+// derived in the compose from con1.y. See the region map in compute_engine.h.
+#define kEasuCon0        gParams[9]
+#define kEasuCon1        gParams[10]
+#define kEasuCon2        gParams[11]
 // Residual block, at kResidualSlotBase = float 24 = gParams[6].
 #define kEditStrength    gParams[6].x
 
