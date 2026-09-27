@@ -193,6 +193,12 @@ struct PassSettings {
   // pass's model produced.
   ResidualSettings residual;
 
+  // FSR RCAS sharpening applied to the EASU-upsampled working-scale images
+  // before the ratio is taken. Not inheritable: like the grades, it is a
+  // statement about this pass's images.
+  bool rcas_enabled = false;
+  float rcas_strength = 0.5f;  // [0, 1]
+
   // Inheritance flags. Only meaningful for pass index > 0; the root pass
   // ignores them. A true flag makes the corresponding slider use the
   // resolved value from the previous pass instead of its own raw value.
@@ -280,6 +286,7 @@ struct Settings {
       true, true, true, true, true, true, true, true,
       true, true, true, true, true, true, true, true};
   bool ui_residual_open = true;
+  bool ui_rcas_open = true;
   bool ui_status_open = true;
   bool ui_hdr_open = true;
   bool ui_grade_open = true;
