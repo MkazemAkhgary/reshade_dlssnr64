@@ -203,9 +203,10 @@ void LoadPassSettings(uint32_t index, PassSettings& pass) {
 
   LoadResidual(pref + "Residual.", pass.residual);
 
+  size_t custom_name_size = sizeof(pass.custom_name);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             (pref + "CustomName").c_str(),
-                            pass.custom_name, sizeof(pass.custom_name));
+                            pass.custom_name, &custom_name_size);
 
   LoadGrade(pref + "Grade.Input.", pass.grade_input);
   LoadGrade(pref + "Grade.Output.", pass.grade_output);
