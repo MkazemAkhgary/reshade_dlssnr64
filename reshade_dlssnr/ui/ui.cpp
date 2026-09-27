@@ -1,8 +1,4 @@
 #include <imgui.h>
-// For ImGuiTabBar::Tabs, DragTabId and GetCurrentTabBar, which are the only
-// way to observe the result of a tab reorder. The public API offers only the
-// flag that enables the drag.
-#include <imgui_internal.h>
 
 #include "ui.h"
 
