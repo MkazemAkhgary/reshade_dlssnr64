@@ -208,6 +208,15 @@ void LoadPassSettings(uint32_t index, PassSettings& pass) {
                             (pref + "CustomName").c_str(),
                             pass.custom_name, &custom_name_size);
 
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (pref + "Rcas.Enabled").c_str(),
+                            pass.rcas_enabled);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (pref + "Rcas.Strength").c_str(),
+                            pass.rcas_strength);
+  if (pass.rcas_strength < 0.0f) pass.rcas_strength = 0.0f;
+  if (pass.rcas_strength > 1.0f) pass.rcas_strength = 1.0f;
+
   LoadGrade(pref + "Grade.Input.", pass.grade_input);
   LoadGrade(pref + "Grade.Output.", pass.grade_output);
 
@@ -274,6 +283,13 @@ void SavePassSettings(uint32_t index, const PassSettings& pass) {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             (pref + "CustomName").c_str(),
                             pass.custom_name);
+
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (pref + "Rcas.Enabled").c_str(),
+                            pass.rcas_enabled);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (pref + "Rcas.Strength").c_str(),
+                            pass.rcas_strength);
 
   SaveGrade(pref + "Grade.Input.", pass.grade_input);
   SaveGrade(pref + "Grade.Output.", pass.grade_output);
