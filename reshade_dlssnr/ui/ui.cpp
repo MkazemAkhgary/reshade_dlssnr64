@@ -1148,6 +1148,39 @@ void DrawResidualSection(uint32_t pass_index,
       &pass.residual.edit_strength, nullptr, 0.0f, 0.0f, 2.0f, 1.0f);
 }
 
+void DrawRcasSection(uint32_t pass_index,
+                     Settings& settings,
+                     bool& changed) {
+  PassSettings& pass = settings.passes[pass_index];
+
+  IndentScope indent;
+  if (!PersistentSubHeader("Sharpening", settings.ui_rcas_open, changed)) {
+    return;
+  }
+
+  ImGui::AlignTextToFramePadding();
+  changed |= DrawCheckboxAtLabel("rcas_enabled", &pass.rcas_enabled);
+  if (ImGui::IsItemHovered()) {
+    Tip(
+        "Sharpen the model's upsampled output with FSR RCAS.\n"
+        "Applies after the working-scale images are upsampled, so it "
+        "restores some of the crispness lost at lower working scales.");
+  }
+  ImGui::SameLine();
+  ImGui::TextUnformatted("Enable RCAS");
+
+  WithDisabled(!pass.rcas_enabled, [&] {
+    changed |= DrawFloatRow(
+        pass_index, "rcas_strength", "Strength",
+        "How aggressively to sharpen.\n"
+        "RCAS limits the amount it can sharpen each pixel by the local "
+        "contrast, so this raises the ceiling rather than applying a "
+        "uniform sharpening: flat areas stay flat and edges gain "
+        "definition.",
+        &pass.rcas_strength, nullptr, 0.5f, 0.0f, 1.0f, 0.5f);
+  });
+}
+
 void DrawPassSettingsBody(uint32_t pass_index,
                           Settings& settings,
                           bool& changed) {
@@ -1221,6 +1254,7 @@ void DrawPassSettingsBody(uint32_t pass_index,
     DrawModelSection(pass_index, settings, changed);
     DrawShaderParamSections(pass_index, settings, changed);
     DrawResidualSection(pass_index, settings, changed);
+    DrawRcasSection(pass_index, settings, changed);
     ImGui::Separator();
     DrawGradeSection(
         "grade_input", "Grade Model Input",
