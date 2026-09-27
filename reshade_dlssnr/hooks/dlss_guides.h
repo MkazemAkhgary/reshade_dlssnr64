@@ -42,6 +42,10 @@ class DlssGuides {
   void ReleaseRetiredGameResources();
   void Clear();
 
+  // Queue depths, for the frame-boundary diagnostic in AddonController.
+  size_t RetiredResourceCount() const;
+  size_t RetiredGameResourceCount() const;
+
  private:
   void ReleaseRetiredResourcesLocked();
   void ReleaseRetiredGameResourcesLocked();

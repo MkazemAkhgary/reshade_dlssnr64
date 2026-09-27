@@ -400,6 +400,16 @@ void DlssGuides::ReleaseRetiredGameResources() {
   ReleaseRetiredGameResourcesLocked();
 }
 
+size_t DlssGuides::RetiredResourceCount() const {
+  std::lock_guard<std::mutex> lock(lock_);
+  return retired_resources_.size();
+}
+
+size_t DlssGuides::RetiredGameResourceCount() const {
+  std::lock_guard<std::mutex> lock(lock_);
+  return retired_game_resources_.size();
+}
+
 void DlssGuides::Clear() {
   std::lock_guard<std::mutex> lock(lock_);
 
