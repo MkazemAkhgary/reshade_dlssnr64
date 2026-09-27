@@ -1349,6 +1349,12 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   SectionDivider();
 
   if (ImGui::BeginTabBar("PassTabs")) {
+    // Cleared only once a tab has actually drawn with the flag. Moving a pass
+    // forward targets a tab later in this loop, so the flag fires the same
+    // frame; moving it back targets one already drawn, so the flag has to
+    // survive to the next frame, when the tabs are laid out in the new order.
+    bool force_applied = false;
+
     for (uint32_t i = 0; i < kMaxPasses; ++i) {
       // ### rather than ##: ImHashStr resets at ###, so the ID is the suffix
       // and the display name can change without the tab losing its open
@@ -1361,10 +1367,10 @@ void DrawOverlay(reshade::api::effect_runtime*) {
       } else {
         std::snprintf(label, sizeof(label), "Pass %u###PassTab%u", i + 1, i);
       }
+      const bool force_this = (g_force_select_tab == static_cast<int>(i));
+      if (force_this) force_applied = true;
       const ImGuiTabItemFlags tab_flags =
-          (g_force_select_tab == static_cast<int>(i))
-              ? ImGuiTabItemFlags_SetSelected
-              : 0;
+          force_this ? ImGuiTabItemFlags_SetSelected : 0;
       if (ImGui::BeginTabItem(label, nullptr, tab_flags)) {
         // The open tab determines which pass's debug view is rendered.
         settings.active_pass = static_cast<int>(i);
@@ -1374,7 +1380,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
     }
     ImGui::EndTabBar();
   }
-  g_force_select_tab = -1;
+  if (force_applied) g_force_select_tab = -1;
   SectionDivider();
 
   // --- Colour grade (shared across passes) ---
