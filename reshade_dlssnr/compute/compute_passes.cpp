@@ -632,8 +632,11 @@ float3 FsrRcasF(float3 b, float3 d, float3 e, float3 f, float3 h,
     float hL = hB * 0.5 + (hR * 0.5 + hG);
 
     float nz = 0.25 * bL + 0.25 * dL + 0.25 * fL + 0.25 * hL - eL;
-    nz = saturate(abs(nz) * rcp(max(max(bL, dL, eL), max(fL, hL)) -
-                                min(min(bL, dL, eL), min(fL, hL))));
+    // HLSL min/max are binary, so the neighborhood extremes are chained
+    // rather than written as the three-argument forms the FSR source uses.
+    float nz_min = min(min(bL, dL), min(eL, min(fL, hL)));
+    float nz_max = max(max(bL, dL), max(eL, max(fL, hL)));
+    nz = saturate(abs(nz) * rcp(nz_max - nz_min));
     nz = -0.5 * nz + 1.0;
 
     float mn4R = min(min(bR, dR, fR), hR);
