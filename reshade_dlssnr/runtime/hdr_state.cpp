@@ -41,9 +41,10 @@ HdrFormat DetectFormatFromDxgi(DXGI_FORMAT format) {
 namespace {
 
 constexpr uint32_t kHistogramBins = 256;
-// Two histograms packed into one buffer: [0, 256) global (depth-filtered),
-// [256, 512) skin-weighted. The shader splits it at the same offset.
-constexpr uint32_t kHistogramTotalBins = 2 * kHistogramBins;
+// Three histograms packed into one buffer: [0, 256) full frame, [256, 512)
+// depth-filtered, [512, 768) skin. The shader splits it at the same offsets.
+constexpr uint32_t kHistogramSlices = 3;
+constexpr uint32_t kHistogramTotalBins = kHistogramSlices * kHistogramBins;
 constexpr uint32_t kHistogramBytes = kHistogramTotalBins * sizeof(uint32_t);
 constexpr float kLumaMinLog2 = -12.0f;
 constexpr float kLumaMaxLog2 = 12.0f;
@@ -169,6 +170,8 @@ void HdrState::Shutdown() {
   last_samples_ = 0;
   skin_fraction_ = 0.0f;
   target_is_skin_ = false;
+  depth_filter_survived_ = 0.0f;
+  metering_source_ = MeteringSource::FullFrame;
 }
 
 HdrSnapshot HdrState::GetSnapshot() const {
@@ -361,10 +364,11 @@ void HdrState::PollReadback(ID3D12Fence* fence, const Settings& settings) {
 
   UpdateExposure(bins, settings);
 
-  // Copy both halves into the diagnostics buffers.
+  // Copy the two diagnostic halves. Full-frame feeds the histogram plot,
+  // skin is kept alongside it.
   for (uint32_t i = 0; i < kHistogramBins; ++i) {
     last_histogram_[i] = bins[i];
-    last_histogram_skin_[i] = bins[kHistogramBins + i];
+    last_histogram_skin_[i] = bins[2u * kHistogramBins + i];
   }
   have_histogram_ = true;
   last_samples_ = total;
@@ -373,33 +377,59 @@ void HdrState::PollReadback(ID3D12Fence* fence, const Settings& settings) {
 }
 
 void HdrState::UpdateExposure(const uint32_t* bins, const Settings& settings) {
-  const uint32_t* global_bins = bins;
-  const uint32_t* skin_bins = bins + kHistogramBins;
+  const uint32_t* full_bins = bins;
+  const uint32_t* depth_bins = bins + kHistogramBins;
+  const uint32_t* skin_bins = bins + 2u * kHistogramBins;
 
-  uint32_t total_global = 0;
+  uint32_t total_full = 0;
+  uint32_t total_depth = 0;
   uint32_t total_skin = 0;
   for (uint32_t i = 0; i < kHistogramBins; ++i) {
-    total_global += global_bins[i];
+    total_full += full_bins[i];
+    total_depth += depth_bins[i];
     total_skin += skin_bins[i];
   }
-  if (total_global == 0) return;
+  if (total_full == 0) return;
+
+  // Which histogram drives the exposure median.
+  //
+  // Priority: skin, if there is enough of it; else the depth-filtered
+  // histogram, if the filter left enough to measure from; else the full
+  // frame. The last step is what keeps the measurement alive when depth
+  // filtering removes nearly everything (an interior scene with no depth
+  // information in range, or a game whose far plane is not where we assume)
+  // and skin finds nothing either.
+  const float depth_survived =
+      static_cast<float>(total_depth) / static_cast<float>(total_full);
+
+  const uint32_t* luma_source = full_bins;
+  uint32_t luma_total = total_full;
+  MeteringSource source = MeteringSource::FullFrame;
+
+  const bool depth_usable =
+      total_depth > 0u &&
+      depth_survived >= settings.hdr_depth_fallback_fraction;
+  if (depth_usable) {
+    luma_source = depth_bins;
+    luma_total = total_depth;
+    source = MeteringSource::DepthFiltered;
+  }
 
   const float skin_fraction =
-      static_cast<float>(total_skin) / static_cast<float>(total_global);
-
-  // Skin takes priority when enough of it is present. The threshold is low
-  // because a face is usually a small fraction of a frame even when it fills
-  // the subject, and the absolute floor keeps a handful of misdetected
-  // pixels from driving the whole frame.
-  const bool use_skin = (skin_fraction > 0.01f) && (total_skin > 1000u);
-  const uint32_t* luma_source = use_skin ? skin_bins : global_bins;
-  const uint32_t luma_total = use_skin ? total_skin : total_global;
+      static_cast<float>(total_skin) / static_cast<float>(total_full);
+  if (total_skin > 1000u &&
+      skin_fraction > settings.hdr_skin_fraction_threshold) {
+    luma_source = skin_bins;
+    luma_total = total_skin;
+    source = MeteringSource::Skin;
+  }
 
   const float p_mid_bin = PercentileBin(luma_source, luma_total, 0.50f);
-  // White point is always from the global histogram: skin does not define
-  // the brightest part of a scene.
+  // White point always from the full-frame histogram: skin does not define
+  // the brightest part of a scene, and the depth filter would drop the sky
+  // the white point is meant to describe.
   const float p_hi_bin =
-      PercentileBin(global_bins, total_global,
+      PercentileBin(full_bins, total_full,
                     std::clamp(settings.hdr_white_percentile, 0.90f, 0.999f));
 
   const float luma_mid = BinToLinear(p_mid_bin);
@@ -410,20 +440,27 @@ void HdrState::UpdateExposure(const uint32_t* bins, const Settings& settings) {
           ? std::clamp(settings.hdr_midtone / luma_mid, 0.01f, 128.0f)
           : exposure_ema_;
 
-  // Rate cap in log2 space. The target can jump when a bright object enters
-  // the frame; the cap turns that into a slow drift. Warmup is exempt, so
-  // the first ~30 measurements still converge quickly.
-  const float log_max_delta = warmup_frames_ < 30 ? 0.5f : 0.02f;
-  const float log_current = log2(std::max(exposure_ema_, 1e-6f));
-  float log_delta = log2(raw_target) - log_current;
-  log_delta = std::clamp(log_delta, -log_max_delta, log_max_delta);
-  const float capped_target = exp2(log_current + log_delta);
+  // Rate cap in log2 space. A bright object entering or leaving the frame
+  // moves the target by a large amount; the cap converts that into a slow
+  // drift. Warmup is exempt, so the first ~30 measurements still converge
+  // quickly. 0 disables the cap.
+  const float log_max_delta =
+      warmup_frames_ < 30 ? 0.5f : settings.hdr_rate_cap;
+  float capped_target = raw_target;
+  if (log_max_delta > 0.0f) {
+    const float log_current = log2(std::max(exposure_ema_, 1e-6f));
+    float log_delta = log2(raw_target) - log_current;
+    log_delta = std::clamp(log_delta, -log_max_delta, log_max_delta);
+    capped_target = exp2(log_current + log_delta);
+  }
 
   p50_luma_ = luma_mid;
   p_hi_luma_ = luma_hi;
   target_exposure_ = capped_target;
   skin_fraction_ = skin_fraction;
-  target_is_skin_ = use_skin;
+  target_is_skin_ = (source == MeteringSource::Skin);
+  depth_filter_survived_ = depth_survived;
+  metering_source_ = source;
 
   // Warm-up: converge quickly for the first ~30 measurements, then blend
   // at a rate proportional to how often we measure. A short interval means
