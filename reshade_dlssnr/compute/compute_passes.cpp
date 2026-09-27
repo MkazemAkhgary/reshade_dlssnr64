@@ -180,23 +180,25 @@ float3 GradeLinearInv(float3 lin) {
 }
 )";
 
-// Clears both halves of the two-histogram buffer in one dispatch. See
-// kBuildHistogram for the split.
+// Clears all three histogram halves in one dispatch. See kBuildHistogram for
+// the split.
 constexpr const char* kZeroHistogram = R"(
 RWBuffer<uint> gHistogram : register(u0);
 
-[numthreads(512, 1, 1)]
+[numthreads(768, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
-    if (id.x < 512u)
+    if (id.x < 768u)
         gHistogram[id.x] = 0u;
 }
 )";
 
-// Two histograms packed into one buffer: [0, 256) global (excluding sky,
-// which is at the far end of the depth range), [256, 512) skin only. The
-// CPU side uses the global one for the white point and either one for the
-// exposure median, preferring skin when enough of it is present.
+// Three histograms packed into one buffer: [0, 256) full frame, [256, 512)
+// depth-filtered (sky excluded when depth is available), [512, 768) skin.
+// The CPU side picks which one drives the exposure median and always uses
+// the full-frame one for the white point. Three rather than two because the
+// depth filter can leave too little to measure from, and the fallback is
+// then the unfiltered histogram rather than a stale value.
 constexpr const char* kBuildHistogram = R"(
 cbuffer Params : register(b0)
 {
@@ -222,7 +224,7 @@ RWBuffer<uint>    gHistogram : register(u0);
 SamplerState      s0 : register(s0);
 
 static const float3 kLuma709 = float3(0.2126, 0.7152, 0.0722);
-static const uint kHistogramHalf = 256u;
+static const uint kHistogramStride = 256u;
 
 float3 SrgbToLinear(float3 v)
 {
@@ -282,8 +284,8 @@ bool IsSky(float d)
     return kDepthInverted > 0.5 ? (d < 0.05) : (d > 0.95);
 }
 
-// One shared histogram per workgroup, sized for both halves.
-groupshared uint gSharedHist[512];
+// One shared histogram per workgroup, sized for all three halves.
+groupshared uint gSharedHist[768];
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 gid : SV_GroupID,
@@ -291,7 +293,7 @@ void CSMain(uint3 gid : SV_GroupID,
             uint3 dtid : SV_DispatchThreadID)
 {
     const uint lidx = gtid.x + gtid.y * 8u;
-    for (uint i = lidx; i < 512u; i += 64u)
+    for (uint i = lidx; i < 768u; i += 64u)
         gSharedHist[i] = 0u;
     GroupMemoryBarrierWithGroupSync();
 
@@ -305,6 +307,9 @@ void CSMain(uint3 gid : SV_GroupID,
         float t = saturate((l2 - kLumaMinLog2) / span);
         uint bin = min((uint)(t * 255.0 + 0.5), 255u);
 
+        // Full frame, always.
+        InterlockedAdd(gSharedHist[bin], 1u);
+
         bool sky = false;
         if (kHasDepth > 0.5) {
             float2 uv = (float2(dtid.xy) + 0.5) / float2(gWidth, gHeight);
@@ -312,17 +317,17 @@ void CSMain(uint3 gid : SV_GroupID,
             sky = IsSky(d);
         }
         if (!sky) {
-            InterlockedAdd(gSharedHist[bin], 1u);
+            InterlockedAdd(gSharedHist[kHistogramStride + bin], 1u);
         }
 
         if (IsSkin(lin)) {
-            InterlockedAdd(gSharedHist[kHistogramHalf + bin], 1u);
+            InterlockedAdd(gSharedHist[2u * kHistogramStride + bin], 1u);
         }
     }
 
     GroupMemoryBarrierWithGroupSync();
 
-    for (uint i = lidx; i < 512u; i += 64u) {
+    for (uint i = lidx; i < 768u; i += 64u) {
         if (gSharedHist[i] > 0u)
             InterlockedAdd(gHistogram[i], gSharedHist[i]);
     }
