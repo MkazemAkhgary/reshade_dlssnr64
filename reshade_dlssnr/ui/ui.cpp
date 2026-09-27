@@ -1395,13 +1395,12 @@ void DrawOverlay(reshade::api::effect_runtime*) {
 
   SectionDivider();
 
+  // The tab bar is visual only. BeginTabItem's return tracks ImGui's own
+  // selection, which after a reorder still names the old position - a
+  // position that now holds a different pass - so using it to set active_pass
+  // would draw the wrong pass for the frame after a move. active_pass is set
+  // from clicks instead, and the body is drawn once below it.
   if (ImGui::BeginTabBar("PassTabs")) {
-    // Cleared only once a tab has actually drawn with the flag. Moving a pass
-    // forward targets a tab later in this loop, so the flag fires the same
-    // frame; moving it back targets one already drawn, so the flag has to
-    // survive to the next frame, when the tabs are laid out in the new order.
-    bool force_applied = false;
-
     for (uint32_t i = 0; i < kMaxPasses; ++i) {
       // ### rather than ##: ImHashStr resets at ###, so the ID is the suffix
       // and the display name can change without the tab losing its open
@@ -1415,18 +1414,24 @@ void DrawOverlay(reshade::api::effect_runtime*) {
         std::snprintf(label, sizeof(label), "Pass %u###PassTab%u", i + 1, i);
       }
       const bool force_this = (g_force_select_tab == static_cast<int>(i));
-      if (force_this) force_applied = true;
       const ImGuiTabItemFlags tab_flags =
           force_this ? ImGuiTabItemFlags_SetSelected : 0;
-      if (ImGui::BeginTabItem(label, nullptr, tab_flags)) {
-        // The open tab determines which pass's debug view is rendered.
+      const bool tab_open = ImGui::BeginTabItem(label, nullptr, tab_flags);
+      if (ImGui::IsItemClicked()) {
         settings.active_pass = static_cast<int>(i);
-        DrawPassSettingsBody(i, settings, changed);
+      }
+      if (tab_open) {
         ImGui::EndTabItem();
       }
     }
-    if (force_applied) g_force_select_tab = -1;
+    g_force_select_tab = -1;
     ImGui::EndTabBar();
+  }
+
+  if (settings.active_pass >= 0 &&
+      settings.active_pass < static_cast<int>(kMaxPasses)) {
+    DrawPassSettingsBody(static_cast<uint32_t>(settings.active_pass), settings,
+                         changed);
   }
   SectionDivider();
 
