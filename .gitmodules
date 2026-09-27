@@ -1,6 +1,8 @@
 [submodule "reshade_dlssnr/third_party/reshade"]
 	path = reshade_dlssnr/third_party/reshade
 	url = https://github.com/crosire/reshade
+	ignore = dirty
 [submodule "reshade_dlssnr/third_party/FidelityFX-FSR"]
 	path = reshade_dlssnr/third_party/FidelityFX-FSR
 	url = https://github.com/GPUOpen-Effects/FidelityFX-FSR
+	ignore = dirty
