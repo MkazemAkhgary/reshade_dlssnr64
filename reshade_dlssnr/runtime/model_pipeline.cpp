@@ -89,9 +89,12 @@ bool ComposeOutput(
   const char* pass_name = "ComposeModelOutput";
   if (hdr != nullptr) {
     pass_name = "ComposeModelOutputHdr";
-    // Only the format: the residual is a ratio, so the tonemap's exposure and
-    // white point cancel out of the compose entirely.
+    // Exposure and white point are read by the compose so it can invert the
+    // tonemap on the model's output. The model saw the tonemapped image, so
+    // the ratio it implies is in the tonemapped domain.
     constants.params[kHdrSlotBase + 0] = static_cast<float>(hdr->format);
+    constants.params[kHdrSlotBase + 1] = hdr->exposure;
+    constants.params[kHdrSlotBase + 2] = hdr->white_point;
   }
 
   state.Transition(command_list, original,
