@@ -320,8 +320,16 @@ bool ComputeEngine::Dispatch(
       // (CompilePipeline logs the error).
       if (!IsReady()) return false;
 
-      const char* source = FindComputePassSource(pass_name);
-      if (source == nullptr) return false;
+      const ComputePassDef* def = FindComputePassDef(pass_name);
+      if (def == nullptr) return false;
+
+      std::string combined;
+      if (def->prelude != nullptr && def->prelude[0] != '\0') {
+        combined = def->prelude;
+        combined += def->hlsl_source;
+      }
+      const char* source =
+          combined.empty() ? def->hlsl_source : combined.c_str();
 
       CachedPass pass;
       if (!CompilePipeline(source, pass.pso.GetAddressOf())) {
@@ -468,9 +476,17 @@ void ComputeEngine::WorkerCompileAll() {
   for (uint32_t i = 0; i < kComputePassCount; ++i) {
     const char* name = kComputePasses[i].name;
 
+    std::string combined;
+    if (kComputePasses[i].prelude != nullptr &&
+        kComputePasses[i].prelude[0] != '\0') {
+      combined = kComputePasses[i].prelude;
+      combined += kComputePasses[i].hlsl_source;
+    }
+    const char* source =
+        combined.empty() ? kComputePasses[i].hlsl_source : combined.c_str();
+
     CachedPass pass;
-    if (!CompilePipeline(kComputePasses[i].hlsl_source,
-                         pass.pso.GetAddressOf())) {
+    if (!CompilePipeline(source, pass.pso.GetAddressOf())) {
       // CompilePipeline already logged the HLSL error. Dispatch will
       // retry synchronously once ready_ is set, so a bad shader surfaces
       // through the normal failure path instead of silently.

@@ -1449,27 +1449,32 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 )";
 
 const ComputePassDef kComputePasses[] = {
-    {"ZeroHistogram",         kZeroHistogram},
-    {"BuildHistogram",        kBuildHistogram},
-    {"TonemapForward",        kTonemapForward},
-    {"PrepareModelInput",     kPrepareModelInput},
-    {"ComposeModelOutput",    kComposeModelOutput},
-    {"ComposeModelOutputHdr", kComposeModelOutputHdr},
-    {"DebugDisplay",          kDebugDisplay},
-    {"ApplyGrade",            kApplyGrade},
+    {"ZeroHistogram",         kZeroHistogram,         nullptr},
+    {"BuildHistogram",        kBuildHistogram,        nullptr},
+    {"TonemapForward",        kTonemapForward,        nullptr},
+    {"PrepareModelInput",     kPrepareModelInput,     nullptr},
+    {"ComposeModelOutput",    kComposeModelOutput,    kGradePrelude},
+    {"ComposeModelOutputHdr", kComposeModelOutputHdr, kGradePrelude},
+    {"DebugDisplay",          kDebugDisplay,          nullptr},
+    {"ApplyGrade",            kApplyGrade,            nullptr},
 };
 
 const uint32_t kComputePassCount =
     sizeof(kComputePasses) / sizeof(kComputePasses[0]);
 
-const char* FindComputePassSource(const char* name) {
+const ComputePassDef* FindComputePassDef(const char* name) {
   if (name == nullptr) return nullptr;
   for (uint32_t i = 0; i < kComputePassCount; ++i) {
     if (std::strcmp(kComputePasses[i].name, name) == 0) {
-      return kComputePasses[i].hlsl_source;
+      return &kComputePasses[i];
     }
   }
   return nullptr;
+}
+
+const char* FindComputePassSource(const char* name) {
+  const ComputePassDef* def = FindComputePassDef(name);
+  return def != nullptr ? def->hlsl_source : nullptr;
 }
 
 }  // namespace reshade_dlssnr
