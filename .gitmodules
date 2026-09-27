@@ -1,0 +1,3 @@
+[submodule "reshade_dlssnr/third_party/reshade"]
+	path = reshade_dlssnr/third_party/reshade
+	url = https://github.com/crosire/reshade
