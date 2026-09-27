@@ -1378,9 +1378,9 @@ void DrawOverlay(reshade::api::effect_runtime*) {
         ImGui::EndTabItem();
       }
     }
+    if (force_applied) g_force_select_tab = -1;
     ImGui::EndTabBar();
   }
-  if (force_applied) g_force_select_tab = -1;
   SectionDivider();
 
   // --- Colour grade (shared across passes) ---
