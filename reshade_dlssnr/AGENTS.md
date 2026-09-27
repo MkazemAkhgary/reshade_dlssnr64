@@ -936,4 +936,34 @@ already has `TonemapForward`/`TonemapInverse` around it, so the likely question
 is which space the grade levels are applied in and whether the HDR remap runs
 before or after them.
 
+## Dependencies
 
+Two dependencies are Git submodules under `third_party/`:
+
+- `third_party/reshade` — ReShade headers and ImGui. Headers live at
+  `include/`, `deps/imgui/`, and the repo root.
+- `third_party/FidelityFX-FSR` — FSR 1.0 shader headers, under `ffx-fsr/`.
+
+Clone with submodules:
+
+```
+git clone --recurse-submodules <url>
+```
+
+If you cloned without them, or a submodule directory is empty:
+
+```
+git submodule update --init --recursive
+```
+
+`--recursive` matters because ReShade has its own submodules (gl3w and
+others); without it, a fresh checkout builds with a missing `gl3w.h`.
+
+The `ignore = dirty` setting in `.gitmodules` suppresses the "modified:
+<submodule> (untracked content)" line that appears in `git status` after
+building ReShade's sources in place. Bumping a submodule to a different
+commit still shows up, which is the one case you want to see.
+
+Include paths in `reshade_dlssnr.vcxproj` are rooted at `$(ProjectDir)` and
+reference the submodule paths directly, so the build works from a clean
+clone without any manual header placement.
