@@ -1578,6 +1578,36 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           "can flatten bright areas.",
           &settings.hdr_highlight_headroom, nullptr, 0.0f,
           0.25f, 16.0f, 8.0f);
+
+      changed |= DrawFloatRow(
+          0, "hdr_rate_cap", "Response Cap",
+          "Maximum change in log2 exposure per measurement.\n"
+          "Lower values resist a bright object entering the frame, at the "
+          "cost of lagging on real scene changes. 0 disables the cap.\n"
+          "The first ~30 measurements after start are always uncapped, so "
+          "the initial convergence is fast either way.",
+          &settings.hdr_rate_cap, nullptr, 0.0f,
+          0.0f, 2.0f, 0.1f);
+
+      changed |= DrawFloatRow(
+          0, "hdr_skin_fraction_threshold", "Skin Priority",
+          "Fraction of the frame that must be skin for the skin "
+          "histogram to drive exposure.\n"
+          "Lower values favor faces sooner; higher values keep the "
+          "whole-scene measurement until a face occupies more of the "
+          "image.",
+          &settings.hdr_skin_fraction_threshold, nullptr, 0.0f,
+          0.0f, 0.5f, 0.01f);
+
+      changed |= DrawFloatRow(
+          0, "hdr_depth_fallback_fraction", "Depth Fallback",
+          "If the depth filter leaves less than this fraction of the "
+          "frame, the exposure falls back to the full histogram rather "
+          "than metering on too few pixels.\n"
+          "Raise this if exposure gets stuck on interior scenes; lower it "
+          "if sky is leaking back into the measurement.",
+          &settings.hdr_depth_fallback_fraction, nullptr, 0.0f,
+          0.0f, 0.95f, 0.20f);
     });
 
     // Diagnostics: raw measurement values, for scenes where the exposure
@@ -1621,6 +1651,17 @@ void DrawOverlay(reshade::api::effect_runtime*) {
             ImGui::Text("White (post-headroom): %.3f",
                         snap.white_point *
                             std::max(settings.hdr_highlight_headroom, 0.01f));
+
+            const char* source_name = "Full frame";
+            if (snap.metering_source == 1) source_name = "Depth-filtered";
+            else if (snap.metering_source == 2) source_name = "Skin";
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::Text("Metering: %s", source_name);
+            ImGui::TableNextColumn();
+            ImGui::Text("Skin: %.2f%%  Depth kept: %.1f%%",
+                        snap.skin_fraction * 100.0f,
+                        snap.depth_filter_survived * 100.0f);
 
             ImGui::EndTable();
           }
