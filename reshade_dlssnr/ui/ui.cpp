@@ -1146,6 +1146,39 @@ void DrawResidualSection(uint32_t pass_index,
       "The edit is applied as a per-channel ratio, which is scale-invariant, "
       "so this behaves the same whether or not HDR handling is on.",
       &pass.residual.edit_strength, nullptr, 0.0f, 0.0f, 2.0f, 1.0f);
+
+  changed |= DrawFloatRow(
+      pass_index, "residual_chroma", "Chroma Strength",
+      "How much of the edit's chroma lands relative to its brightness.\n"
+      "1 keeps the model's per-channel edit as it is. 0 leaves only the "
+      "brightness change and takes hue out of the edit entirely, which is "
+      "the setting for a scene where the model's chroma shift reads as "
+      "wrong.",
+      &pass.residual.chroma_strength, nullptr, 1.0f, 0.0f, 1.0f, 1.0f);
+
+  changed |= DrawFloatRow(
+      pass_index, "residual_gamma", "Edit Gamma",
+      "Shapes the edit's response curve.\n"
+      "Below 1 amplifies small edits, above 1 compresses them. 0 magnitude "
+      "always stays 0, so this only changes how strongly a given edit "
+      "lands, not whether it lands.",
+      &pass.residual.edit_gamma, nullptr, 1.0f, 0.25f, 4.0f, 1.0f);
+
+  changed |= DrawFloatRow(
+      pass_index, "residual_highlight", "Highlight Protect",
+      "Fades the edit out above mid-to-high brightness.\n"
+      "At 1 the edit is removed entirely at white. Useful when the model's "
+      "brightness lift blows highlights the source image kept under "
+      "control.",
+      &pass.residual.highlight_protect, nullptr, 0.0f, 0.0f, 1.0f, 0.0f);
+
+  changed |= DrawFloatRow(
+      pass_index, "residual_shadow", "Shadow Protect",
+      "Fades the edit out below mid-to-low brightness.\n"
+      "At 1 the edit is removed entirely at black. Useful when the model's "
+      "darkening crushes shadow detail, or when its brightening turns near-"
+      "black noise into visible patches.",
+      &pass.residual.shadow_protect, nullptr, 0.0f, 0.0f, 1.0f, 0.0f);
 }
 
 void DrawRcasSection(uint32_t pass_index,
