@@ -1140,6 +1140,8 @@ void DrawPassSettingsBody(uint32_t pass_index,
                           bool& changed) {
   ImGui::PushID(static_cast<int>(pass_index));
 
+  PassSettings& pass = settings.passes[pass_index];
+
   char label[32];
   std::snprintf(label, sizeof(label), "Enable Pass %u", pass_index + 1);
   changed |= ImGui::Checkbox(label, &settings.pass_enabled[pass_index]);
@@ -1147,6 +1149,68 @@ void DrawPassSettingsBody(uint32_t pass_index,
     Tip("Turn this pass on or off.");
   }
   ImGui::Separator();
+
+  // Name field
+  {
+    char name_buffer[64];
+    std::snprintf(name_buffer, sizeof(name_buffer), "%s", pass.custom_name);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Name");
+    ImGui::SameLine(kControlLabelWidth);
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x -
+                            kResetButtonWidth - ImGui::GetStyle().ItemSpacing.x);
+    if (ImGui::InputText("##pass_name", name_buffer, sizeof(name_buffer))) {
+      std::snprintf(pass.custom_name, sizeof(pass.custom_name), "%s",
+                    name_buffer);
+      changed = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("R", ImVec2(kResetButtonWidth, 0.0f))) {
+      pass.custom_name[0] = '\0';
+      changed = true;
+    }
+    if (ImGui::IsItemHovered()) Tip("Reset to default name");
+  }
+
+  // Move buttons
+  bool moved = false;
+  {
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Order");
+    ImGui::SameLine(kControlLabelWidth);
+
+    const bool can_move_left = pass_index > 0;
+    const bool can_move_right = pass_index + 1 < kMaxPasses;
+
+    WithDisabled(!can_move_left, [&] {
+      if (ImGui::Button("◀", ImVec2(30, 0)) && can_move_left) {
+        int order[kMaxPasses];
+        for (uint32_t i = 0; i < kMaxPasses; ++i) order[i] = i;
+        std::swap(order[pass_index - 1], order[pass_index]);
+        ApplyPassReorder(settings, order, changed);
+        moved = true;
+      }
+      if (ImGui::IsItemHovered()) Tip("Move this pass earlier in the pipeline");
+    });
+
+    ImGui::SameLine();
+
+    WithDisabled(!can_move_right, [&] {
+      if (ImGui::Button("▶", ImVec2(30, 0)) && can_move_right) {
+        int order[kMaxPasses];
+        for (uint32_t i = 0; i < kMaxPasses; ++i) order[i] = i;
+        std::swap(order[pass_index], order[pass_index + 1]);
+        ApplyPassReorder(settings, order, changed);
+        moved = true;
+      }
+      if (ImGui::IsItemHovered()) Tip("Move this pass later in the pipeline");
+    });
+  }
+
+  if (moved) {
+    ImGui::PopID();
+    return;
+  }
 
   const bool enabled = settings.pass_enabled[pass_index];
   WithDisabled(!enabled, [&] {
