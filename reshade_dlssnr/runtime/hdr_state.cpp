@@ -41,7 +41,10 @@ HdrFormat DetectFormatFromDxgi(DXGI_FORMAT format) {
 namespace {
 
 constexpr uint32_t kHistogramBins = 256;
-constexpr uint32_t kHistogramBytes = kHistogramBins * sizeof(uint32_t);
+// Two histograms packed into one buffer: [0, 256) global (depth-filtered),
+// [256, 512) skin-weighted. The shader splits it at the same offset.
+constexpr uint32_t kHistogramTotalBins = 2 * kHistogramBins;
+constexpr uint32_t kHistogramBytes = kHistogramTotalBins * sizeof(uint32_t);
 constexpr float kLumaMinLog2 = -12.0f;
 constexpr float kLumaMaxLog2 = 12.0f;
 
@@ -156,11 +159,16 @@ void HdrState::Shutdown() {
   have_logged_format_ = false;
 
   have_histogram_ = false;
-  for (uint32_t i = 0; i < kHistogramBins; ++i) last_histogram_[i] = 0;
+  for (uint32_t i = 0; i < kHistogramBins; ++i) {
+    last_histogram_[i] = 0;
+    last_histogram_skin_[i] = 0;
+  }
   p50_luma_ = 0.0f;
   p_hi_luma_ = 0.0f;
   target_exposure_ = 1.0f;
   last_samples_ = 0;
+  skin_fraction_ = 0.0f;
+  target_is_skin_ = false;
 }
 
 HdrSnapshot HdrState::GetSnapshot() const {
@@ -176,12 +184,15 @@ HdrSnapshot HdrState::GetSnapshot() const {
   if (have_histogram_) {
     for (uint32_t i = 0; i < kHistogramBins; ++i) {
       s.histogram[i] = last_histogram_[i];
+      s.histogram_skin[i] = last_histogram_skin_[i];
     }
   }
   s.p50_luma = p50_luma_;
   s.p_hi_luma = p_hi_luma_;
   s.target_exposure = target_exposure_;
   s.samples = last_samples_;
+  s.skin_fraction = skin_fraction_;
+  s.target_is_skin = target_is_skin_;
   return s;
 }
 
@@ -190,6 +201,8 @@ void HdrState::BeginFrame(CommandContext& cmd,
                           ID3D12Resource* source,
                           unsigned int width,
                           unsigned int height,
+                          ID3D12Resource* depth,
+                          bool depth_inverted,
                           const Settings& settings,
                           ComputeEngine& codec) {
   enabled_ = settings.hdr_enable;
@@ -258,6 +271,9 @@ void HdrState::BeginFrame(CommandContext& cmd,
   constants.params[0] = FormatToShaderValue(resolved_format_);
   constants.params[1] = kLumaMinLog2;
   constants.params[2] = kLumaMaxLog2;
+  // gParams[1] in the shader: depth availability and orientation.
+  constants.params[4] = depth != nullptr ? 1.0f : 0.0f;
+  constants.params[5] = depth_inverted ? 1.0f : 0.0f;
 
   // Seed the state tracker with the actual current states. Without this,
   // inference would guess from the resource descriptor, which is wrong for
@@ -272,14 +288,25 @@ void HdrState::BeginFrame(CommandContext& cmd,
                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   cmd.SetResourceState(histogram_.Get(),
                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  if (depth != nullptr) {
+    cmd.SetResourceState(depth,
+                         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
 
-  ID3D12Resource* srvs[kSrvCount] = {source, source, source};
+  // The shader reads depth from t1 when available; otherwise it uses the
+  // kHasDepth flag and skips the sample, so binding source there is safe.
+  ID3D12Resource* depth_srv = depth != nullptr ? depth : source;
+  ID3D12Resource* srvs[kSrvCount] = {source, depth_srv, source};
   ID3D12Resource* uavs[kUavCount] = {histogram_.Get()};
 
   cmd.Transition(command_list, source,
                  D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   cmd.Transition(command_list, histogram_.Get(),
                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  if (depth != nullptr) {
+    cmd.Transition(command_list, depth,
+                   D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
 
   // Clear then build.
   codec.Dispatch("ZeroHistogram", command_list, constants, srvs, uavs,
@@ -329,44 +356,79 @@ void HdrState::PollReadback(ID3D12Fence* fence, const Settings& settings) {
 
   const uint32_t* bins = static_cast<const uint32_t*>(mapped);
   uint32_t total = 0;
-  for (uint32_t i = 0; i < kHistogramBins; ++i) total += bins[i];
+  for (uint32_t i = 0; i < kHistogramTotalBins; ++i) total += bins[i];
   if (total == 0) return;
 
-  UpdateExposure(bins, total, settings);
+  UpdateExposure(bins, settings);
 
-  // Copy the raw histogram into our diagnostics buffer.
-  for (uint32_t i = 0; i < kHistogramBins; ++i) last_histogram_[i] = bins[i];
+  // Copy both halves into the diagnostics buffers.
+  for (uint32_t i = 0; i < kHistogramBins; ++i) {
+    last_histogram_[i] = bins[i];
+    last_histogram_skin_[i] = bins[kHistogramBins + i];
+  }
   have_histogram_ = true;
   last_samples_ = total;
 
   frames_since_measure_ = 0;
 }
 
-void HdrState::UpdateExposure(const uint32_t* bins, uint32_t total,
-                              const Settings& settings) {
-  const float p_mid_bin = PercentileBin(bins, total, 0.50f);
+void HdrState::UpdateExposure(const uint32_t* bins, const Settings& settings) {
+  const uint32_t* global_bins = bins;
+  const uint32_t* skin_bins = bins + kHistogramBins;
+
+  uint32_t total_global = 0;
+  uint32_t total_skin = 0;
+  for (uint32_t i = 0; i < kHistogramBins; ++i) {
+    total_global += global_bins[i];
+    total_skin += skin_bins[i];
+  }
+  if (total_global == 0) return;
+
+  const float skin_fraction =
+      static_cast<float>(total_skin) / static_cast<float>(total_global);
+
+  // Skin takes priority when enough of it is present. The threshold is low
+  // because a face is usually a small fraction of a frame even when it fills
+  // the subject, and the absolute floor keeps a handful of misdetected
+  // pixels from driving the whole frame.
+  const bool use_skin = (skin_fraction > 0.01f) && (total_skin > 1000u);
+  const uint32_t* luma_source = use_skin ? skin_bins : global_bins;
+  const uint32_t luma_total = use_skin ? total_skin : total_global;
+
+  const float p_mid_bin = PercentileBin(luma_source, luma_total, 0.50f);
+  // White point is always from the global histogram: skin does not define
+  // the brightest part of a scene.
   const float p_hi_bin =
-      PercentileBin(bins, total,
+      PercentileBin(global_bins, total_global,
                     std::clamp(settings.hdr_white_percentile, 0.90f, 0.999f));
 
   const float luma_mid = BinToLinear(p_mid_bin);
   const float luma_hi = BinToLinear(p_hi_bin);
 
-  const float target =
+  const float raw_target =
       (luma_mid > 1e-6f)
           ? std::clamp(settings.hdr_midtone / luma_mid, 0.01f, 128.0f)
           : exposure_ema_;
 
-  // Publish to the diagnostics fields.
+  // Rate cap in log2 space. The target can jump when a bright object enters
+  // the frame; the cap turns that into a slow drift. Warmup is exempt, so
+  // the first ~30 measurements still converge quickly.
+  const float log_max_delta = warmup_frames_ < 30 ? 0.5f : 0.02f;
+  const float log_current = log2(std::max(exposure_ema_, 1e-6f));
+  float log_delta = log2(raw_target) - log_current;
+  log_delta = std::clamp(log_delta, -log_max_delta, log_max_delta);
+  const float capped_target = exp2(log_current + log_delta);
+
   p50_luma_ = luma_mid;
   p_hi_luma_ = luma_hi;
-  target_exposure_ = target;
+  target_exposure_ = capped_target;
+  skin_fraction_ = skin_fraction;
+  target_is_skin_ = use_skin;
 
   // Warm-up: converge quickly for the first ~30 measurements, then blend
   // at a rate proportional to how often we measure. A short interval means
   // fresher data, so the EMA can move faster; a long one means stale data,
-  // so it smooths more. Converted back to the [0,1] responsiveness scale
-  // used below.
+  // so it smooths more.
   const uint32_t interval =
       static_cast<uint32_t>(std::clamp(settings.hdr_measure_interval, 1, 32));
   const float resp = (32.0f - static_cast<float>(interval)) / 31.0f;
@@ -374,7 +436,7 @@ void HdrState::UpdateExposure(const uint32_t* bins, uint32_t total,
                           ? 0.5f
                           : (0.02f + resp * 0.38f);
 
-  exposure_ema_ = Lerp(exposure_ema_, target, alpha);
+  exposure_ema_ = Lerp(exposure_ema_, capped_target, alpha);
 
   const float W_target = std::max(1.0f, luma_hi * exposure_ema_);
   white_point_ema_ = Lerp(white_point_ema_, W_target, alpha);
@@ -415,8 +477,13 @@ PipelineStatus RunHdrBeginFrame(PassRun& run) {
 
   // hdr_cmd is the controller-owned scratch context the histogram records
   // through. Carried on the run so the graph has no controller coupling.
+  // Depth filtering removes the sky, which is the largest single source of
+  // exposure flicker from camera movement. The guide is only valid together
+  // with motion, so a valid guide implies a non-null depth clone.
+  ID3D12Resource* depth = run.guides.valid ? run.guides.depth : nullptr;
   run.hdr->BeginFrame(*run.hdr_cmd, run.list, run.guides.dlss_output_color,
                       run.guides.output_width, run.guides.output_height,
+                      depth, run.guides.depth_inverted,
                       *run.settings, *run.codec);
   return PipelineStatus::Ok;
 }
