@@ -715,8 +715,15 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float2 uv = (float2(id.xy) + 0.5) / float2(gWidth, gHeight);
 
     float4 orig_hdr = gOriginal.SampleLevel(s0, uv, 0);
-    float3 low_in  = gLowInput.SampleLevel(s0, uv, 0).rgb;    // sRGB
-    float3 low_out = gLowEnhanced.SampleLevel(s0, uv, 0).rgb; // sRGB
+
+    // EASU in place of the bilinear sample. Bilinear is what produced the
+    // visible blockiness at working scales below 1.0; the constants come
+    // from the two resolutions, built CPU-side in ComposeOutput.
+    const float2 easu_con3 = float2(0.0, 4.0 * kEasuCon1.y);
+    float3 low_in  = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
+                              easu_con3, 0);
+    float3 low_out = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
+                              easu_con3, 1);
 
     float3 src_lin = DecodeToLinear(orig_hdr.rgb);
 
