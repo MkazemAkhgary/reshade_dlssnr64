@@ -203,11 +203,9 @@ void LoadPassSettings(uint32_t index, PassSettings& pass) {
 
   LoadResidual(pref + "Residual.", pass.residual);
 
-  std::string custom_name;
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            (pref + "CustomName").c_str(), custom_name);
-  std::snprintf(pass.custom_name, sizeof(pass.custom_name), "%s",
-                custom_name.c_str());
+                            (pref + "CustomName").c_str(),
+                            pass.custom_name, sizeof(pass.custom_name));
 
   LoadGrade(pref + "Grade.Input.", pass.grade_input);
   LoadGrade(pref + "Grade.Output.", pass.grade_output);
@@ -274,7 +272,7 @@ void SavePassSettings(uint32_t index, const PassSettings& pass) {
 
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             (pref + "CustomName").c_str(),
-                            std::string(pass.custom_name));
+                            pass.custom_name);
 
   SaveGrade(pref + "Grade.Input.", pass.grade_input);
   SaveGrade(pref + "Grade.Output.", pass.grade_output);
