@@ -69,7 +69,7 @@ bool ComposeOutput(
     unsigned int full_width,
     unsigned int full_height,
     const float* params,
-    float edit_strength,
+    const ResidualSettings& residual,
     bool rcas_enabled,
     float rcas_strength,
     const GradeSettings* grade_input,
@@ -87,7 +87,11 @@ bool ComposeOutput(
   }
   // Written for both paths. How the edit is carried back is not an HDR
   // concern; it only used to be stored here.
-  constants.params[kResidualSlotBase + 0] = edit_strength;
+  constants.params[kResidualSlotBase + 0] = residual.edit_strength;
+  constants.params[kResidualSlotBase + 1] = residual.chroma_strength;
+  constants.params[kResidualSlotBase + 2] = residual.edit_gamma;
+  constants.params[kResidualSlotBase + 3] = residual.highlight_protect;
+  constants.params[kResidualSlotBase + 4] = residual.shadow_protect;
 
   const char* pass_name = "ComposeModelOutput";
   if (hdr != nullptr) {

@@ -75,7 +75,7 @@ bool ComposeOutput(
     unsigned int full_width,
     unsigned int full_height,
     const float* params,
-    float edit_strength = 1.0f,
+    const ResidualSettings& residual = {},
     bool rcas_enabled = false,
     float rcas_strength = 0.5f,
     const GradeSettings* grade_input = nullptr,
