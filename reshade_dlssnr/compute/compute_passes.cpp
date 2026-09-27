@@ -299,12 +299,10 @@ cbuffer Params : register(b0)
 #define kSoftMaxChroma   gParams[1].y
 #define kSoftKnee        gParams[1].z
 // HDR uniforms, at kHdrSlotBase = float 32 = gParams[8]. See the region map
-// in compute_engine.h. These used to sit at gParams[2], directly above the
-// parameter table, which was free to grow into them.
-//
-// Only the format is left. The residual is a ratio, so the tonemap's exposure
-// and white point cancel out of the compose entirely and are not read here.
+// in compute_engine.h.
 #define kFormat          gParams[8].x
+#define kExposure        gParams[8].y
+#define kWhitePoint      gParams[8].z
 // Residual block, at kResidualSlotBase = float 24 = gParams[6].
 #define kEditStrength    gParams[6].x
 
@@ -451,18 +449,23 @@ float3 BlendYCbCr(float3 original, float3 edited,
     return result;
 }
 
-// The model's edit is a per-channel multiplicative ratio in linear SDR,
-// applied directly to the HDR linear. A ratio is scale-invariant, so it means
-// the same thing here as it does in the SDR compose.
-//
-// It preserves relative brightness changes exactly, but can amplify noise
-// where the SDR input is near zero: the ratio has a small denominator there.
-float3 ComposeRatio(float3 src_lin, float3 low_in, float3 low_out) {
-    float3 sdr_in_lin = SrgbToLinear(low_in);
+// Inverse of ReinhardForward for a fixed W, positive root.
+float ReinhardInverse(float y, float W) {
+    float W2 = max(W * W, 1e-6);
+    float u = W2 * (1.0 - y);
+    return 0.5 * (sqrt(max(u * u + 4.0 * W2 * y, 0.0)) - u);
+}
+
+// The model saw a tonemapped image, so the ratio it implies is in the
+// tonemapped domain. Invert the tonemap on the model's output first, or the
+// edit is applied through a curve the model never saw.
+float3 ComposeRatio(float3 src_lin, float3 low_in, float3 low_out,
+                    float exposure, float W) {
     float3 sdr_out_lin = SrgbToLinear(low_out);
+    float3 h_out_est = ReinhardInverse(sdr_out_lin, W) / max(exposure, 1e-6);
 
     const float eps = 1e-4;
-    float3 ratio = (sdr_out_lin + eps) / (sdr_in_lin + eps);
+    float3 ratio = (h_out_est + eps) / (max(src_lin, 0.0) + eps);
     // Same guard as the SDR compose: where the model's input was near black
     // this ratio has a small denominator and can otherwise reach thousands,
     // blowing those pixels out. Bound it to 16x either way.
@@ -496,7 +499,8 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     float3 src_lin = DecodeToLinear(orig_hdr.rgb);
 
-    float3 edited_src_lin = ComposeRatio(src_lin, low_in, low_out);
+    float3 edited_src_lin = ComposeRatio(src_lin, low_in, low_out,
+                                         kExposure, kWhitePoint);
 
     // Blend original and edited in linear space using luma / chroma
     // strengths. Chroma is interpolated in normalized space so that
