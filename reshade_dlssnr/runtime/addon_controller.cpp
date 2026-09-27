@@ -394,6 +394,10 @@ void AddonController::PresentDebugOutput(
                                     D3D12_RESOURCE_STATE_PRESENT);
   release_command_.SetResourceState(debug.output.Get(),
                                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  // The debug image was written by a compute dispatch on the pass's list, not
+  // this one. Same queue, so the copy runs after the dispatch, but the write
+  // is only guaranteed visible to the copy after a barrier.
+  release_command_.UavBarrier(list, debug.output.Get());
   release_command_.CopyResourceToBackbuffer(list, debug.output.Get(),
                                             backbuffer.Get());
 }
