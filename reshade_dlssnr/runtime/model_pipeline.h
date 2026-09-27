@@ -76,6 +76,8 @@ bool ComposeOutput(
     unsigned int full_height,
     const float* params,
     float edit_strength = 1.0f,
+    bool rcas_enabled = false,
+    float rcas_strength = 0.5f,
     const HdrUniforms* hdr = nullptr);
 
 // Applies a grade to `target` in place, reading it through `scratch`.

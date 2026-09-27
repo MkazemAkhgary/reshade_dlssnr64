@@ -70,6 +70,8 @@ bool ComposeOutput(
     unsigned int full_height,
     const float* params,
     float edit_strength,
+    bool rcas_enabled,
+    float rcas_strength,
     const HdrUniforms* hdr) {
   if (codec == nullptr || command_list == nullptr || original == nullptr ||
       low_input == nullptr || low_enhanced == nullptr || params == nullptr) {
@@ -117,6 +119,9 @@ bool ComposeOutput(
     constants.params[kEasuSlotBase + 9] = 2.0f / in_h;
     constants.params[kEasuSlotBase + 10] = 1.0f / in_w;
     constants.params[kEasuSlotBase + 11] = 2.0f / in_h;
+
+    constants.params[kRcasSlotBase + 0] = rcas_enabled ? 1.0f : 0.0f;
+    constants.params[kRcasSlotBase + 1] = rcas_strength;
   }
 
   state.Transition(command_list, original,
