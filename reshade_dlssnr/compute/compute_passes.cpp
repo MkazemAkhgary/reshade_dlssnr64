@@ -545,6 +545,10 @@ constexpr const char* kComposeModelOutputHdr = R"(
 #define kRcasStrength    gParams[12].y
 // Residual block, at kResidualSlotBase = float 24 = gParams[6].
 #define kEditStrength    gParams[6].x
+#define kChromaStrength  gParams[6].y
+#define kEditGamma       gParams[6].z
+#define kHighlightProtect gParams[6].w
+#define kShadowProtect   gParams[7].x
 
 Texture2D<float4> gOriginal    : register(t0);
 Texture2D<float4> gLowInput    : register(t1);
@@ -637,6 +641,42 @@ float SoftCompress(float x, float max_pos, float max_neg, float knee)
         return max_pos * x / (max_pos + knee * abs(x));
     else
         return max_neg * x / (max_neg + knee * abs(x));
+}
+
+// Same shaping as ShapeResidual in the HDR compose, but on the SDR path's
+// log-space residual rather than a per-channel ratio. Separate functions
+// because the input spaces differ and the region protection reads a
+// different luma; the sliders are the same.
+float3 ShapeResidualSdr(float3 delta, float3 original_srgb) {
+    if (kSoftCompression != 0) {
+        delta.r = SoftCompress(delta.r, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
+        delta.g = SoftCompress(delta.g, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
+        delta.b = SoftCompress(delta.b, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
+    }
+
+    if (kEditGamma != 1.0 && kEditGamma > 0.0) {
+        delta = sign(delta) * pow(abs(delta), kEditGamma);
+    }
+
+    if (kChromaStrength < 1.0) {
+        const float3 kL = float3(0.2126, 0.7152, 0.0722);
+        float d_luma = dot(delta, kL);
+        delta = lerp(float3(d_luma, d_luma, d_luma), delta, kChromaStrength);
+    }
+
+    const float3 kL = float3(0.2126, 0.7152, 0.0722);
+    float luma = dot(original_srgb, kL);
+    float protect = 1.0;
+    if (kHighlightProtect > 0.0) {
+        float h = saturate((luma - 0.7) / 0.3);
+        protect *= 1.0 - kHighlightProtect * h;
+    }
+    if (kShadowProtect > 0.0) {
+        float s = saturate((0.3 - luma) / 0.3);
+        protect *= 1.0 - kShadowProtect * s;
+    }
+
+    return delta * protect * kEditStrength;
 }
 
 float safe_log(float x)
@@ -926,19 +966,52 @@ float3 ReinhardForward(float3 x, float W) {
 // The model's edit as a per-channel delta ratio in linear SDR, measured
 // between the two working-scale images the model saw. Delta alone: the caller
 // decides which domain to apply it in.
-float3 ComposeRatioDelta(float3 low_in_lin, float3 low_out_lin) {
-    const float eps = 1e-4;
-    float3 ratio = (low_out_lin + eps) / (max(low_in_lin, 0.0) + eps);
-    ratio = clamp(ratio, 1.0 / 16.0, 16.0);
-    float3 delta = ratio - 1.0;
-
+// The residual shaping controls, shared by both compose passes. `luma` is the
+// SDR-domain luma of the pixel the edit will land on, used only by the region
+// protection; the other three are pixel-independent.
+float3 ShapeResidual(float3 delta, float luma) {
     if (kSoftCompression != 0) {
         delta.r = SoftCompress(delta.r, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
         delta.g = SoftCompress(delta.g, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
         delta.b = SoftCompress(delta.b, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
     }
 
-    return delta * kEditStrength;
+    // Response curve. Sign-preserving: a brightening and a darkening of the
+    // same magnitude get shaped the same way, and 0 stays 0.
+    if (kEditGamma != 1.0 && kEditGamma > 0.0) {
+        delta = sign(delta) * pow(abs(delta), kEditGamma);
+    }
+
+    // Chroma strength. 1 passes the model's per-channel delta; 0 collapses
+    // the delta to its luma, so only brightness moves and hue is left alone.
+    if (kChromaStrength < 1.0) {
+        const float3 kL = float3(0.2126, 0.7152, 0.0722);
+        float d_luma = dot(delta, kL);
+        delta = lerp(float3(d_luma, d_luma, d_luma), delta, kChromaStrength);
+    }
+
+    // Region protection. Both are off at 0, so the default leaves the edit
+    // whole across the range.
+    float protect = 1.0;
+    if (kHighlightProtect > 0.0) {
+        float h = saturate((luma - 0.7) / 0.3);
+        protect *= 1.0 - kHighlightProtect * h;
+    }
+    if (kShadowProtect > 0.0) {
+        float s = saturate((0.3 - luma) / 0.3);
+        protect *= 1.0 - kShadowProtect * s;
+    }
+
+    return delta * protect * kEditStrength;
+}
+
+// The ratio alone, without any shaping. Kept separate because the shaping
+// needs the target pixel's luma, which this does not.
+float3 ComposeRatioDelta(float3 low_in_lin, float3 low_out_lin) {
+    const float eps = 1e-4;
+    float3 ratio = (low_out_lin + eps) / (max(low_in_lin, 0.0) + eps);
+    ratio = clamp(ratio, 1.0 / 16.0, 16.0);
+    return ratio - 1.0;
 }
 
 // The whole compose. Tonemap the HDR source, apply the input grade so the
@@ -952,7 +1025,9 @@ float3 ComposeRatio(float3 src_lin, float3 low_in, float3 low_out,
 
     float3 low_in_lin = SrgbToLinear(low_in);
     float3 low_out_lin = SrgbToLinear(low_out);
-    float3 delta = ComposeRatioDelta(low_in_lin, low_out_lin);
+    float sdr_luma = dot(sdr_graded, float3(0.2126, 0.7152, 0.0722));
+    float3 delta = ShapeResidual(
+        ComposeRatioDelta(low_in_lin, low_out_lin), sdr_luma);
 
     float3 sdr_edited_graded = sdr_graded * (1.0 + delta);
     float3 sdr_edited = (kGradeEnabled > 0.5)
@@ -1044,6 +1119,10 @@ constexpr const char* kComposeModelOutput = R"(
 // Residual block, at kResidualSlotBase = float 24 = gParams[6]. See the region
 // map in compute_engine.h.
 #define kEditStrength     gParams[6].x
+#define kChromaStrength   gParams[6].y
+#define kEditGamma        gParams[6].z
+#define kHighlightProtect gParams[6].w
+#define kShadowProtect    gParams[7].x
 
 Texture2D<float4> gOriginal : register(t0);
 Texture2D<float4> gLowInput : register(t1);
@@ -1154,6 +1233,8 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     const float kMaxLogRatio = 2.7725887;  // log(16)
     residual_log = clamp(residual_log, -kMaxLogRatio, kMaxLogRatio);
 
+    const float3 residual_shaped = ShapeResidualSdr(residual_log, original.rgb);
+
     // A ratio is scale-invariant, so the same edit means the same thing
     // whatever range the original is in. Scaling the log raises the ratio to
     // the strength, which is the ratio-space analogue of scaling a delta: 0
@@ -1170,10 +1251,10 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         // image it saw, so the grade and the ratio act on that encoding
         // directly.
         float3 graded_original = GradeLinearFwd(original.rgb);
-        float3 graded_edited = graded_original * exp(residual_log * kEditStrength);
+        float3 graded_edited = graded_original * exp(residual_shaped);
         edited = GradeLinearInv(graded_edited);
     } else {
-        edited = original.rgb * exp(residual_log * kEditStrength);
+        edited = original.rgb * exp(residual_shaped);
     }
 
     float3 final_rgb = BlendYCbCr(original.rgb, edited,
