@@ -228,22 +228,22 @@ void AddonController::OnPresent(
     IDXGISwapChain* swapchain) {
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
-  // Both queues are drained at the end of every frame. Anything here at the
-  // start of the next was added since that drain: legitimate sources are a
-  // guide clone replaced by a resolution or format change, and a working
-  // texture replaced by a working-scale change. Both are one-shot events, so
-  // a count that grows across frames is a queue nothing is draining - which
-  // is the failure this line exists to catch.
+  // Both queues are drained at the end of every frame. The count reported
+  // here is what that drain released: a working texture replaced by a
+  // working-scale change, or all three guide clones replaced by a resolution
+  // or format change. Reading the queues before the drain instead made every
+  // such frame look like a leak, because the disposal that refilled them had
+  // happened earlier in the same frame.
   {
     DlssGuides& guides = DlssGuides::Get();
-    const size_t guide_depth = guides.RetiredResourceCount();
-    const size_t game_depth = guides.RetiredGameResourceCount();
-    if (guide_depth > 0 || game_depth > 0) {
+    const size_t guide_pending = guides.RetiredResourceCount();
+    const size_t game_pending = guides.RetiredGameResourceCount();
+    if (guide_pending > 0 || game_pending > 0) {
       char message[160];
       std::snprintf(message, sizeof(message),
-                    "DLSSNR: retired queues non-empty at frame start "
+                    "DLSSNR: released retired resources "
                     "(guide=%zu game=%zu)",
-                    guide_depth, game_depth);
+                    guide_pending, game_pending);
       reshade::log::message(reshade::log::level::info, message);
     }
   }
@@ -290,9 +290,10 @@ void AddonController::OnPresent(
   // ReleaseRetiredResources holds the guide clones, replaced on a resolution
   // or format change; they accumulate over a session for the same reason.
   //
-  // RunSingleStage ends in EndReleaseCommands, which submits and waits, so the
-  // GPU is idle here and every resource on both queues was last referenced by
-  // a submitted command list.
+  // RunSingleStage ends in EndReleaseCommands, which submits and waits on the
+  // game's queue. Because the game's earlier DLSS work is ahead of the release
+  // list in that queue's FIFO, that wait covers it too, so every resource on
+  // both queues was last referenced by work that has completed.
   DlssGuides::Get().ReleaseRetiredGameResources();
   DlssGuides::Get().ReleaseRetiredResources();
 
