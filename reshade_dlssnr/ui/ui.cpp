@@ -24,6 +24,14 @@ namespace reshade_dlssnr {
 // the tab that now holds the active pass to be selected instead.
 int g_force_select_tab = -1;
 
+// A move queued by the order buttons. Applied at the top of the next frame
+// rather than in place: the buttons are drawn inside the tab bar loop, and
+// permuting the array mid-loop redraws the tabs to the right with the new
+// names and leaves the current tab's body half-drawn for one frame.
+enum class PendingMove { None, Left, Right };
+PendingMove g_pending_move = PendingMove::None;
+int g_pending_move_index = -1;
+
 // Defined below, but used by DrawPassSettingsBody's move buttons.
 void ApplyPassReorder(Settings& settings, const int* order, bool& changed);
 
@@ -1189,11 +1197,8 @@ void DrawPassSettingsBody(uint32_t pass_index,
 
     WithDisabled(!can_move_left, [&] {
       if (ImGui::Button("<", ImVec2(30, 0)) && can_move_left) {
-        int order[kMaxPasses];
-        for (uint32_t i = 0; i < kMaxPasses; ++i) order[i] = i;
-        std::swap(order[pass_index - 1], order[pass_index]);
-        ApplyPassReorder(settings, order, changed);
-        moved = true;
+        g_pending_move = PendingMove::Left;
+        g_pending_move_index = static_cast<int>(pass_index);
       }
       if (ImGui::IsItemHovered()) Tip("Move this pass earlier in the pipeline");
     });
@@ -1202,19 +1207,11 @@ void DrawPassSettingsBody(uint32_t pass_index,
 
     WithDisabled(!can_move_right, [&] {
       if (ImGui::Button(">", ImVec2(30, 0)) && can_move_right) {
-        int order[kMaxPasses];
-        for (uint32_t i = 0; i < kMaxPasses; ++i) order[i] = i;
-        std::swap(order[pass_index], order[pass_index + 1]);
-        ApplyPassReorder(settings, order, changed);
-        moved = true;
+        g_pending_move = PendingMove::Right;
+        g_pending_move_index = static_cast<int>(pass_index);
       }
       if (ImGui::IsItemHovered()) Tip("Move this pass later in the pipeline");
     });
-  }
-
-  if (moved) {
-    ImGui::PopID();
-    return;
   }
 
   const bool enabled = settings.pass_enabled[pass_index];
@@ -1292,6 +1289,23 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   Settings& settings = GetSettings();
   g_show_tooltips = settings.show_tooltips;
   bool changed = false;
+
+  // A move queued by last frame's order buttons. Applied before anything is
+  // drawn, so this frame sees the new order from its first widget.
+  if (g_pending_move != PendingMove::None && g_pending_move_index >= 0 &&
+      g_pending_move_index < static_cast<int>(kMaxPasses)) {
+    const int idx = g_pending_move_index;
+    int order[kMaxPasses];
+    for (uint32_t i = 0; i < kMaxPasses; ++i) order[i] = static_cast<int>(i);
+    if (g_pending_move == PendingMove::Left && idx > 0) {
+      std::swap(order[idx - 1], order[idx]);
+    } else if (g_pending_move == PendingMove::Right &&
+               idx + 1 < static_cast<int>(kMaxPasses)) {
+      std::swap(order[idx], order[idx + 1]);
+    }
+    g_pending_move = PendingMove::None;
+    ApplyPassReorder(settings, order, changed);
+  }
 
   ImGui::Text("Version %s", reshade_dlssnr::kAddonVersion);
   ImGui::Separator();
