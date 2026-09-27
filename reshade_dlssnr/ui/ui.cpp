@@ -1278,75 +1278,25 @@ void DrawOverlay(reshade::api::effect_runtime*) {
 
   SectionDivider();
 
-  // After a reorder the tab bar is torn down and rebuilt with a fresh ID so
-  // the drag is forgotten: labels are positional, and a remembered drag
-  // position would leave the visual order out of step with the array the
-  // labels index into. `reselect` carries the open-tab choice across that
-  // reset, because a freshly created tab bar has no selection of its own.
-  static uint32_t tab_bar_generation = 0;
-  static bool tab_bar_reselect = false;
-
-  char tab_bar_id[32];
-  std::snprintf(tab_bar_id, sizeof(tab_bar_id), "PassTabs##%u",
-                tab_bar_generation);
-
-  if (ImGui::BeginTabBar(tab_bar_id, ImGuiTabBarFlags_Reorderable)) {
-    const bool reselect = tab_bar_reselect;
-    tab_bar_reselect = false;
-
-    ImGuiID tab_ids[kMaxPasses] = {};
-
+  if (ImGui::BeginTabBar("PassTabs")) {
     for (uint32_t i = 0; i < kMaxPasses; ++i) {
-      char label[32];
-      std::snprintf(label, sizeof(label), "Pass %u", i + 1);
-
-      const bool select_this =
-          reselect && (static_cast<int>(i) == settings.active_pass);
-      const bool tab_open = ImGui::BeginTabItem(
-          label, nullptr, select_this ? ImGuiTabItemFlags_SetSelected : 0);
-      tab_ids[i] = ImGui::GetItemID();
-
-      if (tab_open) {
+      // The stable ID is the position, not the name, so renaming a pass
+      // changes the visible label without recreating the tab and losing
+      // the open state.
+      char label[96];
+      if (settings.passes[i].custom_name[0] != '\0') {
+        std::snprintf(label, sizeof(label), "%s##PassTab%u",
+                      settings.passes[i].custom_name, i);
+      } else {
+        std::snprintf(label, sizeof(label), "Pass %u##PassTab%u", i + 1, i);
+      }
+      if (ImGui::BeginTabItem(label)) {
         // The open tab determines which pass's debug view is rendered.
         settings.active_pass = static_cast<int>(i);
         DrawPassSettingsBody(i, settings, changed);
         ImGui::EndTabItem();
       }
     }
-
-    // Non-zero DragTabId means a tab is still held, so this only sees a
-    // completed drop. The size check guards against reading a stale array
-    // from a frame in which the tabs were not resubmitted.
-    ImGuiTabBar* tab_bar = ImGui::GetCurrentTabBar();
-    if (tab_bar != nullptr && tab_bar->DragTabId == 0 &&
-        tab_bar->Tabs.Size == static_cast<int>(kMaxPasses)) {
-      int order[kMaxPasses] = {};
-      bool valid = true;
-      bool reordered = false;
-
-      for (int i = 0; i < tab_bar->Tabs.Size; ++i) {
-        int found = -1;
-        for (uint32_t j = 0; j < kMaxPasses; ++j) {
-          if (tab_ids[j] == tab_bar->Tabs[i].ID) {
-            found = static_cast<int>(j);
-            break;
-          }
-        }
-        if (found < 0) {
-          valid = false;
-          break;
-        }
-        order[i] = found;
-        if (found != i) reordered = true;
-      }
-
-      if (valid && reordered) {
-        ApplyPassReorder(settings, order, changed);
-        tab_bar_generation++;
-        tab_bar_reselect = true;
-      }
-    }
-
     ImGui::EndTabBar();
   }
   SectionDivider();
