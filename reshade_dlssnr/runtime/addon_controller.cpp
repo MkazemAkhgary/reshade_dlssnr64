@@ -228,6 +228,26 @@ void AddonController::OnPresent(
     IDXGISwapChain* swapchain) {
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
+  // Both queues are drained at the end of every frame. Anything here at the
+  // start of the next was added since that drain: legitimate sources are a
+  // guide clone replaced by a resolution or format change, and a working
+  // texture replaced by a working-scale change. Both are one-shot events, so
+  // a count that grows across frames is a queue nothing is draining - which
+  // is the failure this line exists to catch.
+  {
+    DlssGuides& guides = DlssGuides::Get();
+    const size_t guide_depth = guides.RetiredResourceCount();
+    const size_t game_depth = guides.RetiredGameResourceCount();
+    if (guide_depth > 0 || game_depth > 0) {
+      char message[160];
+      std::snprintf(message, sizeof(message),
+                    "DLSSNR: retired queues non-empty at frame start "
+                    "(guide=%zu game=%zu)",
+                    guide_depth, game_depth);
+      reshade::log::message(reshade::log::level::info, message);
+    }
+  }
+
   const Settings& settings = GetSettings();
   if (!settings.enabled) { frame_debug_.Reset(); return; }
   if (command_queue == nullptr || swapchain == nullptr) {
