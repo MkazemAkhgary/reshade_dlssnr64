@@ -358,13 +358,19 @@ float3 NitsToPq(float3 nits)
     return pow(num / den, m2);
 }
 
+// The compose's pair of this function normalises to scRGB (1.0 == 80 nits),
+// which is scale-invariant for the ratio it carries. The grade is not: its
+// pivot, shaping windows and Lift/Soft headroom all assume 1.0 is SDR white.
+// So this copy normalises to SDR white instead.
+static const float kSdrWhiteNits = 100.0;
+
 float3 DecodeToLinear(float3 c)
 {
     int fmt = (int)(kFormat + 0.5);
     if (fmt == 1) {
-        return max(c, 0.0);
+        return max(c, 0.0) * (80.0 / kSdrWhiteNits);
     } else if (fmt == 2) {
-        return max(PqToNits(c), 0.0) / 80.0;
+        return max(PqToNits(c), 0.0) / kSdrWhiteNits;
     } else {
         return SrgbToLinear(c);
     }
@@ -374,9 +380,9 @@ float3 EncodeFromLinear(float3 lin)
 {
     int fmt = (int)(kFormat + 0.5);
     if (fmt == 1) {
-        return max(lin, 0.0);
+        return max(lin, 0.0) * (kSdrWhiteNits / 80.0);
     } else if (fmt == 2) {
-        return NitsToPq(max(lin, 0.0) * 80.0);
+        return NitsToPq(max(lin, 0.0) * kSdrWhiteNits);
     } else {
         return LinearToSrgb(lin);
     }
