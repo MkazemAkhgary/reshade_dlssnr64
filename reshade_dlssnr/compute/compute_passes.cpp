@@ -287,7 +287,7 @@ cbuffer Params : register(b0)
 {
     uint  gWidth;
     uint  gHeight;
-    float4 gParams[12];
+    float4 gParams[13];
 };
 
 // User shader params (identical to ComposeModelOutput):
@@ -308,6 +308,9 @@ cbuffer Params : register(b0)
 #define kEasuCon0        gParams[9]
 #define kEasuCon1        gParams[10]
 #define kEasuCon2        gParams[11]
+// FSR RCAS, at kRcasSlotBase = float 48 = gParams[12].
+#define kRcasEnabled     gParams[12].x
+#define kRcasStrength    gParams[12].y
 // Residual block, at kResidualSlotBase = float 24 = gParams[6].
 #define kEditStrength    gParams[6].x
 
