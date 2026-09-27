@@ -639,12 +639,12 @@ float3 FsrRcasF(float3 b, float3 d, float3 e, float3 f, float3 h,
     nz = saturate(abs(nz) * rcp(nz_max - nz_min));
     nz = -0.5 * nz + 1.0;
 
-    float mn4R = min(min(bR, dR, fR), hR);
-    float mn4G = min(min(bG, dG, fG), hG);
-    float mn4B = min(min(bB, dB, fB), hB);
-    float mx4R = max(max(bR, dR, fR), hR);
-    float mx4G = max(max(bG, dG, fG), hG);
-    float mx4B = max(max(bB, dB, fB), hB);
+    float mn4R = min(min(bR, dR), min(fR, hR));
+    float mn4G = min(min(bG, dG), min(fG, hG));
+    float mn4B = min(min(bB, dB), min(fB, hB));
+    float mx4R = max(max(bR, dR), max(fR, hR));
+    float mx4G = max(max(bG, dG), max(fG, hG));
+    float mx4B = max(max(bB, dB), max(fB, hB));
 
     float hitMinR = min(mn4R, eR) * rcp(4.0 * mx4R);
     float hitMinG = min(mn4G, eG) * rcp(4.0 * mx4G);
