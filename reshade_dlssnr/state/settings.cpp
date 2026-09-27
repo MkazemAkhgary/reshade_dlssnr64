@@ -454,6 +454,11 @@ Snapshot BuildSnapshot(const Settings& settings) {
   Append(snap, "hdr_white_percentile", FloatText(settings.hdr_white_percentile));
   Append(snap, "hdr_highlight_headroom",
          FloatText(settings.hdr_highlight_headroom));
+  Append(snap, "hdr_rate_cap", FloatText(settings.hdr_rate_cap));
+  Append(snap, "hdr_skin_fraction_threshold",
+         FloatText(settings.hdr_skin_fraction_threshold));
+  Append(snap, "hdr_depth_fallback_fraction",
+         FloatText(settings.hdr_depth_fallback_fraction));
   AppendGrade(snap, "grade_backbuffer", settings.grade_backbuffer);
 
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
@@ -545,6 +550,27 @@ void LoadSettings() {
     g_settings.hdr_highlight_headroom = 8.0f;
   }
 
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.RateCap",
+                            g_settings.hdr_rate_cap);
+  if (g_settings.hdr_rate_cap < 0.0f) g_settings.hdr_rate_cap = 0.0f;
+  if (g_settings.hdr_rate_cap > 2.0f) g_settings.hdr_rate_cap = 2.0f;
+
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.SkinFractionThreshold",
+                            g_settings.hdr_skin_fraction_threshold);
+  if (g_settings.hdr_skin_fraction_threshold < 0.0f)
+    g_settings.hdr_skin_fraction_threshold = 0.0f;
+  if (g_settings.hdr_skin_fraction_threshold > 0.5f)
+    g_settings.hdr_skin_fraction_threshold = 0.5f;
+
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.DepthFallbackFraction",
+                            g_settings.hdr_depth_fallback_fraction);
+  if (g_settings.hdr_depth_fallback_fraction < 0.0f)
+    g_settings.hdr_depth_fallback_fraction = 0.0f;
+  if (g_settings.hdr_depth_fallback_fraction > 0.95f)
+    g_settings.hdr_depth_fallback_fraction = 0.95f;
+
   LoadGrade("Grade.Backbuffer.", g_settings.grade_backbuffer);
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.StatusOpen",
@@ -621,6 +647,14 @@ void SaveSettings() {
                             g_settings.hdr_white_percentile);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.HighlightHeadroom",
                             g_settings.hdr_highlight_headroom);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.RateCap",
+                            g_settings.hdr_rate_cap);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.SkinFractionThreshold",
+                            g_settings.hdr_skin_fraction_threshold);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.DepthFallbackFraction",
+                            g_settings.hdr_depth_fallback_fraction);
 
   SaveGrade("Grade.Backbuffer.", g_settings.grade_backbuffer);
 

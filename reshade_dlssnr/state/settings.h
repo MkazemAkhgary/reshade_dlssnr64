@@ -268,6 +268,22 @@ struct Settings {
   // intact, at the cost of a slightly flatter overall response.
   float hdr_highlight_headroom = 8.0f;
 
+  // Maximum log2 change to the exposure per measurement. A bright object
+  // entering or leaving the frame moves the target by a large amount; the
+  // cap converts that into a slow drift. 0 disables the cap. Warmup is
+  // exempt regardless, so the first ~30 measurements converge fast.
+  float hdr_rate_cap = 0.1f;
+
+  // Skin pixels take priority for the exposure median once they are at
+  // least this fraction of the frame. A face is usually a small part of
+  // the image even when it is the subject, so the threshold is low.
+  float hdr_skin_fraction_threshold = 0.01f;
+
+  // If the depth filter leaves less than this fraction of the frame, the
+  // exposure median falls back to the unfiltered histogram rather than
+  // metering on too few pixels. Applies only when depth is available.
+  float hdr_depth_fallback_fraction = 0.20f;
+
   // ---------------------------------------------------------------------
   // Final backbuffer grade. Runs once per frame, after every pass, on the
   // swapchain backbuffer itself — the last thing before the game presents.
