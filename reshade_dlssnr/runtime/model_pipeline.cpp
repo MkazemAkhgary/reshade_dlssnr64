@@ -72,6 +72,7 @@ bool ComposeOutput(
     float edit_strength,
     bool rcas_enabled,
     float rcas_strength,
+    const GradeSettings* grade_input,
     const HdrUniforms* hdr) {
   if (codec == nullptr || command_list == nullptr || original == nullptr ||
       low_input == nullptr || low_enhanced == nullptr || params == nullptr) {
@@ -122,6 +123,23 @@ bool ComposeOutput(
 
     constants.params[kRcasSlotBase + 0] = rcas_enabled ? 1.0f : 0.0f;
     constants.params[kRcasSlotBase + 1] = rcas_strength;
+
+    // The input grade the model's image was put through, so the compose can
+    // apply it to the tonemapped source and invert it after the ratio.
+    if (grade_input != nullptr) {
+      constants.params[kGradeSlotBase + 0] = grade_input->enabled ? 1.0f : 0.0f;
+      constants.params[kGradeSlotBase + 1] = grade_input->luma;
+      constants.params[kGradeSlotBase + 2] = grade_input->chroma;
+      constants.params[kGradeSlotBase + 3] =
+          static_cast<float>(static_cast<int>(grade_input->luma_mode));
+      constants.params[kGradeSlotBase + 4] =
+          static_cast<float>(static_cast<int>(grade_input->chroma_mode));
+      constants.params[kGradeSlotBase + 5] = grade_input->black_point;
+      constants.params[kGradeSlotBase + 6] = grade_input->white_point;
+      constants.params[kGradeSlotBase + 7] = grade_input->contrast;
+      constants.params[kGradeSlotBase + 8] = grade_input->shadows;
+      constants.params[kGradeSlotBase + 9] = grade_input->highlights;
+    }
   }
 
   state.Transition(command_list, original,
