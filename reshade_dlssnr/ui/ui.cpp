@@ -18,6 +18,12 @@
 
 namespace reshade_dlssnr {
 
+// Set by ApplyPassReorder and consumed by DrawOverlay on the next frame. Tab
+// IDs are positional, so after a reorder ImGui still has the tab at the old
+// position selected and would overwrite active_pass back to it. This forces
+// the tab that now holds the active pass to be selected instead.
+int g_force_select_tab = -1;
+
 // Defined below, but used by DrawPassSettingsBody's move buttons.
 void ApplyPassReorder(Settings& settings, const int* order, bool& changed);
 
@@ -1278,6 +1284,7 @@ void ApplyPassReorder(Settings& settings, const int* order, bool& changed) {
     }
   }
 
+  g_force_select_tab = settings.active_pass;
   changed = true;
 }
 
@@ -1354,7 +1361,11 @@ void DrawOverlay(reshade::api::effect_runtime*) {
       } else {
         std::snprintf(label, sizeof(label), "Pass %u###PassTab%u", i + 1, i);
       }
-      if (ImGui::BeginTabItem(label)) {
+      const ImGuiTabItemFlags tab_flags =
+          (g_force_select_tab == static_cast<int>(i))
+              ? ImGuiTabItemFlags_SetSelected
+              : 0;
+      if (ImGui::BeginTabItem(label, nullptr, tab_flags)) {
         // The open tab determines which pass's debug view is rendered.
         settings.active_pass = static_cast<int>(i);
         DrawPassSettingsBody(i, settings, changed);
@@ -1363,6 +1374,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
     }
     ImGui::EndTabBar();
   }
+  g_force_select_tab = -1;
   SectionDivider();
 
   // --- Colour grade (shared across passes) ---
