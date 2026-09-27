@@ -1140,8 +1140,20 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
   const unsigned int width = static_cast<unsigned int>(desc.Width);
   const unsigned int height = desc.Height;
 
+  // Two slots: the input and output grades run at different resolutions when
+  // working scale is below 1.0, and a single slot would be disposed and
+  // recreated on each grade of each frame. Prefer whichever slot already
+  // matches, so each size keeps its own texture across frames.
+  uint32_t scratch_slot = kGradeScratchSlotA;
+  if (!self->resources_.ScratchMatches(width, height, desc.Format,
+                                       kGradeScratchSlotA) &&
+      self->resources_.ScratchMatches(width, height, desc.Format,
+                                      kGradeScratchSlotB)) {
+    scratch_slot = kGradeScratchSlotB;
+  }
+
   if (!self->resources_.EnsureScratch(run.device, desc, width, height,
-                                      kGradeScratchSlot)) {
+                                      scratch_slot)) {
     self->FailForStep("failed to create the grade scratch texture");
     return PipelineStatus::Fail;
   }
@@ -1149,7 +1161,7 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
   ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
   if (!model_pipeline::ApplyGrade(
           self->command_, list, run.codec, target,
-          self->resources_.GetScratch(kGradeScratchSlot), width, height,
+          self->resources_.GetScratch(scratch_slot), width, height,
           GradeFormat(run, target), grade)) {
     self->FailForStep("failed to apply the grade");
     return PipelineStatus::Fail;

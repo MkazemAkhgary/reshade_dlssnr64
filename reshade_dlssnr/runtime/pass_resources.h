@@ -18,8 +18,8 @@ using RetireCallback = void (*)(ID3D12Resource* resource, void* user_data);
 // blend helpers, etc.). Slots are created lazily at whatever size/format
 // is requested and reused across frames until the requested size changes.
 //
-// Slot 0 holds the Post-DLSS multi-pass input snapshot and slot 2 the colour
-// grade's in-place ping-pong; slot 1 is free.
+// Slot 0 holds the Post-DLSS multi-pass input snapshot. Slots 2 and 3 are the
+// grade's in-place scratch; slot 1 is free.
 //
 // The frame debug output is deliberately not here. It lives in the
 // controller's FrameDebugContext, because the Release stage copies it to the
@@ -27,7 +27,8 @@ using RetireCallback = void (*)(ID3D12Resource* resource, void* user_data);
 // session that rendered it.
 constexpr uint32_t kScratchCount = 4;
 constexpr uint32_t kInputSnapshotSlot = 0;
-constexpr uint32_t kGradeScratchSlot = 2;
+constexpr uint32_t kGradeScratchSlotA = 2;
+constexpr uint32_t kGradeScratchSlotB = 3;
 
 class PassResources {
  public:
@@ -79,6 +80,17 @@ class PassResources {
   ID3D12Resource* GetCompositeOutput() const { return composite_output.Get(); }
   ID3D12Resource* GetWorkingInput() const { return working_input.Get(); }
   ID3D12Resource* GetWorkingOutput() const { return working_output.Get(); }
+  // True when slot `index` already holds a texture of the given shape. Lets a
+  // caller pick between two slots instead of letting EnsureScratch dispose a
+  // matching one in the other.
+  bool ScratchMatches(unsigned int width, unsigned int height,
+                      DXGI_FORMAT format, uint32_t index) const {
+    return index < kScratchCount && scratch_[index] != nullptr &&
+           scratch_width_[index] == width &&
+           scratch_height_[index] == height &&
+           scratch_format_[index] == format;
+  }
+
   ID3D12Resource* GetScratch(uint32_t index) const {
     return index < kScratchCount ? scratch_[index].Get() : nullptr;
   }
