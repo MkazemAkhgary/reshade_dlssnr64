@@ -1130,7 +1130,8 @@ static HdrFormat GradeFormat(const PassRun& run, ID3D12Resource* target) {
 }
 
 PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
-                                         const GradeSettings& grade) {
+                                         const GradeSettings& grade,
+                                         uint32_t scratch_slot) {
   PassSession* self = run.session;
   if (self == nullptr) return PipelineStatus::Ok;
   if (!grade.enabled || target == nullptr) return PipelineStatus::Ok;
@@ -1140,18 +1141,11 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
   const unsigned int width = static_cast<unsigned int>(desc.Width);
   const unsigned int height = desc.Height;
 
-  // Two slots: the input and output grades run at different resolutions when
-  // working scale is below 1.0, and a single slot would be disposed and
-  // recreated on each grade of each frame. Prefer whichever slot already
-  // matches, so each size keeps its own texture across frames.
-  uint32_t scratch_slot = kGradeScratchSlotA;
-  if (!self->resources_.ScratchMatches(width, height, desc.Format,
-                                       kGradeScratchSlotA) &&
-      self->resources_.ScratchMatches(width, height, desc.Format,
-                                      kGradeScratchSlotB)) {
-    scratch_slot = kGradeScratchSlotB;
-  }
-
+  // The slot is chosen by the caller, not by matching here. On the first
+  // frame with working scale below 1.0, neither slot matches what either
+  // caller needs, so matching-based selection sent both callers to slot A,
+  // each disposing the other's texture and recreating it. One slot per
+  // caller is what makes the size each wants persist.
   if (!self->resources_.EnsureScratch(run.device, desc, width, height,
                                       scratch_slot)) {
     self->FailForStep("failed to create the grade scratch texture");
@@ -1189,7 +1183,7 @@ PipelineStatus PassSession::StepGradeModelInput(PassRun& run) {
 
   TRACE_EVT(run.session, "grade_model_input pass=%u luma=%.3f chroma=%.3f",
             run.pass_index, grade.luma, grade.chroma);
-  return GradeInPlace(run, run.model_color, grade);
+  return GradeInPlace(run, run.model_color, grade, kGradeScratchSlotA);
 }
 
 // Grades the model's own output, before anything publishes it. The composite
@@ -1202,7 +1196,8 @@ PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
 
   TRACE_EVT(run.session, "grade_model_output pass=%u luma=%.3f chroma=%.3f",
             run.pass_index, grade.luma, grade.chroma);
-  return GradeInPlace(run, run.session->resources_.GetCompositeOutput(), grade);
+  return GradeInPlace(run, run.session->resources_.GetCompositeOutput(),
+                      grade, kGradeScratchSlotB);
 }
 
 // ---------------------------------------------------------------------------
