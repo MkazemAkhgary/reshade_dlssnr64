@@ -139,10 +139,11 @@ static_assert(sizeof(ComputeConstants) <= 256, "Constants must fit in a 256-byte
 // so the third pass made the ring overwrite constants a pending dispatch was
 // still going to read.
 constexpr uint32_t kMaxFramesInFlight = 16;  // DXGI's maximum swapchain buffers
-// Worst case for one frame: every pass records a tonemap, two grades, a
-// compose and a debug view, and the HDR histogram adds two more. The
-// static_assert in pass_session.cpp ties the literal to kMaxPasses.
-constexpr uint32_t kMaxDispatchesPerFrame = 3 * 5 + 2;
+// Worst case for one frame at kMaxPasses == 3: three passes each recording
+// a prepare, two grades, a compose and a debug view (15), the HDR histogram
+// adding two (17), and the Release stage's backbuffer grade (18). The
+// static_assert in pass_session.cpp ties the pass count to kMaxPasses.
+constexpr uint32_t kMaxDispatchesPerFrame = 3 * 5 + 3;
 constexpr uint32_t kDescriptorRingSize =
     kMaxFramesInFlight * kMaxDispatchesPerFrame;
 

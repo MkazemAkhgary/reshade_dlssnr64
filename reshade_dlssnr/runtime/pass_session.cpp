@@ -1473,7 +1473,11 @@ static_assert(
 // descriptors and constants are written when the command is recorded and read
 // when it executes, so a slot reused too early hands a pending dispatch another
 // dispatch's resources. See kDescriptorRingSize in compute_engine.h.
-static_assert(kMaxDispatchesPerFrame >= kMaxPasses * 5 + 2,
+// +3, not +2: the histogram contributes two and the Release stage's
+// backbuffer grade contributes one. Leaving the Release grade out sized the
+// ring for fifteen frames of work rather than sixteen, which is what
+// kMaxFramesInFlight promises.
+static_assert(kMaxDispatchesPerFrame >= kMaxPasses * 5 + 3,
               "kMaxDispatchesPerFrame no longer covers a frame at kMaxPasses - "
               "raise it, and kDescriptorRingSize with it");
 
