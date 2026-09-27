@@ -1119,25 +1119,13 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
 
 // Every grade target carries the encoding its own format says, except the
 // model input under HDR: TonemapForward wrote sRGB into a resource whose
-// format still describes the DLSS output, so the format would lie.
-static HdrFormat FormatFromResource(ID3D12Resource* resource) {
-  if (resource == nullptr) return HdrFormat::Sdr;
-  switch (resource->GetDesc().Format) {
-    case DXGI_FORMAT_R16G16B16A16_FLOAT:
-    case DXGI_FORMAT_R11G11B10_FLOAT:
-      return HdrFormat::ScRgb;
-    case DXGI_FORMAT_R10G10B10A2_UNORM:
-      return HdrFormat::Hdr10;
-    default:
-      return HdrFormat::Sdr;
-  }
-}
-
+// format still describes the DLSS output.
 static HdrFormat GradeFormat(const PassRun& run, ID3D12Resource* target) {
   if (run.hdr_uniforms_ready && target == run.model_color) {
     return HdrFormat::Sdr;
   }
-  return FormatFromResource(target);
+  return target != nullptr ? DetectFormatFromDxgi(target->GetDesc().Format)
+                           : HdrFormat::Sdr;
 }
 
 PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,

@@ -12,20 +12,8 @@
 
 namespace reshade_dlssnr {
 
-namespace {
-
-constexpr uint32_t kHistogramBins = 256;
-constexpr uint32_t kHistogramBytes = kHistogramBins * sizeof(uint32_t);
-constexpr float kLumaMinLog2 = -12.0f;
-constexpr float kLumaMaxLog2 = 12.0f;
-
-HdrFormat DetectFormatFromResource(ID3D12Resource* resource,
-                                   HdrFormat override) {
-  if (override != HdrFormat::Auto) return override;
-  if (resource == nullptr) return HdrFormat::Sdr;
-
-  const DXGI_FORMAT fmt = resource->GetDesc().Format;
-  switch (fmt) {
+HdrFormat DetectFormatFromDxgi(DXGI_FORMAT format) {
+  switch (format) {
     // Linear float formats — unambiguously HDR.
     case DXGI_FORMAT_R16G16B16A16_FLOAT:
     case DXGI_FORMAT_R11G11B10_FLOAT:
@@ -48,6 +36,20 @@ HdrFormat DetectFormatFromResource(ID3D12Resource* resource,
     default:
       return HdrFormat::Sdr;
   }
+}
+
+namespace {
+
+constexpr uint32_t kHistogramBins = 256;
+constexpr uint32_t kHistogramBytes = kHistogramBins * sizeof(uint32_t);
+constexpr float kLumaMinLog2 = -12.0f;
+constexpr float kLumaMaxLog2 = 12.0f;
+
+HdrFormat DetectFormatFromResource(ID3D12Resource* resource,
+                                   HdrFormat override) {
+  if (override != HdrFormat::Auto) return override;
+  if (resource == nullptr) return HdrFormat::Sdr;
+  return DetectFormatFromDxgi(resource->GetDesc().Format);
 }
 
 float FormatToShaderValue(HdrFormat format) {

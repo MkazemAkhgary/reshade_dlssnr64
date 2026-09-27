@@ -45,6 +45,10 @@ struct HdrSnapshot {
   uint32_t samples = 0;          // total pixels sampled in the last histogram
 };
 
+// Maps a DXGI format to the HdrFormat the shaders should treat it as. The
+// single definition; every format detection in the addon routes through it.
+HdrFormat DetectFormatFromDxgi(DXGI_FORMAT format);
+
 class HdrState {
  public:
   bool Ensure(ID3D12Device* device);

@@ -12,21 +12,6 @@ namespace reshade_dlssnr {
 namespace {
 std::mutex g_direct_mutex;
 
-// The backbuffer's own format is the encoding the grade reads and writes.
-// Resolving it from HdrState would give the DLSS output's format instead,
-// which is a different resource and not necessarily the same encoding.
-HdrFormat FormatFromDxgi(DXGI_FORMAT format) {
-  switch (format) {
-    case DXGI_FORMAT_R16G16B16A16_FLOAT:
-    case DXGI_FORMAT_R11G11B10_FLOAT:
-      return HdrFormat::ScRgb;
-    case DXGI_FORMAT_R10G10B10A2_UNORM:
-      return HdrFormat::Hdr10;
-    default:
-      return HdrFormat::Sdr;
-  }
-}
-
 // Creates a UAV-capable texture matching `desc`.
 //
 // The grade copies its source into this and then dispatches back over the
@@ -206,7 +191,7 @@ void AddonController::GradeBackbuffer(ComputeEngine& codec,
 
   const bool graded = model_pipeline::ApplyGrade(
       release_command_, list, &codec, grade_scratch_out_.Get(),
-      grade_scratch_.Get(), width, height, FormatFromDxgi(desc.Format), grade);
+      grade_scratch_.Get(), width, height, DetectFormatFromDxgi(desc.Format), grade);
 
   if (!graded) {
     TRACE_EVT(this, "grade_backbuffer_failed");
