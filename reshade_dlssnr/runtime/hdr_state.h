@@ -38,11 +38,17 @@ struct HdrSnapshot {
   // Raw measurement, for the diagnostics UI. Populated whenever a fresh
   // histogram has been consumed. `has_histogram` is false until then.
   bool has_histogram = false;
-  uint32_t histogram[256] = {};
+  uint32_t histogram[256] = {};       // depth-filtered global
+  uint32_t histogram_skin[256] = {};  // skin pixels only
   float p50_luma = 0.0f;         // scene median, before exposure
   float p_hi_luma = 0.0f;        // white-point percentile, before exposure
   float target_exposure = 1.0f;  // value the EMA is chasing
   uint32_t samples = 0;          // total pixels sampled in the last histogram
+
+  // Which histogram the exposure median was taken from, and how much of the
+  // frame was skin. Diagnostics only.
+  float skin_fraction = 0.0f;
+  bool target_is_skin = false;
 };
 
 // Maps a DXGI format to the HdrFormat the shaders should treat it as. The
@@ -58,11 +64,16 @@ class HdrState {
   // is the image to measure (typically the captured DLSS output clone).
   // `codec` is any ComputeEngine; the histogram passes are dispatched on
   // `command_list`, which is the game's list.
+  // `depth` may be null when the game does not provide a depth guide; the
+  // histogram then falls back to the full frame. `depth_inverted` is only
+  // meaningful when `depth` is non-null.
   void BeginFrame(CommandContext& cmd,
                   ID3D12GraphicsCommandList* command_list,
                   ID3D12Resource* source,
                   unsigned int width,
                   unsigned int height,
+                  ID3D12Resource* depth,
+                  bool depth_inverted,
                   const Settings& settings,
                   ComputeEngine& codec);
 
@@ -81,8 +92,9 @@ class HdrState {
 
  private:
   void PollReadback(ID3D12Fence* fence, const Settings& settings);
-  void UpdateExposure(const uint32_t* bins, uint32_t total,
-                      const Settings& settings);
+  // `bins` is the whole two-histogram buffer, 512 entries. The split between
+  // global and skin is decided here.
+  void UpdateExposure(const uint32_t* bins, const Settings& settings);
 
   Microsoft::WRL::ComPtr<ID3D12Device> device_;
   Microsoft::WRL::ComPtr<ID3D12Resource> histogram_;
@@ -107,10 +119,13 @@ class HdrState {
   // Diagnostics: last measured histogram and the values derived from it.
   bool have_histogram_ = false;
   uint32_t last_histogram_[256] = {};
+  uint32_t last_histogram_skin_[256] = {};
   float p50_luma_ = 0.0f;
   float p_hi_luma_ = 0.0f;
   float target_exposure_ = 1.0f;
   uint32_t last_samples_ = 0;
+  float skin_fraction_ = 0.0f;
+  bool target_is_skin_ = false;
 };
 
 }  // namespace reshade_dlssnr
