@@ -64,8 +64,8 @@ PipelineStatus AddonController::RunPassStage(const PipelineStageDef& stage,
 
   return passes_[pass_index].RunStage(
       stage, settings, codec_, runtime_, command_list, output_resource,
-      is_first_pass, frame_debug_, &hdr_, &pass1_command_, command_queue,
-      swapchain);
+      is_first_pass, frame_debug_, &hdr_, &pass1_command_, &skin_detect_,
+      command_queue, swapchain);
 }
 
 PipelineStatus AddonController::RunSingleStage(
@@ -489,6 +489,7 @@ void AddonController::Shutdown() {
   grade_scratch_format_ = DXGI_FORMAT_UNKNOWN;
   pass1_command_.Shutdown();
   codec_.Destroy();
+  skin_detect_.Shutdown(runtime_);
   hdr_.Shutdown();
   hdr_initialized_ = false;
   frame_debug_.Release();

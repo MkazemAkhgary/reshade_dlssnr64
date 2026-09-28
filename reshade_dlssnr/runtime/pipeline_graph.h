@@ -42,6 +42,7 @@ class HdrState;
 class NgxRuntime;
 class PassResources;
 class PassSession;
+class SkinDetect;
 struct FrameDebugContext;
 struct PassSettings;
 struct PipelineStageDef;
@@ -79,52 +80,55 @@ enum class PipelineNodeId : uint32_t {
   // once per process, not once per frame, and must succeed before BeginFrame
   // can touch the histogram buffer.
   EnsureHdr = 9,
-  HdrBeginFrame = 10,
-  HistogramZero = 11,      // dispatches "ZeroHistogram"
-  HistogramBuild = 12,     // dispatches "BuildHistogram"
-  HistogramReadback = 13,  // leaves histogram in COPY_SOURCE for the readback
+  // Model-driven skin detection. Runs before HdrBeginFrame so the histogram
+  // can sample the mask on the frame it was written.
+  SkinDetect = 10,
+  HdrBeginFrame = 11,
+  HistogramZero = 12,      // dispatches "ZeroHistogram"
+  HistogramBuild = 13,     // dispatches "BuildHistogram"
+  HistogramReadback = 14,  // leaves histogram in COPY_SOURCE for the readback
 
   // -- model input ----------------------------------------------------------
-  ResolveModelInput = 14,  // first pass -> guide color; else scratch snapshot
-  BuildHdrUniforms = 15,
-  TonemapForward = 16,     // dispatches "TonemapForward"
-  PrepareModelInput = 17,  // dispatches "PrepareModelInput"
+  ResolveModelInput = 15,  // first pass -> guide color; else scratch snapshot
+  BuildHdrUniforms = 16,
+  TonemapForward = 17,     // dispatches "TonemapForward"
+  PrepareModelInput = 18,  // dispatches "PrepareModelInput"
   // Grades the image the model is about to read. Follows PrepareModelInput
   // because that is what fills the working input, and precedes the evaluate
   // because that is what consumes it.
-  GradeModelInput = 18,
+  GradeModelInput = 19,
 
   // -- model evaluation -----------------------------------------------------
-  EnsureFeature = 19,
+  EnsureFeature = 20,
   // Re-reads the guide state. Must follow EnsureFeature: creating the NGX
   // feature can make the game re-capture its DLSS guides, so a snapshot taken
   // before the feature exists can be stale — or entirely invalid on the first
   // frame. Both stages take the snapshot at exactly this point.
-  SnapshotGuides = 20,
-  FillEvaluateParams = 21,
-  EvaluateFeature = 22,
-  ModelOutputBarrier = 23, // UavBarrier on the model output
+  SnapshotGuides = 21,
+  FillEvaluateParams = 22,
+  EvaluateFeature = 23,
+  ModelOutputBarrier = 24, // UavBarrier on the model output
 
   // -- composition ----------------------------------------------------------
-  ComposeModelOutput = 24,    // dispatches "ComposeModelOutput"
-  ComposeModelOutputHdr = 25, // dispatches "ComposeModelOutputHdr"
+  ComposeModelOutput = 25,    // dispatches "ComposeModelOutput"
+  ComposeModelOutputHdr = 26, // dispatches "ComposeModelOutputHdr"
   // Grades the model's own output, before anything publishes it.
-  GradeModelOutput = 26,
+  GradeModelOutput = 27,
 
   // -- output ---------------------------------------------------------------
-  RenderDebugView = 27,      // dispatches "DebugDisplay"
-  WriteToBackbuffer = 28,
-  WriteToGameResource = 29,
-  SubmitAndWait = 30,        // Present stage only
+  RenderDebugView = 28,      // dispatches "DebugDisplay"
+  WriteToBackbuffer = 29,
+  WriteToGameResource = 30,
+  SubmitAndWait = 31,        // Present stage only
 
   // -- release stage --------------------------------------------------------
   // Grades the final backbuffer. Listed first in the Release stage on purpose:
   // the debug-present override replaces the backbuffer wholesale, so grading
   // before it keeps a debug view showing the pipeline's own output rather than
   // a graded version of it.
-  GradeBackbuffer = 31,
-  WriteDebugToBackbuffer = 32, // dispatches "DebugDisplay"
-  SignalHdrAtPresent = 33,
+  GradeBackbuffer = 32,
+  WriteDebugToBackbuffer = 33, // dispatches "DebugDisplay"
+  SignalHdrAtPresent = 34,
 
   Count
 };
@@ -180,6 +184,7 @@ struct PassRun {
   ComputeEngine* codec = nullptr;
   NgxRuntime* runtime = nullptr;
   HdrState* hdr = nullptr;                 // null in the Present stage
+  SkinDetect* skin_detect = nullptr;       // null in the Present stage
   // Scratch command context the HDR histogram records through. Owned by the
   // controller; null when the stage never touches HDR.
   CommandContext* hdr_cmd = nullptr;
@@ -635,6 +640,7 @@ inline constexpr PipelineNodeId kPostDlssStepNodes[] = {
     PipelineNodeId::ResolveDevice,
     PipelineNodeId::EnsureHdr,
     PipelineNodeId::EnsureComputeEngine,
+    PipelineNodeId::SkinDetect,
     PipelineNodeId::HdrBeginFrame,
     PipelineNodeId::ResolveWorkingScale,
     PipelineNodeId::EnsureFrameResources,
@@ -666,6 +672,7 @@ inline constexpr PipelineNodeId kReleaseStepNodes[] = {
 // does not own is required. FindPipelineStep() consults them in order.
 const PipelineStepDef* SessionStepFor(PipelineNodeId id);
 const PipelineStepDef* HdrStepFor(PipelineNodeId id);
+const PipelineStepDef* SkinDetectStepFor(PipelineNodeId id);
 const PipelineStepDef* DebugStepFor(PipelineNodeId id);
 const PipelineStepDef* ControllerStepFor(PipelineNodeId id);
 

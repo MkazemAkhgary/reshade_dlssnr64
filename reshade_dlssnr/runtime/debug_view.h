@@ -51,6 +51,15 @@ struct DebugSnapshot {
   ID3D12Resource* depth = nullptr;
   unsigned int depth_width = 0;
   unsigned int depth_height = 0;
+
+  // Skin detection, when the pass ran this frame. Input and output are at
+  // detect scale (working scale of the detection pass); the mask is at the
+  // same scale and format R8_UNORM.
+  ID3D12Resource* skin_detect_input = nullptr;
+  ID3D12Resource* skin_detect_output = nullptr;
+  ID3D12Resource* skin_mask = nullptr;
+  unsigned int skin_detect_width = 0;
+  unsigned int skin_detect_height = 0;
 };
 
 // How the display shader should interpret the selected resource.
@@ -58,6 +67,7 @@ enum class DebugDisplayMode : uint32_t {
   Color = 0,   // pass through as RGB
   Motion = 1,  // remap [-1,1] xy to [0,1] and show as R=x, G=y
   Depth = 2,   // replicate the red channel
+  Mask = 3,    // replicate the red channel (skin mask)
 };
 
 struct DebugViewDef {

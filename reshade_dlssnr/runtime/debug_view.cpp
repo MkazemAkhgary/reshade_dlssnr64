@@ -50,6 +50,27 @@ ID3D12Resource* SelectDepth(const DebugSnapshot& s,
   return s.depth;
 }
 
+ID3D12Resource* SelectSkinDetectInput(const DebugSnapshot& s,
+                                      unsigned int* w, unsigned int* h) {
+  *w = s.skin_detect_width;
+  *h = s.skin_detect_height;
+  return s.skin_detect_input;
+}
+
+ID3D12Resource* SelectSkinDetectOutput(const DebugSnapshot& s,
+                                       unsigned int* w, unsigned int* h) {
+  *w = s.skin_detect_width;
+  *h = s.skin_detect_height;
+  return s.skin_detect_output;
+}
+
+ID3D12Resource* SelectSkinMask(const DebugSnapshot& s,
+                               unsigned int* w, unsigned int* h) {
+  *w = s.skin_detect_width;
+  *h = s.skin_detect_height;
+  return s.skin_mask;
+}
+
 }  // namespace
 
 const DebugViewDef kDebugViews[] = {
@@ -76,6 +97,18 @@ const DebugViewDef kDebugViews[] = {
     {"Depth",
      "The depth buffer the game supplied to DLSS. Shown as grayscale.",
      DebugDisplayMode::Depth, SelectDepth},
+    {"Skin Detect Input",
+     "The image the skin-detection pass fed to the model (after HDR "
+     "normalization and resize).",
+     DebugDisplayMode::Color, SelectSkinDetectInput},
+    {"Skin Detect Output",
+     "The model's raw output from the skin-detection pass. The mask is "
+     "derived from the difference against the input.",
+     DebugDisplayMode::Color, SelectSkinDetectOutput},
+    {"Skin Mask",
+     "White = the model classified the pixel as skin. This is what gates "
+     "the HDR skin histogram.",
+     DebugDisplayMode::Mask, SelectSkinMask},
     {nullptr, nullptr, DebugDisplayMode::Color, nullptr},
 };
 

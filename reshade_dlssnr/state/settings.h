@@ -250,6 +250,14 @@ struct Settings {
   // metering on too few pixels. Applies only when depth is available.
   float hdr_depth_fallback_fraction = 0.20f;
 
+  // Skin detection: run the model at reduced scale with tone/structure edits
+  // suppressed and skin edits on, threshold the difference against its input.
+  // The mask replaces the histogram's hue-based classifier. DLSS Output only.
+  bool skin_detect_enable = false;
+  float skin_detect_scale = 0.25f;
+  float skin_detect_luma_threshold = 0.02f;
+  float skin_detect_chroma_threshold = 0.02f;
+
   // ---------------------------------------------------------------------
   // Final backbuffer grade. Runs once per frame, after every pass, on the
   // swapchain backbuffer itself — the last thing before the game presents.
@@ -273,6 +281,7 @@ struct Settings {
   bool ui_hdr_open = true;
   bool ui_grade_open = true;
   bool ui_hdr_diagnostics_open = false;
+  bool ui_skin_detect_open = true;
 };
 
 Settings& GetSettings();

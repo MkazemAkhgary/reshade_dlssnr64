@@ -1728,6 +1728,47 @@ void DrawOverlay(reshade::api::effect_runtime*) {
     if (!hdr_relevant) ImGui::EndDisabled();
   }
 
+  SectionDivider();
+
+  // --- Skin detection (shared across passes; DLSS Output only) ---
+  if (PersistentHeader("Skin Detection", settings.ui_skin_detect_open,
+                       changed)) {
+    changed |= ImGui::Checkbox("Enable Skin Detection",
+                               &settings.skin_detect_enable);
+    if (ImGui::IsItemHovered()) {
+      Tip(
+          "Run the model at reduced resolution with tone and structure "
+          "edits suppressed and skin edits on, and threshold the "
+          "difference against its input to build a per-pixel skin mask.\n"
+          "The mask replaces the histogram's hue-based classifier. When "
+          "off, the hue classifier is used.\n"
+          "DLSS Output only.");
+    }
+
+    WithDisabled(!settings.skin_detect_enable, [&] {
+      changed |= DrawFloatRow(
+          0, "skin_detect_scale", "Detection Scale",
+          "Fraction of the frame the detection model runs at.\n"
+          "Lower values are cheaper but blur the mask at edges.",
+          &settings.skin_detect_scale, nullptr, 0.0f,
+          0.10f, 1.0f, 0.25f);
+
+      changed |= DrawFloatRow(
+          0, "skin_detect_luma_threshold", "Luma Threshold",
+          "Minimum absolute luma difference between the model's input and "
+          "output for a pixel to count as skin.",
+          &settings.skin_detect_luma_threshold, nullptr, 0.0f,
+          0.0f, 0.5f, 0.02f);
+
+      changed |= DrawFloatRow(
+          0, "skin_detect_chroma_threshold", "Chroma Threshold",
+          "Minimum chroma difference between the model's input and output "
+          "for a pixel to count as skin.",
+          &settings.skin_detect_chroma_threshold, nullptr, 0.0f,
+          0.0f, 0.5f, 0.02f);
+    });
+  }
+
   if (changed) {
     SaveSettings();
   }

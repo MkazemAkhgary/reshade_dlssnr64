@@ -499,6 +499,12 @@ Snapshot BuildSnapshot(const Settings& settings) {
          FloatText(settings.hdr_skin_fraction_threshold));
   Append(snap, "hdr_depth_fallback_fraction",
          FloatText(settings.hdr_depth_fallback_fraction));
+  Append(snap, "skin_detect_enable", BoolText(settings.skin_detect_enable));
+  Append(snap, "skin_detect_scale", FloatText(settings.skin_detect_scale));
+  Append(snap, "skin_detect_luma_threshold",
+         FloatText(settings.skin_detect_luma_threshold));
+  Append(snap, "skin_detect_chroma_threshold",
+         FloatText(settings.skin_detect_chroma_threshold));
   AppendGrade(snap, "grade_backbuffer", settings.grade_backbuffer);
 
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
@@ -611,6 +617,22 @@ void LoadSettings() {
   if (g_settings.hdr_depth_fallback_fraction > 0.95f)
     g_settings.hdr_depth_fallback_fraction = 0.95f;
 
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.Enable",
+                            g_settings.skin_detect_enable);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.Scale",
+                            g_settings.skin_detect_scale);
+  if (g_settings.skin_detect_scale < 0.10f) g_settings.skin_detect_scale = 0.10f;
+  if (g_settings.skin_detect_scale > 1.0f) g_settings.skin_detect_scale = 1.0f;
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.LumaThreshold",
+                            g_settings.skin_detect_luma_threshold);
+  if (g_settings.skin_detect_luma_threshold < 0.0f)
+    g_settings.skin_detect_luma_threshold = 0.0f;
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "SkinDetect.ChromaThreshold",
+                            g_settings.skin_detect_chroma_threshold);
+  if (g_settings.skin_detect_chroma_threshold < 0.0f)
+    g_settings.skin_detect_chroma_threshold = 0.0f;
+
   LoadGrade("Grade.Backbuffer.", g_settings.grade_backbuffer);
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.StatusOpen",
@@ -621,6 +643,8 @@ void LoadSettings() {
                             g_settings.ui_grade_open);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.HdrDiagnosticsOpen",
                             g_settings.ui_hdr_diagnostics_open);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.SkinDetectOpen",
+                            g_settings.ui_skin_detect_open);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.ModelOpen",
                             g_settings.ui_model_open);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.ResidualOpen",
@@ -696,6 +720,17 @@ void SaveSettings() {
                             "Hdr.DepthFallbackFraction",
                             g_settings.hdr_depth_fallback_fraction);
 
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.Enable",
+                            g_settings.skin_detect_enable);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.Scale",
+                            g_settings.skin_detect_scale);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            "SkinDetect.LumaThreshold",
+                            g_settings.skin_detect_luma_threshold);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            "SkinDetect.ChromaThreshold",
+                            g_settings.skin_detect_chroma_threshold);
+
   SaveGrade("Grade.Backbuffer.", g_settings.grade_backbuffer);
 
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.StatusOpen",
@@ -706,6 +741,8 @@ void SaveSettings() {
                             g_settings.ui_grade_open);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.HdrDiagnosticsOpen",
                             g_settings.ui_hdr_diagnostics_open);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.SkinDetectOpen",
+                            g_settings.ui_skin_detect_open);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.ModelOpen",
                             g_settings.ui_model_open);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.ResidualOpen",

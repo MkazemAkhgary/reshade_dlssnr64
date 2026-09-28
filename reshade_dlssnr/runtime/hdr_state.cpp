@@ -9,6 +9,7 @@
 #include "d3d12_utils.h"
 #include "pipeline_graph.h"
 #include "pipeline_trace.h"
+#include "skin_detect.h"
 
 namespace reshade_dlssnr {
 
@@ -208,6 +209,7 @@ void HdrState::BeginFrame(CommandContext& cmd,
                           unsigned int height,
                           ID3D12Resource* depth,
                           bool depth_inverted,
+                          ID3D12Resource* mask,
                           const Settings& settings,
                           ComputeEngine& codec) {
   enabled_ = settings.hdr_enable;
@@ -276,9 +278,10 @@ void HdrState::BeginFrame(CommandContext& cmd,
   constants.params[0] = FormatToShaderValue(resolved_format_);
   constants.params[1] = kLumaMinLog2;
   constants.params[2] = kLumaMaxLog2;
-  // gParams[1] in the shader: depth availability and orientation.
+  // gParams[1] in the shader: depth availability, orientation, mask bound.
   constants.params[4] = depth != nullptr ? 1.0f : 0.0f;
   constants.params[5] = depth_inverted ? 1.0f : 0.0f;
+  constants.params[6] = mask != nullptr ? 1.0f : 0.0f;
 
   // Seed the state tracker with the actual current states. Without this,
   // inference would guess from the resource descriptor, which is wrong for
@@ -297,11 +300,17 @@ void HdrState::BeginFrame(CommandContext& cmd,
     cmd.SetResourceState(depth,
                          D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   }
+  // The mask was left UAV by the skin-detect pass.
+  if (mask != nullptr) {
+    cmd.SetResourceState(mask, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  }
 
-  // The shader reads depth from t1 when available; otherwise it uses the
-  // kHasDepth flag and skips the sample, so binding source there is safe.
+  // The shader reads depth from t1 and the skin mask from t2 when each is
+  // available; otherwise the kHasDepth / kHasMask flags skip the sample, so
+  // binding source there is safe.
   ID3D12Resource* depth_srv = depth != nullptr ? depth : source;
-  ID3D12Resource* srvs[kSrvCount] = {source, depth_srv, source};
+  ID3D12Resource* mask_srv = mask != nullptr ? mask : source;
+  ID3D12Resource* srvs[kSrvCount] = {source, depth_srv, mask_srv};
   ID3D12Resource* uavs[kUavCount] = {histogram_.Get()};
 
   cmd.Transition(command_list, source,
@@ -310,6 +319,10 @@ void HdrState::BeginFrame(CommandContext& cmd,
                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   if (depth != nullptr) {
     cmd.Transition(command_list, depth,
+                   D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
+  if (mask != nullptr) {
+    cmd.Transition(command_list, mask,
                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   }
 
@@ -512,9 +525,12 @@ PipelineStatus RunHdrBeginFrame(PassRun& run) {
   // exposure flicker from camera movement. The guide is only valid together
   // with motion, so a valid guide implies a non-null depth clone.
   ID3D12Resource* depth = run.guides.valid ? run.guides.depth : nullptr;
+  ID3D12Resource* mask = (run.skin_detect != nullptr)
+                             ? run.skin_detect->GetOutput().mask
+                             : nullptr;
   run.hdr->BeginFrame(*run.hdr_cmd, run.list, run.guides.dlss_output_color,
                       run.guides.output_width, run.guides.output_height,
-                      depth, run.guides.depth_inverted,
+                      depth, run.guides.depth_inverted, mask,
                       *run.settings, *run.codec);
   return PipelineStatus::Ok;
 }
@@ -528,6 +544,7 @@ PipelineStatus RunHistogramPlaceholder(PassRun&) { return PipelineStatus::Ok; }
 // runtime lookup in HdrStepFor below and still fail the assertion at the end
 // of this namespace with C2131.
 constexpr PipelineNodeId kHdrBeginRequires[] = {PipelineNodeId::EnsureComputeEngine,
+                                                PipelineNodeId::SkinDetect,
                                                 PipelineNodeId::Count};
 constexpr PipelineNodeId kHistogramRequires[] = {PipelineNodeId::HdrBeginFrame,
                                                  PipelineNodeId::Count};

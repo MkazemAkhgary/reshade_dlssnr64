@@ -79,6 +79,9 @@ class HdrState {
   // `depth` may be null when the game does not provide a depth guide; the
   // histogram then falls back to the full frame. `depth_inverted` is only
   // meaningful when `depth` is non-null.
+  //
+  // `mask` may be null; when non-null it is an R8 skin mask at detect scale
+  // and replaces the shader's hue classifier for the skin histogram.
   void BeginFrame(CommandContext& cmd,
                   ID3D12GraphicsCommandList* command_list,
                   ID3D12Resource* source,
@@ -86,6 +89,7 @@ class HdrState {
                   unsigned int height,
                   ID3D12Resource* depth,
                   bool depth_inverted,
+                  ID3D12Resource* mask,
                   const Settings& settings,
                   ComputeEngine& codec);
 

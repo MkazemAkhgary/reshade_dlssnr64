@@ -18,6 +18,7 @@
 #include "pipeline_graph.h"
 #include "runtime.h"
 #include "settings.h"
+#include "skin_detect.h"
 #include "status.h"
 
 namespace reshade_dlssnr {
@@ -107,6 +108,10 @@ class AddonController {
   bool HdrInitialized() const { return hdr_initialized_; }
   bool EnsureHdr(ID3D12Device* device);
 
+  // The model-driven skin detection pass. Owned here rather than per-pass
+  // because one mask per frame drives the shared HDR histogram.
+  SkinDetect& GetSkinDetect() { return skin_detect_; }
+
  private:
   AddonController() {
     passes_.reserve(kMaxPasses);
@@ -158,6 +163,7 @@ class AddonController {
   std::vector<PassSession> passes_;
   FrameDebugContext frame_debug_;
   HdrState hdr_;
+  SkinDetect skin_detect_;
 
   // The Release stage's command list, opened on demand by
   // BeginReleaseCommands and submitted by EndReleaseCommands.

@@ -12,6 +12,7 @@
 #include "ngx_model_params.h"
 #include "pipeline_graph.h"
 #include "pipeline_trace.h"
+#include "skin_detect.h"
 #include "streamline_compat.h"
 
 namespace reshade_dlssnr {
@@ -390,6 +391,7 @@ void PassSession::PrepareRun(PassRun& run,
                              FrameDebugContext& frame_debug,
                              HdrState* hdr,
                              CommandContext* hdr_cmd,
+                             SkinDetect* skin_detect,
                              ID3D12CommandQueue* command_queue,
                              IDXGISwapChain* swapchain) {
   run.session = this;
@@ -400,6 +402,7 @@ void PassSession::PrepareRun(PassRun& run,
   run.runtime = &runtime;
   run.hdr = hdr;
   run.hdr_cmd = hdr_cmd;
+  run.skin_detect = skin_detect;
   run.frame_debug = &frame_debug;
 
   run.settings = &settings;
@@ -426,6 +429,7 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
                                      FrameDebugContext& frame_debug,
                                      HdrState* hdr,
                                      CommandContext* hdr_cmd,
+                                     SkinDetect* skin_detect,
                                      ID3D12CommandQueue* command_queue,
                                      IDXGISwapChain* swapchain) {
   // The pre-refactor entry points were serialized against each other with this
@@ -455,7 +459,8 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
 
   PassRun run;
   PrepareRun(run, settings, codec, runtime, command_list, output_resource,
-             is_first_pass, frame_debug, hdr, hdr_cmd, command_queue, swapchain);
+             is_first_pass, frame_debug, hdr, hdr_cmd, skin_detect,
+             command_queue, swapchain);
 
   const PipelineStatus status = PipelineRunner::RunStage(stage, run);
 
@@ -1229,6 +1234,16 @@ PipelineStatus PassSession::StepRenderDebugView(PassRun& run) {
   debug.composed_output = self->resources_.GetCompositeOutput();
   debug.composed_output_width = run.width;
   debug.composed_output_height = run.height;
+  if (run.skin_detect != nullptr) {
+    const SkinDetect::Output& sd = run.skin_detect->GetOutput();
+    if (sd.valid) {
+      debug.skin_detect_input = sd.detect_input;
+      debug.skin_detect_output = sd.detect_output;
+      debug.skin_mask = sd.mask;
+      debug.skin_detect_width = sd.width;
+      debug.skin_detect_height = sd.height;
+    }
+  }
   if (run.guides_valid) {
     debug.motion = run.guides.motion;
     debug.motion_width = run.guides.guide_width;

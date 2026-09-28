@@ -27,6 +27,7 @@ const char* const kNodeNames[] = {
     "SeedResourceStates",
     "SeedGuideStates",
     "EnsureHdr",
+    "SkinDetect",
     "HdrBeginFrame",
     "HistogramZero",
     "HistogramBuild",
@@ -115,6 +116,7 @@ const PipelineStepDef* const* StepIndex() {
   const Source sources[] = {
       {"pass_session.cpp", &SessionStepFor},
       {"hdr_state.cpp", &HdrStepFor},
+      {"skin_detect.cpp", &SkinDetectStepFor},
       {"debug_view.cpp", &DebugStepFor},
       {"addon_controller.cpp", &ControllerStepFor},
   };
@@ -241,6 +243,7 @@ constexpr PipelineNodeId kPostDlssSteps[] = {
     // and silently skip HDR measurement every frame.
     PipelineNodeId::EnsureHdr,
     PipelineNodeId::EnsureComputeEngine,  // codec.Init + IsReady
+    PipelineNodeId::SkinDetect,
     PipelineNodeId::HdrBeginFrame,
     PipelineNodeId::ResolveWorkingScale,
     PipelineNodeId::EnsureFrameResources, // includes SetRetireCallback
@@ -262,14 +265,15 @@ constexpr PipelineNodeId kPostDlssSteps[] = {
 };
 
 constexpr PipelinePhaseDef kPostDlssPhases[] = {
-    {"setup", 0, 4, nullptr},   // ResolveDevice, EnsureHdr,
-                                // EnsureComputeEngine, HdrBeginFrame
-    {"resources", 4, 4, nullptr},
-    {"feature", 8, 3, nullptr},
-    {"prepare", 11, 3, nullptr},
-    {"evaluate", 14, 3, nullptr},
-    {"compose", 17, 2, nullptr},
-    {"output", 19, 2, nullptr},
+    {"setup", 0, 5, nullptr},   // ResolveDevice, EnsureHdr,
+                                // EnsureComputeEngine, SkinDetect,
+                                // HdrBeginFrame
+    {"resources", 5, 4, nullptr},
+    {"feature", 9, 3, nullptr},
+    {"prepare", 12, 3, nullptr},
+    {"evaluate", 15, 3, nullptr},
+    {"compose", 18, 2, nullptr},
+    {"output", 20, 2, nullptr},
 };
 
 // -- Release stage ----------------------------------------------------------

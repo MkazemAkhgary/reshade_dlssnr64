@@ -212,14 +212,17 @@ cbuffer Params : register(b0)
 // gParams[0].z = luma max log2 (histogram range high edge)
 // gParams[1].x = depth available (1 = yes, 0 = no)
 // gParams[1].y = depth inverted (1 = 0 is far, 0 = 0 is near)
+// gParams[1].z = skin mask bound (1 = yes; use t2 instead of the hue test)
 #define kFormat         gParams[0].x
 #define kLumaMinLog2    gParams[0].y
 #define kLumaMaxLog2    gParams[0].z
 #define kHasDepth       gParams[1].x
 #define kDepthInverted  gParams[1].y
+#define kHasMask        gParams[1].z
 
-Texture2D<float4> gSource : register(t0);
-Texture2D<float4> gDepth  : register(t1);
+Texture2D<float4> gSource   : register(t0);
+Texture2D<float4> gDepth    : register(t1);
+Texture2D<float4> gSkinMask : register(t2);
 RWBuffer<uint>    gHistogram : register(u0);
 SamplerState      s0 : register(s0);
 
@@ -310,9 +313,9 @@ void CSMain(uint3 gid : SV_GroupID,
         // Full frame, always.
         InterlockedAdd(gSharedHist[bin], 1u);
 
+        float2 uv = (float2(dtid.xy) + 0.5) / float2(gWidth, gHeight);
         bool sky = false;
         if (kHasDepth > 0.5) {
-            float2 uv = (float2(dtid.xy) + 0.5) / float2(gWidth, gHeight);
             float d = gDepth.SampleLevel(s0, uv, 0).r;
             sky = IsSky(d);
         }
@@ -320,7 +323,14 @@ void CSMain(uint3 gid : SV_GroupID,
             InterlockedAdd(gSharedHist[kHistogramStride + bin], 1u);
         }
 
-        if (!sky && IsSkin(lin)) {
+        // Model mask when bound; hue classifier otherwise.
+        bool is_skin;
+        if (kHasMask > 0.5) {
+            is_skin = gSkinMask.SampleLevel(s0, uv, 0).r > 0.5;
+        } else {
+            is_skin = IsSkin(lin);
+        }
+        if (!sky && is_skin) {
             InterlockedAdd(gSharedHist[2u * kHistogramStride + bin], 1u);
         }
     }
@@ -334,6 +344,49 @@ void CSMain(uint3 gid : SV_GroupID,
 }
 )";
 
+constexpr const char* kSkinMaskDiff = R"(
+cbuffer Params : register(b0)
+{
+    uint  gWidth;
+    uint  gHeight;
+    float4 gParams[12];
+};
+
+// gParams[0].x = luma threshold
+// gParams[0].y = chroma threshold
+#define kLumaThreshold   gParams[0].x
+#define kChromaThreshold gParams[0].y
+
+Texture2D<float4> gInput  : register(t0);
+Texture2D<float4> gOutput : register(t1);
+RWTexture2D<float> gMask  : register(u0);
+
+static const float3 kLuma709 = float3(0.2126, 0.7152, 0.0722);
+
+[numthreads(8, 8, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= gWidth || id.y >= gHeight) return;
+
+    float3 a = gInput.Load(int3(id.xy, 0)).rgb;
+    float3 b = gOutput.Load(int3(id.xy, 0)).rgb;
+
+    float a_luma = dot(a, kLuma709);
+    float b_luma = dot(b, kLuma709);
+    float luma_diff = abs(b_luma - a_luma);
+
+    float3 chroma_diff = (b - b_luma) - (a - a_luma);
+    float chroma_mag = length(chroma_diff);
+
+    // The model runs with only the skin edit on, so any edit at all marks a
+    // pixel the model classified as skin. Either channel of the diff
+    // crossing its threshold counts.
+    float skin =
+        (luma_diff > kLumaThreshold || chroma_mag > kChromaThreshold) ? 1.0 : 0.0;
+    gMask[id.xy] = skin;
+}
+)";
+
 constexpr const char* kDebugDisplay = R"(
 cbuffer Params : register(b0)
 {
@@ -342,7 +395,7 @@ cbuffer Params : register(b0)
     float4 gParams[12];
 };
 
-// gParams[0].x = display mode (0 color, 1 motion, 2 depth)
+// gParams[0].x = display mode (0 color, 1 motion, 2 depth, 3 mask)
 // gParams[0].y = source content width
 // gParams[0].z = source content height
 // gParams[0].w = source resource width
@@ -375,7 +428,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float3 rgb;
     if (mode == 1) {
         rgb = float3(0.5 + 0.5 * c.x, 0.5 + 0.5 * c.y, 0.0);
-    } else if (mode == 2) {
+    } else if (mode == 2 || mode == 3) {
         rgb = c.rrr;
     } else {
         rgb = c.rgb;
@@ -1594,6 +1647,7 @@ const ComputePassDef kComputePasses[] = {
     {"PrepareModelInput",     kPrepareModelInput,     nullptr},
     {"ComposeModelOutput",    kComposeModelOutput,    kGradePrelude},
     {"ComposeModelOutputHdr", kComposeModelOutputHdr, kGradePrelude},
+    {"SkinMaskDiff",          kSkinMaskDiff,          nullptr},
     {"DebugDisplay",          kDebugDisplay,          nullptr},
     {"ApplyGrade",            kApplyGrade,            nullptr},
 };

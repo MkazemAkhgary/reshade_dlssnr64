@@ -25,6 +25,8 @@
 
 namespace reshade_dlssnr {
 
+class SkinDetect;
+
 class PassSession {
  public:
   PassSession(DlssGuides* guides, uint32_t pass_index)
@@ -48,6 +50,7 @@ class PassSession {
                           FrameDebugContext& frame_debug,
                           HdrState* hdr,
                           CommandContext* hdr_cmd,
+                          SkinDetect* skin_detect,
                           ID3D12CommandQueue* command_queue,
                           IDXGISwapChain* swapchain);
 
@@ -138,6 +141,7 @@ class PassSession {
                   FrameDebugContext& frame_debug,
                   HdrState* hdr,
                   CommandContext* hdr_cmd,
+                  SkinDetect* skin_detect,
                   ID3D12CommandQueue* command_queue,
                   IDXGISwapChain* swapchain);
 
