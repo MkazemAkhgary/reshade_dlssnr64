@@ -180,18 +180,21 @@ bool ApplyGrade(CommandContext& state,
   ComputeConstants constants = {};
   constants.Width = width;
   constants.Height = height;
-  constants.params[kGradeSlotBase + 0] = grade.luma;
-  constants.params[kGradeSlotBase + 1] = grade.chroma;
-  constants.params[kGradeSlotBase + 2] =
-      static_cast<float>(static_cast<int>(grade.luma_mode));
+  // Same layout the prelude and ComposeOutput use. `enabled` is 1 here: the
+  // caller already checked, and GradeLinearFwd reads it.
+  constants.params[kGradeSlotBase + 0] = 1.0f;
+  constants.params[kGradeSlotBase + 1] = grade.luma;
+  constants.params[kGradeSlotBase + 2] = grade.chroma;
   constants.params[kGradeSlotBase + 3] =
+      static_cast<float>(static_cast<int>(grade.luma_mode));
+  constants.params[kGradeSlotBase + 4] =
       static_cast<float>(static_cast<int>(grade.chroma_mode));
-  constants.params[kGradeSlotBase + 4] = grade.black_point;
-  constants.params[kGradeSlotBase + 5] = grade.white_point;
-  constants.params[kGradeSlotBase + 6] = grade.contrast;
-  constants.params[kGradeSlotBase + 7] = grade.shadows;
-  constants.params[kGradeSlotBase + 8] = grade.highlights;
-  constants.params[kGradeSlotBase + 9] =
+  constants.params[kGradeSlotBase + 5] = grade.black_point;
+  constants.params[kGradeSlotBase + 6] = grade.white_point;
+  constants.params[kGradeSlotBase + 7] = grade.contrast;
+  constants.params[kGradeSlotBase + 8] = grade.shadows;
+  constants.params[kGradeSlotBase + 9] = grade.highlights;
+  constants.params[kGradeSlotBase + 10] =
       static_cast<float>(HdrFormatCode(format));
 
   // Same shape as the input snapshot in StepResolveModelInput: park the source
