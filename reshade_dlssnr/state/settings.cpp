@@ -525,6 +525,8 @@ Snapshot BuildSnapshot(const Settings& settings) {
          FloatText(settings.skin_detect_edit_strength));
   Append(snap, "skin_detect_mask_smoothing",
          FloatText(settings.skin_detect_mask_smoothing));
+  Append(snap, "skin_detect_mask_response",
+         FloatText(settings.skin_detect_mask_response));
   Append(snap, "skin_detect_hdr_midtone",
          FloatText(settings.skin_detect_hdr_midtone));
   Append(snap, "skin_detect_hdr_rate_cap",
@@ -707,6 +709,13 @@ void LoadSettings() {
     g_settings.skin_detect_mask_smoothing = 0.0f;
   if (g_settings.skin_detect_mask_smoothing > 1.0f)
     g_settings.skin_detect_mask_smoothing = 1.0f;
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "SkinDetect.MaskResponse",
+                            g_settings.skin_detect_mask_response);
+  if (g_settings.skin_detect_mask_response < 0.0f)
+    g_settings.skin_detect_mask_response = 0.0f;
+  if (g_settings.skin_detect_mask_response > 1.0f)
+    g_settings.skin_detect_mask_response = 1.0f;
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.HdrMidtone",
@@ -866,6 +875,9 @@ void SaveSettings() {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.MaskSmoothing",
                             g_settings.skin_detect_mask_smoothing);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            "SkinDetect.MaskResponse",
+                            g_settings.skin_detect_mask_response);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.HdrMidtone",
                             g_settings.skin_detect_hdr_midtone);

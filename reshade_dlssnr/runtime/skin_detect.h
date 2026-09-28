@@ -52,7 +52,11 @@ class SkinDetect {
   FeatureLifecycle feature_;
   Microsoft::WRL::ComPtr<ID3D12Resource> working_input_;
   Microsoft::WRL::ComPtr<ID3D12Resource> working_output_;
-  Microsoft::WRL::ComPtr<ID3D12Resource> mask_;
+  // Ping-pong: each frame reads the previous frame's mask and writes the
+  // current one, so the shader can blend the new vote against it.
+  Microsoft::WRL::ComPtr<ID3D12Resource> mask_[2];
+  uint32_t mask_index_ = 0;
+  bool mask_valid_ = false;
   unsigned int width_ = 0;
   unsigned int height_ = 0;
   DXGI_FORMAT format_ = DXGI_FORMAT_UNKNOWN;

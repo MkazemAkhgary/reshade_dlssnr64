@@ -66,7 +66,10 @@ void SkinDetect::Shutdown(NgxRuntime& runtime) {
   feature_.Shutdown(runtime);
   working_input_.Reset();
   working_output_.Reset();
-  mask_.Reset();
+  mask_[0].Reset();
+  mask_[1].Reset();
+  mask_index_ = 0;
+  mask_valid_ = false;
   width_ = 0;
   height_ = 0;
   format_ = DXGI_FORMAT_UNKNOWN;
@@ -98,8 +101,12 @@ bool SkinDetect::EnsureResources(ID3D12Device* device,
 
   D3D12_RESOURCE_DESC mask_desc = color_desc;
   mask_desc.Format = DXGI_FORMAT_R8_UNORM;
-  if (!RetireAndCreate(device, mask_, mask_desc)) return false;
+  if (!RetireAndCreate(device, mask_[0], mask_desc)) return false;
+  if (!RetireAndCreate(device, mask_[1], mask_desc)) return false;
 
+  // Fresh pair, no history. First frame after this writes the vote fresh.
+  mask_index_ = 0;
+  mask_valid_ = false;
   width_ = width;
   height_ = height;
   format_ = format;
@@ -138,13 +145,23 @@ bool SkinDetect::Run(CommandContext& cmd,
 
   tuning_ = BuildDetectionTuning(settings);
 
+  const uint32_t cur = mask_index_;
+  const uint32_t prev = 1u - mask_index_;
+  const bool warmup = !mask_valid_;
+
   cmd.SetResourceState(guides.dlss_output_color,
                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   cmd.SetResourceState(working_input_.Get(),
                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   cmd.SetResourceState(working_output_.Get(),
                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  cmd.SetResourceState(mask_.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  cmd.SetResourceState(mask_[cur].Get(),
+                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  // Previous mask is read this frame; seed it as SRV. On warmup it is not
+  // read by the shader (alpha is forced to 1), but the binding is still
+  // valid so the same dispatch shape works for both cases.
+  cmd.SetResourceState(mask_[prev].Get(),
+                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
   cmd.Transition(command_list, guides.dlss_output_color,
                  D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -152,8 +169,10 @@ bool SkinDetect::Run(CommandContext& cmd,
                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   cmd.Transition(command_list, working_output_.Get(),
                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  cmd.Transition(command_list, mask_.Get(),
+  cmd.Transition(command_list, mask_[cur].Get(),
                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  cmd.Transition(command_list, mask_[prev].Get(),
+                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
   // 1. Tonemap + resize into working_input_.
   ComputeConstants constants = {};
@@ -245,23 +264,31 @@ bool SkinDetect::Run(CommandContext& cmd,
   ComputeConstants mask_constants = {};
   mask_constants.Width = work_w;
   mask_constants.Height = work_h;
+  // Response 0..1 -> alpha 0.02..1.0. Warmup forces 1.0 (write fresh, no
+  // blend) so the first frame after a resource (re)creation is not a fade.
+  float alpha = 0.02f + settings.skin_detect_mask_response * 0.98f;
+  if (warmup) alpha = 1.0f;
+
   mask_constants.params[0] = settings.skin_detect_luma_threshold;
   mask_constants.params[1] = settings.skin_detect_luma_relative;
   mask_constants.params[2] = settings.skin_detect_chroma_threshold;
   mask_constants.params[3] = settings.skin_detect_clip_threshold;
   mask_constants.params[4] = settings.skin_detect_edit_strength;
   mask_constants.params[5] = settings.skin_detect_mask_smoothing;
+  mask_constants.params[6] = alpha;
 
   ID3D12Resource* mask_srvs[kSrvCount] = {working_input_.Get(),
                                           working_output_.Get(),
-                                          working_input_.Get()};
-  ID3D12Resource* mask_uavs[kUavCount] = {mask_.Get()};
+                                          mask_[prev].Get()};
+  ID3D12Resource* mask_uavs[kUavCount] = {mask_[cur].Get()};
   if (!codec.Dispatch("SkinMaskDiff", command_list, mask_constants, mask_srvs,
                       mask_uavs)) {
     return false;
   }
 
-  output_.mask = mask_.Get();
+  mask_index_ = prev;
+  mask_valid_ = true;
+  output_.mask = mask_[cur].Get();
   output_.detect_input = working_input_.Get();
   output_.detect_output = working_output_.Get();
   output_.width = work_w;

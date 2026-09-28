@@ -1866,6 +1866,14 @@ void DrawOverlay(reshade::api::effect_runtime*) {
               "can round off the mask's edges.",
               &settings.skin_detect_mask_smoothing, nullptr, 0.5f,
               0.0f, 1.0f, 0.5f);
+
+          changed |= DrawFloatRow(
+              0, "skin_detect_mask_response", "Mask Response",
+              "Temporal EMA on the mask.\n"
+              "Lower values smooth flicker more, at the cost of lagging "
+              "behind quick changes. 1 is per-frame with no smoothing.",
+              &settings.skin_detect_mask_response, nullptr, 0.15f,
+              0.0f, 1.0f, 0.15f);
         }
       }
 

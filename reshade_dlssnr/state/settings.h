@@ -279,6 +279,8 @@ struct Settings {
   // the model produces) and mask smoothing (majority-vote radius, 0..1).
   float skin_detect_edit_strength = 1.0f;
   float skin_detect_mask_smoothing = 0.5f;
+  // Temporal EMA on the mask. 0 = frozen, 1 = per-frame (no smoothing).
+  float skin_detect_mask_response = 0.15f;
 
   // HDR response for the detection pass's own exposure tracker. Independent
   // of the regular-pass HDR settings. The depth fallback defaults to 1.0 so

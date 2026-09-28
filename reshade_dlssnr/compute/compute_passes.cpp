@@ -358,16 +358,19 @@ cbuffer Params : register(b0)
 // gParams[0].w = saturation bound
 // gParams[1].x = edit strength (amplifies the model's diff)
 // gParams[1].y = mask smoothing (0..1 -> majority radius 0..2)
+// gParams[1].z = temporal EMA alpha
 #define kLumaAbs       gParams[0].x
 #define kLumaRel       gParams[0].y
 #define kChromaAbs     gParams[0].z
 #define kSatBound      gParams[0].w
 #define kEditStrength  gParams[1].x
 #define kMaskSmoothing gParams[1].y
+#define kMaskAlpha     gParams[1].z
 
-Texture2D<float4> gInput  : register(t0);
-Texture2D<float4> gOutput : register(t1);
-RWTexture2D<float> gMask  : register(u0);
+Texture2D<float4> gInput    : register(t0);
+Texture2D<float4> gOutput   : register(t1);
+Texture2D<float>  gPrevMask : register(t2);
+RWTexture2D<float> gMask    : register(u0);
 
 static const float3 kLuma709 = float3(0.2126, 0.7152, 0.0722);
 
@@ -422,7 +425,9 @@ void CSMain(uint3 id : SV_DispatchThreadID)
             if (PixelIsSkin(p)) hits++;
         }
     }
-    gMask[id.xy] = (total > 0 && hits * 2 >= total) ? 1.0 : 0.0;
+    float vote = (total > 0 && hits * 2 >= total) ? 1.0 : 0.0;
+    float prev = gPrevMask.Load(int3(id.xy, 0));
+    gMask[id.xy] = lerp(prev, vote, kMaskAlpha);
 }
 )";
 
