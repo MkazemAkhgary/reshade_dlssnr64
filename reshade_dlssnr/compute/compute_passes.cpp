@@ -1493,7 +1493,7 @@ const ComputePassDef kComputePasses[] = {
     {"ComposeModelOutputHdr", kComposeModelOutputHdr, kGradePrelude},
     {"SkinMaskDiff",          kSkinMaskDiff,          nullptr},
     {"DebugDisplay",          kDebugDisplay,          nullptr},
-    {"ApplyGrade",            kApplyGrade,            nullptr},
+    {"ApplyGrade",            kApplyGrade,            kGradePrelude},
 };
 
 const uint32_t kComputePassCount =
