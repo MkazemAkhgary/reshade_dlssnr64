@@ -9,14 +9,9 @@ namespace reshade_dlssnr {
 
 constexpr uint32_t kMaxPasses = 3;
 
-// Storage capacity for PassSettings::params and ::inherit_params.
-//
-// Deliberately larger than kShaderParamCount, and deliberately not derived
-// from it. Sizing the storage from the table would resize PassSettings every
-// time a parameter is added, and an array that is merely big enough today
-// truncates silently once the table outgrows it: the index is not bounds
-// checked, so the write lands on whatever field follows. The static_assert
-// in settings.cpp is what keeps the two in step.
+// Storage capacity for PassSettings::params and ::inherit_params. Kept
+// larger than the current table on purpose; settings.cpp static_asserts
+// the two stay in step.
 constexpr uint32_t kShaderParamCapacity = 32;
 
 enum class InjectionStage : int {
@@ -50,19 +45,9 @@ inline int HdrFormatCode(HdrFormat format) {
 // Residual edit
 // ---------------------------------------------------------------------------
 //
-// How the model's edit is carried onto the source image. The model produces an
-// edit at working scale; the compose step applies it to the full-resolution
-// original, and this is what governs that application.
-//
-// The transfer is always a per-channel ratio. An additive transfer was tried
-// and dropped: an RGB delta measured in SDR does not survive the trip back to
-// a wider range, and it produced visible artifacts around high-contrast edges.
-// A ratio is scale-invariant, so the same edit means the same thing whatever
-// the original's range is — which is also why one setting can serve both the
-// SDR and the HDR compose.
-//
-// Per pass, because the model's edit is a statement about what that pass
-// produced.
+// How the model's edit is carried onto the source. Always a per-channel
+// ratio (scale-invariant, so one setting serves SDR and HDR); an additive
+// transfer was dropped for artifacts on high-contrast edges. Per pass.
 struct ResidualSettings {
   // Scales the edit before it is applied. 0 makes the compose a pass-through
   // (only the model's own evaluation still runs), 1 applies it at the
@@ -92,44 +77,23 @@ struct ResidualSettings {
 // Colour grade
 // ---------------------------------------------------------------------------
 //
-// A brightness/saturation grade the user applies to the image at chosen points
-// in the frame: before the model reads it, after the model writes it, and on
-// the final backbuffer. It is separate from the model's own edit — the model
-// still does its thing, this is a grade on top.
-//
-// Only ONE luma algorithm and ONE chroma algorithm are active at a time, and
-// the combos below select which. That is deliberate: several of these do the
-// same job by different means, and stacking two of them makes each control
-// fight the other, because the second one re-derives the value the first just
-// changed. The combo is the switch between them.
+// A grade the user applies at three points: before the model reads, after
+// it writes, and on the final backbuffer. One luma mode and one chroma mode
+// are active at a time; stacking two would make them fight.
 
 // How the grade changes brightness.
 enum class GradeLumaMode : int {
-  // Multiply luma by 2^amount. The classic exposure control: symmetric
-  // (equal push either way), and it clips at white rather than rolling off.
-  Gain = 0,
-  // Raise normalised luma to a power. Midtone-weighted, so black stays black
-  // and white stays white, and the amount never clips.
-  Gamma = 1,
-  // Additive offset scaled by the remaining headroom. Moves shadows most and
-  // leaves white alone, which is what "lift" means in a grading suite.
-  Lift = 2,
-  // Parabolic lift, zero at both ends and strongest at mid grey. Black and
-  // white stay put while the middle opens up, so a large amount cannot clip.
-  Soft = 3,
+  Gain = 0,   // x2^amount; symmetric, clips at white
+  Gamma = 1,  // power on normalized luma; midtone-weighted, never clips
+  Lift = 2,   // offset scaled by headroom; moves shadows
+  Soft = 3,   // parabolic lift; strongest at mid grey
 };
 
 // How the grade changes saturation.
 enum class GradeChromaMode : int {
-  // Blend toward luma. Uniform across the image, so a saturated pixel moves
-  // as much as a muted one — which is what makes it the predictable default.
-  Saturation = 0,
-  // Scale by how muted the pixel already is, so colours near grey move and
-  // colours that are already vivid hold back.
-  Vibrance = 1,
-  // Scale the chroma channels only, leaving luma exactly where it was. Use
-  // this when a saturation change should not touch brightness at all.
-  ChromaGain = 2,
+  Saturation = 0,  // blend toward luma; uniform
+  Vibrance = 1,    // muted colors move more
+  ChromaGain = 2,  // scale chroma only; luma fixed
 };
 
 // One grade. Where it is applied is decided by which field holds it, not by
@@ -150,22 +114,16 @@ struct GradeSettings {
   GradeLumaMode luma_mode = GradeLumaMode::Gamma;
   GradeChromaMode chroma_mode = GradeChromaMode::Saturation;
 
-  // Levels, applied to linear luma before anything else.
-  //
-  // Black point is the linear value mapped to black. Raising it crushes the
-  // floor — everything below it goes to black and the rest is stretched to
-  // fill the range. Lowering it lifts the floor instead, so black becomes a
-  // dark grey. White point is the linear value mapped to white, so lowering
-  // it brightens the image rather than only touching the top end.
+  // Levels on linear luma, applied first. Black point is the value mapped
+  // to black (raising crushes, lowering lifts). White point is the value
+  // mapped to white.
   float black_point = 0.0f;   // [kGradeBlackPointMin, kGradeBlackPointMax]
   float white_point = 1.0f;   // [kGradeWhitePointMin, kGradeWhitePointMax]
 
   // Contrast, a stretch around mid grey. Positive steepens, negative flattens.
   float contrast = 0.0f;      // [-1, 1]
 
-  // Region-weighted scales. Shadows moves the dark end and highlights the
-  // bright end, each fading out before it reaches the other, so neither can
-  // flatten the image on its own.
+  // Region-weighted scales; each fades out before reaching the other end.
   float shadows = 0.0f;       // [-1, 1]
   float highlights = 0.0f;    // [-1, 1]
 };
@@ -196,30 +154,20 @@ struct PassSettings {
   // this pass must also run at Present. Enforced at load time and in the UI.
   InjectionStage injection_stage = InjectionStage::Present;
 
-  // Grades applied at this pass's two model boundaries. `grade_input` runs on
-  // the image the model is about to read; `grade_output` on the image it
-  // produced, before that image is published.
-  //
-  // Not inheritable, unlike the fields below. A grade is a statement about
-  // this image at this point, so carrying it into the next pass would apply
-  // it twice rather than extend it.
+  // Grades at this pass's two model boundaries. Not inheritable — carrying
+  // one into the next pass would apply it twice.
   GradeSettings grade_input;
   GradeSettings grade_output;
 
-  // How this pass's model edit is carried onto the source. Also not
-  // inheritable, for the same reason as the grades: it describes what this
-  // pass's model produced.
+  // How this pass's model edit is carried back. Not inheritable.
   ResidualSettings residual;
 
-  // FSR RCAS sharpening applied to the EASU-upsampled working-scale images
-  // before the ratio is taken. Not inheritable: like the grades, it is a
-  // statement about this pass's images.
+  // FSR RCAS on the EASU-upsampled working images. Not inheritable.
   bool rcas_enabled = false;
   float rcas_strength = 0.5f;  // [0, 1]
 
-  // Inheritance flags. Only meaningful for pass index > 0; the root pass
-  // ignores them. A true flag makes the corresponding slider use the
-  // resolved value from the previous pass instead of its own raw value.
+  // Only meaningful for pass index > 0; a true flag makes the slider use
+  // the previous pass's resolved value.
   bool inherit_working_scale = false;
   bool inherit_intensity = false;
   bool inherit_local_tone = false;
