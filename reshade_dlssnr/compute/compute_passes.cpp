@@ -14,9 +14,7 @@ namespace {
 // pass because the operators are the same and drift between copies is
 // invisible until the image is wrong.
 constexpr const char* kGradePrelude = R"(
-// 13 float4s = 52 floats, matching kParamSlotCount in compute_engine.h. The
-// array has to cover the highest slot any pass reads: the RCAS block at
-// kRcasSlotBase = 48 = gParams[12].
+// 13 float4s = 52 floats, matching kParamSlotCount in compute_engine.h.
 cbuffer Params : register(b0)
 {
     uint  gWidth;
@@ -34,149 +32,204 @@ cbuffer Params : register(b0)
 #define kGradeContrast   gParams[3].w
 #define kGradeShadows    gParams[4].x
 #define kGradeHighlights gParams[4].y
+#define kGradeFormat     gParams[4].z
 
-static const float kPreludeMidGrey = 0.2140;
-static const float kPreludeShapeMax = 0.5;
+static const float3 kL709 = float3(0.2126, 0.7152, 0.0722);
 
-float PreludeLevelsFwd(float y) {
-    float span = max(kGradeWhitePoint - kGradeBlackPoint, 0.05);
-    return max(y - kGradeBlackPoint, 0.0) / span;
+// Extended sRGB: no clamp, so HDR values round-trip.
+float3 SrgbToLinearExt(float3 v) {
+    v = max(v, 0.0);
+    float3 lo = v / 12.92;
+    float3 hi = pow((v + 0.055) / 1.055, 2.4);
+    return lerp(lo, hi, step(0.04045, v));
 }
-float PreludeLevelsInv(float y) {
+float3 LinearToSrgbExt(float3 v) {
+    v = max(v, 0.0);
+    float3 lo = v * 12.92;
+    float3 hi = 1.055 * pow(v, 1.0 / 2.4) - 0.055;
+    return lerp(lo, hi, step(0.0031308, v));
+}
+
+float GradeLevelsFwd(float y) {
+    float span = max(kGradeWhitePoint - kGradeBlackPoint, 0.05);
+    return (y - kGradeBlackPoint) / span;
+}
+float GradeLevelsInv(float y) {
     float span = max(kGradeWhitePoint - kGradeBlackPoint, 0.05);
     return y * span + kGradeBlackPoint;
 }
-float PreludeContrastFwd(float y) {
+
+// Contrast around 0.5 in sRGB, so the pivot is what the user sees.
+float GradeContrastFwd(float y) {
     if (kGradeContrast == 0.0) return y;
-    return max(kPreludeMidGrey + (y - kPreludeMidGrey) * exp2(kGradeContrast), 0.0);
+    return (y - 0.5) * exp2(kGradeContrast) + 0.5;
 }
-float PreludeContrastInv(float y) {
+float GradeContrastInv(float y) {
     if (kGradeContrast == 0.0) return y;
-    return kPreludeMidGrey + (y - kPreludeMidGrey) / exp2(kGradeContrast);
+    return (y - 0.5) / exp2(kGradeContrast) + 0.5;
 }
-float PreludeShadowWeight(float y) {
+
+float ShadowWeight(float y) {
     float t = saturate(y);
     return exp(-t * t * 6.0);
 }
-float PreludeHighlightWeight(float y) {
+float HighlightWeight(float y) {
     float t = 1.0 - saturate(y);
     return exp(-t * t * 6.0);
 }
-float PreludeShapeFwd(float y, float amount, float weight) {
-    return y * (1.0 + amount * kPreludeShapeMax * weight);
+
+// Add toward the nearest end. Positive brightens, negative darkens. Room is
+// non-negative so values above SDR white are unchanged.
+float GradeShadowFwd(float y, float a) {
+    if (a == 0.0) return y;
+    float w = ShadowWeight(y);
+    float room = a > 0.0 ? max(1.0 - y, 0.0) : max(y, 0.0);
+    return y + a * 0.5 * w * room;
 }
-float PreludeShapeInv(float y_out, float amount, bool is_highlight) {
-    if (amount == 0.0) return y_out;
+float GradeHighlightFwd(float y, float a) {
+    if (a == 0.0) return y;
+    float w = HighlightWeight(y);
+    float room = a > 0.0 ? max(1.0 - y, 0.0) : max(y, 0.0);
+    return y + a * 0.5 * w * room;
+}
+float GradeShadowInv(float y_out, float a) {
+    if (a == 0.0) return y_out;
     float y = y_out;
     for (int i = 0; i < 4; ++i) {
-        float t = is_highlight ? (1.0 - saturate(y)) : saturate(y);
+        float t = saturate(y);
         float w = exp(-t * t * 6.0);
-        float f = y * (1.0 + amount * kPreludeShapeMax * w) - y_out;
-        float dW = -12.0 * t * w * (is_highlight ? -1.0 : 1.0);
-        float df = 1.0 + amount * kPreludeShapeMax * (w + y * dW);
+        float room = a > 0.0 ? max(1.0 - y, 0.0) : max(y, 0.0);
+        float droom = a > 0.0 ? -1.0 : 1.0;
+        float dw = (y > 0.0 && y < 1.0) ? -12.0 * y * w : 0.0;
+        float f = y + a * 0.5 * w * room - y_out;
+        float df = 1.0 + a * 0.5 * (dw * room + w * droom);
         if (abs(df) < 1e-6) break;
         y -= f / df;
     }
     return y;
 }
-float PreludeLumaFwd(float y, float amount, int mode) {
-    if (amount == 0.0) return y;
-    if (mode == 0) return y * exp2(amount);
-    if (mode == 1) return pow(max(y, 0.0), exp2(-amount));
+float GradeHighlightInv(float y_out, float a) {
+    if (a == 0.0) return y_out;
+    float y = y_out;
+    for (int i = 0; i < 4; ++i) {
+        float t = 1.0 - saturate(y);
+        float w = exp(-t * t * 6.0);
+        float room = a > 0.0 ? max(1.0 - y, 0.0) : max(y, 0.0);
+        float droom = a > 0.0 ? -1.0 : 1.0;
+        float dw = (y > 0.0 && y < 1.0) ? 12.0 * (1.0 - y) * w : 0.0;
+        float f = y + a * 0.5 * w * room - y_out;
+        float df = 1.0 + a * 0.5 * (dw * room + w * droom);
+        if (abs(df) < 1e-6) break;
+        y -= f / df;
+    }
+    return y;
+}
+
+// Luma modes. Gain multiplies, Gamma curves, Lift adds in the room, Soft is
+// parabolic and zero at both ends.
+float GradeLumaFwd(float y, float a, int mode) {
+    if (a == 0.0) return y;
+    if (mode == 0) return y * exp2(a);
+    if (mode == 1) return pow(max(y, 1e-6), exp2(-a));
     if (mode == 2) {
-        float lift = amount * 0.5;
-        float room = lift > 0.0 ? max(1.0 - y, 0.0) : y;
+        float lift = a * 0.5;
+        float room = lift > 0.0 ? max(1.0 - y, 0.0) : max(y, 0.0);
         return y + lift * room;
     }
-    return y + amount * y * max(1.0 - y, 0.0);
+    return y + a * y * max(1.0 - y, 0.0);
 }
-float PreludeLumaInv(float y, float amount, int mode) {
-    if (amount == 0.0) return y;
-    if (mode == 0) return y / exp2(amount);
-    if (mode == 1) return pow(max(y, 0.0), exp2(amount));
+float GradeLumaInv(float y, float a, int mode) {
+    if (a == 0.0) return y;
+    if (mode == 0) return y / exp2(a);
+    if (mode == 1) return pow(max(y, 1e-6), exp2(a));
     if (mode == 2) {
-        float lift = amount * 0.5;
-        return (lift > 0.0) ? (y - lift) / max(1.0 - lift, 1e-3)
-                            : y / max(1.0 + lift, 1e-3);
+        float lift = a * 0.5;
+        if (lift > 0.0) return (y - lift) / max(1.0 - lift, 1e-3);
+        return y / max(1.0 + lift, 1e-3);
     }
-    float a = amount;
-    float disc = (1.0 + a) * (1.0 + a) - 4.0 * a * y;
+    // Soft: quadratic in y.
+    float A = -a;
+    if (abs(A) < 1e-6) return y;
+    float B = 1.0 + a;
+    float C = -y;
+    float disc = B * B - 4.0 * A * C;
     if (disc < 0.0) return y;
     float sq = sqrt(disc);
-    float r1 = ((1.0 + a) - sq) / (2.0 * a);
-    float r2 = ((1.0 + a) + sq) / (2.0 * a);
+    float r1 = (-B - sq) / (2.0 * A);
+    float r2 = (-B + sq) / (2.0 * A);
+    if (r1 >= 0.0 && r1 <= 1.0) return r1;
+    if (r2 >= 0.0 && r2 <= 1.0) return r2;
     return (a > 0.0) ? r1 : r2;
 }
 
-float3 GradeLinearFwd(float3 lin) {
-    const float3 kL = float3(0.2126, 0.7152, 0.0722);
-    float y = dot(lin, kL);
-    float ny = PreludeLevelsFwd(y);
-    ny = PreludeContrastFwd(ny);
-    ny = PreludeShapeFwd(ny, kGradeShadows, PreludeShadowWeight(ny));
-    ny = PreludeShapeFwd(ny, kGradeHighlights, PreludeHighlightWeight(ny));
-    ny = PreludeLumaFwd(ny, kGradeLuma, (int)(kGradeLumaMode + 0.5));
-    float sy = (y > 0.0) ? y : 1.0;
-    float3 c = lin * (ny / sy);
-
-    if (kGradeChroma != 0.0) {
-        float cy = dot(c, kL);
-        float g = 1.0 + kGradeChroma;
-        int mode = (int)(kGradeChromaMode + 0.5);
-        if (mode == 0) {
-            c = lerp(float3(cy, cy, cy), c, g);
-        } else if (mode == 1) {
-            float spread = max(max(c.r, c.g), c.b) - min(min(c.r, c.g), c.b);
-            c = lerp(float3(cy, cy, cy), c,
-                     1.0 + kGradeChroma * (1.0 - 0.5 * saturate(spread)));
-        } else {
-            float cb = (c.b - cy) / 1.8556 * g;
-            float cr = (c.r - cy) / 1.5748 * g;
-            c.r = cy + 1.5748 * cr;
-            c.g = cy - 0.1873 * cb - 0.4681 * cr;
-            c.b = cy + 1.8556 * cb;
-        }
+// Chroma modes. Vibrance uses the output spread for both directions so the
+// inverse is closed-form.
+float3 GradeChromaFwd(float3 c, float a, int mode) {
+    if (a == 0.0) return c;
+    float y = dot(c, kL709);
+    if (mode == 0) return lerp(float3(y, y, y), c, 1.0 + a);
+    if (mode == 1) {
+        float spread = max(max(c.r, c.g), c.b) - min(min(c.r, c.g), c.b);
+        float k = 1.0 + a * (1.0 - 0.5 * saturate(spread));
+        return lerp(float3(y, y, y), c, k);
     }
-    return c;
+    float g = 1.0 + a;
+    float cb = (c.b - y) / 1.8556 * g;
+    float cr = (c.r - y) / 1.5748 * g;
+    return float3(y + 1.5748 * cr,
+                  y - 0.1873 * cb - 0.4681 * cr,
+                  y + 1.8556 * cb);
+}
+float3 GradeChromaInv(float3 c, float a, int mode) {
+    if (a == 0.0) return c;
+    float y = dot(c, kL709);
+    if (mode == 0) return lerp(float3(y, y, y), c, 1.0 / max(1.0 + a, 1e-3));
+    if (mode == 1) {
+        float spread = max(max(c.r, c.g), c.b) - min(min(c.r, c.g), c.b);
+        float k = 1.0 + a * (1.0 - 0.5 * saturate(spread));
+        return lerp(float3(y, y, y), c, 1.0 / max(k, 1e-3));
+    }
+    float g = 1.0 + a;
+    float cb = (c.b - y) / 1.8556 / max(g, 1e-3);
+    float cr = (c.r - y) / 1.5748 / max(g, 1e-3);
+    return float3(y + 1.5748 * cr,
+                  y - 0.1873 * cb - 0.4681 * cr,
+                  y + 1.8556 * cb);
 }
 
-float3 GradeLinearInv(float3 lin) {
-    const float3 kL = float3(0.2126, 0.7152, 0.0722);
-    float3 c = lin;
-    if (kGradeChroma != 0.0) {
-        float cy = dot(c, kL);
-        float g = 1.0 + kGradeChroma;
-        int mode = (int)(kGradeChromaMode + 0.5);
-        float3 gray = float3(cy, cy, cy);
-        if (mode == 0) {
-            c = gray + (c - gray) / max(g, 1e-3);
-        } else if (mode == 1) {
-            float spread_out = max(max(c.r, c.g), c.b) - min(min(c.r, c.g), c.b);
-            float spread_in = spread_out;
-            for (int i = 0; i < 3; ++i) {
-                float k = 1.0 + kGradeChroma * (1.0 - 0.5 * saturate(spread_in));
-                spread_in = spread_out / max(k, 1e-3);
-            }
-            float k = 1.0 + kGradeChroma * (1.0 - 0.5 * saturate(spread_in));
-            c = gray + (c - gray) / max(k, 1e-3);
-        } else {
-            float cb = (c.b - cy) / 1.8556 / max(g, 1e-3);
-            float cr = (c.r - cy) / 1.5748 / max(g, 1e-3);
-            c.r = cy + 1.5748 * cr;
-            c.g = cy - 0.1873 * cb - 0.4681 * cr;
-            c.b = cy + 1.8556 * cb;
-        }
-    }
-
-    float ny = dot(c, kL);
+// The chain, on sRGB-encoded values with 1.0 == SDR white.
+float3 GradeSdrFwd(float3 sdr) {
+    float y = dot(sdr, kL709);
+    float ny = GradeLevelsFwd(y);
+    ny = GradeContrastFwd(ny);
+    ny = GradeShadowFwd(ny, kGradeShadows);
+    ny = GradeHighlightFwd(ny, kGradeHighlights);
+    ny = GradeLumaFwd(ny, kGradeLuma, (int)(kGradeLumaMode + 0.5));
+    float sy = (y != 0.0) ? y : 1.0;
+    float3 c = sdr * (ny / sy);
+    return GradeChromaFwd(c, kGradeChroma, (int)(kGradeChromaMode + 0.5));
+}
+float3 GradeSdrInv(float3 sdr) {
+    float3 c = GradeChromaInv(sdr, kGradeChroma, (int)(kGradeChromaMode + 0.5));
+    float ny = dot(c, kL709);
     float y = ny;
-    y = PreludeLumaInv(y, kGradeLuma, (int)(kGradeLumaMode + 0.5));
-    y = PreludeShapeInv(y, kGradeHighlights, true);
-    y = PreludeShapeInv(y, kGradeShadows, false);
-    y = PreludeContrastInv(y);
-    y = PreludeLevelsInv(y);
-    float sny = (ny > 0.0) ? ny : 1.0;
+    y = GradeLumaInv(y, kGradeLuma, (int)(kGradeLumaMode + 0.5));
+    y = GradeHighlightInv(y, kGradeHighlights);
+    y = GradeShadowInv(y, kGradeShadows);
+    y = GradeContrastInv(y);
+    y = GradeLevelsInv(y);
+    float sny = (ny != 0.0) ? ny : 1.0;
     return c * (y / sny);
+}
+
+// Compose-facing wrappers: linear SDR in and out.
+float3 GradeLinearFwd(float3 lin) {
+    if (kGradeEnabled < 0.5) return lin;
+    return SrgbToLinearExt(GradeSdrFwd(LinearToSrgbExt(lin)));
+}
+float3 GradeLinearInv(float3 lin) {
+    if (kGradeEnabled < 0.5) return lin;
+    return SrgbToLinearExt(GradeSdrInv(LinearToSrgbExt(lin)));
 }
 )";
 
