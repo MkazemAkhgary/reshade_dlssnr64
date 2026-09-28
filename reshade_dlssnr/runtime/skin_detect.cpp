@@ -159,10 +159,12 @@ bool SkinDetect::Run(CommandContext& cmd,
   constants.Height = work_h;
   const char* pass_name = "PrepareModelInput";
   if (hdr != nullptr && hdr->Enabled()) {
+    // Fallback EMA: no skin slice, so the mask this pass produces cannot
+    // drive its own input exposure.
     pass_name = "TonemapForward";
-    constants.params[0] = hdr->Exposure();
-    constants.params[1] =
-        hdr->WhitePoint() * std::max(settings.hdr_highlight_headroom, 0.01f);
+    constants.params[0] = hdr->FallbackExposure();
+    constants.params[1] = hdr->FallbackWhitePoint() *
+                          std::max(settings.hdr_highlight_headroom, 0.01f);
     constants.params[2] = static_cast<float>(HdrFormatCode(hdr->ResolvedFormat()));
   }
 

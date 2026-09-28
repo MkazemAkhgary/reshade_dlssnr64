@@ -1696,6 +1696,12 @@ void DrawOverlay(reshade::api::effect_runtime*) {
                         snap.skin_fraction * 100.0f,
                         snap.depth_filter_survived * 100.0f);
 
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::Text("Fallback exposure: %.3f", snap.fallback_exposure);
+            ImGui::TableNextColumn();
+            ImGui::Text("Fallback white: %.3f", snap.fallback_white_point);
+
             ImGui::EndTable();
           }
 

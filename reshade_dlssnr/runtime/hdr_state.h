@@ -25,6 +25,34 @@
 
 namespace reshade_dlssnr {
 
+// Which histogram the exposure median was drawn from.
+enum class MeteringSource {
+  FullFrame = 0,
+  DepthFiltered = 1,
+  Skin = 2,
+};
+
+// One exposure/white-point EMA driven from a histogram. HdrState holds two:
+// one for regular passes (skin-driven when a mask is available) and one for
+// the skin-detect pass (depth -> full fallback only, no skin). Splitting them
+// breaks the loop where the mask drives the skin histogram, which drives the
+// exposure, which changes the tonemap that produced the mask.
+struct ExposureTracker {
+  float exposure = 1.0f;
+  float white_point = 1.0f;
+  float target_exposure = 1.0f;
+  float p50_luma = 0.0f;
+  float skin_fraction = 0.0f;
+  float depth_filter_survived = 0.0f;
+  uint32_t warmup_frames = 0;
+  bool have_measurement = false;
+  bool target_is_skin = false;
+  MeteringSource metering_source = MeteringSource::FullFrame;
+
+  void Reset();
+  void Update(const uint32_t* bins, const Settings& settings, bool use_skin);
+};
+
 // Read-only snapshot of the current HDR measurement state, safe to copy to
 // the UI thread.
 struct HdrSnapshot {
@@ -52,7 +80,13 @@ struct HdrSnapshot {
   // Fraction of the frame the depth filter kept. Zero when there is no
   // depth guide; the histogram is the full frame in that case.
   float depth_filter_survived = 0.0f;
-  int metering_source = 0;  // HdrState::MeteringSource, as an int for the UI
+  int metering_source = 0;  // MeteringSource, as an int for the UI
+
+  // Fallback EMA, used by the skin-detect pass. Depth -> full only, no skin
+  // slice, so it does not depend on the mask.
+  float fallback_exposure = 1.0f;
+  float fallback_white_point = 1.0f;
+  int fallback_metering_source = 0;
 };
 
 // Maps a DXGI format to the HdrFormat the shaders should treat it as. The
@@ -61,14 +95,6 @@ HdrFormat DetectFormatFromDxgi(DXGI_FORMAT format);
 
 class HdrState {
  public:
-  // Which histogram the exposure median was drawn from. Reported in the
-  // diagnostics and used to explain the current exposure.
-  enum class MeteringSource {
-    FullFrame = 0,
-    DepthFiltered = 1,
-    Skin = 2,
-  };
-
   bool Ensure(ID3D12Device* device);
   void Shutdown();
 
@@ -101,8 +127,12 @@ class HdrState {
   // Accessors used by the pass session.
   bool Enabled() const { return enabled_; }
   HdrFormat ResolvedFormat() const { return resolved_format_; }
-  float Exposure() const { return exposure_ema_; }
-  float WhitePoint() const { return white_point_ema_; }
+  // Regular passes: skin-driven when a mask is available.
+  float Exposure() const { return regular_.exposure; }
+  float WhitePoint() const { return regular_.white_point; }
+  // Skin-detect pass: depth -> full only, no skin slice.
+  float FallbackExposure() const { return fallback_.exposure; }
+  float FallbackWhitePoint() const { return fallback_.white_point; }
 
   HdrSnapshot GetSnapshot() const;
 
@@ -122,27 +152,20 @@ class HdrState {
   bool enabled_ = false;
   HdrFormat resolved_format_ = HdrFormat::Sdr;
 
-  float exposure_ema_ = 1.0f;
-  float white_point_ema_ = 1.0f;
-  bool have_measurement_ = false;
+  ExposureTracker regular_;
+  ExposureTracker fallback_;
   uint32_t frame_counter_ = 0;
   uint32_t frames_until_measure_ = 0;
-  uint32_t warmup_frames_ = 0;
   uint32_t frames_since_measure_ = 0;
   bool have_logged_format_ = false;
 
-  // Diagnostics: last measured histogram and the values derived from it.
+  // Diagnostics: last measured histogram and the shared white-point
+  // percentile (identical for both trackers).
   bool have_histogram_ = false;
   uint32_t last_histogram_[256] = {};
   uint32_t last_histogram_skin_[256] = {};
-  float p50_luma_ = 0.0f;
   float p_hi_luma_ = 0.0f;
-  float target_exposure_ = 1.0f;
   uint32_t last_samples_ = 0;
-  float skin_fraction_ = 0.0f;
-  bool target_is_skin_ = false;
-  float depth_filter_survived_ = 0.0f;
-  MeteringSource metering_source_ = MeteringSource::FullFrame;
 };
 
 }  // namespace reshade_dlssnr
