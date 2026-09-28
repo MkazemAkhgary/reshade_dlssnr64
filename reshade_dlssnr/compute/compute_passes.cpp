@@ -320,7 +320,7 @@ void CSMain(uint3 gid : SV_GroupID,
             InterlockedAdd(gSharedHist[kHistogramStride + bin], 1u);
         }
 
-        if (IsSkin(lin)) {
+        if (!sky && IsSkin(lin)) {
             InterlockedAdd(gSharedHist[2u * kHistogramStride + bin], 1u);
         }
     }

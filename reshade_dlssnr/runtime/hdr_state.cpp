@@ -196,6 +196,8 @@ HdrSnapshot HdrState::GetSnapshot() const {
   s.samples = last_samples_;
   s.skin_fraction = skin_fraction_;
   s.target_is_skin = target_is_skin_;
+  s.depth_filter_survived = depth_filter_survived_;
+  s.metering_source = static_cast<int>(metering_source_);
   return s;
 }
 
@@ -391,14 +393,8 @@ void HdrState::UpdateExposure(const uint32_t* bins, const Settings& settings) {
   }
   if (total_full == 0) return;
 
-  // Which histogram drives the exposure median.
-  //
-  // Priority: skin, if there is enough of it; else the depth-filtered
-  // histogram, if the filter left enough to measure from; else the full
-  // frame. The last step is what keeps the measurement alive when depth
-  // filtering removes nearly everything (an interior scene with no depth
-  // information in range, or a game whose far plane is not where we assume)
-  // and skin finds nothing either.
+  // Priority: skin > depth-filtered > full frame. The full frame keeps the
+  // measurement alive when the other two are empty or too sparse.
   const float depth_survived =
       static_cast<float>(total_depth) / static_cast<float>(total_full);
 
@@ -440,14 +436,13 @@ void HdrState::UpdateExposure(const uint32_t* bins, const Settings& settings) {
           ? std::clamp(settings.hdr_midtone / luma_mid, 0.01f, 128.0f)
           : exposure_ema_;
 
-  // Rate cap in log2 space. A bright object entering or leaving the frame
-  // moves the target by a large amount; the cap converts that into a slow
-  // drift. Warmup is exempt, so the first ~30 measurements still converge
-  // quickly. 0 disables the cap.
+  // Rate cap in log2 space. Skin and warmup bypass it so they can lock
+  // quickly; 0 disables it outright.
+  const bool skin_drives = (source == MeteringSource::Skin);
   const float log_max_delta =
       warmup_frames_ < 30 ? 0.5f : settings.hdr_rate_cap;
   float capped_target = raw_target;
-  if (log_max_delta > 0.0f) {
+  if (!skin_drives && log_max_delta > 0.0f) {
     const float log_current = log2(std::max(exposure_ema_, 1e-6f));
     float log_delta = log2(raw_target) - log_current;
     log_delta = std::clamp(log_delta, -log_max_delta, log_max_delta);
@@ -462,20 +457,19 @@ void HdrState::UpdateExposure(const uint32_t* bins, const Settings& settings) {
   depth_filter_survived_ = depth_survived;
   metering_source_ = source;
 
-  // Warm-up: converge quickly for the first ~30 measurements, then blend
-  // at a rate proportional to how often we measure. A short interval means
-  // fresher data, so the EMA can move faster; a long one means stale data,
-  // so it smooths more.
+  // Warm-up and skin converge fast; otherwise the blend rate scales with
+  // the measurement interval, so a longer interval smooths more.
   const uint32_t interval =
       static_cast<uint32_t>(std::clamp(settings.hdr_measure_interval, 1, 32));
   const float resp = (32.0f - static_cast<float>(interval)) / 31.0f;
-  const float alpha = warmup_frames_ < 30
+  const float alpha = (skin_drives || warmup_frames_ < 30)
                           ? 0.5f
                           : (0.02f + resp * 0.38f);
 
   exposure_ema_ = Lerp(exposure_ema_, capped_target, alpha);
 
-  const float W_target = std::max(1.0f, luma_hi * exposure_ema_);
+  const float W_target = std::max(
+      1.0f, luma_hi * exposure_ema_ * settings.hdr_highlight_headroom);
   white_point_ema_ = Lerp(white_point_ema_, W_target, alpha);
 
   have_measurement_ = true;

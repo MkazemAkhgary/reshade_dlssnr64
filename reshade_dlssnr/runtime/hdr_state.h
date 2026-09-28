@@ -38,8 +38,8 @@ struct HdrSnapshot {
   // Raw measurement, for the diagnostics UI. Populated whenever a fresh
   // histogram has been consumed. `has_histogram` is false until then.
   bool has_histogram = false;
-  uint32_t histogram[256] = {};       // depth-filtered global
-  uint32_t histogram_skin[256] = {};  // skin pixels only
+  uint32_t histogram[256] = {};       // full frame
+  uint32_t histogram_skin[256] = {};  // skin, depth-filtered
   float p50_luma = 0.0f;         // scene median, before exposure
   float p_hi_luma = 0.0f;        // white-point percentile, before exposure
   float target_exposure = 1.0f;  // value the EMA is chasing
@@ -104,8 +104,7 @@ class HdrState {
 
  private:
   void PollReadback(ID3D12Fence* fence, const Settings& settings);
-  // `bins` is the whole two-histogram buffer, 512 entries. The split between
-  // global and skin is decided here.
+  // `bins` is the packed 768-entry buffer: full, depth-filtered, skin.
   void UpdateExposure(const uint32_t* bins, const Settings& settings);
 
   Microsoft::WRL::ComPtr<ID3D12Device> device_;
