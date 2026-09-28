@@ -1788,6 +1788,127 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           "is where the tonemap saturates.",
           &settings.skin_detect_clip_threshold, nullptr, 0.97f,
           0.5f, 1.0f, 0.97f);
+
+      // --- Model: own tuning, no inheritance ---
+      {
+        IndentScope indent;
+        if (PersistentSubHeader("Model",
+                                settings.ui_skin_detect_model_open,
+                                changed)) {
+          static const char* kNames[] = {"A", "B", "C"};
+          static const char* kTips[] = {"Preset A.", "Preset B.", "Preset C."};
+          ImGui::AlignTextToFramePadding();
+          ImGui::TextUnformatted("Preset");
+          if (ImGui::IsItemHovered()) {
+            Tip("Which model preset the detection pass runs. Independent "
+                "of the pass tabs.");
+          }
+          ImGui::SameLine(kControlLabelWidth);
+          const int clicked = DrawGroupButtons(
+              "skin_detect_preset", kNames, kTips, 3,
+              settings.skin_detect_preset, nullptr);
+          if (clicked >= 0) {
+            settings.skin_detect_preset = clicked;
+            changed = true;
+          }
+
+          changed |= DrawFloatRow(
+              0, "skin_detect_intensity", "Intensity",
+              "Model intensity for the detection pass.",
+              &settings.skin_detect_intensity, nullptr, 1.0f,
+              0.0f, 2.0f, 1.0f);
+          changed |= DrawFloatRow(
+              0, "skin_detect_local_tone", "Local Tone",
+              "Local tone strength for the detection pass. Default 0 so "
+              "only the skin edit shows up in the diff.",
+              &settings.skin_detect_local_tone, nullptr, 0.0f,
+              0.0f, 2.0f, 0.0f);
+          changed |= DrawFloatRow(
+              0, "skin_detect_local_structure", "Local Structure",
+              "Local structure strength for the detection pass. Default 0.",
+              &settings.skin_detect_local_structure, nullptr, 0.0f,
+              0.0f, 2.0f, 0.0f);
+          changed |= DrawFloatRow(
+              0, "skin_detect_skin_structure", "Skin Structure",
+              "Skin structure strength for the detection pass. The only "
+              "edit left on by default.",
+              &settings.skin_detect_skin_structure, nullptr, 1.0f,
+              0.0f, 1.0f, 1.0f);
+
+          ImGui::AlignTextToFramePadding();
+          changed |= DrawCheckboxAtLabel("skin_detect_ui_correction",
+                                         &settings.skin_detect_ui_correction);
+          ImGui::SameLine();
+          ImGui::TextUnformatted("UI Correction");
+        }
+      }
+
+      // --- Mask: sensitivity and smoothing ---
+      {
+        IndentScope indent;
+        if (PersistentSubHeader("Mask",
+                                settings.ui_skin_detect_mask_open,
+                                changed)) {
+          changed |= DrawFloatRow(
+              0, "skin_detect_edit_strength", "Edit Strength",
+              "Amplifies the model's diff before the threshold test.\n"
+              "Raises detection sensitivity without asking the model to "
+              "produce a bigger edit. Values above 1 catch smaller edits; "
+              "too high makes the mask noisier.",
+              &settings.skin_detect_edit_strength, nullptr, 1.0f,
+              0.1f, 8.0f, 1.0f);
+
+          changed |= DrawFloatRow(
+              0, "skin_detect_mask_smoothing", "Mask Smoothing",
+              "Majority-vote radius on the mask.\n"
+              "0 keeps only the pixel's own vote; 1 uses a 3x3 neighborhood; "
+              "2 uses a 5x5. Higher values reject single-pixel flicker but "
+              "can round off the mask's edges.",
+              &settings.skin_detect_mask_smoothing, nullptr, 0.5f,
+              0.0f, 1.0f, 0.5f);
+        }
+      }
+
+      // --- HDR: own response, no shared settings ---
+      {
+        IndentScope indent;
+        if (PersistentSubHeader("HDR Response",
+                                settings.ui_skin_detect_hdr_open, changed)) {
+          changed |= DrawFloatRow(
+              0, "skin_detect_hdr_midtone", "Midtone Target",
+              "Where the detection pass aims the scene's median brightness.\n"
+              "Independent of the regular HDR Midtone Target.",
+              &settings.skin_detect_hdr_midtone, nullptr, 0.18f,
+              0.01f, 0.50f, 0.18f);
+
+          changed |= DrawFloatRow(
+              0, "skin_detect_hdr_rate_cap", "Response Cap",
+              "Maximum log2 change in the detection pass's exposure per "
+              "measurement. Lower values resist scene motion more strongly; "
+              "0 disables the cap.",
+              &settings.skin_detect_hdr_rate_cap, nullptr, 0.1f,
+              0.0f, 2.0f, 0.1f);
+
+          changed |= DrawIntRow(
+              "skin_detect_hdr_measure_interval", "Measure Interval",
+              "How quickly the detection pass's exposure responds. Higher "
+              "values move it more slowly.\n"
+              "The scene histogram is measured at the global cadence; this "
+              "only controls how much of each measurement is applied.",
+              &settings.skin_detect_hdr_measure_interval,
+              32, 1, 16);
+
+          changed |= DrawFloatRow(
+              0, "skin_detect_hdr_depth_fallback_fraction",
+              "Depth Fallback",
+              "If the depth filter keeps less than this fraction, the "
+              "detection pass falls back to the full frame.\n"
+              "Default 1.0 forces full-frame always, which is the most "
+              "stable across camera motion.",
+              &settings.skin_detect_hdr_depth_fallback_fraction, nullptr, 0.2f,
+              0.0f, 1.0f, 1.0f);
+        }
+      }
     });
   }
 

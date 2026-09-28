@@ -266,6 +266,29 @@ struct Settings {
   // pixel. Rejects emissives and clipped highlights.
   float skin_detect_clip_threshold = 0.97f;
 
+  // Model tuning for the detection pass. Fully independent from the pass
+  // sliders: none of these inherit from or share with any PassSettings.
+  int skin_detect_preset = 0;
+  float skin_detect_intensity = 1.0f;
+  float skin_detect_local_tone = 0.0f;
+  float skin_detect_local_structure = 0.0f;
+  float skin_detect_skin_structure = 1.0f;
+  bool skin_detect_ui_correction = false;
+
+  // Diff amplification (raises detection sensitivity without changing what
+  // the model produces) and mask smoothing (majority-vote radius, 0..1).
+  float skin_detect_edit_strength = 1.0f;
+  float skin_detect_mask_smoothing = 0.5f;
+
+  // HDR response for the detection pass's own exposure tracker. Independent
+  // of the regular-pass HDR settings. The depth fallback defaults to 1.0 so
+  // the tracker always uses the full-frame histogram and never flips source
+  // on camera motion.
+  float skin_detect_hdr_midtone = 0.18f;
+  float skin_detect_hdr_rate_cap = 0.1f;
+  int skin_detect_hdr_measure_interval = 16;
+  float skin_detect_hdr_depth_fallback_fraction = 1.0f;
+
   // ---------------------------------------------------------------------
   // Final backbuffer grade. Runs once per frame, after every pass, on the
   // swapchain backbuffer itself — the last thing before the game presents.
@@ -290,6 +313,9 @@ struct Settings {
   bool ui_grade_open = true;
   bool ui_hdr_diagnostics_open = false;
   bool ui_skin_detect_open = true;
+  bool ui_skin_detect_model_open = true;
+  bool ui_skin_detect_mask_open = true;
+  bool ui_skin_detect_hdr_open = true;
 };
 
 Settings& GetSettings();

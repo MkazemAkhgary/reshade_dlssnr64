@@ -16,16 +16,19 @@ namespace reshade_dlssnr {
 
 namespace {
 
-// Only the skin edit is enabled; every global edit is zero. The model's own
-// skin detector is what produces the classification.
-void ConfigureDetectionTuning(PassSettings& pass, int preset) {
-  pass.preset = std::clamp(preset, 0, 2);
-  pass.intensity = 1.0f;
-  pass.local_tone = 0.0f;
-  pass.local_structure = 0.0f;
-  pass.skin_structure = 1.0f;
+// Tuning for the detection pass. Built entirely from the dedicated
+// skin_detect_* settings; nothing here inherits from or shares with any
+// PassSettings.
+PassSettings BuildDetectionTuning(const Settings& s) {
+  PassSettings pass;
+  pass.preset = std::clamp(s.skin_detect_preset, 0, 2);
+  pass.intensity = s.skin_detect_intensity;
+  pass.local_tone = s.skin_detect_local_tone;
+  pass.local_structure = s.skin_detect_local_structure;
+  pass.skin_structure = s.skin_detect_skin_structure;
   pass.auto_mask = true;
-  pass.ui_correction = false;
+  pass.ui_correction = s.skin_detect_ui_correction;
+  return pass;
 }
 
 void RetireToGuides(ID3D12Resource* resource) {
@@ -133,8 +136,7 @@ bool SkinDetect::Run(CommandContext& cmd,
     return false;
   }
 
-  // Preset tracks pass 0 so both use the same model; the rest is fixed.
-  ConfigureDetectionTuning(tuning_, settings.passes[0].preset);
+  tuning_ = BuildDetectionTuning(settings);
 
   cmd.SetResourceState(guides.dlss_output_color,
                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -247,6 +249,8 @@ bool SkinDetect::Run(CommandContext& cmd,
   mask_constants.params[1] = settings.skin_detect_luma_relative;
   mask_constants.params[2] = settings.skin_detect_chroma_threshold;
   mask_constants.params[3] = settings.skin_detect_clip_threshold;
+  mask_constants.params[4] = settings.skin_detect_edit_strength;
+  mask_constants.params[5] = settings.skin_detect_mask_smoothing;
 
   ID3D12Resource* mask_srvs[kSrvCount] = {working_input_.Get(),
                                           working_output_.Get(),

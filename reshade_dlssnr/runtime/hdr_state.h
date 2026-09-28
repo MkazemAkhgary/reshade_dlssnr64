@@ -32,9 +32,21 @@ enum class MeteringSource {
   Skin = 2,
 };
 
+// Per-tracker EMA parameters. Two instances live on HdrState, one built from
+// the regular HDR settings and one from the skin-detect HDR settings, so each
+// responds at its own rate and to its own target.
+struct ExposureParams {
+  float midtone = 0.18f;
+  float white_percentile = 0.99f;
+  float rate_cap = 0.1f;
+  float skin_fraction_threshold = 0.01f;
+  float depth_fallback_fraction = 0.20f;
+  uint32_t measure_interval = 4;
+};
+
 // One exposure/white-point EMA driven from a histogram. HdrState holds two:
 // one for regular passes (skin-driven when a mask is available) and one for
-// the skin-detect pass (depth -> full fallback only, no skin). Splitting them
+// the skin-detect pass (full-frame only by default; no skin). Splitting them
 // breaks the loop where the mask drives the skin histogram, which drives the
 // exposure, which changes the tonemap that produced the mask.
 struct ExposureTracker {
@@ -50,7 +62,7 @@ struct ExposureTracker {
   MeteringSource metering_source = MeteringSource::FullFrame;
 
   void Reset();
-  void Update(const uint32_t* bins, const Settings& settings, bool use_skin);
+  void Update(const uint32_t* bins, const ExposureParams& params, bool use_skin);
 };
 
 // Read-only snapshot of the current HDR measurement state, safe to copy to

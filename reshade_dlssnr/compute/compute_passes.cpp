@@ -356,10 +356,14 @@ cbuffer Params : register(b0)
 // gParams[0].y = relative luma threshold (fraction of luma)
 // gParams[0].z = chroma threshold
 // gParams[0].w = saturation bound
-#define kLumaAbs    gParams[0].x
-#define kLumaRel    gParams[0].y
-#define kChromaAbs  gParams[0].z
-#define kSatBound   gParams[0].w
+// gParams[1].x = edit strength (amplifies the model's diff)
+// gParams[1].y = mask smoothing (0..1 -> majority radius 0..2)
+#define kLumaAbs       gParams[0].x
+#define kLumaRel       gParams[0].y
+#define kChromaAbs     gParams[0].z
+#define kSatBound      gParams[0].w
+#define kEditStrength  gParams[1].x
+#define kMaskSmoothing gParams[1].y
 
 Texture2D<float4> gInput  : register(t0);
 Texture2D<float4> gOutput : register(t1);
@@ -368,11 +372,12 @@ RWTexture2D<float> gMask  : register(u0);
 static const float3 kLuma709 = float3(0.2126, 0.7152, 0.0722);
 
 // One pixel's vote. Rejects saturated pixels outright, then requires both an
-// absolute and a relative luma change (or a chroma change).
+// absolute and a relative luma change (or a chroma change). The model's diff
+// is amplified by kEditStrength before the comparison, so a small edit
+// crosses the threshold more readily without the model producing a bigger
+// one.
 bool PixelIsSkin(int2 xy)
 {
-    xy.x = clamp(xy.x, 0, (int)gWidth - 1);
-    xy.y = clamp(xy.y, 0, (int)gHeight - 1);
     float3 a = gInput.Load(int3(xy, 0)).rgb;
     float3 b = gOutput.Load(int3(xy, 0)).rgb;
 
@@ -385,15 +390,13 @@ bool PixelIsSkin(int2 xy)
 
     float a_luma = dot(a, kLuma709);
     float b_luma = dot(b, kLuma709);
-    float luma_diff = abs(b_luma - a_luma);
+    float luma_diff = abs(b_luma - a_luma) * kEditStrength;
     float luma_ref = max(a_luma, b_luma);
 
-    // Both a noise floor and a proportional bar: bright pixels need a
-    // larger absolute change to qualify.
     bool luma_edit = luma_diff > kLumaAbs && luma_diff > kLumaRel * luma_ref;
 
     float3 chroma_diff = (b - b_luma) - (a - a_luma);
-    bool chroma_edit = length(chroma_diff) > kChromaAbs;
+    bool chroma_edit = length(chroma_diff) * kEditStrength > kChromaAbs;
 
     return luma_edit || chroma_edit;
 }
@@ -403,15 +406,23 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= gWidth || id.y >= gHeight) return;
 
-    // 3x3 majority. A lone noise spike is rejected; a regional edit
-    // survives intact. Purely spatial — no dependence across frames.
+    // Radius from the smoothing slider: 0 (pixel only), 1 (3x3), 2 (5x5).
+    // Majority vote, so a lone spike is rejected while a regional edit
+    // survives. Purely spatial.
+    int r = (int)(kMaskSmoothing * 2.0 + 0.5);
     int2 center = int2(id.xy);
     int hits = 0;
-    for (int dy = -1; dy <= 1; ++dy)
-        for (int dx = -1; dx <= 1; ++dx)
-            if (PixelIsSkin(center + int2(dx, dy))) hits++;
-
-    gMask[id.xy] = hits >= 5 ? 1.0 : 0.0;
+    int total = 0;
+    for (int dy = -r; dy <= r; ++dy) {
+        for (int dx = -r; dx <= r; ++dx) {
+            int2 p = center + int2(dx, dy);
+            if (p.x < 0 || p.y < 0 || p.x >= (int)gWidth || p.y >= (int)gHeight)
+                continue;
+            total++;
+            if (PixelIsSkin(p)) hits++;
+        }
+    }
+    gMask[id.xy] = (total > 0 && hits * 2 >= total) ? 1.0 : 0.0;
 }
 )";
 

@@ -97,10 +97,10 @@ float Lerp(float a, float b, float t) {
 
 void ExposureTracker::Reset() { *this = ExposureTracker{}; }
 
-// Same EMA logic for both trackers; `use_skin` is the only difference.
-// Headroom is not applied here: it belongs at the shader uniform, so this
-// stays the exposure-adjusted scene white.
-void ExposureTracker::Update(const uint32_t* bins, const Settings& settings,
+// Same EMA logic for both trackers; `params` and `use_skin` are the only
+// differences between them. Headroom is not applied here: it belongs at the
+// shader uniform, so this stays the exposure-adjusted scene white.
+void ExposureTracker::Update(const uint32_t* bins, const ExposureParams& params,
                              bool use_skin) {
   const uint32_t* full_bins = bins;
   const uint32_t* depth_bins = bins + kHistogramBins;
@@ -127,7 +127,7 @@ void ExposureTracker::Update(const uint32_t* bins, const Settings& settings,
 
   const bool depth_usable =
       total_depth > 0u &&
-      depth_survived >= settings.hdr_depth_fallback_fraction;
+      depth_survived >= params.depth_fallback_fraction;
   if (depth_usable) {
     luma_source = depth_bins;
     luma_total = total_depth;
@@ -137,7 +137,7 @@ void ExposureTracker::Update(const uint32_t* bins, const Settings& settings,
   const float skin_frac =
       static_cast<float>(total_skin) / static_cast<float>(total_full);
   if (use_skin && total_skin > 1000u &&
-      skin_frac > settings.hdr_skin_fraction_threshold) {
+      skin_frac > params.skin_fraction_threshold) {
     luma_source = skin_bins;
     luma_total = total_skin;
     source = MeteringSource::Skin;
@@ -146,21 +146,21 @@ void ExposureTracker::Update(const uint32_t* bins, const Settings& settings,
   const float p_mid_bin = PercentileBin(luma_source, luma_total, 0.50f);
   const float p_hi_bin =
       PercentileBin(full_bins, total_full,
-                    std::clamp(settings.hdr_white_percentile, 0.90f, 0.999f));
+                    std::clamp(params.white_percentile, 0.90f, 0.999f));
 
   const float luma_mid = BinToLinear(p_mid_bin);
   const float luma_hi = BinToLinear(p_hi_bin);
 
   const float raw_target =
       (luma_mid > 1e-6f)
-          ? std::clamp(settings.hdr_midtone / luma_mid, 0.01f, 128.0f)
+          ? std::clamp(params.midtone / luma_mid, 0.01f, 128.0f)
           : exposure;
 
   // Rate cap in log2 space. Skin and warmup bypass it so they can lock
   // quickly; 0 disables it outright.
   const bool skin_drives = (source == MeteringSource::Skin);
   const float log_max_delta =
-      warmup_frames < 30 ? 0.5f : settings.hdr_rate_cap;
+      warmup_frames < 30 ? 0.5f : params.rate_cap;
   float capped_target = raw_target;
   if (!skin_drives && log_max_delta > 0.0f) {
     const float log_current = log2(std::max(exposure, 1e-6f));
@@ -179,7 +179,7 @@ void ExposureTracker::Update(const uint32_t* bins, const Settings& settings,
   // Warm-up and skin converge fast; otherwise the blend rate scales with
   // the measurement interval, so a longer interval smooths more.
   const uint32_t interval =
-      static_cast<uint32_t>(std::clamp(settings.hdr_measure_interval, 1, 32));
+      static_cast<uint32_t>(std::clamp(params.measure_interval, 1u, 32u));
   const float resp = (32.0f - static_cast<float>(interval)) / 31.0f;
   const float alpha = (skin_drives || warmup_frames < 30)
                           ? 0.5f
@@ -485,12 +485,34 @@ void HdrState::PollReadback(ID3D12Fence* fence, const Settings& settings) {
 }
 
 void HdrState::UpdateExposure(const uint32_t* bins, const Settings& settings) {
-  // Same histogram, two independent EMAs. The regular tracker may use the
-  // skin slice (which the mask gates); the fallback tracker never does, so
-  // the skin-detect pass's exposure cannot be driven by the mask it
-  // produced.
-  regular_.Update(bins, settings, /*use_skin=*/true);
-  fallback_.Update(bins, settings, /*use_skin=*/false);
+  // Same histogram, two independent EMAs with independent parameters. The
+  // regular tracker may use the skin slice (which the mask gates); the
+  // fallback tracker never does, so the skin-detect pass's exposure cannot
+  // be driven by the mask it produced.
+  ExposureParams regular_params;
+  regular_params.midtone = settings.hdr_midtone;
+  regular_params.white_percentile = settings.hdr_white_percentile;
+  regular_params.rate_cap = settings.hdr_rate_cap;
+  regular_params.skin_fraction_threshold =
+      settings.hdr_skin_fraction_threshold;
+  regular_params.depth_fallback_fraction =
+      settings.hdr_depth_fallback_fraction;
+  regular_params.measure_interval =
+      static_cast<uint32_t>(settings.hdr_measure_interval);
+
+  // The skin-detect tracker keeps the scene's white point (that describes
+  // the scene, not the pass) but has its own target, response, and depth
+  // fallback.
+  ExposureParams fallback_params = regular_params;
+  fallback_params.midtone = settings.skin_detect_hdr_midtone;
+  fallback_params.rate_cap = settings.skin_detect_hdr_rate_cap;
+  fallback_params.depth_fallback_fraction =
+      settings.skin_detect_hdr_depth_fallback_fraction;
+  fallback_params.measure_interval =
+      static_cast<uint32_t>(settings.skin_detect_hdr_measure_interval);
+
+  regular_.Update(bins, regular_params, /*use_skin=*/true);
+  fallback_.Update(bins, fallback_params, /*use_skin=*/false);
 
   // Shared: the P99 of the full-frame histogram, for diagnostics. Both
   // trackers compute it internally; this copy is only for the UI.
