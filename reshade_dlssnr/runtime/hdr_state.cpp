@@ -154,7 +154,7 @@ void ExposureTracker::Update(const uint32_t* bins, const ExposureParams& params,
     if (luma_mid_skin > 1e-6f) {
       const float log_skin = log2(params.midtone / luma_mid_skin);
       const float t = std::clamp(params.skin_priority, 0.0f, 1.0f);
-      log_target = lerp(log_target, log_skin, t);
+      log_target = Lerp(log_target, log_skin, t);
       skin_blended = (t > 0.0f);
       if (skin_blended) source = MeteringSource::Skin;
     }
