@@ -1235,14 +1235,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     const float3 residual_shaped = ShapeResidualSdr(residual_log, original.rgb);
 
-    // A ratio is scale-invariant, so the same edit means the same thing
-    // whatever range the original is in. Scaling the log raises the ratio to
-    // the strength, which is the ratio-space analogue of scaling a delta: 0
-    // leaves the image alone, 1 applies the model's own edit.
-    // The model saw the image after GradeModelInput, so the ratio is
-    // measured in the graded domain. Apply the same grade to the original
-    // before the edit, un-grade the result, and the compose is the same
-    // statement the model made rather than a differently-shaped one.
+    // When an input grade ran, apply it before the ratio and invert after.
     const bool graded = (kGradeEnabled > 0.5);
 
     float3 edited;
