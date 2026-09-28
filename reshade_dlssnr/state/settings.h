@@ -255,8 +255,16 @@ struct Settings {
   // The mask replaces the histogram's hue-based classifier. DLSS Output only.
   bool skin_detect_enable = false;
   float skin_detect_scale = 0.25f;
+  // Absolute floor for a luma change to count. Below this it is treated as
+  // noise regardless of relative size.
   float skin_detect_luma_threshold = 0.02f;
+  // Relative bar: a change must also exceed this fraction of the pixel's
+  // luma. Rejects the model's numeric jitter on bright pixels.
+  float skin_detect_luma_relative = 0.05f;
   float skin_detect_chroma_threshold = 0.02f;
+  // Saturation bound: any channel above this on either side excludes the
+  // pixel. Rejects emissives and clipped highlights.
+  float skin_detect_clip_threshold = 0.97f;
 
   // ---------------------------------------------------------------------
   // Final backbuffer grade. Runs once per frame, after every pass, on the

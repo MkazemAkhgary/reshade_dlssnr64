@@ -244,7 +244,9 @@ bool SkinDetect::Run(CommandContext& cmd,
   mask_constants.Width = work_w;
   mask_constants.Height = work_h;
   mask_constants.params[0] = settings.skin_detect_luma_threshold;
-  mask_constants.params[1] = settings.skin_detect_chroma_threshold;
+  mask_constants.params[1] = settings.skin_detect_luma_relative;
+  mask_constants.params[2] = settings.skin_detect_chroma_threshold;
+  mask_constants.params[3] = settings.skin_detect_clip_threshold;
 
   ID3D12Resource* mask_srvs[kSrvCount] = {working_input_.Get(),
                                           working_output_.Get(),

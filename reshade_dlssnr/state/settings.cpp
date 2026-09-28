@@ -503,8 +503,12 @@ Snapshot BuildSnapshot(const Settings& settings) {
   Append(snap, "skin_detect_scale", FloatText(settings.skin_detect_scale));
   Append(snap, "skin_detect_luma_threshold",
          FloatText(settings.skin_detect_luma_threshold));
+  Append(snap, "skin_detect_luma_relative",
+         FloatText(settings.skin_detect_luma_relative));
   Append(snap, "skin_detect_chroma_threshold",
          FloatText(settings.skin_detect_chroma_threshold));
+  Append(snap, "skin_detect_clip_threshold",
+         FloatText(settings.skin_detect_clip_threshold));
   AppendGrade(snap, "grade_backbuffer", settings.grade_backbuffer);
 
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
@@ -632,6 +636,20 @@ void LoadSettings() {
                             g_settings.skin_detect_chroma_threshold);
   if (g_settings.skin_detect_chroma_threshold < 0.0f)
     g_settings.skin_detect_chroma_threshold = 0.0f;
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "SkinDetect.LumaRelative",
+                            g_settings.skin_detect_luma_relative);
+  if (g_settings.skin_detect_luma_relative < 0.0f)
+    g_settings.skin_detect_luma_relative = 0.0f;
+  if (g_settings.skin_detect_luma_relative > 1.0f)
+    g_settings.skin_detect_luma_relative = 1.0f;
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "SkinDetect.ClipThreshold",
+                            g_settings.skin_detect_clip_threshold);
+  if (g_settings.skin_detect_clip_threshold < 0.5f)
+    g_settings.skin_detect_clip_threshold = 0.5f;
+  if (g_settings.skin_detect_clip_threshold > 1.0f)
+    g_settings.skin_detect_clip_threshold = 1.0f;
 
   LoadGrade("Grade.Backbuffer.", g_settings.grade_backbuffer);
 
@@ -730,6 +748,12 @@ void SaveSettings() {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.ChromaThreshold",
                             g_settings.skin_detect_chroma_threshold);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            "SkinDetect.LumaRelative",
+                            g_settings.skin_detect_luma_relative);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            "SkinDetect.ClipThreshold",
+                            g_settings.skin_detect_clip_threshold);
 
   SaveGrade("Grade.Backbuffer.", g_settings.grade_backbuffer);
 

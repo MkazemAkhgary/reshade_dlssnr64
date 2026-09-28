@@ -352,10 +352,14 @@ cbuffer Params : register(b0)
     float4 gParams[12];
 };
 
-// gParams[0].x = luma threshold
-// gParams[0].y = chroma threshold
-#define kLumaThreshold   gParams[0].x
-#define kChromaThreshold gParams[0].y
+// gParams[0].x = absolute luma threshold (noise floor)
+// gParams[0].y = relative luma threshold (fraction of luma)
+// gParams[0].z = chroma threshold
+// gParams[0].w = saturation bound
+#define kLumaAbs    gParams[0].x
+#define kLumaRel    gParams[0].y
+#define kChromaAbs  gParams[0].z
+#define kSatBound   gParams[0].w
 
 Texture2D<float4> gInput  : register(t0);
 Texture2D<float4> gOutput : register(t1);
@@ -363,27 +367,51 @@ RWTexture2D<float> gMask  : register(u0);
 
 static const float3 kLuma709 = float3(0.2126, 0.7152, 0.0722);
 
+// One pixel's vote. Rejects saturated pixels outright, then requires both an
+// absolute and a relative luma change (or a chroma change).
+bool PixelIsSkin(int2 xy)
+{
+    xy.x = clamp(xy.x, 0, (int)gWidth - 1);
+    xy.y = clamp(xy.y, 0, (int)gHeight - 1);
+    float3 a = gInput.Load(int3(xy, 0)).rgb;
+    float3 b = gOutput.Load(int3(xy, 0)).rgb;
+
+    // Emissives sit near 1.0; the model's output there is not a skin edit.
+    float lo = 1.0 - kSatBound;
+    if (max(max(a.r, a.g), a.b) >= kSatBound) return false;
+    if (max(max(b.r, b.g), b.b) >= kSatBound) return false;
+    if (min(min(a.r, a.g), a.b) <= lo) return false;
+    if (min(min(b.r, b.g), b.b) <= lo) return false;
+
+    float a_luma = dot(a, kLuma709);
+    float b_luma = dot(b, kLuma709);
+    float luma_diff = abs(b_luma - a_luma);
+    float luma_ref = max(a_luma, b_luma);
+
+    // Both a noise floor and a proportional bar: bright pixels need a
+    // larger absolute change to qualify.
+    bool luma_edit = luma_diff > kLumaAbs && luma_diff > kLumaRel * luma_ref;
+
+    float3 chroma_diff = (b - b_luma) - (a - a_luma);
+    bool chroma_edit = length(chroma_diff) > kChromaAbs;
+
+    return luma_edit || chroma_edit;
+}
+
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= gWidth || id.y >= gHeight) return;
 
-    float3 a = gInput.Load(int3(id.xy, 0)).rgb;
-    float3 b = gOutput.Load(int3(id.xy, 0)).rgb;
+    // 3x3 majority. A lone noise spike is rejected; a regional edit
+    // survives intact. Purely spatial — no dependence across frames.
+    int2 center = int2(id.xy);
+    int hits = 0;
+    for (int dy = -1; dy <= 1; ++dy)
+        for (int dx = -1; dx <= 1; ++dx)
+            if (PixelIsSkin(center + int2(dx, dy))) hits++;
 
-    float a_luma = dot(a, kLuma709);
-    float b_luma = dot(b, kLuma709);
-    float luma_diff = abs(b_luma - a_luma);
-
-    float3 chroma_diff = (b - b_luma) - (a - a_luma);
-    float chroma_mag = length(chroma_diff);
-
-    // The model runs with only the skin edit on, so any edit at all marks a
-    // pixel the model classified as skin. Either channel of the diff
-    // crossing its threshold counts.
-    float skin =
-        (luma_diff > kLumaThreshold || chroma_mag > kChromaThreshold) ? 1.0 : 0.0;
-    gMask[id.xy] = skin;
+    gMask[id.xy] = hits >= 5 ? 1.0 : 0.0;
 }
 )";
 

@@ -1761,10 +1761,18 @@ void DrawOverlay(reshade::api::effect_runtime*) {
 
       changed |= DrawFloatRow(
           0, "skin_detect_luma_threshold", "Luma Threshold",
-          "Minimum absolute luma difference between the model's input and "
-          "output for a pixel to count as skin.",
+          "Absolute floor for a luma change to count. Below this the "
+          "difference is treated as model noise.",
           &settings.skin_detect_luma_threshold, nullptr, 0.0f,
           0.0f, 0.5f, 0.02f);
+
+      changed |= DrawFloatRow(
+          0, "skin_detect_luma_relative", "Luma Relative",
+          "A change must also exceed this fraction of the pixel's luma.\n"
+          "Rejects the model's numeric jitter on bright pixels; raise if "
+          "bright sources (emissives, specular) still flicker in the mask.",
+          &settings.skin_detect_luma_relative, nullptr, 0.0f,
+          0.0f, 1.0f, 0.05f);
 
       changed |= DrawFloatRow(
           0, "skin_detect_chroma_threshold", "Chroma Threshold",
@@ -1772,6 +1780,14 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           "for a pixel to count as skin.",
           &settings.skin_detect_chroma_threshold, nullptr, 0.0f,
           0.0f, 0.5f, 0.02f);
+
+      changed |= DrawFloatRow(
+          0, "skin_detect_clip_threshold", "Clip Threshold",
+          "Any channel at or above this on either side excludes the pixel.\n"
+          "Lower to reject more of a bright emissive's halo; the hard limit "
+          "is where the tonemap saturates.",
+          &settings.skin_detect_clip_threshold, nullptr, 0.97f,
+          0.5f, 1.0f, 0.97f);
     });
   }
 
