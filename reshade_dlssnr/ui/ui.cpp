@@ -1649,9 +1649,10 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           "frame, the exposure falls back to the full histogram rather "
           "than metering on too few pixels.\n"
           "Raise this if exposure gets stuck on interior scenes; lower it "
-          "if sky is leaking back into the measurement.",
+          "if sky is leaking back into the measurement. 1.0 disables the "
+          "depth filter entirely.",
           &settings.hdr_depth_fallback_fraction, nullptr, 0.0f,
-          0.0f, 0.95f, 0.20f);
+          0.0f, 1.0f, 0.20f);
     });
 
     // Diagnostics: raw measurement values, for scenes where the exposure

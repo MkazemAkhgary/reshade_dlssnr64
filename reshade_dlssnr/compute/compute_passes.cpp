@@ -376,14 +376,16 @@ void CSMain(uint3 gid : SV_GroupID,
             InterlockedAdd(gSharedHist[kHistogramStride + bin], 1u);
         }
 
-        // Model mask when bound; hue classifier otherwise.
+        // Model mask when bound; hue classifier otherwise. Not gated on sky:
+        // sky exclusion is a scene-histogram concern, and skin metering
+        // should keep working when depth classifies the whole frame as sky.
         bool is_skin;
         if (kHasMask > 0.5) {
             is_skin = gSkinMask.SampleLevel(s0, uv, 0).r > 0.5;
         } else {
             is_skin = IsSkin(lin);
         }
-        if (!sky && is_skin) {
+        if (is_skin) {
             InterlockedAdd(gSharedHist[2u * kHistogramStride + bin], 1u);
         }
     }

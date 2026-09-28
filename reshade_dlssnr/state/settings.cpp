@@ -650,8 +650,8 @@ void LoadSettings() {
                             g_settings.hdr_depth_fallback_fraction);
   if (g_settings.hdr_depth_fallback_fraction < 0.0f)
     g_settings.hdr_depth_fallback_fraction = 0.0f;
-  if (g_settings.hdr_depth_fallback_fraction > 0.95f)
-    g_settings.hdr_depth_fallback_fraction = 0.95f;
+  if (g_settings.hdr_depth_fallback_fraction > 1.0f)
+    g_settings.hdr_depth_fallback_fraction = 1.0f;
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.Enable",
                             g_settings.skin_detect_enable);
