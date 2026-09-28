@@ -119,6 +119,7 @@
     <ClCompile Include="runtime\pipeline_graph.cpp" />
     <ClCompile Include="runtime\pipeline_trace.cpp" />
     <ClCompile Include="runtime\runtime.cpp" />
+    <ClCompile Include="runtime\skin_detect.cpp" />
     <ClCompile Include="state\settings.cpp" />
     <ClCompile Include="ui\ui.cpp" />
   </ItemGroup>
@@ -151,6 +152,7 @@
     <ClInclude Include="runtime\pipeline_graph.h" />
     <ClInclude Include="runtime\pipeline_trace.h" />
     <ClInclude Include="runtime\runtime.h" />
+    <ClInclude Include="runtime\skin_detect.h" />
     <ClInclude Include="state\settings.h" />
     <ClInclude Include="state\version.h" />
     <ClInclude Include="ui\ui.h" />
