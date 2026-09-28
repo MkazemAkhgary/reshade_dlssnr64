@@ -1623,14 +1623,25 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           0.0f, 2.0f, 0.1f);
 
       changed |= DrawFloatRow(
-          0, "hdr_skin_fraction_threshold", "Skin Priority",
+          0, "hdr_skin_fraction_threshold", "Skin Fraction",
           "Fraction of the frame that must be skin for the skin "
-          "histogram to drive exposure.\n"
+          "histogram to be considered at all.\n"
           "Lower values favor faces sooner; higher values keep the "
           "whole-scene measurement until a face occupies more of the "
           "image.",
           &settings.hdr_skin_fraction_threshold, nullptr, 0.0f,
           0.0f, 0.5f, 0.01f);
+
+      changed |= DrawFloatRow(
+          0, "hdr_skin_priority", "Skin Priority",
+          "How much the skin median influences the exposure target, once "
+          "the fraction gate above has passed.\n"
+          "0 = the depth/full scene drives exposure alone; 1 = the skin "
+          "median alone. In between, the two are blended in log2 space, "
+          "so skin is favored without fully excluding the rest of the "
+          "frame.",
+          &settings.hdr_skin_priority, nullptr, 0.7f,
+          0.0f, 1.0f, 0.7f);
 
       changed |= DrawFloatRow(
           0, "hdr_depth_fallback_fraction", "Depth Fallback",

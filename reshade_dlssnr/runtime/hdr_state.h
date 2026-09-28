@@ -42,6 +42,10 @@ struct ExposureParams {
   float skin_fraction_threshold = 0.01f;
   float depth_fallback_fraction = 0.20f;
   uint32_t measure_interval = 4;
+  // Blend weight toward the skin target once the skin gate passes. 0 = scene
+  // alone, 1 = skin alone. Ignored when the tracker is called with
+  // use_skin=false.
+  float skin_priority = 0.7f;
 };
 
 // One exposure/white-point EMA driven from a histogram. HdrState holds two:

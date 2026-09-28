@@ -497,6 +497,7 @@ Snapshot BuildSnapshot(const Settings& settings) {
   Append(snap, "hdr_rate_cap", FloatText(settings.hdr_rate_cap));
   Append(snap, "hdr_skin_fraction_threshold",
          FloatText(settings.hdr_skin_fraction_threshold));
+  Append(snap, "hdr_skin_priority", FloatText(settings.hdr_skin_priority));
   Append(snap, "hdr_depth_fallback_fraction",
          FloatText(settings.hdr_depth_fallback_fraction));
   Append(snap, "skin_detect_enable", BoolText(settings.skin_detect_enable));
@@ -638,6 +639,11 @@ void LoadSettings() {
     g_settings.hdr_skin_fraction_threshold = 0.0f;
   if (g_settings.hdr_skin_fraction_threshold > 0.5f)
     g_settings.hdr_skin_fraction_threshold = 0.5f;
+
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.SkinPriority",
+                            g_settings.hdr_skin_priority);
+  if (g_settings.hdr_skin_priority < 0.0f) g_settings.hdr_skin_priority = 0.0f;
+  if (g_settings.hdr_skin_priority > 1.0f) g_settings.hdr_skin_priority = 1.0f;
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             "Hdr.DepthFallbackFraction",
@@ -834,6 +840,8 @@ void SaveSettings() {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             "Hdr.SkinFractionThreshold",
                             g_settings.hdr_skin_fraction_threshold);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.SkinPriority",
+                            g_settings.hdr_skin_priority);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             "Hdr.DepthFallbackFraction",
                             g_settings.hdr_depth_fallback_fraction);

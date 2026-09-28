@@ -121,44 +121,58 @@ void ExposureTracker::Update(const uint32_t* bins, const ExposureParams& params,
   const float depth_survived =
       static_cast<float>(total_depth) / static_cast<float>(total_full);
 
-  const uint32_t* luma_source = full_bins;
-  uint32_t luma_total = total_full;
+  // Scene source: depth-filtered if usable, else the full frame.
+  const uint32_t* scene_bins = full_bins;
+  uint32_t scene_total = total_full;
   MeteringSource source = MeteringSource::FullFrame;
 
   const bool depth_usable =
       total_depth > 0u &&
       depth_survived >= params.depth_fallback_fraction;
   if (depth_usable) {
-    luma_source = depth_bins;
-    luma_total = total_depth;
+    scene_bins = depth_bins;
+    scene_total = total_depth;
     source = MeteringSource::DepthFiltered;
   }
 
+  const float p_mid_scene_bin = PercentileBin(scene_bins, scene_total, 0.50f);
+  const float luma_mid_scene = BinToLinear(p_mid_scene_bin);
+  float log_target = (luma_mid_scene > 1e-6f)
+                         ? log2(params.midtone / luma_mid_scene)
+                         : log2(std::max(exposure, 1e-6f));
+
+  // Skin is a pull, not a takeover: blend toward the skin target in log2
+  // space so the depth/full scene keeps a say. The gate above (fraction
+  // threshold) decides whether skin is considered at all.
   const float skin_frac =
       static_cast<float>(total_skin) / static_cast<float>(total_full);
+  bool skin_blended = false;
   if (use_skin && total_skin > 1000u &&
       skin_frac > params.skin_fraction_threshold) {
-    luma_source = skin_bins;
-    luma_total = total_skin;
-    source = MeteringSource::Skin;
+    const float p_mid_skin_bin = PercentileBin(skin_bins, total_skin, 0.50f);
+    const float luma_mid_skin = BinToLinear(p_mid_skin_bin);
+    if (luma_mid_skin > 1e-6f) {
+      const float log_skin = log2(params.midtone / luma_mid_skin);
+      const float t = std::clamp(params.skin_priority, 0.0f, 1.0f);
+      log_target = lerp(log_target, log_skin, t);
+      skin_blended = (t > 0.0f);
+      if (skin_blended) source = MeteringSource::Skin;
+    }
   }
 
-  const float p_mid_bin = PercentileBin(luma_source, luma_total, 0.50f);
   const float p_hi_bin =
       PercentileBin(full_bins, total_full,
                     std::clamp(params.white_percentile, 0.90f, 0.999f));
 
-  const float luma_mid = BinToLinear(p_mid_bin);
   const float luma_hi = BinToLinear(p_hi_bin);
+  const float luma_mid = params.midtone / exp2(log_target);
 
   const float raw_target =
-      (luma_mid > 1e-6f)
-          ? std::clamp(params.midtone / luma_mid, 0.01f, 128.0f)
-          : exposure;
+      std::clamp(exp2(log_target), 0.01f, 128.0f);
 
   // Rate cap in log2 space. Skin and warmup bypass it so they can lock
   // quickly; 0 disables it outright.
-  const bool skin_drives = (source == MeteringSource::Skin);
+  const bool skin_drives = skin_blended;
   const float log_max_delta =
       warmup_frames < 30 ? 0.5f : params.rate_cap;
   float capped_target = raw_target;
@@ -495,6 +509,7 @@ void HdrState::UpdateExposure(const uint32_t* bins, const Settings& settings) {
   regular_params.rate_cap = settings.hdr_rate_cap;
   regular_params.skin_fraction_threshold =
       settings.hdr_skin_fraction_threshold;
+  regular_params.skin_priority = settings.hdr_skin_priority;
   regular_params.depth_fallback_fraction =
       settings.hdr_depth_fallback_fraction;
   regular_params.measure_interval =

@@ -245,6 +245,12 @@ struct Settings {
   // the image even when it is the subject, so the threshold is low.
   float hdr_skin_fraction_threshold = 0.01f;
 
+  // How much the skin median influences the target, once the gate above has
+  // passed. 0 = the depth/full scene drives the target alone; 1 = skin drives
+  // alone. In between, the two are blended in log2 space, so skin is favored
+  // without excluding the rest of the frame.
+  float hdr_skin_priority = 0.7f;
+
   // If the depth filter leaves less than this fraction of the frame, the
   // exposure median falls back to the unfiltered histogram rather than
   // metering on too few pixels. Applies only when depth is available.
