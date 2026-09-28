@@ -545,7 +545,7 @@ constexpr const char* kComposeModelOutputHdr = R"(
 #define kRcasStrength    gParams[12].y
 // Residual block, at kResidualSlotBase = float 24 = gParams[6].
 #define kEditStrength    gParams[6].x
-#define kChromaStrength  gParams[6].y
+#define kResidualChroma  gParams[6].y
 #define kEditGamma       gParams[6].z
 #define kHighlightProtect gParams[6].w
 #define kShadowProtect   gParams[7].x
@@ -641,42 +641,6 @@ float SoftCompress(float x, float max_pos, float max_neg, float knee)
         return max_pos * x / (max_pos + knee * abs(x));
     else
         return max_neg * x / (max_neg + knee * abs(x));
-}
-
-// Same shaping as ShapeResidual in the HDR compose, but on the SDR path's
-// log-space residual rather than a per-channel ratio. Separate functions
-// because the input spaces differ and the region protection reads a
-// different luma; the sliders are the same.
-float3 ShapeResidualSdr(float3 delta, float3 original_srgb) {
-    if (kSoftCompression != 0) {
-        delta.r = SoftCompress(delta.r, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
-        delta.g = SoftCompress(delta.g, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
-        delta.b = SoftCompress(delta.b, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
-    }
-
-    if (kEditGamma != 1.0 && kEditGamma > 0.0) {
-        delta = sign(delta) * pow(abs(delta), kEditGamma);
-    }
-
-    if (kChromaStrength < 1.0) {
-        const float3 kL = float3(0.2126, 0.7152, 0.0722);
-        float d_luma = dot(delta, kL);
-        delta = lerp(float3(d_luma, d_luma, d_luma), delta, kChromaStrength);
-    }
-
-    const float3 kL = float3(0.2126, 0.7152, 0.0722);
-    float luma = dot(original_srgb, kL);
-    float protect = 1.0;
-    if (kHighlightProtect > 0.0) {
-        float h = saturate((luma - 0.7) / 0.3);
-        protect *= 1.0 - kHighlightProtect * h;
-    }
-    if (kShadowProtect > 0.0) {
-        float s = saturate((0.3 - luma) / 0.3);
-        protect *= 1.0 - kShadowProtect * s;
-    }
-
-    return delta * protect * kEditStrength;
 }
 
 float safe_log(float x)
@@ -984,10 +948,10 @@ float3 ShapeResidual(float3 delta, float luma) {
 
     // Chroma strength. 1 passes the model's per-channel delta; 0 collapses
     // the delta to its luma, so only brightness moves and hue is left alone.
-    if (kChromaStrength < 1.0) {
+    if (kResidualChroma < 1.0) {
         const float3 kL = float3(0.2126, 0.7152, 0.0722);
         float d_luma = dot(delta, kL);
-        delta = lerp(float3(d_luma, d_luma, d_luma), delta, kChromaStrength);
+        delta = lerp(float3(d_luma, d_luma, d_luma), delta, kResidualChroma);
     }
 
     // Region protection. Both are off at 0, so the default leaves the edit
@@ -1119,7 +1083,7 @@ constexpr const char* kComposeModelOutput = R"(
 // Residual block, at kResidualSlotBase = float 24 = gParams[6]. See the region
 // map in compute_engine.h.
 #define kEditStrength     gParams[6].x
-#define kChromaStrength   gParams[6].y
+#define kResidualChroma   gParams[6].y
 #define kEditGamma        gParams[6].z
 #define kHighlightProtect gParams[6].w
 #define kShadowProtect    gParams[7].x
@@ -1149,6 +1113,42 @@ float safe_log(float x)
 float3 safe_log3(float3 v)
 {
     return log(max(v, 0.0) + 1e-6);
+}
+
+// Same shaping as ShapeResidual in the HDR compose, but on the SDR path's
+// log-space residual rather than a per-channel ratio. Separate functions
+// because the input spaces differ and the region protection reads a
+// different luma; the sliders are the same.
+float3 ShapeResidualSdr(float3 delta, float3 original_srgb) {
+    if (kSoftCompression != 0) {
+        delta.r = SoftCompress(delta.r, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
+        delta.g = SoftCompress(delta.g, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
+        delta.b = SoftCompress(delta.b, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
+    }
+
+    if (kEditGamma != 1.0 && kEditGamma > 0.0) {
+        delta = sign(delta) * pow(abs(delta), kEditGamma);
+    }
+
+    if (kResidualChroma < 1.0) {
+        const float3 kL = float3(0.2126, 0.7152, 0.0722);
+        float d_luma = dot(delta, kL);
+        delta = lerp(float3(d_luma, d_luma, d_luma), delta, kResidualChroma);
+    }
+
+    const float3 kL = float3(0.2126, 0.7152, 0.0722);
+    float luma = dot(original_srgb, kL);
+    float protect = 1.0;
+    if (kHighlightProtect > 0.0) {
+        float h = saturate((luma - 0.7) / 0.3);
+        protect *= 1.0 - kHighlightProtect * h;
+    }
+    if (kShadowProtect > 0.0) {
+        float s = saturate((0.3 - luma) / 0.3);
+        protect *= 1.0 - kShadowProtect * s;
+    }
+
+    return delta * protect * kEditStrength;
 }
 
 // Blend original and edited with independent luma and chroma strengths.
