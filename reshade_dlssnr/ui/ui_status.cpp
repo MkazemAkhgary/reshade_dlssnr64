@@ -1,3 +1,6 @@
+#include <imgui.h>
+#include <reshade.hpp>
+
 #include "ui/ui_sections.h"
 
 #include <cstdio>
