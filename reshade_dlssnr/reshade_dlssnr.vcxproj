@@ -135,6 +135,7 @@
     <ClInclude Include="hooks\proxy_unwrap.h" />
     <ClInclude Include="debug\shaders.h" />
     <ClInclude Include="grade\shaders.h" />
+    <ClInclude Include="hdr\shaders.h" />
     <ClInclude Include="hooks\streamline_compat.h" />
     <ClInclude Include="model\shaders.h" />
     <ClInclude Include="skin\shaders.h" />
