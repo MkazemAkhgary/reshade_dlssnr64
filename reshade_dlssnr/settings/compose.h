@@ -1,6 +1,8 @@
 // Residual edit settings: how the model's edit is carried onto the source.
 #pragma once
 
+#include <string>
+
 namespace reshade_dlssnr {
 
 struct ResidualSettings {
@@ -14,5 +16,8 @@ struct ResidualSettings {
   float ratio_brighten = 64.0f;
   float ratio_darken = 1.0f / 16.0f;
 };
+
+void LoadResidual(const std::string& prefix, ResidualSettings& residual);
+void SaveResidual(const std::string& prefix, const ResidualSettings& residual);
 
 }  // namespace reshade_dlssnr
