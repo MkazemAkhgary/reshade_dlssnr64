@@ -18,8 +18,7 @@ float ClampGradeAmount(float v) {
 
 }  // namespace
 
-void LoadGrade(const char* prefix, GradeSettings& grade) {
-  const std::string p = prefix;
+void LoadGrade(const std::string& p, GradeSettings& grade) {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             (p + "Enabled").c_str(), grade.enabled);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", (p + "Luma").c_str(),
@@ -66,8 +65,7 @@ void LoadGrade(const char* prefix, GradeSettings& grade) {
   grade.highlights = ClampGradeAmount(grade.highlights);
 }
 
-void SaveGrade(const char* prefix, const GradeSettings& grade) {
-  const std::string p = prefix;
+void SaveGrade(const std::string& p, const GradeSettings& grade) {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             (p + "Enabled").c_str(), grade.enabled);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", (p + "Luma").c_str(),

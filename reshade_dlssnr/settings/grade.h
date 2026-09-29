@@ -44,7 +44,7 @@ constexpr float kGradeBlackPointMax = 0.25f;
 constexpr float kGradeWhitePointMin = 0.2f;
 constexpr float kGradeWhitePointMax = 4.0f;
 
-void LoadGrade(const char* prefix, GradeSettings& grade);
-void SaveGrade(const char* prefix, const GradeSettings& grade);
+void LoadGrade(const std::string& prefix, GradeSettings& grade);
+void SaveGrade(const std::string& prefix, const GradeSettings& grade);
 
 }  // namespace reshade_dlssnr
