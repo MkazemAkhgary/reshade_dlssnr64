@@ -136,6 +136,8 @@
     <ClCompile Include="settings\trace.cpp" />
     <ClCompile Include="state\settings.cpp" />
     <ClCompile Include="ui\ui.cpp" />
+    <ClCompile Include="ui\ui_debug.cpp" />
+    <ClCompile Include="ui\ui_status.cpp" />
     <ClCompile Include="ui\ui_widgets.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -182,6 +184,7 @@
     <ClInclude Include="state\settings.h" />
     <ClInclude Include="state\version.h" />
     <ClInclude Include="ui\ui.h" />
+    <ClInclude Include="ui\ui_sections.h" />
     <ClInclude Include="ui\ui_widgets.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
