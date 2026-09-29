@@ -4,6 +4,7 @@
 
 #include <cstdio>
 
+#include "compute/shader_params.h"
 #include "settings.h"
 #include "ui/ui_sections.h"
 #include "ui/ui_widgets.h"
