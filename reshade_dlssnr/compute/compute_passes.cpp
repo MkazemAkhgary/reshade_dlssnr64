@@ -701,6 +701,9 @@ constexpr const char* kComposeModelOutputHdr = R"(
 #define kEditGamma       gParams[6].z
 #define kHighlightProtect gParams[6].w
 #define kShadowProtect   gParams[7].x
+#define kRatioEps        gParams[7].y
+#define kRatioBrighten   gParams[7].z
+#define kRatioDarken     gParams[7].w
 
 Texture2D<float4> gOriginal    : register(t0);
 Texture2D<float4> gLowInput    : register(t1);
@@ -797,12 +800,12 @@ float SoftCompress(float x, float max_pos, float max_neg, float knee)
 
 float safe_log(float x)
 {
-    return log(max(x, 0.0) + 1e-6);
+    return log(max(x, 0.0) + kRatioEps);
 }
 
 float3 safe_log3(float3 v)
 {
-    return log(max(v, 0.0) + 1e-6);
+    return log(max(v, 0.0) + kRatioEps);
 }
 
 // Blend original and edited with independent luma and chroma strengths.
@@ -1129,13 +1132,10 @@ float3 SoftClampRatio(float r, float lo, float hi) {
 }
 
 float3 ComposeRatioDelta(float3 low_in_lin, float3 low_out_lin) {
-    const float eps = 1e-2;
-    const float kBrighten = 64.0;
-    const float kDarken = 1.0 / 16.0;
-    float3 ratio = (low_out_lin + eps) / (max(low_in_lin, 0.0) + eps);
-    ratio.r = SoftClampRatio(ratio.r, kDarken, kBrighten);
-    ratio.g = SoftClampRatio(ratio.g, kDarken, kBrighten);
-    ratio.b = SoftClampRatio(ratio.b, kDarken, kBrighten);
+    float3 ratio = (low_out_lin + kRatioEps) / (max(low_in_lin, 0.0) + kRatioEps);
+    ratio.r = SoftClampRatio(ratio.r, kRatioDarken, kRatioBrighten);
+    ratio.g = SoftClampRatio(ratio.g, kRatioDarken, kRatioBrighten);
+    ratio.b = SoftClampRatio(ratio.b, kRatioDarken, kRatioBrighten);
     return ratio - 1.0;
 }
 
@@ -1248,6 +1248,9 @@ constexpr const char* kComposeModelOutput = R"(
 #define kEditGamma        gParams[6].z
 #define kHighlightProtect gParams[6].w
 #define kShadowProtect    gParams[7].x
+#define kRatioEps         gParams[7].y
+#define kRatioBrighten    gParams[7].z
+#define kRatioDarken      gParams[7].w
 
 Texture2D<float4> gOriginal : register(t0);
 Texture2D<float4> gLowInput : register(t1);
@@ -1386,13 +1389,9 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         residual_log = safe_log3(out_rgb) - safe_log3(in_rgb);
     }
 
-    // A ratio has a small denominator wherever the model's input was near
-    // black, so an unguarded log residual can reach hundreds and blow those
-    // pixels out. Bound it to a change no real edit should need — 16x either
-    // way — which only ever bites in exactly that near-black case. The
-    // compression sliders bound it further when they are on.
-    const float kMaxLogRatio = 2.7725887;  // log(16)
-    residual_log = clamp(residual_log, -kMaxLogRatio, kMaxLogRatio);
+    residual_log = clamp(residual_log,
+                         log(max(kRatioDarken, 1e-4)),
+                         log(max(kRatioBrighten, 1e-4)));
 
     const float3 residual_shaped = ShapeResidualSdr(residual_log, original.rgb);
 

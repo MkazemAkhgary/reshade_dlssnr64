@@ -92,6 +92,9 @@ bool ComposeOutput(
   constants.params[kResidualSlotBase + 2] = residual.edit_gamma;
   constants.params[kResidualSlotBase + 3] = residual.highlight_protect;
   constants.params[kResidualSlotBase + 4] = residual.shadow_protect;
+  constants.params[kResidualSlotBase + 5] = residual.ratio_eps;
+  constants.params[kResidualSlotBase + 6] = residual.ratio_brighten;
+  constants.params[kResidualSlotBase + 7] = residual.ratio_darken;
 
   const char* pass_name = "ComposeModelOutput";
   if (hdr != nullptr) {

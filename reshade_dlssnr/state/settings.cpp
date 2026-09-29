@@ -185,6 +185,23 @@ void LoadResidual(const std::string& prefix, ResidualSettings& residual) {
   if (residual.highlight_protect > 1.0f) residual.highlight_protect = 1.0f;
   if (residual.shadow_protect < 0.0f) residual.shadow_protect = 0.0f;
   if (residual.shadow_protect > 1.0f) residual.shadow_protect = 1.0f;
+
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "RatioEps").c_str(),
+                            residual.ratio_eps);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "RatioBrighten").c_str(),
+                            residual.ratio_brighten);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "RatioDarken").c_str(),
+                            residual.ratio_darken);
+  if (residual.ratio_eps < 1e-6f) residual.ratio_eps = 1e-6f;
+  if (residual.ratio_eps > 0.5f) residual.ratio_eps = 0.5f;
+  if (residual.ratio_brighten < 1.0f) residual.ratio_brighten = 1.0f;
+  if (residual.ratio_brighten > 256.0f) residual.ratio_brighten = 256.0f;
+  if (residual.ratio_darken > 1.0f) residual.ratio_darken = 1.0f;
+  if (residual.ratio_darken < 1.0f / 256.0f)
+    residual.ratio_darken = 1.0f / 256.0f;
 }
 
 void SaveResidual(const std::string& prefix, const ResidualSettings& residual) {
@@ -203,6 +220,15 @@ void SaveResidual(const std::string& prefix, const ResidualSettings& residual) {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             (prefix + "ShadowProtect").c_str(),
                             residual.shadow_protect);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "RatioEps").c_str(),
+                            residual.ratio_eps);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "RatioBrighten").c_str(),
+                            residual.ratio_brighten);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "RatioDarken").c_str(),
+                            residual.ratio_darken);
 }
 
 void LoadPassSettings(uint32_t index, PassSettings& pass) {
@@ -459,6 +485,12 @@ void AppendPass(Snapshot& snap, const std::string& prefix,
          FloatText(pass.residual.highlight_protect));
   Append(snap, prefix + ".residual.shadow_protect",
          FloatText(pass.residual.shadow_protect));
+  Append(snap, prefix + ".residual.ratio_eps",
+         FloatText(pass.residual.ratio_eps));
+  Append(snap, prefix + ".residual.ratio_brighten",
+         FloatText(pass.residual.ratio_brighten));
+  Append(snap, prefix + ".residual.ratio_darken",
+         FloatText(pass.residual.ratio_darken));
   AppendGrade(snap, prefix + ".grade_input", pass.grade_input);
   AppendGrade(snap, prefix + ".grade_output", pass.grade_output);
   Append(snap, prefix + ".inherit.working_scale",

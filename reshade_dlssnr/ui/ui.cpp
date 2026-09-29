@@ -1179,6 +1179,25 @@ void DrawResidualSection(uint32_t pass_index,
       "darkening crushes shadow detail, or when its brightening turns near-"
       "black noise into visible patches.",
       &pass.residual.shadow_protect, nullptr, 0.0f, 0.0f, 1.0f, 0.0f);
+
+  changed |= DrawFloatRow(
+      pass_index, "residual_ratio_eps", "Ratio Eps",
+      "Denominator floor for the per-channel ratio. Higher values make "
+      "near-black pixels contribute less to the edit.",
+      &pass.residual.ratio_eps, nullptr, 1e-2f, 1e-6f, 0.5f, 1e-2f);
+
+  changed |= DrawFloatRow(
+      pass_index, "residual_ratio_brighten", "Ratio Brighten",
+      "Upper bound on how much the model can brighten a channel. "
+      "Soft-clipped: approached, never reached.",
+      &pass.residual.ratio_brighten, nullptr, 64.0f, 1.0f, 256.0f, 64.0f);
+
+  changed |= DrawFloatRow(
+      pass_index, "residual_ratio_darken", "Ratio Darken",
+      "Lower bound on how much the model can darken a channel. "
+      "Soft-clipped: approached, never reached.",
+      &pass.residual.ratio_darken, nullptr, 1.0f / 16.0f,
+      1.0f / 256.0f, 1.0f, 1.0f / 16.0f);
 }
 
 void DrawRcasSection(uint32_t pass_index,
