@@ -139,6 +139,7 @@
     <ClCompile Include="ui\ui_debug.cpp" />
     <ClCompile Include="ui\ui_grade.cpp" />
     <ClCompile Include="ui\ui_hdr.cpp" />
+    <ClCompile Include="ui\ui_pass.cpp" />
     <ClCompile Include="ui\ui_skin.cpp" />
     <ClCompile Include="ui\ui_status.cpp" />
     <ClCompile Include="ui\ui_widgets.cpp" />
