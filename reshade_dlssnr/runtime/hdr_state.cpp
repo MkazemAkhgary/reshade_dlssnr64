@@ -321,7 +321,7 @@ void HdrState::BeginFrame(CommandContext& cmd,
                           ID3D12Resource* mask,
                           const Settings& settings,
                           ComputeEngine& codec) {
-  enabled_ = settings.hdr_enable;
+  enabled_ = settings.hdr.enable;
   if (!enabled_) {
     // Keep existing EMA values around so toggling back on doesn't reset.
     return;
@@ -340,7 +340,7 @@ void HdrState::BeginFrame(CommandContext& cmd,
 
   // Resolve format for this frame.
   const HdrFormat prev_format = resolved_format_;
-  resolved_format_ = DetectFormatFromResource(source, settings.hdr_format);
+  resolved_format_ = DetectFormatFromResource(source, settings.hdr.format);
 
   // Log the raw DXGI format the first time we see it (or whenever it
   // changes). Makes format-detection issues easy to diagnose.
@@ -363,7 +363,7 @@ void HdrState::BeginFrame(CommandContext& cmd,
 
   // Determine how often to measure. 1 = every frame.
   const uint32_t capped_every =
-      static_cast<uint32_t>(std::clamp(settings.hdr_measure_interval, 1, 32));
+      static_cast<uint32_t>(std::clamp(settings.hdr.measure_interval, 1, 32));
 
   if (frames_until_measure_ > 0) {
     frames_until_measure_--;
@@ -506,27 +506,27 @@ void HdrState::UpdateExposure(const uint32_t* bins, const Settings& settings) {
   // fallback tracker never does, so the skin-detect pass's exposure cannot
   // be driven by the mask it produced.
   ExposureParams regular_params;
-  regular_params.midtone = settings.hdr_midtone;
-  regular_params.white_percentile = settings.hdr_white_percentile;
-  regular_params.rate_cap = settings.hdr_rate_cap;
+  regular_params.midtone = settings.hdr.midtone;
+  regular_params.white_percentile = settings.hdr.white_percentile;
+  regular_params.rate_cap = settings.hdr.rate_cap;
   regular_params.skin_fraction_threshold =
-      settings.hdr_skin_fraction_threshold;
-  regular_params.skin_priority = settings.hdr_skin_priority;
+      settings.hdr.skin_fraction_threshold;
+  regular_params.skin_priority = settings.hdr.skin_priority;
   regular_params.depth_fallback_fraction =
-      settings.hdr_depth_fallback_fraction;
+      settings.hdr.depth_fallback_fraction;
   regular_params.measure_interval =
-      static_cast<uint32_t>(settings.hdr_measure_interval);
+      static_cast<uint32_t>(settings.hdr.measure_interval);
 
   // The skin-detect tracker keeps the scene's white point (that describes
   // the scene, not the pass) but has its own target, response, and depth
   // fallback.
   ExposureParams fallback_params = regular_params;
-  fallback_params.midtone = settings.skin_detect_hdr_midtone;
-  fallback_params.rate_cap = settings.skin_detect_hdr_rate_cap;
+  fallback_params.midtone = settings.skin.hdr_midtone;
+  fallback_params.rate_cap = settings.skin.hdr_rate_cap;
   fallback_params.depth_fallback_fraction =
-      settings.skin_detect_hdr_depth_fallback_fraction;
+      settings.skin.hdr_depth_fallback_fraction;
   fallback_params.measure_interval =
-      static_cast<uint32_t>(settings.skin_detect_hdr_measure_interval);
+      static_cast<uint32_t>(settings.skin.hdr_measure_interval);
 
   regular_.Update(bins, regular_params, /*use_skin=*/true);
   fallback_.Update(bins, fallback_params, /*use_skin=*/false);
@@ -538,7 +538,7 @@ void HdrState::UpdateExposure(const uint32_t* bins, const Settings& settings) {
   if (total_full == 0) return;
   const float p_hi_bin =
       PercentileBin(bins, total_full,
-                    std::clamp(settings.hdr_white_percentile, 0.90f, 0.999f));
+                    std::clamp(settings.hdr.white_percentile, 0.90f, 0.999f));
   p_hi_luma_ = BinToLinear(p_hi_bin);
 }
 
@@ -562,7 +562,7 @@ PipelineStatus RunHdrBeginFrame(PassRun& run) {
   // step per pass — so the gate moves here. Only the first pass in the chain
   // measures.
   if (!run.is_first_pass) return PipelineStatus::Ok;
-  if (run.hdr == nullptr || run.hdr_cmd == nullptr) return PipelineStatus::Ok;
+  if (run.hdr == nullptr || run.hdr.cmd == nullptr) return PipelineStatus::Ok;
   if (run.guides.dlss_output_color == nullptr || run.guides.output_width == 0 ||
       run.guides.output_height == 0) {
     TRACE_EVT(run.session, "hdr_begin_frame SKIP (no guide color)");
@@ -581,7 +581,7 @@ PipelineStatus RunHdrBeginFrame(PassRun& run) {
   ID3D12Resource* mask = (run.skin_detect != nullptr)
                              ? run.skin_detect->GetOutput().mask
                              : nullptr;
-  run.hdr->BeginFrame(*run.hdr_cmd, run.list, run.guides.dlss_output_color,
+  run.hdr->BeginFrame(*run.hdr.cmd, run.list, run.guides.dlss_output_color,
                       run.guides.output_width, run.guides.output_height,
                       depth, run.guides.depth_inverted, mask,
                       *run.settings, *run.codec);

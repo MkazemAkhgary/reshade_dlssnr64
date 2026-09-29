@@ -627,15 +627,15 @@ void DrawStatusSection(Settings& settings, bool& changed) {
                 snap.guides_valid ? "Valid (depth + motion)" : "Not seen");
 
   const bool hdr_in_use = AnyPassUsesDlssOutput(settings);
-  const bool hdr_good = !settings.hdr_enable || !hdr_in_use || snap.hdr_ready;
+  const bool hdr_good = !settings.hdr.enable || !hdr_in_use || snap.hdr.ready;
   char hdr_buf[96];
-  if (!settings.hdr_enable) {
+  if (!settings.hdr.enable) {
     std::snprintf(hdr_buf, sizeof(hdr_buf), "Off");
   } else if (!hdr_in_use) {
     std::snprintf(hdr_buf, sizeof(hdr_buf), "Inactive (no DLSS Output pass)");
-  } else if (snap.hdr_ready) {
+  } else if (snap.hdr.ready) {
     std::snprintf(hdr_buf, sizeof(hdr_buf), "Active · exp %.3f · white %.3f",
-                  snap.hdr_exposure, snap.hdr_white_point);
+                  snap.hdr.exposure, snap.hdr.white_point);
   } else {
     std::snprintf(hdr_buf, sizeof(hdr_buf), "Warming up");
   }
@@ -1511,7 +1511,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   // --- HDR section (shared across passes) ---
   if (PersistentHeader("HDR", settings.ui_hdr_open, changed)) {
     changed |= ImGui::Checkbox("Enable HDR Handling",
-                               &settings.hdr_enable);
+                               &settings.hdr.enable);
     if (ImGui::IsItemHovered()) {
       Tip(
           "Prepares HDR content for the model, which expects a "
@@ -1528,7 +1528,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
     // rest of the section is inert while no pass uses the stage.
     if (!hdr_relevant) ImGui::BeginDisabled();
 
-    const bool hdr_on = settings.hdr_enable;
+    const bool hdr_on = settings.hdr.enable;
 
     // Live measurement feedback. Without this the HDR stage has no visible
     // effect during Phase A (measurement only, no tonemapping yet).
@@ -1579,14 +1579,14 @@ void DrawOverlay(reshade::api::effect_runtime*) {
             "for Windows HDR and modern games.",
             "Treat the source as HDR10 PQ (ST.2084). Common for HDR "
             "games on consoles and PC."};
-        int fmt = static_cast<int>(settings.hdr_format);
+        int fmt = static_cast<int>(settings.hdr.format);
         changed |= DrawGroupRow(
             "hdr_format", "Format",
             "How the source image is encoded.\n"
             "Auto detects from the DLSS output's DXGI format; override "
             "it only if the automatic choice looks wrong on your system.",
             kFormatNames, kFormatTips, 4, &fmt, nullptr);
-        settings.hdr_format = static_cast<HdrFormat>(fmt);
+        settings.hdr.format = static_cast<HdrFormat>(fmt);
       }
 
       // Range is reversed: dragging right goes toward 1 frame, matching
@@ -1598,7 +1598,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           "most GPU work.\n"
           "Higher values measure less often and let exposure adjust more "
           "slowly.",
-          &settings.hdr_measure_interval,
+          &settings.hdr.measure_interval,
           32, 1, 4);
 
       changed |= DrawFloatRow(
@@ -1608,7 +1608,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           "Higher values brighten the image fed to the model; lower values "
           "darken it. 18% grey is a common photographic reference and the "
           "default.",
-          &settings.hdr_midtone, nullptr, 0.0f,
+          &settings.hdr.midtone, nullptr, 0.0f,
           0.01f, 0.50f, 0.18f);
 
       changed |= DrawFloatRow(
@@ -1618,7 +1618,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           "Higher values (closer to 1.0) treat only the very brightest "
           "pixels as white, preserving more highlight detail. Lower values "
           "roll off highlights sooner.",
-          &settings.hdr_white_percentile, nullptr, 0.0f,
+          &settings.hdr.white_percentile, nullptr, 0.0f,
           0.90f, 0.999f, 0.99f);
 
       changed |= DrawFloatRow(
@@ -1628,7 +1628,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           "Higher values keep more highlight detail but compress overall "
           "contrast slightly. Lower values roll off highlights harder and "
           "can flatten bright areas.",
-          &settings.hdr_highlight_headroom, nullptr, 0.0f,
+          &settings.hdr.highlight_headroom, nullptr, 0.0f,
           0.25f, 16.0f, 8.0f);
 
       changed |= DrawFloatRow(
@@ -1638,7 +1638,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           "cost of lagging on real scene changes. 0 disables the cap.\n"
           "The first ~30 measurements after start are always uncapped, so "
           "the initial convergence is fast either way.",
-          &settings.hdr_rate_cap, nullptr, 0.0f,
+          &settings.hdr.rate_cap, nullptr, 0.0f,
           0.0f, 2.0f, 0.1f);
 
       changed |= DrawFloatRow(
@@ -1648,7 +1648,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           "Lower values favor faces sooner; higher values keep the "
           "whole-scene measurement until a face occupies more of the "
           "image.",
-          &settings.hdr_skin_fraction_threshold, nullptr, 0.0f,
+          &settings.hdr.skin_fraction_threshold, nullptr, 0.0f,
           0.0f, 0.5f, 0.01f);
 
       changed |= DrawFloatRow(
@@ -1659,7 +1659,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           "median alone. In between, the two are blended in log2 space, "
           "so skin is favored without fully excluding the rest of the "
           "frame.",
-          &settings.hdr_skin_priority, nullptr, 0.7f,
+          &settings.hdr.skin_priority, nullptr, 0.7f,
           0.0f, 1.0f, 0.7f);
 
       changed |= DrawFloatRow(
@@ -1670,7 +1670,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           "Raise this if exposure gets stuck on interior scenes; lower it "
           "if sky is leaking back into the measurement. 1.0 disables the "
           "depth filter entirely.",
-          &settings.hdr_depth_fallback_fraction, nullptr, 0.0f,
+          &settings.hdr.depth_fallback_fraction, nullptr, 0.0f,
           0.0f, 1.0f, 0.20f);
     });
 
@@ -1701,7 +1701,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
             ImGui::Text("Median (P50): %.4f", snap.p50_luma);
             ImGui::TableNextColumn();
             ImGui::Text("White source (P%.1f): %.4f",
-                        settings.hdr_white_percentile * 100.0f,
+                        settings.hdr.white_percentile * 100.0f,
                         snap.p_hi_luma);
 
             ImGui::TableNextRow();
@@ -1714,7 +1714,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
             ImGui::TableNextColumn();
             ImGui::Text("White (post-headroom): %.3f",
                         snap.white_point *
-                            std::max(settings.hdr_highlight_headroom, 0.01f));
+                            std::max(settings.hdr.highlight_headroom, 0.01f));
 
             const char* source_name = "Full frame";
             if (snap.metering_source == 1) source_name = "Depth-filtered";
@@ -1771,7 +1771,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   if (PersistentHeader("Skin Detection", settings.ui_skin_detect_open,
                        changed)) {
     changed |= ImGui::Checkbox("Enable Skin Detection",
-                               &settings.skin_detect_enable);
+                               &settings.skin.enable);
     if (ImGui::IsItemHovered()) {
       Tip(
           "Run the model at reduced resolution with tone and structure "
@@ -1782,19 +1782,19 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           "DLSS Output only.");
     }
 
-    WithDisabled(!settings.skin_detect_enable, [&] {
+    WithDisabled(!settings.skin.enable, [&] {
       changed |= DrawFloatRow(
           0, "skin_detect_scale", "Detection Scale",
           "Fraction of the frame the detection model runs at.\n"
           "Lower values are cheaper but blur the mask at edges.",
-          &settings.skin_detect_scale, nullptr, 0.0f,
+          &settings.skin.scale, nullptr, 0.0f,
           0.10f, 1.0f, 0.25f);
 
       changed |= DrawFloatRow(
           0, "skin_detect_luma_threshold", "Luma Threshold",
           "Absolute floor for a luma change to count. Below this the "
           "difference is treated as model noise.",
-          &settings.skin_detect_luma_threshold, nullptr, 0.0f,
+          &settings.skin.luma_threshold, nullptr, 0.0f,
           0.0f, 0.5f, 0.02f);
 
       changed |= DrawFloatRow(
@@ -1802,14 +1802,14 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           "A change must also exceed this fraction of the pixel's luma.\n"
           "Rejects the model's numeric jitter on bright pixels; raise if "
           "bright sources (emissives, specular) still flicker in the mask.",
-          &settings.skin_detect_luma_relative, nullptr, 0.0f,
+          &settings.skin.luma_relative, nullptr, 0.0f,
           0.0f, 1.0f, 0.05f);
 
       changed |= DrawFloatRow(
           0, "skin_detect_chroma_threshold", "Chroma Threshold",
           "Minimum chroma difference between the model's input and output "
           "for a pixel to count as skin.",
-          &settings.skin_detect_chroma_threshold, nullptr, 0.0f,
+          &settings.skin.chroma_threshold, nullptr, 0.0f,
           0.0f, 0.5f, 0.02f);
 
       changed |= DrawFloatRow(
@@ -1817,7 +1817,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           "Any channel at or above this on either side excludes the pixel.\n"
           "Lower to reject more of a bright emissive's halo; the hard limit "
           "is where the tonemap saturates.",
-          &settings.skin_detect_clip_threshold, nullptr, 0.97f,
+          &settings.skin.clip_threshold, nullptr, 0.97f,
           0.5f, 1.0f, 0.97f);
 
       // --- Model: own tuning, no inheritance ---
@@ -1837,38 +1837,38 @@ void DrawOverlay(reshade::api::effect_runtime*) {
           ImGui::SameLine(kControlLabelWidth);
           const int clicked = DrawGroupButtons(
               "skin_detect_preset", kNames, kTips, 3,
-              settings.skin_detect_preset, nullptr);
+              settings.skin.preset, nullptr);
           if (clicked >= 0) {
-            settings.skin_detect_preset = clicked;
+            settings.skin.preset = clicked;
             changed = true;
           }
 
           changed |= DrawFloatRow(
               0, "skin_detect_intensity", "Intensity",
               "Model intensity for the detection pass.",
-              &settings.skin_detect_intensity, nullptr, 1.0f,
+              &settings.skin.intensity, nullptr, 1.0f,
               0.0f, 2.0f, 1.0f);
           changed |= DrawFloatRow(
               0, "skin_detect_local_tone", "Local Tone",
               "Local tone strength for the detection pass. Default 0 so "
               "only the skin edit shows up in the diff.",
-              &settings.skin_detect_local_tone, nullptr, 0.0f,
+              &settings.skin.local_tone, nullptr, 0.0f,
               0.0f, 2.0f, 0.0f);
           changed |= DrawFloatRow(
               0, "skin_detect_local_structure", "Local Structure",
               "Local structure strength for the detection pass. Default 0.",
-              &settings.skin_detect_local_structure, nullptr, 0.0f,
+              &settings.skin.local_structure, nullptr, 0.0f,
               0.0f, 2.0f, 0.0f);
           changed |= DrawFloatRow(
               0, "skin_detect_skin_structure", "Skin Structure",
               "Skin structure strength for the detection pass. The only "
               "edit left on by default.",
-              &settings.skin_detect_skin_structure, nullptr, 1.0f,
+              &settings.skin.skin_structure, nullptr, 1.0f,
               0.0f, 1.0f, 1.0f);
 
           ImGui::AlignTextToFramePadding();
           changed |= DrawCheckboxAtLabel("skin_detect_ui_correction",
-                                         &settings.skin_detect_ui_correction);
+                                         &settings.skin.ui_correction);
           ImGui::SameLine();
           ImGui::TextUnformatted("UI Correction");
         }
@@ -1886,7 +1886,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
               "Raises detection sensitivity without asking the model to "
               "produce a bigger edit. Values above 1 catch smaller edits; "
               "too high makes the mask noisier.",
-              &settings.skin_detect_edit_strength, nullptr, 1.0f,
+              &settings.skin.edit_strength, nullptr, 1.0f,
               0.1f, 8.0f, 1.0f);
 
           changed |= DrawFloatRow(
@@ -1895,7 +1895,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
               "0 keeps only the pixel's own vote; 1 uses a 3x3 neighborhood; "
               "2 uses a 5x5. Higher values reject single-pixel flicker but "
               "can round off the mask's edges.",
-              &settings.skin_detect_mask_smoothing, nullptr, 0.5f,
+              &settings.skin.mask_smoothing, nullptr, 0.5f,
               0.0f, 1.0f, 0.5f);
 
           changed |= DrawFloatRow(
@@ -1903,7 +1903,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
               "Temporal EMA on the mask.\n"
               "Lower values smooth flicker more, at the cost of lagging "
               "behind quick changes. 1 is per-frame with no smoothing.",
-              &settings.skin_detect_mask_response, nullptr, 0.15f,
+              &settings.skin.mask_response, nullptr, 0.15f,
               0.0f, 1.0f, 0.15f);
         }
       }
@@ -1917,7 +1917,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
               0, "skin_detect_hdr_midtone", "Midtone Target",
               "Where the detection pass aims the scene's median brightness.\n"
               "Independent of the regular HDR Midtone Target.",
-              &settings.skin_detect_hdr_midtone, nullptr, 0.18f,
+              &settings.skin.hdr_midtone, nullptr, 0.18f,
               0.01f, 0.50f, 0.18f);
 
           changed |= DrawFloatRow(
@@ -1925,7 +1925,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
               "Maximum log2 change in the detection pass's exposure per "
               "measurement. Lower values resist scene motion more strongly; "
               "0 disables the cap.",
-              &settings.skin_detect_hdr_rate_cap, nullptr, 0.1f,
+              &settings.skin.hdr_rate_cap, nullptr, 0.1f,
               0.0f, 2.0f, 0.1f);
 
           changed |= DrawIntRow(
@@ -1934,7 +1934,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
               "values move it more slowly.\n"
               "The scene histogram is measured at the global cadence; this "
               "only controls how much of each measurement is applied.",
-              &settings.skin_detect_hdr_measure_interval,
+              &settings.skin.hdr_measure_interval,
               32, 1, 16);
 
           changed |= DrawFloatRow(
@@ -1944,7 +1944,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
               "detection pass falls back to the full frame.\n"
               "Default 1.0 forces full-frame always, which is the most "
               "stable across camera motion.",
-              &settings.skin_detect_hdr_depth_fallback_fraction, nullptr, 0.2f,
+              &settings.skin.hdr_depth_fallback_fraction, nullptr, 0.2f,
               0.0f, 1.0f, 1.0f);
         }
       }

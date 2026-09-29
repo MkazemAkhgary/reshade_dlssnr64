@@ -21,13 +21,13 @@ namespace {
 // PassSettings.
 PassSettings BuildDetectionTuning(const Settings& s) {
   PassSettings pass;
-  pass.preset = std::clamp(s.skin_detect_preset, 0, 2);
-  pass.intensity = s.skin_detect_intensity;
-  pass.local_tone = s.skin_detect_local_tone;
-  pass.local_structure = s.skin_detect_local_structure;
-  pass.skin_structure = s.skin_detect_skin_structure;
+  pass.preset = std::clamp(s.skin.preset, 0, 2);
+  pass.intensity = s.skin.intensity;
+  pass.local_tone = s.skin.local_tone;
+  pass.local_structure = s.skin.local_structure;
+  pass.skin_structure = s.skin.skin_structure;
   pass.auto_mask = true;
-  pass.ui_correction = s.skin_detect_ui_correction;
+  pass.ui_correction = s.skin.ui_correction;
   return pass;
 }
 
@@ -132,7 +132,7 @@ bool SkinDetect::Run(CommandContext& cmd,
     return false;
   }
 
-  const float scale = std::clamp(settings.skin_detect_scale, 0.1f, 1.0f);
+  const float scale = std::clamp(settings.skin.scale, 0.1f, 1.0f);
   const unsigned int work_w = std::max(
       1u, static_cast<unsigned int>(guides.output_width * scale + 0.5f));
   const unsigned int work_h = std::max(
@@ -185,7 +185,7 @@ bool SkinDetect::Run(CommandContext& cmd,
     pass_name = "TonemapForward";
     constants.params[0] = hdr->FallbackExposure();
     constants.params[1] = hdr->FallbackWhitePoint() *
-                          std::max(settings.hdr_highlight_headroom, 0.01f);
+                          std::max(settings.hdr.highlight_headroom, 0.01f);
     constants.params[2] = static_cast<float>(HdrFormatCode(hdr->ResolvedFormat()));
   }
 
@@ -266,15 +266,15 @@ bool SkinDetect::Run(CommandContext& cmd,
   mask_constants.Height = work_h;
   // Response 0..1 -> alpha 0.02..1.0. Warmup forces 1.0 (write fresh, no
   // blend) so the first frame after a resource (re)creation is not a fade.
-  float alpha = 0.02f + settings.skin_detect_mask_response * 0.98f;
+  float alpha = 0.02f + settings.skin.mask_response * 0.98f;
   if (warmup) alpha = 1.0f;
 
-  mask_constants.params[0] = settings.skin_detect_luma_threshold;
-  mask_constants.params[1] = settings.skin_detect_luma_relative;
-  mask_constants.params[2] = settings.skin_detect_chroma_threshold;
-  mask_constants.params[3] = settings.skin_detect_clip_threshold;
-  mask_constants.params[4] = settings.skin_detect_edit_strength;
-  mask_constants.params[5] = settings.skin_detect_mask_smoothing;
+  mask_constants.params[0] = settings.skin.luma_threshold;
+  mask_constants.params[1] = settings.skin.luma_relative;
+  mask_constants.params[2] = settings.skin.chroma_threshold;
+  mask_constants.params[3] = settings.skin.clip_threshold;
+  mask_constants.params[4] = settings.skin.edit_strength;
+  mask_constants.params[5] = settings.skin.mask_smoothing;
   mask_constants.params[6] = alpha;
 
   ID3D12Resource* mask_srvs[kSrvCount] = {working_input_.Get(),

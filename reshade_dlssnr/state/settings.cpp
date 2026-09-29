@@ -518,56 +518,56 @@ Snapshot BuildSnapshot(const Settings& settings) {
   Append(snap, "only_super_sampling", BoolText(settings.only_super_sampling));
   Append(snap, "debug_view", std::to_string(settings.debug_view));
   Append(snap, "active_pass", std::to_string(settings.active_pass));
-  Append(snap, "hdr_enable", BoolText(settings.hdr_enable));
-  Append(snap, "hdr_format", HdrFormatText(settings.hdr_format));
+  Append(snap, "hdr_enable", BoolText(settings.hdr.enable));
+  Append(snap, "hdr_format", HdrFormatText(settings.hdr.format));
   Append(snap, "hdr_measure_interval",
-         std::to_string(settings.hdr_measure_interval));
-  Append(snap, "hdr_midtone", FloatText(settings.hdr_midtone));
-  Append(snap, "hdr_white_percentile", FloatText(settings.hdr_white_percentile));
+         std::to_string(settings.hdr.measure_interval));
+  Append(snap, "hdr_midtone", FloatText(settings.hdr.midtone));
+  Append(snap, "hdr_white_percentile", FloatText(settings.hdr.white_percentile));
   Append(snap, "hdr_highlight_headroom",
-         FloatText(settings.hdr_highlight_headroom));
-  Append(snap, "hdr_rate_cap", FloatText(settings.hdr_rate_cap));
+         FloatText(settings.hdr.highlight_headroom));
+  Append(snap, "hdr_rate_cap", FloatText(settings.hdr.rate_cap));
   Append(snap, "hdr_skin_fraction_threshold",
-         FloatText(settings.hdr_skin_fraction_threshold));
-  Append(snap, "hdr_skin_priority", FloatText(settings.hdr_skin_priority));
+         FloatText(settings.hdr.skin_fraction_threshold));
+  Append(snap, "hdr_skin_priority", FloatText(settings.hdr.skin_priority));
   Append(snap, "hdr_depth_fallback_fraction",
-         FloatText(settings.hdr_depth_fallback_fraction));
-  Append(snap, "skin_detect_enable", BoolText(settings.skin_detect_enable));
-  Append(snap, "skin_detect_scale", FloatText(settings.skin_detect_scale));
+         FloatText(settings.hdr.depth_fallback_fraction));
+  Append(snap, "skin_detect_enable", BoolText(settings.skin.enable));
+  Append(snap, "skin_detect_scale", FloatText(settings.skin.scale));
   Append(snap, "skin_detect_luma_threshold",
-         FloatText(settings.skin_detect_luma_threshold));
+         FloatText(settings.skin.luma_threshold));
   Append(snap, "skin_detect_luma_relative",
-         FloatText(settings.skin_detect_luma_relative));
+         FloatText(settings.skin.luma_relative));
   Append(snap, "skin_detect_chroma_threshold",
-         FloatText(settings.skin_detect_chroma_threshold));
+         FloatText(settings.skin.chroma_threshold));
   Append(snap, "skin_detect_clip_threshold",
-         FloatText(settings.skin_detect_clip_threshold));
+         FloatText(settings.skin.clip_threshold));
   Append(snap, "skin_detect_preset",
-         std::to_string(settings.skin_detect_preset));
+         std::to_string(settings.skin.preset));
   Append(snap, "skin_detect_intensity",
-         FloatText(settings.skin_detect_intensity));
+         FloatText(settings.skin.intensity));
   Append(snap, "skin_detect_local_tone",
-         FloatText(settings.skin_detect_local_tone));
+         FloatText(settings.skin.local_tone));
   Append(snap, "skin_detect_local_structure",
-         FloatText(settings.skin_detect_local_structure));
+         FloatText(settings.skin.local_structure));
   Append(snap, "skin_detect_skin_structure",
-         FloatText(settings.skin_detect_skin_structure));
+         FloatText(settings.skin.skin_structure));
   Append(snap, "skin_detect_ui_correction",
-         BoolText(settings.skin_detect_ui_correction));
+         BoolText(settings.skin.ui_correction));
   Append(snap, "skin_detect_edit_strength",
-         FloatText(settings.skin_detect_edit_strength));
+         FloatText(settings.skin.edit_strength));
   Append(snap, "skin_detect_mask_smoothing",
-         FloatText(settings.skin_detect_mask_smoothing));
+         FloatText(settings.skin.mask_smoothing));
   Append(snap, "skin_detect_mask_response",
-         FloatText(settings.skin_detect_mask_response));
+         FloatText(settings.skin.mask_response));
   Append(snap, "skin_detect_hdr_midtone",
-         FloatText(settings.skin_detect_hdr_midtone));
+         FloatText(settings.skin.hdr_midtone));
   Append(snap, "skin_detect_hdr_rate_cap",
-         FloatText(settings.skin_detect_hdr_rate_cap));
+         FloatText(settings.skin.hdr_rate_cap));
   Append(snap, "skin_detect_hdr_measure_interval",
-         std::to_string(settings.skin_detect_hdr_measure_interval));
+         std::to_string(settings.skin.hdr_measure_interval));
   Append(snap, "skin_detect_hdr_depth_fallback_fraction",
-         FloatText(settings.skin_detect_hdr_depth_fallback_fraction));
+         FloatText(settings.skin.hdr_depth_fallback_fraction));
   AppendGrade(snap, "grade_backbuffer", settings.grade_backbuffer);
 
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
@@ -636,149 +636,149 @@ void LoadSettings() {
   if (g_settings.debug_view < 0) g_settings.debug_view = 0;
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Enable",
-                            g_settings.hdr_enable);
-  int hdr_format = static_cast<int>(g_settings.hdr_format);
+                            g_settings.hdr.enable);
+  int format_value = static_cast<int>(g_settings.hdr.format);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Format",
-                            hdr_format);
-  if (hdr_format < 0 || hdr_format > 3) hdr_format = 0;
-  g_settings.hdr_format = static_cast<HdrFormat>(hdr_format);
+                            format_value);
+  if (format_value < 0 || format_value > 3) format_value = 0;
+  g_settings.hdr.format = static_cast<HdrFormat>(format_value);
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.MeasureInterval",
-                            g_settings.hdr_measure_interval);
-  if (g_settings.hdr_measure_interval < 1) g_settings.hdr_measure_interval = 1;
-  if (g_settings.hdr_measure_interval > 32) g_settings.hdr_measure_interval = 32;
+                            g_settings.hdr.measure_interval);
+  if (g_settings.hdr.measure_interval < 1) g_settings.hdr.measure_interval = 1;
+  if (g_settings.hdr.measure_interval > 32) g_settings.hdr.measure_interval = 32;
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Midtone",
-                            g_settings.hdr_midtone);
+                            g_settings.hdr.midtone);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.WhitePercentile",
-                            g_settings.hdr_white_percentile);
+                            g_settings.hdr.white_percentile);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.HighlightHeadroom",
-                            g_settings.hdr_highlight_headroom);
+                            g_settings.hdr.highlight_headroom);
   // Clamp to the slider's range.
-  if (g_settings.hdr_highlight_headroom > 16.0f ||
-      g_settings.hdr_highlight_headroom < 0.25f) {
-    g_settings.hdr_highlight_headroom = 8.0f;
+  if (g_settings.hdr.highlight_headroom > 16.0f ||
+      g_settings.hdr.highlight_headroom < 0.25f) {
+    g_settings.hdr.highlight_headroom = 8.0f;
   }
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.RateCap",
-                            g_settings.hdr_rate_cap);
-  if (g_settings.hdr_rate_cap < 0.0f) g_settings.hdr_rate_cap = 0.0f;
-  if (g_settings.hdr_rate_cap > 2.0f) g_settings.hdr_rate_cap = 2.0f;
+                            g_settings.hdr.rate_cap);
+  if (g_settings.hdr.rate_cap < 0.0f) g_settings.hdr.rate_cap = 0.0f;
+  if (g_settings.hdr.rate_cap > 2.0f) g_settings.hdr.rate_cap = 2.0f;
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             "Hdr.SkinFractionThreshold",
-                            g_settings.hdr_skin_fraction_threshold);
-  if (g_settings.hdr_skin_fraction_threshold < 0.0f)
-    g_settings.hdr_skin_fraction_threshold = 0.0f;
-  if (g_settings.hdr_skin_fraction_threshold > 0.5f)
-    g_settings.hdr_skin_fraction_threshold = 0.5f;
+                            g_settings.hdr.skin_fraction_threshold);
+  if (g_settings.hdr.skin_fraction_threshold < 0.0f)
+    g_settings.hdr.skin_fraction_threshold = 0.0f;
+  if (g_settings.hdr.skin_fraction_threshold > 0.5f)
+    g_settings.hdr.skin_fraction_threshold = 0.5f;
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.SkinPriority",
-                            g_settings.hdr_skin_priority);
-  if (g_settings.hdr_skin_priority < 0.0f) g_settings.hdr_skin_priority = 0.0f;
-  if (g_settings.hdr_skin_priority > 1.0f) g_settings.hdr_skin_priority = 1.0f;
+                            g_settings.hdr.skin_priority);
+  if (g_settings.hdr.skin_priority < 0.0f) g_settings.hdr.skin_priority = 0.0f;
+  if (g_settings.hdr.skin_priority > 1.0f) g_settings.hdr.skin_priority = 1.0f;
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             "Hdr.DepthFallbackFraction",
-                            g_settings.hdr_depth_fallback_fraction);
-  if (g_settings.hdr_depth_fallback_fraction < 0.0f)
-    g_settings.hdr_depth_fallback_fraction = 0.0f;
-  if (g_settings.hdr_depth_fallback_fraction > 1.0f)
-    g_settings.hdr_depth_fallback_fraction = 1.0f;
+                            g_settings.hdr.depth_fallback_fraction);
+  if (g_settings.hdr.depth_fallback_fraction < 0.0f)
+    g_settings.hdr.depth_fallback_fraction = 0.0f;
+  if (g_settings.hdr.depth_fallback_fraction > 1.0f)
+    g_settings.hdr.depth_fallback_fraction = 1.0f;
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.Enable",
-                            g_settings.skin_detect_enable);
+                            g_settings.skin.enable);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.Scale",
-                            g_settings.skin_detect_scale);
-  if (g_settings.skin_detect_scale < 0.10f) g_settings.skin_detect_scale = 0.10f;
-  if (g_settings.skin_detect_scale > 1.0f) g_settings.skin_detect_scale = 1.0f;
+                            g_settings.skin.scale);
+  if (g_settings.skin.scale < 0.10f) g_settings.skin.scale = 0.10f;
+  if (g_settings.skin.scale > 1.0f) g_settings.skin.scale = 1.0f;
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.LumaThreshold",
-                            g_settings.skin_detect_luma_threshold);
-  if (g_settings.skin_detect_luma_threshold < 0.0f)
-    g_settings.skin_detect_luma_threshold = 0.0f;
+                            g_settings.skin.luma_threshold);
+  if (g_settings.skin.luma_threshold < 0.0f)
+    g_settings.skin.luma_threshold = 0.0f;
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.ChromaThreshold",
-                            g_settings.skin_detect_chroma_threshold);
-  if (g_settings.skin_detect_chroma_threshold < 0.0f)
-    g_settings.skin_detect_chroma_threshold = 0.0f;
+                            g_settings.skin.chroma_threshold);
+  if (g_settings.skin.chroma_threshold < 0.0f)
+    g_settings.skin.chroma_threshold = 0.0f;
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.LumaRelative",
-                            g_settings.skin_detect_luma_relative);
-  if (g_settings.skin_detect_luma_relative < 0.0f)
-    g_settings.skin_detect_luma_relative = 0.0f;
-  if (g_settings.skin_detect_luma_relative > 1.0f)
-    g_settings.skin_detect_luma_relative = 1.0f;
+                            g_settings.skin.luma_relative);
+  if (g_settings.skin.luma_relative < 0.0f)
+    g_settings.skin.luma_relative = 0.0f;
+  if (g_settings.skin.luma_relative > 1.0f)
+    g_settings.skin.luma_relative = 1.0f;
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.ClipThreshold",
-                            g_settings.skin_detect_clip_threshold);
-  if (g_settings.skin_detect_clip_threshold < 0.5f)
-    g_settings.skin_detect_clip_threshold = 0.5f;
-  if (g_settings.skin_detect_clip_threshold > 1.0f)
-    g_settings.skin_detect_clip_threshold = 1.0f;
+                            g_settings.skin.clip_threshold);
+  if (g_settings.skin.clip_threshold < 0.5f)
+    g_settings.skin.clip_threshold = 0.5f;
+  if (g_settings.skin.clip_threshold > 1.0f)
+    g_settings.skin.clip_threshold = 1.0f;
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.Preset",
-                            g_settings.skin_detect_preset);
-  if (g_settings.skin_detect_preset < 0) g_settings.skin_detect_preset = 0;
-  if (g_settings.skin_detect_preset > 2) g_settings.skin_detect_preset = 2;
+                            g_settings.skin.preset);
+  if (g_settings.skin.preset < 0) g_settings.skin.preset = 0;
+  if (g_settings.skin.preset > 2) g_settings.skin.preset = 2;
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.Intensity",
-                            g_settings.skin_detect_intensity);
+                            g_settings.skin.intensity);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.LocalTone",
-                            g_settings.skin_detect_local_tone);
+                            g_settings.skin.local_tone);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.LocalStructure",
-                            g_settings.skin_detect_local_structure);
+                            g_settings.skin.local_structure);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.SkinStructure",
-                            g_settings.skin_detect_skin_structure);
+                            g_settings.skin.skin_structure);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.UICorrection",
-                            g_settings.skin_detect_ui_correction);
+                            g_settings.skin.ui_correction);
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.EditStrength",
-                            g_settings.skin_detect_edit_strength);
-  if (g_settings.skin_detect_edit_strength < 0.1f)
-    g_settings.skin_detect_edit_strength = 0.1f;
-  if (g_settings.skin_detect_edit_strength > 8.0f)
-    g_settings.skin_detect_edit_strength = 8.0f;
+                            g_settings.skin.edit_strength);
+  if (g_settings.skin.edit_strength < 0.1f)
+    g_settings.skin.edit_strength = 0.1f;
+  if (g_settings.skin.edit_strength > 8.0f)
+    g_settings.skin.edit_strength = 8.0f;
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.MaskSmoothing",
-                            g_settings.skin_detect_mask_smoothing);
-  if (g_settings.skin_detect_mask_smoothing < 0.0f)
-    g_settings.skin_detect_mask_smoothing = 0.0f;
-  if (g_settings.skin_detect_mask_smoothing > 1.0f)
-    g_settings.skin_detect_mask_smoothing = 1.0f;
+                            g_settings.skin.mask_smoothing);
+  if (g_settings.skin.mask_smoothing < 0.0f)
+    g_settings.skin.mask_smoothing = 0.0f;
+  if (g_settings.skin.mask_smoothing > 1.0f)
+    g_settings.skin.mask_smoothing = 1.0f;
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.MaskResponse",
-                            g_settings.skin_detect_mask_response);
-  if (g_settings.skin_detect_mask_response < 0.0f)
-    g_settings.skin_detect_mask_response = 0.0f;
-  if (g_settings.skin_detect_mask_response > 1.0f)
-    g_settings.skin_detect_mask_response = 1.0f;
+                            g_settings.skin.mask_response);
+  if (g_settings.skin.mask_response < 0.0f)
+    g_settings.skin.mask_response = 0.0f;
+  if (g_settings.skin.mask_response > 1.0f)
+    g_settings.skin.mask_response = 1.0f;
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.HdrMidtone",
-                            g_settings.skin_detect_hdr_midtone);
+                            g_settings.skin.hdr_midtone);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.HdrRateCap",
-                            g_settings.skin_detect_hdr_rate_cap);
-  if (g_settings.skin_detect_hdr_rate_cap < 0.0f)
-    g_settings.skin_detect_hdr_rate_cap = 0.0f;
-  if (g_settings.skin_detect_hdr_rate_cap > 2.0f)
-    g_settings.skin_detect_hdr_rate_cap = 2.0f;
+                            g_settings.skin.hdr_rate_cap);
+  if (g_settings.skin.hdr_rate_cap < 0.0f)
+    g_settings.skin.hdr_rate_cap = 0.0f;
+  if (g_settings.skin.hdr_rate_cap > 2.0f)
+    g_settings.skin.hdr_rate_cap = 2.0f;
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.HdrMeasureInterval",
-                            g_settings.skin_detect_hdr_measure_interval);
-  if (g_settings.skin_detect_hdr_measure_interval < 1)
-    g_settings.skin_detect_hdr_measure_interval = 1;
-  if (g_settings.skin_detect_hdr_measure_interval > 32)
-    g_settings.skin_detect_hdr_measure_interval = 32;
+                            g_settings.skin.hdr_measure_interval);
+  if (g_settings.skin.hdr_measure_interval < 1)
+    g_settings.skin.hdr_measure_interval = 1;
+  if (g_settings.skin.hdr_measure_interval > 32)
+    g_settings.skin.hdr_measure_interval = 32;
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.HdrDepthFallbackFraction",
-                            g_settings.skin_detect_hdr_depth_fallback_fraction);
-  if (g_settings.skin_detect_hdr_depth_fallback_fraction < 0.0f)
-    g_settings.skin_detect_hdr_depth_fallback_fraction = 0.0f;
-  if (g_settings.skin_detect_hdr_depth_fallback_fraction > 1.0f)
-    g_settings.skin_detect_hdr_depth_fallback_fraction = 1.0f;
+                            g_settings.skin.hdr_depth_fallback_fraction);
+  if (g_settings.skin.hdr_depth_fallback_fraction < 0.0f)
+    g_settings.skin.hdr_depth_fallback_fraction = 0.0f;
+  if (g_settings.skin.hdr_depth_fallback_fraction > 1.0f)
+    g_settings.skin.hdr_depth_fallback_fraction = 1.0f;
 
   LoadGrade("Grade.Backbuffer.", g_settings.grade_backbuffer);
 
@@ -856,80 +856,80 @@ void SaveSettings() {
                             g_settings.debug_view);
 
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Enable",
-                            g_settings.hdr_enable);
+                            g_settings.hdr.enable);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Format",
-                            static_cast<int>(g_settings.hdr_format));
+                            static_cast<int>(g_settings.hdr.format));
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.MeasureInterval",
-                            g_settings.hdr_measure_interval);
+                            g_settings.hdr.measure_interval);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Midtone",
-                            g_settings.hdr_midtone);
+                            g_settings.hdr.midtone);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.WhitePercentile",
-                            g_settings.hdr_white_percentile);
+                            g_settings.hdr.white_percentile);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.HighlightHeadroom",
-                            g_settings.hdr_highlight_headroom);
+                            g_settings.hdr.highlight_headroom);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.RateCap",
-                            g_settings.hdr_rate_cap);
+                            g_settings.hdr.rate_cap);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             "Hdr.SkinFractionThreshold",
-                            g_settings.hdr_skin_fraction_threshold);
+                            g_settings.hdr.skin_fraction_threshold);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.SkinPriority",
-                            g_settings.hdr_skin_priority);
+                            g_settings.hdr.skin_priority);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             "Hdr.DepthFallbackFraction",
-                            g_settings.hdr_depth_fallback_fraction);
+                            g_settings.hdr.depth_fallback_fraction);
 
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.Enable",
-                            g_settings.skin_detect_enable);
+                            g_settings.skin.enable);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.Scale",
-                            g_settings.skin_detect_scale);
+                            g_settings.skin.scale);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.LumaThreshold",
-                            g_settings.skin_detect_luma_threshold);
+                            g_settings.skin.luma_threshold);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.ChromaThreshold",
-                            g_settings.skin_detect_chroma_threshold);
+                            g_settings.skin.chroma_threshold);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.LumaRelative",
-                            g_settings.skin_detect_luma_relative);
+                            g_settings.skin.luma_relative);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.ClipThreshold",
-                            g_settings.skin_detect_clip_threshold);
+                            g_settings.skin.clip_threshold);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.Preset",
-                            g_settings.skin_detect_preset);
+                            g_settings.skin.preset);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.Intensity",
-                            g_settings.skin_detect_intensity);
+                            g_settings.skin.intensity);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.LocalTone",
-                            g_settings.skin_detect_local_tone);
+                            g_settings.skin.local_tone);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.LocalStructure",
-                            g_settings.skin_detect_local_structure);
+                            g_settings.skin.local_structure);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.SkinStructure",
-                            g_settings.skin_detect_skin_structure);
+                            g_settings.skin.skin_structure);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.UICorrection",
-                            g_settings.skin_detect_ui_correction);
+                            g_settings.skin.ui_correction);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.EditStrength",
-                            g_settings.skin_detect_edit_strength);
+                            g_settings.skin.edit_strength);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.MaskSmoothing",
-                            g_settings.skin_detect_mask_smoothing);
+                            g_settings.skin.mask_smoothing);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.MaskResponse",
-                            g_settings.skin_detect_mask_response);
+                            g_settings.skin.mask_response);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.HdrMidtone",
-                            g_settings.skin_detect_hdr_midtone);
+                            g_settings.skin.hdr_midtone);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.HdrRateCap",
-                            g_settings.skin_detect_hdr_rate_cap);
+                            g_settings.skin.hdr_rate_cap);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.HdrMeasureInterval",
-                            g_settings.skin_detect_hdr_measure_interval);
+                            g_settings.skin.hdr_measure_interval);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.HdrDepthFallbackFraction",
-                            g_settings.skin_detect_hdr_depth_fallback_fraction);
+                            g_settings.skin.hdr_depth_fallback_fraction);
 
   SaveGrade("Grade.Backbuffer.", g_settings.grade_backbuffer);
 

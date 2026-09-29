@@ -6,7 +6,10 @@
 #include <reshade.hpp>
 
 #include "settings/compose.h"
+#include "settings/compose.h"
 #include "settings/grade.h"
+#include "settings/hdr.h"
+#include "settings/skin.h"
 
 namespace reshade_dlssnr {
 
@@ -21,28 +24,6 @@ enum class InjectionStage : int {
   PostDLSS = 0,
   Present = 1,
 };
-
-// How the source image is encoded. Auto means detect from DXGI format.
-enum class HdrFormat : int {
-  Auto  = 0,
-  Sdr   = 1,   // sRGB-encoded, [0,1]
-  ScRgb = 2,   // linear, 1.0 == 80 nits
-  Hdr10 = 3,   // PQ (ST.2084)
-};
-
-// The code the shaders read, which is not the enum's own value: 0 is sRGB,
-// 1 is scRGB and 2 is HDR10. Auto is a request, not an encoding, so it
-// resolves to SDR here — by the time a shader sees a format the resource has
-// already been detected and the enum is no longer Auto.
-inline int HdrFormatCode(HdrFormat format) {
-  switch (format) {
-    case HdrFormat::ScRgb: return 1;
-    case HdrFormat::Hdr10: return 2;
-    case HdrFormat::Auto:
-    case HdrFormat::Sdr:
-    default: return 0;
-  }
-}
 
 
 
@@ -114,98 +95,8 @@ struct Settings {
   // is rendered. Transient (not persisted).
   int active_pass = 0;
 
-  // ---------------------------------------------------------------------
-  // HDR handling. Shared across passes; only the Post-DLSS path uses it.
-  // See HDR_DESIGN.md for the pipeline and the meaning of each control.
-  //
-  // How the model's edit is carried back is NOT here: that is
-  // PassSettings::residual, per pass, and it applies whether or not HDR
-  // handling is on.
-  // ---------------------------------------------------------------------
-  bool hdr_enable = true;
-  HdrFormat hdr_format = HdrFormat::Auto;
-
-  // How often the scene's brightness is measured, in frames. 1 measures
-  // every frame (most responsive, most GPU work); higher values measure
-  // less often. The EMA blend rate scales with this so a longer interval
-  // also smooths more slowly.
-  int hdr_measure_interval = 4;
-
-  // Scene key target in SDR (midtones land here).
-  float hdr_midtone = 0.18f;
-
-  // Which percentile of the histogram defines the white point.
-  float hdr_white_percentile = 0.99f;
-
-  // Highlight headroom: multiplier on the auto-detected white point. 1.0
-  // uses the histogram's own value (P99 by default), which clips the top
-  // 1% of pixels and flattens highlights on the round trip. The default
-  // 8.0 gives generous headroom so highlights survive the round trip
-  // intact, at the cost of a slightly flatter overall response.
-  float hdr_highlight_headroom = 8.0f;
-
-  // Maximum log2 change to the exposure per measurement. A bright object
-  // entering or leaving the frame moves the target by a large amount; the
-  // cap converts that into a slow drift. 0 disables the cap. Warmup is
-  // exempt regardless, so the first ~30 measurements converge fast.
-  float hdr_rate_cap = 0.1f;
-
-  // Skin pixels take priority for the exposure median once they are at
-  // least this fraction of the frame. A face is usually a small part of
-  // the image even when it is the subject, so the threshold is low.
-  float hdr_skin_fraction_threshold = 0.01f;
-
-  // How much the skin median influences the target, once the gate above has
-  // passed. 0 = the depth/full scene drives the target alone; 1 = skin drives
-  // alone. In between, the two are blended in log2 space, so skin is favored
-  // without excluding the rest of the frame.
-  float hdr_skin_priority = 0.7f;
-
-  // If the depth filter leaves less than this fraction of the frame, the
-  // exposure median falls back to the unfiltered histogram rather than
-  // metering on too few pixels. Applies only when depth is available.
-  float hdr_depth_fallback_fraction = 0.20f;
-
-  // Skin detection: run the model at reduced scale with tone/structure edits
-  // suppressed and skin edits on, threshold the difference against its input.
-  // The mask replaces the histogram's hue-based classifier. DLSS Output only.
-  bool skin_detect_enable = false;
-  float skin_detect_scale = 0.25f;
-  // Absolute floor for a luma change to count. Below this it is treated as
-  // noise regardless of relative size.
-  float skin_detect_luma_threshold = 0.02f;
-  // Relative bar: a change must also exceed this fraction of the pixel's
-  // luma. Rejects the model's numeric jitter on bright pixels.
-  float skin_detect_luma_relative = 0.05f;
-  float skin_detect_chroma_threshold = 0.02f;
-  // Saturation bound: any channel above this on either side excludes the
-  // pixel. Rejects emissives and clipped highlights.
-  float skin_detect_clip_threshold = 0.97f;
-
-  // Model tuning for the detection pass. Fully independent from the pass
-  // sliders: none of these inherit from or share with any PassSettings.
-  int skin_detect_preset = 0;
-  float skin_detect_intensity = 1.0f;
-  float skin_detect_local_tone = 0.0f;
-  float skin_detect_local_structure = 0.0f;
-  float skin_detect_skin_structure = 1.0f;
-  bool skin_detect_ui_correction = false;
-
-  // Diff amplification (raises detection sensitivity without changing what
-  // the model produces) and mask smoothing (majority-vote radius, 0..1).
-  float skin_detect_edit_strength = 1.0f;
-  float skin_detect_mask_smoothing = 0.5f;
-  // Temporal EMA on the mask. 0 = frozen, 1 = per-frame (no smoothing).
-  float skin_detect_mask_response = 0.15f;
-
-  // HDR response for the detection pass's own exposure tracker. Independent
-  // of the regular-pass HDR settings. The depth fallback defaults to 1.0 so
-  // the tracker always uses the full-frame histogram and never flips source
-  // on camera motion.
-  float skin_detect_hdr_midtone = 0.18f;
-  float skin_detect_hdr_rate_cap = 0.1f;
-  int skin_detect_hdr_measure_interval = 16;
-  float skin_detect_hdr_depth_fallback_fraction = 1.0f;
+  HdrSettings hdr;
+  SkinSettings skin;
 
   // ---------------------------------------------------------------------
   // Final backbuffer grade. Runs once per frame, after every pass, on the
