@@ -6,6 +6,7 @@
 #include "addon_controller.h"
 #include "runtime/hdr_state.h"
 #include "settings.h"
+#include "settings/hdr.h"
 #include "ui/ui_sections.h"
 #include "ui/ui_widgets.h"
 
@@ -104,9 +105,9 @@ void DrawControls(HdrSettings& hdr, bool& changed) {
 }
 
 void DrawDiagnostics(const HdrSnapshot& snap, const HdrSettings& hdr,
-                     bool& changed) {
+                     bool& diagnostics_open, bool& changed) {
   IndentScope indent;
-  if (!PersistentSubHeader("Diagnostics", settings_ui_diagnostics, changed)) {
+  if (!PersistentSubHeader("Diagnostics", diagnostics_open, changed)) {
     return;
   }
 
@@ -200,7 +201,7 @@ void DrawHdrSection(Settings& settings, bool hdr_relevant, bool& changed) {
 
   if (hdr_on) {
     DrawDiagnostics(AddonController::Get().GetHdrSnapshot(), settings.hdr,
-                    changed);
+                    settings.ui_hdr_diagnostics_open, changed);
   }
 
   if (!hdr_relevant) ImGui::EndDisabled();
