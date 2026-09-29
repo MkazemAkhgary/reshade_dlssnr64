@@ -18,7 +18,6 @@ namespace reshade_dlssnr {
 // the tab that now holds the active pass to be selected instead.
 int g_force_select_tab = -1;
 
-
 // Permutes settings.passes, settings.pass_enabled and settings.active_pass so
 // position i holds the pass that was at order[i]. Re-applies what the pass
 // body assumes about positions: pass 0 is the inheritance root and has no
@@ -198,9 +197,6 @@ void DrawOverlay(reshade::api::effect_runtime*) {
         "wholesale, so it is not graded.",
         settings.grade_backbuffer, changed);
   }
-  SectionDivider();
-
-
   SectionDivider();
 
   // --- HDR section (shared across passes) ---
