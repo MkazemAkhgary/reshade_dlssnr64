@@ -123,6 +123,7 @@
     <ClCompile Include="settings\compose.cpp" />
     <ClCompile Include="settings\grade.cpp" />
     <ClCompile Include="settings\hdr.cpp" />
+    <ClCompile Include="settings\pass.cpp" />
     <ClCompile Include="settings\skin.cpp" />
     <ClCompile Include="settings\trace.cpp" />
     <ClCompile Include="state\settings.cpp" />
