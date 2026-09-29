@@ -5,7 +5,7 @@
 
 #include <reshade.hpp>
 
-#include "grade/grade.h"
+#include "settings/grade.h"
 
 namespace reshade_dlssnr {
 
