@@ -111,7 +111,9 @@
     <ClCompile Include="runtime\feature_lifecycle.cpp" />
     <ClCompile Include="runtime\gpu_readback.cpp" />
     <ClCompile Include="runtime\hdr_state.cpp" />
-    <ClCompile Include="runtime\model_pipeline.cpp" />
+    <ClCompile Include="runtime\compose.cpp" />
+    <ClCompile Include="runtime\grade.cpp" />
+    <ClCompile Include="runtime\model_input.cpp" />
     <ClCompile Include="runtime\ngx_model_params.cpp" />
     <ClCompile Include="runtime\ngx_parameter_block.cpp" />
     <ClCompile Include="runtime\pass_resources.cpp" />
@@ -157,6 +159,9 @@
     <ClInclude Include="runtime\feature_lifecycle.h" />
     <ClInclude Include="runtime\gpu_readback.h" />
     <ClInclude Include="runtime\hdr_state.h" />
+    <ClInclude Include="runtime\compose.h" />
+    <ClInclude Include="runtime\grade.h" />
+    <ClInclude Include="runtime\model_input.h" />
     <ClInclude Include="runtime\model_pipeline.h" />
     <ClInclude Include="runtime\ngx_model_params.h" />
     <ClInclude Include="runtime\ngx_parameter_block.h" />
