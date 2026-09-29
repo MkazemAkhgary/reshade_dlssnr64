@@ -16,4 +16,7 @@ void DrawGradeSection(const char* id,
                       GradeSettings& grade,
                       bool& changed);
 
+// `hdr_relevant` gates the section: HDR only affects passes at DLSS Output.
+void DrawHdrSection(Settings& settings, bool hdr_relevant, bool& changed);
+
 }  // namespace reshade_dlssnr
