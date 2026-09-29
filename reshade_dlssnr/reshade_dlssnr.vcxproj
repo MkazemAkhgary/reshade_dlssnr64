@@ -133,6 +133,8 @@
     <ClInclude Include="hooks\local_vtable.h" />
     <ClInclude Include="hooks\nvngx_hook_compat.h" />
     <ClInclude Include="hooks\proxy_unwrap.h" />
+    <ClInclude Include="settings\hdr.h" />
+    <ClInclude Include="settings\skin.h" />
     <ClInclude Include="shaders\compose.h" />
     <ClInclude Include="shaders\debug.h" />
     <ClInclude Include="shaders\grade.h" />
