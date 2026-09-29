@@ -635,55 +635,7 @@ void LoadSettings() {
                             g_settings.debug_view);
   if (g_settings.debug_view < 0) g_settings.debug_view = 0;
 
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Enable",
-                            g_settings.hdr.enable);
-  int format_value = static_cast<int>(g_settings.hdr.format);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Format",
-                            format_value);
-  if (format_value < 0 || format_value > 3) format_value = 0;
-  g_settings.hdr.format = static_cast<HdrFormat>(format_value);
-
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.MeasureInterval",
-                            g_settings.hdr.measure_interval);
-  if (g_settings.hdr.measure_interval < 1) g_settings.hdr.measure_interval = 1;
-  if (g_settings.hdr.measure_interval > 32) g_settings.hdr.measure_interval = 32;
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Midtone",
-                            g_settings.hdr.midtone);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.WhitePercentile",
-                            g_settings.hdr.white_percentile);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.HighlightHeadroom",
-                            g_settings.hdr.highlight_headroom);
-  // Clamp to the slider's range.
-  if (g_settings.hdr.highlight_headroom > 16.0f ||
-      g_settings.hdr.highlight_headroom < 0.25f) {
-    g_settings.hdr.highlight_headroom = 8.0f;
-  }
-
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.RateCap",
-                            g_settings.hdr.rate_cap);
-  if (g_settings.hdr.rate_cap < 0.0f) g_settings.hdr.rate_cap = 0.0f;
-  if (g_settings.hdr.rate_cap > 2.0f) g_settings.hdr.rate_cap = 2.0f;
-
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            "Hdr.SkinFractionThreshold",
-                            g_settings.hdr.skin_fraction_threshold);
-  if (g_settings.hdr.skin_fraction_threshold < 0.0f)
-    g_settings.hdr.skin_fraction_threshold = 0.0f;
-  if (g_settings.hdr.skin_fraction_threshold > 0.5f)
-    g_settings.hdr.skin_fraction_threshold = 0.5f;
-
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.SkinPriority",
-                            g_settings.hdr.skin_priority);
-  if (g_settings.hdr.skin_priority < 0.0f) g_settings.hdr.skin_priority = 0.0f;
-  if (g_settings.hdr.skin_priority > 1.0f) g_settings.hdr.skin_priority = 1.0f;
-
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            "Hdr.DepthFallbackFraction",
-                            g_settings.hdr.depth_fallback_fraction);
-  if (g_settings.hdr.depth_fallback_fraction < 0.0f)
-    g_settings.hdr.depth_fallback_fraction = 0.0f;
-  if (g_settings.hdr.depth_fallback_fraction > 1.0f)
-    g_settings.hdr.depth_fallback_fraction = 1.0f;
+  LoadHdrSettings(g_settings.hdr);
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.Enable",
                             g_settings.skin.enable);
@@ -855,28 +807,7 @@ void SaveSettings() {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "DebugView",
                             g_settings.debug_view);
 
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Enable",
-                            g_settings.hdr.enable);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Format",
-                            static_cast<int>(g_settings.hdr.format));
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.MeasureInterval",
-                            g_settings.hdr.measure_interval);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Midtone",
-                            g_settings.hdr.midtone);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.WhitePercentile",
-                            g_settings.hdr.white_percentile);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.HighlightHeadroom",
-                            g_settings.hdr.highlight_headroom);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.RateCap",
-                            g_settings.hdr.rate_cap);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            "Hdr.SkinFractionThreshold",
-                            g_settings.hdr.skin_fraction_threshold);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.SkinPriority",
-                            g_settings.hdr.skin_priority);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            "Hdr.DepthFallbackFraction",
-                            g_settings.hdr.depth_fallback_fraction);
+  SaveHdrSettings(g_settings.hdr);
 
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.Enable",
                             g_settings.skin.enable);

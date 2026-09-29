@@ -36,4 +36,7 @@ struct HdrSettings {
   float depth_fallback_fraction = 0.20f;
 };
 
+void LoadHdrSettings(HdrSettings& hdr);
+void SaveHdrSettings(const HdrSettings& hdr);
+
 }  // namespace reshade_dlssnr
