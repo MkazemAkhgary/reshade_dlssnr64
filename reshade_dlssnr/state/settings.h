@@ -5,6 +5,8 @@
 
 #include <reshade.hpp>
 
+#include "grade/grade.h"
+
 namespace reshade_dlssnr {
 
 constexpr uint32_t kMaxPasses = 3;
@@ -77,68 +79,6 @@ struct ResidualSettings {
   float ratio_darken = 1.0f / 16.0f;
 };
 
-// ---------------------------------------------------------------------------
-// Colour grade
-// ---------------------------------------------------------------------------
-//
-// A grade the user applies at three points: before the model reads, after
-// it writes, and on the final backbuffer. One luma mode and one chroma mode
-// are active at a time; stacking two would make them fight.
-
-// How the grade changes brightness.
-enum class GradeLumaMode : int {
-  Gain = 0,   // x2^amount; symmetric, clips at white
-  Gamma = 1,  // power on normalized luma; midtone-weighted, never clips
-  Lift = 2,   // offset scaled by headroom; moves shadows
-  Soft = 3,   // parabolic lift; strongest at mid grey
-};
-
-// How the grade changes saturation.
-enum class GradeChromaMode : int {
-  Saturation = 0,  // blend toward luma; uniform
-  Vibrance = 1,    // muted colors move more
-  ChromaGain = 2,  // scale chroma only; luma fixed
-};
-
-// One grade. Where it is applied is decided by which field holds it, not by
-// anything in here.
-//
-// The grade runs in linear light, so every value below is a linear-light
-// quantity rather than a display-encoded one. That is what keeps a bright
-// highlight's shape instead of flattening it: the operators act on the light
-// the pixels actually carry.
-struct GradeSettings {
-  bool enabled = false;
-
-  // Both in [-1, 1], 0 = unchanged. The ranges are symmetric so the midpoint
-  // of the slider is the neutral position.
-  float luma = 0.0f;
-  float chroma = 0.0f;
-
-  GradeLumaMode luma_mode = GradeLumaMode::Gamma;
-  GradeChromaMode chroma_mode = GradeChromaMode::Saturation;
-
-  // Levels on linear luma, applied first. Black point is the value mapped
-  // to black (raising crushes, lowering lifts). White point is the value
-  // mapped to white.
-  float black_point = 0.0f;   // [kGradeBlackPointMin, kGradeBlackPointMax]
-  float white_point = 1.0f;   // [kGradeWhitePointMin, kGradeWhitePointMax]
-
-  // Contrast, a stretch around mid grey. Positive steepens, negative flattens.
-  float contrast = 0.0f;      // [-1, 1]
-
-  // Region-weighted scales; each fades out before reaching the other end.
-  float shadows = 0.0f;       // [-1, 1]
-  float highlights = 0.0f;    // [-1, 1]
-};
-
-// The two level ranges are named because the loader clamps to them and the UI
-// draws sliders over them: a slider wider than the clamp is a control that
-// springs back when the config is reloaded.
-constexpr float kGradeBlackPointMin = -0.25f;
-constexpr float kGradeBlackPointMax = 0.25f;
-constexpr float kGradeWhitePointMin = 0.2f;
-constexpr float kGradeWhitePointMax = 4.0f;
 
 struct PassSettings {
   int preset = 1;
