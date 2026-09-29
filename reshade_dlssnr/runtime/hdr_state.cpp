@@ -562,7 +562,7 @@ PipelineStatus RunHdrBeginFrame(PassRun& run) {
   // step per pass — so the gate moves here. Only the first pass in the chain
   // measures.
   if (!run.is_first_pass) return PipelineStatus::Ok;
-  if (run.hdr == nullptr || run.hdr.cmd == nullptr) return PipelineStatus::Ok;
+  if (run.hdr == nullptr || run.hdr_cmd == nullptr) return PipelineStatus::Ok;
   if (run.guides.dlss_output_color == nullptr || run.guides.output_width == 0 ||
       run.guides.output_height == 0) {
     TRACE_EVT(run.session, "hdr_begin_frame SKIP (no guide color)");
@@ -581,7 +581,7 @@ PipelineStatus RunHdrBeginFrame(PassRun& run) {
   ID3D12Resource* mask = (run.skin_detect != nullptr)
                              ? run.skin_detect->GetOutput().mask
                              : nullptr;
-  run.hdr->BeginFrame(*run.hdr.cmd, run.list, run.guides.dlss_output_color,
+  run.hdr->BeginFrame(*run.hdr_cmd, run.list, run.guides.dlss_output_color,
                       run.guides.output_width, run.guides.output_height,
                       depth, run.guides.depth_inverted, mask,
                       *run.settings, *run.codec);

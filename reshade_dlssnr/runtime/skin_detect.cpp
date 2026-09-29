@@ -309,7 +309,7 @@ PipelineStatus RunSkinDetect(PassRun& run) {
       run.settings == nullptr) {
     return PipelineStatus::Ok;
   }
-  if (!run.settings->skin_detect_enable) return PipelineStatus::Ok;
+  if (!run.settings->skin.enable) return PipelineStatus::Ok;
   if (!run.hdr->Enabled()) return PipelineStatus::Ok;
   if (run.guides.dlss_output_color == nullptr) return PipelineStatus::Ok;
 

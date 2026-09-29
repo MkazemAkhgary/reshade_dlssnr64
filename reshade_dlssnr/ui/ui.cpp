@@ -627,15 +627,15 @@ void DrawStatusSection(Settings& settings, bool& changed) {
                 snap.guides_valid ? "Valid (depth + motion)" : "Not seen");
 
   const bool hdr_in_use = AnyPassUsesDlssOutput(settings);
-  const bool hdr_good = !settings.hdr.enable || !hdr_in_use || snap.hdr.ready;
+  const bool hdr_good = !settings.hdr.enable || !hdr_in_use || snap.hdr_ready;
   char hdr_buf[96];
   if (!settings.hdr.enable) {
     std::snprintf(hdr_buf, sizeof(hdr_buf), "Off");
   } else if (!hdr_in_use) {
     std::snprintf(hdr_buf, sizeof(hdr_buf), "Inactive (no DLSS Output pass)");
-  } else if (snap.hdr.ready) {
+  } else if (snap.hdr_ready) {
     std::snprintf(hdr_buf, sizeof(hdr_buf), "Active · exp %.3f · white %.3f",
-                  snap.hdr.exposure, snap.hdr.white_point);
+                  snap.hdr_exposure, snap.hdr_white_point);
   } else {
     std::snprintf(hdr_buf, sizeof(hdr_buf), "Warming up");
   }
