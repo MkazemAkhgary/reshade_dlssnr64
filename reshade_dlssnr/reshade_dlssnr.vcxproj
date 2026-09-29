@@ -133,12 +133,12 @@
     <ClInclude Include="hooks\local_vtable.h" />
     <ClInclude Include="hooks\nvngx_hook_compat.h" />
     <ClInclude Include="hooks\proxy_unwrap.h" />
-    <ClInclude Include="debug\shaders.h" />
-    <ClInclude Include="grade\shaders.h" />
-    <ClInclude Include="hdr\shaders.h" />
+    <ClInclude Include="shaders\debug.h" />
+    <ClInclude Include="shaders\grade.h" />
+    <ClInclude Include="shaders\hdr.h" />
     <ClInclude Include="hooks\streamline_compat.h" />
-    <ClInclude Include="model\shaders.h" />
-    <ClInclude Include="skin\shaders.h" />
+    <ClInclude Include="shaders\model.h" />
+    <ClInclude Include="shaders\skin.h" />
     <ClInclude Include="runtime\addon_controller.h" />
     <ClInclude Include="runtime\command_context.h" />
     <ClInclude Include="runtime\crash_trace.h" />

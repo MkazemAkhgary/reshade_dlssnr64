@@ -2,11 +2,11 @@
 
 #include <cstring>
 
-#include "debug/shaders.h"
-#include "grade/shaders.h"
-#include "hdr/shaders.h"
-#include "model/shaders.h"
-#include "skin/shaders.h"
+#include "shaders/debug.h"
+#include "shaders/grade.h"
+#include "shaders/hdr.h"
+#include "shaders/model.h"
+#include "shaders/skin.h"
 
 namespace reshade_dlssnr {
 
