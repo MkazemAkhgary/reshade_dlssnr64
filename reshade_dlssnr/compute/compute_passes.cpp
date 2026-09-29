@@ -1124,7 +1124,7 @@ float3 ShapeResidual(float3 delta, float luma) {
 // The ratio alone, without any shaping. Kept separate because the shaping
 // needs the target pixel's luma, which this does not.
 float3 ComposeRatioDelta(float3 low_in_lin, float3 low_out_lin) {
-    const float eps = 1e-4;
+    const float eps = 1e-2;
     float3 ratio = (low_out_lin + eps) / (max(low_in_lin, 0.0) + eps);
     ratio = clamp(ratio, 1.0 / 16.0, 16.0);
     return ratio - 1.0;
