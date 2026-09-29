@@ -30,4 +30,7 @@ struct SkinSettings {
   float hdr_depth_fallback_fraction = 1.0f;
 };
 
+void LoadSkinSettings(SkinSettings& skin);
+void SaveSkinSettings(const SkinSettings& skin);
+
 }  // namespace reshade_dlssnr
