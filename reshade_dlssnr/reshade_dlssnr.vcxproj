@@ -136,6 +136,7 @@
     <ClInclude Include="debug\shaders.h" />
     <ClInclude Include="grade\shaders.h" />
     <ClInclude Include="hooks\streamline_compat.h" />
+    <ClInclude Include="model\shaders.h" />
     <ClInclude Include="skin\shaders.h" />
     <ClInclude Include="runtime\addon_controller.h" />
     <ClInclude Include="runtime\command_context.h" />

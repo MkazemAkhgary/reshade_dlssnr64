@@ -4,6 +4,7 @@
 
 #include "debug/shaders.h"
 #include "grade/shaders.h"
+#include "model/shaders.h"
 #include "skin/shaders.h"
 
 namespace reshade_dlssnr {
@@ -276,28 +277,6 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 }
 )";
 
-constexpr const char* kPrepareModelInput = R"(
-cbuffer Params : register(b0)
-{
-    uint  gWidth;
-    uint  gHeight;
-};
-
-Texture2D<float4> gSource : register(t0);
-RWTexture2D<float4> gOutput : register(u0);
-SamplerState s0 : register(s0);
-
-[numthreads(8, 8, 1)]
-void CSMain(uint3 id : SV_DispatchThreadID)
-{
-    if (id.x >= gWidth || id.y >= gHeight)
-        return;
-
-    float2 uv = (float2(id.xy) + 0.5) / float2(gWidth, gHeight);
-    float4 color = gSource.SampleLevel(s0, uv, 0);
-    gOutput[id.xy] = color;
-}
-)";
 
 constexpr const char* kComposeModelOutputHdr = R"(
 // The constant buffer is declared in kGradePrelude, which is prepended to this
@@ -1067,7 +1046,7 @@ const ComputePassDef kComputePasses[] = {
     {"ZeroHistogram",         kZeroHistogram,         nullptr},
     {"BuildHistogram",        kBuildHistogram,        nullptr},
     {"TonemapForward",        kTonemapForward,        nullptr},
-    {"PrepareModelInput",     kPrepareModelInput,     nullptr},
+    {"PrepareModelInput",     kPrepareModelInputSource, nullptr},
     {"ComposeModelOutput",    kComposeModelOutput,    kGradePreludeSource},
     {"ComposeModelOutputHdr", kComposeModelOutputHdr, kGradePreludeSource},
     {"SkinMaskDiff",          kSkinMaskDiffSource,    nullptr},
