@@ -817,31 +817,6 @@ PipelineStatus PassSession::StepResolveModelInput(PassRun& run) {
   return PipelineStatus::Ok;
 }
 
-// Build the HDR tonemap uniforms, if HDR is on for this pass. The tonemap
-// shader doubles as the resize into working scale, so passing these uniforms is
-// all that is needed to switch from a plain resample to a full HDR -> SDR
-// normalize.
-//
-// `Highlight Headroom` scales the auto-detected white point. Default 1.0 keeps
-// the detected value; larger values push the compression knee higher,
-// preserving more highlight headroom.
-//
-// The SDR variant is selected by leaving hdr_uniforms_ready false, which is what
-// the old `hdr_ptr == nullptr` test expressed.
-PipelineStatus PassSession::StepBuildHdrUniforms(PassRun& run) {
-  PassSession* self = run.session;
-  run.hdr_uniforms_ready = false;
-  if (run.hdr == nullptr || run.settings == nullptr) return PipelineStatus::Ok;
-  if (!run.hdr->Enabled()) return PipelineStatus::Ok;
-
-  const Settings& settings = *run.settings;
-  run.hdr_uniforms.exposure = run.hdr->Exposure();
-  run.hdr_uniforms.white_point =
-      run.hdr->WhitePoint() * std::max(settings.hdr.highlight_headroom, 0.01f);
-  run.hdr_uniforms.format = HdrFormatCode(run.hdr->ResolvedFormat());
-  run.hdr_uniforms_ready = true;
-  return PipelineStatus::Ok;
-}
 
 // ---------------------------------------------------------------------------
 // Model evaluation
@@ -1119,144 +1094,11 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
   return PipelineStatus::Ok;
 }
 
-// ---------------------------------------------------------------------------
-// Grade
-// ---------------------------------------------------------------------------
-
-// Every grade target carries the encoding its own format says, except the
-// model input under HDR: TonemapForward wrote sRGB into a resource whose
-// format still describes the DLSS output.
-static HdrFormat GradeFormat(const PassRun& run, ID3D12Resource* target) {
-  if (run.hdr_uniforms_ready && target == run.model_color) {
-    return HdrFormat::Sdr;
-  }
-  return target != nullptr ? DetectFormatFromDxgi(target->GetDesc().Format)
-                           : HdrFormat::Sdr;
-}
-
-PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
-                                         const GradeSettings& grade,
-                                         uint32_t scratch_slot) {
-  PassSession* self = run.session;
-  if (self == nullptr) return PipelineStatus::Ok;
-  if (!grade.enabled || target == nullptr) return PipelineStatus::Ok;
-  if (run.device == nullptr || run.codec == nullptr) return PipelineStatus::Ok;
-
-  const D3D12_RESOURCE_DESC desc = target->GetDesc();
-  const unsigned int width = static_cast<unsigned int>(desc.Width);
-  const unsigned int height = desc.Height;
-
-  // The slot is chosen by the caller, not by matching here. On the first
-  // frame with working scale below 1.0, neither slot matches what either
-  // caller needs, so matching-based selection sent both callers to slot A,
-  // each disposing the other's texture and recreating it. One slot per
-  // caller is what makes the size each wants persist.
-  if (!self->resources_.EnsureScratch(run.device, desc, width, height,
-                                      scratch_slot)) {
-    self->FailForStep("failed to create the grade scratch texture");
-    return PipelineStatus::Fail;
-  }
-
-  ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
-  if (!model_pipeline::ApplyGrade(
-          self->command_, list, run.codec, target,
-          self->resources_.GetScratch(scratch_slot), width, height,
-          GradeFormat(run, target), grade)) {
-    self->FailForStep("failed to apply the grade");
-    return PipelineStatus::Fail;
-  }
-
-  // ApplyGrade leaves the target as a UAV because that is what the dispatch
-  // wrote through. Every caller here goes on to read the image, so it becomes
-  // an SRV.
-  self->command_.Transition(list, target,
-                            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  return PipelineStatus::Ok;
-}
-
-// Grades the image the model is about to read.
-//
-// Deliberately in place on the working input rather than redirected to a new
-// resource: `run.model_color` is what the compose step later reads back as
-// `low_input` to derive the model's residual, so leaving the pointer alone
-// means grading the input conditions the model (it sees a different image and
-// edits that) without also changing what its edit is measured against.
-PipelineStatus PassSession::StepGradeModelInput(PassRun& run) {
-  if (run.pass == nullptr) return PipelineStatus::Ok;
-  const GradeSettings& grade = run.pass->grade_input;
-  if (!grade.enabled) return PipelineStatus::Ok;
-
-  TRACE_EVT(run.session, "grade_model_input pass=%u luma=%.3f chroma=%.3f",
-            run.pass_index, grade.luma, grade.chroma);
-  return GradeInPlace(run, run.model_color, grade, kGradeScratchSlotA);
-}
-
-// Grades the model's own output, before anything publishes it. The composite
-// is what WriteToBackbuffer / WriteToGameResource copy out, so grading it here
-// is what makes the grade visible without touching those steps.
-PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
-  if (run.pass == nullptr || run.session == nullptr) return PipelineStatus::Ok;
-  const GradeSettings& grade = run.pass->grade_output;
-  if (!grade.enabled) return PipelineStatus::Ok;
-
-  TRACE_EVT(run.session, "grade_model_output pass=%u luma=%.3f chroma=%.3f",
-            run.pass_index, grade.luma, grade.chroma);
-  return GradeInPlace(run, run.session->resources_.GetCompositeOutput(),
-                      grade, kGradeScratchSlotB);
-}
 
 // ---------------------------------------------------------------------------
 // Output
 // ---------------------------------------------------------------------------
 
-// If this is the active pass, render the selected debug view now — while the
-// source resources are in the states this pass left them in. It goes into our
-// own resource, never the game's.
-PipelineStatus PassSession::StepRenderDebugView(PassRun& run) {
-  PassSession* self = run.session;
-  if (run.settings == nullptr || run.codec == nullptr ||
-      run.frame_debug == nullptr) {
-    return PipelineStatus::Ok;
-  }
-
-  DebugSnapshot debug;
-  debug.source = run.stage != nullptr && run.stage->is_post_dlss
-                     ? run.model_input
-                     : run.backbuffer;
-  debug.source_width = run.width;
-  debug.source_height = run.height;
-  debug.prepared_input = run.model_color;
-  debug.prepared_input_width = run.eval_width;
-  debug.prepared_input_height = run.eval_height;
-  debug.model_output = run.model_output;
-  debug.model_output_width = run.eval_width;
-  debug.model_output_height = run.eval_height;
-  debug.composed_output = self->resources_.GetCompositeOutput();
-  debug.composed_output_width = run.width;
-  debug.composed_output_height = run.height;
-  if (run.skin_detect != nullptr) {
-    const SkinDetect::Output& sd = run.skin_detect->GetOutput();
-    if (sd.valid) {
-      debug.skin_detect_input = sd.detect_input;
-      debug.skin_detect_output = sd.detect_output;
-      debug.skin_mask = sd.mask;
-      debug.skin_detect_width = sd.width;
-      debug.skin_detect_height = sd.height;
-    }
-  }
-  if (run.guides_valid) {
-    debug.motion = run.guides.motion;
-    debug.motion_width = run.guides.guide_width;
-    debug.motion_height = run.guides.guide_height;
-    debug.depth = run.guides.depth;
-    debug.depth_width = run.guides.guide_width;
-    debug.depth_height = run.guides.guide_height;
-  }
-
-  self->MaybeRenderDebug(*run.settings, *run.codec, self->StageList(run, self->command_), *run.frame_debug,
-                   debug, run.width, run.height, run.desc.Format);
-  return PipelineStatus::Ok;
-}
 
 // Present: publish the composed image on the backbuffer.
 PipelineStatus PassSession::StepWriteToBackbuffer(PassRun& run) {
