@@ -167,8 +167,10 @@ void ExposureTracker::Update(const uint32_t* bins, const ExposureParams& params,
   const float luma_hi = BinToLinear(p_hi_bin);
   const float luma_mid = params.midtone / exp2(log_target);
 
+  // 4096 = 2^12, matching the histogram's own log2 range. Very dark scenes
+  // need well above 2^7 to reach the default 0.18 midtone.
   const float raw_target =
-      std::clamp(exp2(log_target), 0.01f, 128.0f);
+      std::clamp(exp2(log_target), 0.01f, 4096.0f);
 
   // Rate cap in log2 space. Skin and warmup bypass it so they can lock
   // quickly; 0 disables it outright.
