@@ -1123,10 +1123,19 @@ float3 ShapeResidual(float3 delta, float luma) {
 
 // The ratio alone, without any shaping. Kept separate because the shaping
 // needs the target pixel's luma, which this does not.
+float3 SoftClampRatio(float r, float lo, float hi) {
+    if (r >= 1.0) return 1.0 + (hi - 1.0) * (r - 1.0) / (r - 1.0 + (hi - 1.0));
+    return 1.0 - (1.0 - lo) * (1.0 - r) / ((1.0 - r) + (1.0 - lo));
+}
+
 float3 ComposeRatioDelta(float3 low_in_lin, float3 low_out_lin) {
     const float eps = 1e-2;
+    const float kBrighten = 64.0;
+    const float kDarken = 1.0 / 16.0;
     float3 ratio = (low_out_lin + eps) / (max(low_in_lin, 0.0) + eps);
-    ratio = clamp(ratio, 1.0 / 16.0, 16.0);
+    ratio.r = SoftClampRatio(ratio.r, kDarken, kBrighten);
+    ratio.g = SoftClampRatio(ratio.g, kDarken, kBrighten);
+    ratio.b = SoftClampRatio(ratio.b, kDarken, kBrighten);
     return ratio - 1.0;
 }
 
