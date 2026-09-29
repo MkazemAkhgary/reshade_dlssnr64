@@ -6,6 +6,7 @@
 #include "command_context.h"
 #include "compute_engine.h"
 #include "settings/grade.h"
+#include "settings/hdr.h"
 
 namespace reshade_dlssnr::model_pipeline {
 
