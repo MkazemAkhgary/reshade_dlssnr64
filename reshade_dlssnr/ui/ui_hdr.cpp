@@ -4,7 +4,7 @@
 #include <algorithm>
 
 #include "addon_controller.h"
-#include "runtime/hdr_state.h"
+#include "hdr/hdr_state.h"
 #include "state/settings.h"
 #include "hdr/settings.h"
 #include "ui/ui_sections.h"

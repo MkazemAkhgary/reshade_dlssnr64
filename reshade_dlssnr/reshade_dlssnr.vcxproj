@@ -115,8 +115,8 @@
     <ClCompile Include="runtime\debug_steps.cpp" />
     <ClCompile Include="runtime\debug_view.cpp" />
     <ClCompile Include="runtime\feature_lifecycle.cpp" />
-    <ClCompile Include="runtime\hdr_state.cpp" />
-    <ClCompile Include="runtime\hdr_steps.cpp" />
+    <ClCompile Include="hdr\hdr_state.cpp" />
+    <ClCompile Include="hdr\steps.cpp" />
     <ClCompile Include="compose\compose.cpp" />
     <ClCompile Include="grade\grade.cpp" />
     <ClCompile Include="grade\steps.cpp" />
@@ -176,7 +176,7 @@
     <ClInclude Include="runtime\debug_view.h" />
     <ClInclude Include="runtime\frame_debug_context.h" />
     <ClInclude Include="runtime\feature_lifecycle.h" />
-    <ClInclude Include="runtime\hdr_state.h" />
+    <ClInclude Include="hdr\hdr_state.h" />
     <ClInclude Include="compose\compose.h" />
     <ClInclude Include="grade\grade.h" />
     <ClInclude Include="runtime\model_input.h" />

@@ -1,7 +1,7 @@
 #include "pipeline/pass_session.h"
 
 #include "grade/grade.h"
-#include "runtime/hdr_state.h"
+#include "hdr/hdr_state.h"
 #include "pipeline/pipeline_graph.h"
 #include "pipeline/pipeline_trace.h"
 

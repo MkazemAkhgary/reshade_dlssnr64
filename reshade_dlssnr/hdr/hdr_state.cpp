@@ -1,4 +1,4 @@
-#include "hdr_state.h"
+#include "hdr/hdr_state.h"
 
 #include <algorithm>
 #include <cmath>
@@ -6,9 +6,9 @@
 
 #include <reshade.hpp>
 
-#include "d3d12_utils.h"
-#include "pipeline_graph.h"
-#include "pipeline_trace.h"
+#include "gpu/d3d12_utils.h"
+#include "pipeline/pipeline_graph.h"
+#include "pipeline/pipeline_trace.h"
 #include "skin_detect.h"
 
 namespace reshade_dlssnr {

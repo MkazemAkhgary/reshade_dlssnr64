@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-#include "runtime/hdr_state.h"
+#include "hdr/hdr_state.h"
 #include "pipeline/pipeline_graph.h"
 
 namespace reshade_dlssnr {
