@@ -1,9 +1,9 @@
-#include "runtime/pass_session.h"
+#include "pipeline/pass_session.h"
 
 #include <algorithm>
 
 #include "runtime/hdr_state.h"
-#include "runtime/pipeline_graph.h"
+#include "pipeline/pipeline_graph.h"
 
 namespace reshade_dlssnr {
 
