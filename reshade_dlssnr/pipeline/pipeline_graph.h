@@ -29,7 +29,7 @@
 #include <dxgi1_4.h>
 #include <wrl/client.h>
 
-#include "debug_view.h"
+#include "debug/debug_view.h"
 #include "dlss_guides.h"
 #include "model_pipeline.h"
 

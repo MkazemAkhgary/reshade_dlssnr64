@@ -13,9 +13,9 @@
 
 #include <cstdint>
 
-#include "command_context.h"
-#include "compute_engine.h"
-#include "pass_resources.h"
+#include "gpu/command_context.h"
+#include "gpu/compute_engine.h"
+#include "gpu/pass_resources.h"
 
 namespace reshade_dlssnr {
 

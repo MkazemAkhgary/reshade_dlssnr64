@@ -1,8 +1,8 @@
-#include "debug_view.h"
+#include "debug/debug_view.h"
 
 #include <wrl/client.h>
 
-#include "pipeline_graph.h"
+#include "pipeline/pipeline_graph.h"
 
 namespace reshade_dlssnr {
 

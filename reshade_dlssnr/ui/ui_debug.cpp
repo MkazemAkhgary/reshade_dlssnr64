@@ -2,7 +2,7 @@
 
 #include <vector>
 
-#include "debug_view.h"
+#include "debug/debug_view.h"
 #include "state/settings.h"
 #include "ui/ui_widgets.h"
 

@@ -11,10 +11,10 @@
 
 #include "command_context.h"
 #include "compute_engine.h"
-#include "debug_view.h"
+#include "debug/debug_view.h"
 #include "dlss_guides.h"
 #include "feature_lifecycle.h"
-#include "frame_debug_context.h"
+#include "debug/frame_debug_context.h"
 #include "hdr_state.h"
 #include "model_pipeline.h"
 #include "pass_resources.h"

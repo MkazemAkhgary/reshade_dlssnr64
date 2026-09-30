@@ -1,6 +1,6 @@
 #include "pipeline/pass_session.h"
 
-#include "runtime/debug_view.h"
+#include "debug/debug_view.h"
 #include "pipeline/pipeline_graph.h"
 #include "skin/skin_detect.h"
 

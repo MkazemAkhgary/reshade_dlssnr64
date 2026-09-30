@@ -12,7 +12,7 @@
 
 #include "command_context.h"
 #include "dlss_guides.h"
-#include "frame_debug_context.h"
+#include "debug/frame_debug_context.h"
 #include "hdr_state.h"
 #include "pass_session.h"
 #include "pipeline_graph.h"

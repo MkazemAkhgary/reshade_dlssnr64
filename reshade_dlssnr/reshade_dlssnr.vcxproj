@@ -112,8 +112,8 @@
     <ClCompile Include="hooks\d3d12_state.cpp" />
     <ClCompile Include="hooks\dlss_guides.cpp" />
     <ClCompile Include="pipeline\addon_controller.cpp" />
-    <ClCompile Include="runtime\debug_steps.cpp" />
-    <ClCompile Include="runtime\debug_view.cpp" />
+    <ClCompile Include="debug\debug_view.cpp" />
+    <ClCompile Include="debug\steps.cpp" />
     <ClCompile Include="runtime\feature_lifecycle.cpp" />
     <ClCompile Include="hdr\hdr_state.cpp" />
     <ClCompile Include="hdr\steps.cpp" />
@@ -173,8 +173,8 @@
     <ClInclude Include="skin\shaders.h" />
     <ClInclude Include="pipeline\addon_controller.h" />
     <ClInclude Include="pipeline\crash_trace.h" />
-    <ClInclude Include="runtime\debug_view.h" />
-    <ClInclude Include="runtime\frame_debug_context.h" />
+    <ClInclude Include="debug\debug_view.h" />
+    <ClInclude Include="debug\frame_debug_context.h" />
     <ClInclude Include="runtime\feature_lifecycle.h" />
     <ClInclude Include="hdr\hdr_state.h" />
     <ClInclude Include="compose\compose.h" />
