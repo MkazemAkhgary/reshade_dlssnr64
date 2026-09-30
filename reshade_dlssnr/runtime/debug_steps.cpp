@@ -2,7 +2,7 @@
 
 #include "runtime/debug_view.h"
 #include "pipeline/pipeline_graph.h"
-#include "runtime/skin_detect.h"
+#include "skin/skin_detect.h"
 
 namespace reshade_dlssnr {
 

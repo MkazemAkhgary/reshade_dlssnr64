@@ -1,15 +1,15 @@
-#include "skin_detect.h"
+#include "skin/skin_detect.h"
 
 #include <algorithm>
 
 #include <reshade.hpp>
 
 #include "dlss_guides.h"
-#include "hdr_state.h"
+#include "hdr/hdr_state.h"
 #include "model_pipeline.h"
 #include "ngx_model_params.h"
-#include "pipeline_graph.h"
-#include "pipeline_trace.h"
+#include "pipeline/pipeline_graph.h"
+#include "pipeline/pipeline_trace.h"
 #include "runtime.h"
 
 namespace reshade_dlssnr {

@@ -9,7 +9,7 @@
 #include "gpu/d3d12_utils.h"
 #include "pipeline/pipeline_graph.h"
 #include "pipeline/pipeline_trace.h"
-#include "skin_detect.h"
+#include "skin/skin_detect.h"
 
 namespace reshade_dlssnr {
 

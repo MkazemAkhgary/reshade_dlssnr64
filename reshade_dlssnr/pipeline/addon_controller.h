@@ -18,7 +18,7 @@
 #include "pipeline_graph.h"
 #include "runtime.h"
 #include "state/settings.h"
-#include "skin_detect.h"
+#include "skin/skin_detect.h"
 #include "status.h"
 
 namespace reshade_dlssnr {

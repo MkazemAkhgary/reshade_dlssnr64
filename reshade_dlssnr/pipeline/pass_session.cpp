@@ -12,7 +12,7 @@
 #include "ngx_model_params.h"
 #include "pipeline_graph.h"
 #include "pipeline_trace.h"
-#include "skin_detect.h"
+#include "skin/skin_detect.h"
 #include "streamline_compat.h"
 
 namespace reshade_dlssnr {
