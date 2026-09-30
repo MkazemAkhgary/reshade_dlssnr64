@@ -6,7 +6,7 @@
 
 #include "hdr_state.h"
 #include "pipeline_trace.h"
-#include "settings.h"
+#include "state/settings.h"
 
 namespace reshade_dlssnr {
 

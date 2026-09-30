@@ -6,7 +6,7 @@
 #include "dlss_guides.h"
 #include "pipeline_graph.h"
 #include "pipeline_trace.h"
-#include "settings.h"
+#include "state/settings.h"
 
 namespace reshade_dlssnr {
 

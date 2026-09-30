@@ -20,7 +20,7 @@
 #include "dlss_guides.h"
 #include "local_vtable.h"
 #include "proxy_unwrap.h"
-#include "settings.h"
+#include "state/settings.h"
 
 namespace reshade_dlssnr::ngx_hook_compat {
 

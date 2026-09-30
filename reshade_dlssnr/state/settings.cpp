@@ -1,4 +1,4 @@
-#include "settings.h"
+#include "state/settings.h"
 
 #include <reshade.hpp>
 

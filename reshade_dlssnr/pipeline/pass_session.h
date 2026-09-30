@@ -20,7 +20,7 @@
 #include "pass_resources.h"
 #include "pipeline_graph.h"
 #include "runtime.h"
-#include "settings.h"
+#include "state/settings.h"
 #include "status.h"
 
 namespace reshade_dlssnr {

@@ -6,7 +6,7 @@
 #include "command_context.h"
 #include "compute_engine.h"
 #include "feature_lifecycle.h"
-#include "settings.h"
+#include "state/settings.h"
 
 namespace reshade_dlssnr {
 

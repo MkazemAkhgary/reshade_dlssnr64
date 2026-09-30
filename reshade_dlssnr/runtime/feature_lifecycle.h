@@ -5,7 +5,7 @@
 #include <nvsdk_ngx.h>
 
 #include "runtime.h"
-#include "settings.h"
+#include "state/settings.h"
 
 namespace reshade_dlssnr {
 

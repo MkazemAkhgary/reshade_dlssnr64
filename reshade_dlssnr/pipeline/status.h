@@ -10,7 +10,7 @@
 
 #include <cstdint>
 
-#include "settings.h"
+#include "state/settings.h"
 
 namespace reshade_dlssnr {
 

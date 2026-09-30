@@ -6,7 +6,7 @@
 #include <string>
 
 #include "gpu/shader_params.h"
-#include "settings.h"
+#include "state/settings.h"
 #include "grade/settings.h"
 #include "ui/ui_sections.h"
 #include "ui/ui_widgets.h"

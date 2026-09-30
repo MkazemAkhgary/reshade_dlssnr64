@@ -6,7 +6,7 @@
 #include <cstdio>
 
 #include "addon_controller.h"
-#include "settings.h"
+#include "state/settings.h"
 #include "status.h"
 #include "ui/ui_widgets.h"
 

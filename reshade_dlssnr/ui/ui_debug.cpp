@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "debug_view.h"
-#include "settings.h"
+#include "state/settings.h"
 #include "ui/ui_widgets.h"
 
 namespace reshade_dlssnr {

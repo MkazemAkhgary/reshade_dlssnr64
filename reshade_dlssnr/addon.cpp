@@ -13,7 +13,7 @@
 #include "d3d12_hooks.h"
 #include "dlss_guides.h"
 #include "nvngx_hook_compat.h"
-#include "settings.h"
+#include "state/settings.h"
 #include "ui.h"
 
 namespace {

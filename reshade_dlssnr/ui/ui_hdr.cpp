@@ -5,7 +5,7 @@
 
 #include "addon_controller.h"
 #include "runtime/hdr_state.h"
-#include "settings.h"
+#include "state/settings.h"
 #include "hdr/settings.h"
 #include "ui/ui_sections.h"
 #include "ui/ui_widgets.h"

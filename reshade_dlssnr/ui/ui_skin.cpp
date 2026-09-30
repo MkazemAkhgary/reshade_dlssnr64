@@ -1,7 +1,7 @@
 #include <imgui.h>
 #include <reshade.hpp>
 
-#include "settings.h"
+#include "state/settings.h"
 #include "skin/settings.h"
 #include "ui/ui_sections.h"
 #include "ui/ui_widgets.h"

@@ -2,7 +2,7 @@
 #pragma once
 
 #include "ngx_parameter_block.h"
-#include "settings.h"
+#include "state/settings.h"
 
 namespace reshade_dlssnr {
 
