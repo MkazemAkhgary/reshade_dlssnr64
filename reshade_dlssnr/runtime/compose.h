@@ -8,8 +8,8 @@
 #include "compute_engine.h"
 #include "pass_resources.h"
 #include "runtime/model_input.h"
-#include "settings/compose.h"
-#include "settings/grade.h"
+#include "compose/settings.h"
+#include "grade/settings.h"
 
 namespace reshade_dlssnr::model_pipeline {
 
