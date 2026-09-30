@@ -1,4 +1,4 @@
-#include "settings/hdr.h"
+#include "hdr/settings.h"
 
 #include <reshade.hpp>
 

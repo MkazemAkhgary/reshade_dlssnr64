@@ -1,4 +1,4 @@
-#include "settings/grade.h"
+#include "grade/settings.h"
 
 #include <reshade.hpp>
 

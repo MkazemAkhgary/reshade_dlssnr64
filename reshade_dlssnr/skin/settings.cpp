@@ -1,4 +1,4 @@
-#include "settings/skin.h"
+#include "skin/settings.h"
 
 #include <reshade.hpp>
 

@@ -1,4 +1,4 @@
-#include "settings/compose.h"
+#include "compose/settings.h"
 
 #include <reshade.hpp>
 
