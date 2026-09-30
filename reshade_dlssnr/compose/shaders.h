@@ -246,7 +246,7 @@ void FsrEasuSetF(inout float2 dir, inout float len, float2 pp,
     if (biV) w = pp.x * pp.y;
     float dc = lD - lC;
     float cb = lC - lB;
-    float lenX = max(abs(dc), abs(cb));
+    float lenX = max(max(abs(dc), abs(cb)), 1e-6);
     lenX = rcp(lenX);
     float dirX = lD - lB;
     dir.x += dirX * w;
@@ -255,7 +255,7 @@ void FsrEasuSetF(inout float2 dir, inout float len, float2 pp,
     len += lenX * w;
     float ec = lE - lC;
     float ca = lC - lA;
-    float lenY = max(abs(ec), abs(ca));
+    float lenY = max(max(abs(ec), abs(ca)), 1e-6);
     lenY = rcp(lenY);
     float dirY = lE - lA;
     dir.y += dirY * w;
@@ -375,7 +375,8 @@ float3 FsrRcasF(float3 b, float3 d, float3 e, float3 f, float3 h,
     // rather than written as the three-argument forms the FSR source uses.
     float nz_min = min(min(bL, dL), min(eL, min(fL, hL)));
     float nz_max = max(max(bL, dL), max(eL, max(fL, hL)));
-    nz = saturate(abs(nz) * rcp(nz_max - nz_min));
+    float nz_range = max(nz_max - nz_min, 1e-6);
+    nz = saturate(abs(nz) / nz_range);
     nz = -0.5 * nz + 1.0;
 
     float mn4R = min(min(bR, dR), min(fR, hR));
@@ -385,12 +386,19 @@ float3 FsrRcasF(float3 b, float3 d, float3 e, float3 f, float3 h,
     float mx4G = max(max(bG, dG), max(fG, hG));
     float mx4B = max(max(bB, dB), max(fB, hB));
 
-    float hitMinR = min(mn4R, eR) * rcp(4.0 * mx4R);
-    float hitMinG = min(mn4G, eG) * rcp(4.0 * mx4G);
-    float hitMinB = min(mn4B, eB) * rcp(4.0 * mx4B);
-    float hitMaxR = (1.0 - max(mx4R, eR)) * rcp(4.0 * mn4R - 4.0);
-    float hitMaxG = (1.0 - max(mx4G, eG)) * rcp(4.0 * mn4G - 4.0);
-    float hitMaxB = (1.0 - max(mx4B, eB)) * rcp(4.0 * mn4B - 4.0);
+    float hitMinR = min(mn4R, eR) /
+                    max(4.0 * mx4R, 1e-6);
+    float hitMinG = min(mn4G, eG) /
+                    max(4.0 * mx4G, 1e-6);
+    float hitMinB = min(mn4B, eB) /
+                    max(4.0 * mx4B, 1e-6);
+
+    float hitMaxR = (1.0 - max(mx4R, eR)) /
+                    min(4.0 * mn4R - 4.0, -1e-6);
+    float hitMaxG = (1.0 - max(mx4G, eG)) /
+                    min(4.0 * mn4G - 4.0, -1e-6);
+    float hitMaxB = (1.0 - max(mx4B, eB)) /
+                    min(4.0 * mn4B - 4.0, -1e-6);
 
     float lobeR = max(-hitMinR, hitMaxR);
     float lobeG = max(-hitMinG, hitMaxG);
@@ -474,40 +482,60 @@ float3 ShapeResidual(float3 delta, float luma) {
 
 // The ratio alone, without any shaping. Kept separate because the shaping
 // needs the target pixel's luma, which this does not.
-float3 SoftClampRatio(float r, float lo, float hi) {
-    if (r >= 1.0) return 1.0 + (hi - 1.0) * (r - 1.0) / (r - 1.0 + (hi - 1.0));
-    return 1.0 - (1.0 - lo) * (1.0 - r) / ((1.0 - r) + (1.0 - lo));
+float SoftClampRatio(float r, float lo, float hi) {
+    if (r >= 1.0) {
+        float span = max(hi - 1.0, 1e-6);
+        return 1.0 + (hi - 1.0) * (r - 1.0) / (r - 1.0 + span);
+    } else {
+        float span = max(1.0 - lo, 1e-6);
+        return 1.0 - (1.0 - lo) * (1.0 - r) / ((1.0 - r) + span);
+    }
 }
 
+// The residual is dimensionless: measure the model's change in its linear
+// SDR domain, undo only the deterministic input grade, then apply that gain
+// directly to the original HDR linear pixel. Do not round-trip the HDR pixel
+// through the SDR tone mapper; doing that makes the same model edit depend on
+// the HDR brightness and can damage headroom around highlights.
 float3 ComposeRatioDelta(float3 low_in_lin, float3 low_out_lin) {
-    float3 ratio = (low_out_lin + kRatioEps) / (max(low_in_lin, 0.0) + kRatioEps);
+    const float eps = max(kRatioEps, 1e-8);
+    float3 ratio = (max(low_out_lin, 0.0) + eps) /
+                   (max(low_in_lin, 0.0) + eps);
     ratio.r = SoftClampRatio(ratio.r, kRatioDarken, kRatioBrighten);
     ratio.g = SoftClampRatio(ratio.g, kRatioDarken, kRatioBrighten);
     ratio.b = SoftClampRatio(ratio.b, kRatioDarken, kRatioBrighten);
     return ratio - 1.0;
 }
 
-// The whole compose. Tonemap the HDR source, apply the input grade so the
-// ratio lands in the domain the model saw, apply the ratio, then invert the
-// grade and the tonemap to hand back linear HDR.
+// The whole compose. Build the same full-resolution SDR reference used for
+// region protection, but lift the model residual back to HDR as a gain rather
+// than tone-mapping the HDR source and inverting that tone map afterward.
 float3 ComposeRatio(float3 src_lin, float3 low_in, float3 low_out,
                     float exposure, float W) {
-    float3 sdr_orig = ReinhardForward(src_lin * exposure, W);
+    float3 src_pos = max(src_lin, 0.0);
+
+    float3 sdr_orig = ReinhardForward(src_pos * exposure, W);
     float3 sdr_graded = (kGradeEnabled > 0.5) ? GradeLinearFwd(sdr_orig)
                                               : sdr_orig;
 
+    // The low-res textures are the model's actual SDR-domain input/output.
+    // Undo the input grade before measuring the residual so the resulting
+    // gain is expressed in the ungraded linear SDR domain.
     float3 low_in_lin = SrgbToLinear(low_in);
     float3 low_out_lin = SrgbToLinear(low_out);
+    if (kGradeEnabled > 0.5) {
+        low_in_lin = max(GradeLinearInv(low_in_lin), 0.0);
+        low_out_lin = max(GradeLinearInv(low_out_lin), 0.0);
+    }
+
     float sdr_luma = dot(sdr_graded, float3(0.2126, 0.7152, 0.0722));
     float3 delta = ShapeResidual(
         ComposeRatioDelta(low_in_lin, low_out_lin), sdr_luma);
 
-    float3 sdr_edited_graded = sdr_graded * (1.0 + delta);
-    float3 sdr_edited = (kGradeEnabled > 0.5)
-                            ? GradeLinearInv(sdr_edited_graded)
-                            : sdr_edited_graded;
-
-    float3 edited = ReinhardInverse(sdr_edited, W) / max(exposure, 1e-6);
+    // Apply the dimensionless residual to the original HDR signal. This is
+    // exactly identity when the model output equals its input, including
+    // clipped SDR highlights, so original HDR headroom is preserved.
+    float3 edited = src_pos * (1.0 + delta);
     return max(edited, 0.0);
 }
 
@@ -619,12 +647,12 @@ float SoftCompress(float x, float max_pos, float max_neg, float knee)
 
 float safe_log(float x)
 {
-    return log(max(x, 0.0) + 1e-6);
+    return log(max(x, 0.0) + max(kRatioEps, 1e-8));
 }
 
 float3 safe_log3(float3 v)
 {
-    return log(max(v, 0.0) + 1e-6);
+    return log(max(v, 0.0) + max(kRatioEps, 1e-8));
 }
 
 // Same shaping as ShapeResidual in the HDR compose, but on the SDR path's
@@ -632,12 +660,8 @@ float3 safe_log3(float3 v)
 // because the input spaces differ and the region protection reads a
 // different luma; the sliders are the same.
 float3 ShapeResidualSdr(float3 delta, float3 original_srgb) {
-    if (kSoftCompression != 0) {
-        delta.r = SoftCompress(delta.r, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
-        delta.g = SoftCompress(delta.g, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
-        delta.b = SoftCompress(delta.b, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
-    }
-
+    // When kSoftCompression is enabled, the SDR caller already applies the
+    // luma/chroma-specific soft compression once before this function.
     if (kEditGamma != 1.0 && kEditGamma > 0.0) {
         delta = sign(delta) * pow(abs(delta), kEditGamma);
     }
@@ -760,7 +784,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     float3 final_rgb = BlendYCbCr(original.rgb, edited,
                                   kLumaStrength, kChromaStrength);
-    final_rgb = 0.5 * (final_rgb + sqrt(final_rgb * final_rgb + 1e-6));
+    final_rgb = max(final_rgb, 0.0);
 
     gOutput[id.xy] = float4(final_rgb, original.a);
 }
