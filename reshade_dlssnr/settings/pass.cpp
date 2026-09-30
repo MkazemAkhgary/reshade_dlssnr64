@@ -4,7 +4,7 @@
 
 #include <reshade.hpp>
 
-#include "compute/shader_params.h"
+#include "gpu/shader_params.h"
 #include "settings/compose.h"
 #include "settings/grade.h"
 
