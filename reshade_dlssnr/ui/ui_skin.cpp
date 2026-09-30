@@ -2,7 +2,7 @@
 #include <reshade.hpp>
 
 #include "settings.h"
-#include "settings/skin.h"
+#include "skin/settings.h"
 #include "ui/ui_sections.h"
 #include "ui/ui_widgets.h"
 

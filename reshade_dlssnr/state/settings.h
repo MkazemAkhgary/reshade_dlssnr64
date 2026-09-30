@@ -5,11 +5,10 @@
 
 #include <reshade.hpp>
 
-#include "settings/compose.h"
-#include "settings/compose.h"
-#include "settings/grade.h"
-#include "settings/hdr.h"
-#include "settings/skin.h"
+#include "compose/settings.h"
+#include "grade/settings.h"
+#include "hdr/settings.h"
+#include "skin/settings.h"
 
 namespace reshade_dlssnr {
 

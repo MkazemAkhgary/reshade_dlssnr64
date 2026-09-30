@@ -1,7 +1,7 @@
 #include <imgui.h>
 #include <reshade.hpp>
 
-#include "settings/grade.h"
+#include "grade/settings.h"
 #include "ui/ui_sections.h"
 #include "ui/ui_widgets.h"
 

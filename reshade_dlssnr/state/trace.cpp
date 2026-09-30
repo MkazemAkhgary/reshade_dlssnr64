@@ -1,4 +1,4 @@
-#include "settings/trace.h"
+#include "state/trace.h"
 
 #include <reshade.hpp>
 

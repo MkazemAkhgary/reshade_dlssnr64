@@ -1,12 +1,12 @@
-#include "settings/pass.h"
+#include "state/pass.h"
 
 #include <string>
 
 #include <reshade.hpp>
 
 #include "gpu/shader_params.h"
-#include "settings/compose.h"
-#include "settings/grade.h"
+#include "compose/settings.h"
+#include "grade/settings.h"
 
 namespace reshade_dlssnr {
 

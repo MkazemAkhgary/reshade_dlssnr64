@@ -8,10 +8,10 @@
 #include <vector>
 
 #include "gpu/shader_params.h"
-#include "settings/compose.h"
-#include "settings/grade.h"
-#include "settings/pass.h"
-#include "settings/trace.h"
+#include "compose/settings.h"
+#include "grade/settings.h"
+#include "state/pass.h"
+#include "state/trace.h"
 
 namespace reshade_dlssnr {
 

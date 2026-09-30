@@ -68,7 +68,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <Optimization>Disabled</Optimization>
       <ObjectFileName>$(IntDir)%(RelativeDir)%(Filename).obj</ObjectFileName>
-<AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)third_party\reshade\include;$(ProjectDir)third_party\reshade;$(ProjectDir)third_party\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\FidelityFX-FSR\ffx-fsr;$(ProjectDir)third_party\nvngx_dlss_sdk;$(ProjectDir)third_party\d3dx;$(ProjectDir)third_party\detours;$(ProjectDir)gpu;$(ProjectDir)runtime;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+<AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)third_party\reshade\include;$(ProjectDir)third_party\reshade;$(ProjectDir)third_party\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\FidelityFX-FSR\ffx-fsr;$(ProjectDir)third_party\nvngx_dlss_sdk;$(ProjectDir)third_party\d3dx;$(ProjectDir)third_party\detours;$(ProjectDir)gpu;$(ProjectDir)runtime;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)compose;$(ProjectDir)grade;$(ProjectDir)hdr;$(ProjectDir)skin;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -90,7 +90,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <ErrorLog>$(IntDir)$(MSBuildProjectName).error.log;%(ErrorLog)</ErrorLog>
       <ObjectFileName>$(IntDir)%(RelativeDir)%(Filename).obj</ObjectFileName>
-	  <AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)..\..\reshade\include;$(SolutionDir)..\..\reshade;$(SolutionDir)..\..\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\nvngx_dlss_sdk;$(ProjectDir)third_party\d3dx;$(ProjectDir)third_party\detours;$(ProjectDir)gpu;$(ProjectDir)runtime;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+	  <AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)..\..\reshade\include;$(SolutionDir)..\..\reshade;$(SolutionDir)..\..\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\nvngx_dlss_sdk;$(ProjectDir)third_party\d3dx;$(ProjectDir)third_party\detours;$(ProjectDir)gpu;$(ProjectDir)runtime;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)compose;$(ProjectDir)grade;$(ProjectDir)hdr;$(ProjectDir)skin;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -128,12 +128,12 @@
     <ClCompile Include="pipeline\pipeline_trace.cpp" />
     <ClCompile Include="runtime\runtime.cpp" />
     <ClCompile Include="runtime\skin_detect.cpp" />
-    <ClCompile Include="settings\compose.cpp" />
-    <ClCompile Include="settings\grade.cpp" />
-    <ClCompile Include="settings\hdr.cpp" />
-    <ClCompile Include="settings\pass.cpp" />
-    <ClCompile Include="settings\skin.cpp" />
-    <ClCompile Include="settings\trace.cpp" />
+    <ClCompile Include="compose\settings.cpp" />
+    <ClCompile Include="grade\settings.cpp" />
+    <ClCompile Include="hdr\settings.cpp" />
+    <ClCompile Include="skin\settings.cpp" />
+    <ClCompile Include="state\pass.cpp" />
+    <ClCompile Include="state\trace.cpp" />
     <ClCompile Include="state\settings.cpp" />
     <ClCompile Include="ui\ui.cpp" />
     <ClCompile Include="ui\ui_debug.cpp" />
@@ -158,8 +158,12 @@
     <ClInclude Include="hooks\local_vtable.h" />
     <ClInclude Include="hooks\nvngx_hook_compat.h" />
     <ClInclude Include="hooks\proxy_unwrap.h" />
-    <ClInclude Include="settings\hdr.h" />
-    <ClInclude Include="settings\skin.h" />
+    <ClInclude Include="compose\settings.h" />
+    <ClInclude Include="grade\settings.h" />
+    <ClInclude Include="hdr\settings.h" />
+    <ClInclude Include="skin\settings.h" />
+    <ClInclude Include="state\pass.h" />
+    <ClInclude Include="state\trace.h" />
     <ClInclude Include="compose\shaders.h" />
     <ClInclude Include="debug\shaders.h" />
     <ClInclude Include="grade\shaders.h" />
