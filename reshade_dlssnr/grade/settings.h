@@ -40,9 +40,10 @@ struct GradeSettings {
 };
 
 constexpr float kGradeBlackPointMin = -0.25f;
-constexpr float kGradeBlackPointMax = 0.25f;
-constexpr float kGradeWhitePointMin = 0.2f;
-constexpr float kGradeWhitePointMax = 4.0f;
+constexpr float kGradeBlackPointMax =  0.20f;
+
+constexpr float kGradeWhitePointMin =  0.25f;
+constexpr float kGradeWhitePointMax =  4.0f;
 
 void LoadGrade(const std::string& prefix, GradeSettings& grade);
 void SaveGrade(const std::string& prefix, const GradeSettings& grade);

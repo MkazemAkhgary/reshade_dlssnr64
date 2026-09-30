@@ -100,7 +100,7 @@ void DrawGradeSection(const char* id,
 
     changed |= DrawFloatRow(0, "chroma", "Saturation",
                             "Negative desaturates, positive saturates.",
-                            &grade.chroma, nullptr, 0.0f, -1.0f, 1.0f, 0.0f);
+                            &grade.chroma, nullptr, 0.0f, -0.95f, 1.0f, 0.0f);
   });
 
   ImGui::PopID();
