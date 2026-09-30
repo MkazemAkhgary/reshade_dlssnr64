@@ -1,4 +1,4 @@
-#include "runtime/compose.h"
+#include "compose/compose.h"
 
 #include "shader_params.h"
 
