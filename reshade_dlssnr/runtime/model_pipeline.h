@@ -3,5 +3,5 @@
 #pragma once
 
 #include "compose/compose.h"
-#include "runtime/grade.h"
+#include "grade/grade.h"
 #include "runtime/model_input.h"
