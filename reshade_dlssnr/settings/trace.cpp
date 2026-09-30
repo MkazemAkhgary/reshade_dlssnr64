@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-#include "compute/shader_params.h"
+#include "gpu/shader_params.h"
 #include "pipeline_trace.h"
 
 namespace reshade_dlssnr {
