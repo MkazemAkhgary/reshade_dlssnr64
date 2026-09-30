@@ -68,7 +68,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <Optimization>Disabled</Optimization>
       <ObjectFileName>$(IntDir)%(RelativeDir)%(Filename).obj</ObjectFileName>
-<AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)third_party\reshade\include;$(ProjectDir)third_party\reshade;$(ProjectDir)third_party\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\FidelityFX-FSR\ffx-fsr;$(ProjectDir)third_party\nvngx_dlss_sdk;$(ProjectDir)third_party\d3dx;$(ProjectDir)third_party\detours;$(ProjectDir)compute;$(ProjectDir)runtime;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)shaders;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+<AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)third_party\reshade\include;$(ProjectDir)third_party\reshade;$(ProjectDir)third_party\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\FidelityFX-FSR\ffx-fsr;$(ProjectDir)third_party\nvngx_dlss_sdk;$(ProjectDir)third_party\d3dx;$(ProjectDir)third_party\detours;$(ProjectDir)gpu;$(ProjectDir)runtime;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)shaders;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -90,7 +90,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <ErrorLog>$(IntDir)$(MSBuildProjectName).error.log;%(ErrorLog)</ErrorLog>
       <ObjectFileName>$(IntDir)%(RelativeDir)%(Filename).obj</ObjectFileName>
-	  <AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)..\..\reshade\include;$(SolutionDir)..\..\reshade;$(SolutionDir)..\..\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\nvngx_dlss_sdk;$(ProjectDir)third_party\d3dx;$(ProjectDir)third_party\detours;$(ProjectDir)compute;$(ProjectDir)runtime;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)shaders;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+	  <AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)..\..\reshade\include;$(SolutionDir)..\..\reshade;$(SolutionDir)..\..\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\nvngx_dlss_sdk;$(ProjectDir)third_party\d3dx;$(ProjectDir)third_party\detours;$(ProjectDir)gpu;$(ProjectDir)runtime;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)shaders;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -103,17 +103,18 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="addon.cpp" />
-    <ClCompile Include="compute\compute_engine.cpp" />
-    <ClCompile Include="compute\compute_passes.cpp" />
+    <ClCompile Include="gpu\compute_engine.cpp" />
+    <ClCompile Include="gpu\compute_passes.cpp" />
+    <ClCompile Include="gpu\command_context.cpp" />
+    <ClCompile Include="gpu\gpu_readback.cpp" />
+    <ClCompile Include="gpu\pass_resources.cpp" />
     <ClCompile Include="hooks\d3d12_hooks.cpp" />
     <ClCompile Include="hooks\d3d12_state.cpp" />
     <ClCompile Include="hooks\dlss_guides.cpp" />
     <ClCompile Include="runtime\addon_controller.cpp" />
-    <ClCompile Include="runtime\command_context.cpp" />
     <ClCompile Include="runtime\debug_steps.cpp" />
     <ClCompile Include="runtime\debug_view.cpp" />
     <ClCompile Include="runtime\feature_lifecycle.cpp" />
-    <ClCompile Include="runtime\gpu_readback.cpp" />
     <ClCompile Include="runtime\hdr_state.cpp" />
     <ClCompile Include="runtime\hdr_steps.cpp" />
     <ClCompile Include="runtime\compose.cpp" />
@@ -122,7 +123,6 @@
     <ClCompile Include="runtime\model_input.cpp" />
     <ClCompile Include="runtime\ngx_model_params.cpp" />
     <ClCompile Include="runtime\ngx_parameter_block.cpp" />
-    <ClCompile Include="runtime\pass_resources.cpp" />
     <ClCompile Include="runtime\pass_session.cpp" />
     <ClCompile Include="runtime\pipeline_graph.cpp" />
     <ClCompile Include="runtime\pipeline_trace.cpp" />
@@ -145,9 +145,13 @@
     <ClCompile Include="ui\ui_widgets.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="compute\compute_engine.h" />
-    <ClInclude Include="compute\compute_passes.h" />
-    <ClInclude Include="compute\shader_params.h" />
+    <ClInclude Include="gpu\command_context.h" />
+    <ClInclude Include="gpu\compute_engine.h" />
+    <ClInclude Include="gpu\compute_passes.h" />
+    <ClInclude Include="gpu\d3d12_utils.h" />
+    <ClInclude Include="gpu\gpu_readback.h" />
+    <ClInclude Include="gpu\pass_resources.h" />
+    <ClInclude Include="gpu\shader_params.h" />
     <ClInclude Include="hooks\d3d12_hooks.h" />
     <ClInclude Include="hooks\d3d12_state.h" />
     <ClInclude Include="hooks\dlss_guides.h" />
@@ -164,13 +168,10 @@
     <ClInclude Include="shaders\model.h" />
     <ClInclude Include="shaders\skin.h" />
     <ClInclude Include="runtime\addon_controller.h" />
-    <ClInclude Include="runtime\command_context.h" />
     <ClInclude Include="runtime\crash_trace.h" />
     <ClInclude Include="runtime\debug_view.h" />
-    <ClInclude Include="runtime\d3d12_utils.h" />
     <ClInclude Include="runtime\frame_debug_context.h" />
     <ClInclude Include="runtime\feature_lifecycle.h" />
-    <ClInclude Include="runtime\gpu_readback.h" />
     <ClInclude Include="runtime\hdr_state.h" />
     <ClInclude Include="runtime\compose.h" />
     <ClInclude Include="runtime\grade.h" />
@@ -179,7 +180,6 @@
     <ClInclude Include="runtime\ngx_model_params.h" />
     <ClInclude Include="runtime\ngx_parameter_block.h" />
     <ClInclude Include="runtime\status.h" />
-    <ClInclude Include="runtime\pass_resources.h" />
     <ClInclude Include="runtime\pass_session.h" />
     <ClInclude Include="runtime\pipeline_graph.h" />
     <ClInclude Include="runtime\pipeline_trace.h" />

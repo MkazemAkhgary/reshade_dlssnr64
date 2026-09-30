@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-#include "compute/shader_params.h"
+#include "gpu/shader_params.h"
 #include "settings/compose.h"
 #include "settings/grade.h"
 #include "settings/pass.h"
