@@ -4,4 +4,4 @@
 
 #include "compose/compose.h"
 #include "grade/grade.h"
-#include "runtime/model_input.h"
+#include "model/model_input.h"

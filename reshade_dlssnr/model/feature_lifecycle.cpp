@@ -1,11 +1,11 @@
-#include "feature_lifecycle.h"
+#include "model/feature_lifecycle.h"
 
 #include <algorithm>
 #include <string>
 
 #include <reshade.hpp>
 
-#include "ngx_model_params.h"
+#include "model/ngx_model_params.h"
 
 namespace reshade_dlssnr {
 

@@ -16,7 +16,7 @@
 #include "hdr_state.h"
 #include "pass_session.h"
 #include "pipeline_graph.h"
-#include "runtime.h"
+#include "model/runtime.h"
 #include "state/settings.h"
 #include "skin/skin_detect.h"
 #include "status.h"

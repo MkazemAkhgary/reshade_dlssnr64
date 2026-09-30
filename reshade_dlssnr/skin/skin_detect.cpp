@@ -6,11 +6,11 @@
 
 #include "dlss_guides.h"
 #include "hdr/hdr_state.h"
-#include "model_pipeline.h"
-#include "ngx_model_params.h"
+#include "model/model_pipeline.h"
+#include "model/ngx_model_params.h"
 #include "pipeline/pipeline_graph.h"
 #include "pipeline/pipeline_trace.h"
-#include "runtime.h"
+#include "model/runtime.h"
 
 namespace reshade_dlssnr {
 

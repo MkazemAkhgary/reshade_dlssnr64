@@ -31,7 +31,7 @@
 
 #include "debug/debug_view.h"
 #include "dlss_guides.h"
-#include "model_pipeline.h"
+#include "model/model_pipeline.h"
 
 namespace reshade_dlssnr {
 

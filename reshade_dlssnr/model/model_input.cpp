@@ -1,4 +1,4 @@
-#include "runtime/model_input.h"
+#include "model/model_input.h"
 
 #include "shader_params.h"
 

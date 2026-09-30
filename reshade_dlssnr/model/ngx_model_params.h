@@ -1,7 +1,7 @@
 // Shared DLSSNR model tuning parameters for feature creation and evaluation.
 #pragma once
 
-#include "ngx_parameter_block.h"
+#include "model/ngx_parameter_block.h"
 #include "state/settings.h"
 
 namespace reshade_dlssnr {

@@ -1,4 +1,4 @@
-#include "ngx_parameter_block.h"
+#include "model/ngx_parameter_block.h"
 
 namespace reshade_dlssnr {
 

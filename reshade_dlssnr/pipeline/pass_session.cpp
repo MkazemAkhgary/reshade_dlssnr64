@@ -8,8 +8,8 @@
 
 #include "d3d12_utils.h"
 #include "dlss_guides.h"
-#include "model_pipeline.h"
-#include "ngx_model_params.h"
+#include "model/model_pipeline.h"
+#include "model/ngx_model_params.h"
 #include "pipeline_graph.h"
 #include "pipeline_trace.h"
 #include "skin/skin_detect.h"

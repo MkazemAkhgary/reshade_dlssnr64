@@ -7,7 +7,7 @@
 #include "command_context.h"
 #include "compute_engine.h"
 #include "pass_resources.h"
-#include "runtime/model_input.h"
+#include "model/model_input.h"
 #include "compose/settings.h"
 #include "grade/settings.h"
 
