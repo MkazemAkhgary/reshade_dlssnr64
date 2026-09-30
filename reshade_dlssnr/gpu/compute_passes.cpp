@@ -11,19 +11,6 @@
 
 namespace reshade_dlssnr {
 
-namespace {
-
-
-
-
-
-
-
-
-
-}  // namespace
-
-
 const ComputePassDef kComputePasses[] = {
     {"ZeroHistogram",         kZeroHistogramSource,     nullptr},
     {"BuildHistogram",        kBuildHistogramSource,    nullptr},
