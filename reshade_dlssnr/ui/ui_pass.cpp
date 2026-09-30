@@ -5,7 +5,7 @@
 #include <cstring>
 #include <string>
 
-#include "compute/shader_params.h"
+#include "gpu/shader_params.h"
 #include "settings.h"
 #include "settings/grade.h"
 #include "ui/ui_sections.h"
