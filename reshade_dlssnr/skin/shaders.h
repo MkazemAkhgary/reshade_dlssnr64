@@ -46,16 +46,24 @@ bool PixelIsSkin(int2 xy)
     if (min(min(a.r, a.g), a.b) <= lo) return false;
     if (min(min(b.r, b.g), b.b) <= lo) return false;
 
+    // --- Hysteresis to reduce temporal flickering ---
+    // If the pixel was skin in the previous frame, lower the threshold
+    // required to keep it classified as skin.
+    float prev = gPrevMask.Load(int3(xy, 0));
+    float hysteresis = lerp(1.0, 0.5, saturate(prev * 2.0));
+
     float a_luma = dot(a, kLuma709);
     float b_luma = dot(b, kLuma709);
     float luma_diff = abs(b_luma - a_luma) * kEditStrength;
     float luma_ref = max(a_luma, b_luma);
-
-    bool luma_edit = luma_diff > kLumaAbs && luma_diff > kLumaRel * luma_ref;
-
+    
+    // Apply hysteresis to thresholds
+    bool luma_edit = luma_diff > (kLumaAbs * hysteresis) && 
+                     luma_diff > (kLumaRel * luma_ref * hysteresis);
+                     
     float3 chroma_diff = (b - b_luma) - (a - a_luma);
-    bool chroma_edit = length(chroma_diff) * kEditStrength > kChromaAbs;
-
+    bool chroma_edit = length(chroma_diff) * kEditStrength > (kChromaAbs * hysteresis);
+    
     return luma_edit || chroma_edit;
 }
 
