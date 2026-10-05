@@ -184,7 +184,7 @@ bool SkinDetect::Run(CommandContext& cmd,
     // drive its own input exposure.
     pass_name = "TonemapForward";
     constants.params[0] = hdr->FallbackExposure();
-    constants.params[1] = hdr->FallbackWhitePoint() *
+    constants.params[1] = hdr->FallbackSceneWhite() *
                           std::max(settings.hdr.highlight_headroom, 0.01f);
     constants.params[2] = static_cast<float>(HdrFormatCode(hdr->ResolvedFormat()));
   }

@@ -34,7 +34,7 @@ void DrawStatus(const HdrSnapshot& snap, const HdrSettings& hdr,
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("Status");
   if (ImGui::IsItemHovered()) {
-    Tip("Format, current exposure, and target white point.");
+    Tip("Format, current exposure, and scene white point.");
   }
   ImGui::SameLine(kControlLabelWidth);
 
@@ -45,7 +45,7 @@ void DrawStatus(const HdrSnapshot& snap, const HdrSettings& hdr,
     ImGui::TextDisabled("Waiting for first measurement...");
   } else {
     ImGui::Text("Format: %s   Exposure: %.3f   White: %.3f",
-                format_name, snap.exposure, snap.white_point);
+                format_name, snap.exposure, snap.scene_white);
   }
 }
 
@@ -139,7 +139,7 @@ void DrawDiagnostics(const HdrSnapshot& snap, const HdrSettings& hdr,
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
     ImGui::Text("White (post-headroom): %.3f",
-                snap.white_point * std::max(hdr.highlight_headroom, 0.01f));
+                snap.scene_white * std::max(hdr.highlight_headroom, 0.01f));
 
     const char* source_name = "Full frame";
     if (snap.metering_source == 1) source_name = "Depth-filtered";
@@ -156,7 +156,7 @@ void DrawDiagnostics(const HdrSnapshot& snap, const HdrSettings& hdr,
     ImGui::TableNextColumn();
     ImGui::Text("Fallback exposure: %.3f", snap.fallback_exposure);
     ImGui::TableNextColumn();
-    ImGui::Text("Fallback white: %.3f", snap.fallback_white_point);
+    ImGui::Text("Fallback white: %.3f", snap.fallback_scene_white);
 
     ImGui::EndTable();
   }

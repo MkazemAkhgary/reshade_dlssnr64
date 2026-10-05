@@ -462,7 +462,7 @@ void AddonController::RefreshStatus(const Settings& settings) {
   const HdrSnapshot hdr = hdr_.GetSnapshot();
   status_.hdr_ready = hdr.ready;
   status_.hdr_exposure = hdr.exposure;
-  status_.hdr_white_point = hdr.white_point;
+  status_.hdr_scene_white = hdr.scene_white;
 
   status_.pass_count = kMaxPasses;
   for (uint32_t i = 0; i < kMaxPasses; ++i) {

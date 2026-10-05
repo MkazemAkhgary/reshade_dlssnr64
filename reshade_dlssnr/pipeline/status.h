@@ -53,7 +53,7 @@ struct StatusSnapshot {
   // HDR stage (shared across passes; only used by Post-DLSS passes).
   bool hdr_ready = false;        // has consumed at least one measurement
   float hdr_exposure = 1.0f;
-  float hdr_white_point = 1.0f;
+  float hdr_scene_white = 1.0f;
   char hdr_reason[kStatusTextLength] = {};
 
   // Per-pass state.

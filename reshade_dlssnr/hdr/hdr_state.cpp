@@ -203,7 +203,7 @@ void ExposureTracker::Update(const uint32_t* bins, const ExposureParams& params,
 
   exposure = Lerp(exposure, capped_target, alpha);
   const float W_target = std::max(1.0f, luma_hi * exposure);
-  white_point = Lerp(white_point, W_target, alpha);
+  scene_white = Lerp(scene_white, W_target, alpha);
 
   have_measurement = true;
   warmup_frames++;
@@ -287,9 +287,9 @@ HdrSnapshot HdrState::GetSnapshot() const {
   s.ready = regular_.have_measurement;
   s.resolved_format = resolved_format_;
   s.exposure = regular_.exposure;
-  s.white_point = regular_.white_point;
+  s.scene_white = regular_.scene_white;
   s.fallback_exposure = fallback_.exposure;
-  s.fallback_white_point = fallback_.white_point;
+  s.fallback_scene_white = fallback_.scene_white;
   s.fallback_metering_source = static_cast<int>(fallback_.metering_source);
   s.frames_since_measure = frames_since_measure_;
 

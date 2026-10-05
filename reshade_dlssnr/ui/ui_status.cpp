@@ -116,7 +116,7 @@ void DrawStatusSection(Settings& settings, bool& changed) {
     std::snprintf(hdr_buf, sizeof(hdr_buf), "Inactive (no DLSS Output pass)");
   } else if (snap.hdr_ready) {
     std::snprintf(hdr_buf, sizeof(hdr_buf), "Active · exp %.3f · white %.3f",
-                  snap.hdr_exposure, snap.hdr_white_point);
+                  snap.hdr_exposure, snap.hdr_scene_white);
   } else {
     std::snprintf(hdr_buf, sizeof(hdr_buf), "Warming up");
   }

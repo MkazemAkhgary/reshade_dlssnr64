@@ -55,7 +55,7 @@ struct ExposureParams {
 // exposure, which changes the tonemap that produced the mask.
 struct ExposureTracker {
   float exposure = 1.0f;
-  float white_point = 1.0f;
+  float scene_white = 1.0f;
   float target_exposure = 1.0f;
   float p50_luma = 0.0f;
   float skin_fraction = 0.0f;
@@ -76,7 +76,7 @@ struct HdrSnapshot {
   bool ready = false;             // has a valid measurement to report
   HdrFormat resolved_format = HdrFormat::Sdr;
   float exposure = 1.0f;
-  float white_point = 1.0f;
+  float scene_white = 1.0f;
   uint32_t frames_since_measure = 0;  // frames since last histogram arrived
 
   // Raw measurement, for the diagnostics UI. Populated whenever a fresh
@@ -101,7 +101,7 @@ struct HdrSnapshot {
   // Fallback EMA, used by the skin-detect pass. Depth -> full only, no skin
   // slice, so it does not depend on the mask.
   float fallback_exposure = 1.0f;
-  float fallback_white_point = 1.0f;
+  float fallback_scene_white = 1.0f;
   int fallback_metering_source = 0;
 };
 
@@ -145,10 +145,10 @@ class HdrState {
   HdrFormat ResolvedFormat() const { return resolved_format_; }
   // Regular passes: skin-driven when a mask is available.
   float Exposure() const { return regular_.exposure; }
-  float WhitePoint() const { return regular_.white_point; }
+  float SceneWhite() const { return regular_.scene_white; }
   // Skin-detect pass: depth -> full only, no skin slice.
   float FallbackExposure() const { return fallback_.exposure; }
-  float FallbackWhitePoint() const { return fallback_.white_point; }
+  float FallbackSceneWhite() const { return fallback_.scene_white; }
 
   HdrSnapshot GetSnapshot() const;
 
