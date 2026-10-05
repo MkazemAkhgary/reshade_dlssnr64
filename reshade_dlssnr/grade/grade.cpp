@@ -31,8 +31,8 @@ bool ApplyGrade(CommandContext& state,
       static_cast<float>(static_cast<int>(grade.luma_mode));
   constants.params[kGradeSlotBase + 4] =
       static_cast<float>(static_cast<int>(grade.chroma_mode));
-  constants.params[kGradeSlotBase + 5] = grade.black_point;
-  constants.params[kGradeSlotBase + 6] = grade.white_point;
+  constants.params[kGradeSlotBase + 5] = grade.black_level;
+  constants.params[kGradeSlotBase + 6] = grade.white_level;
   constants.params[kGradeSlotBase + 7] = grade.contrast;
   constants.params[kGradeSlotBase + 8] = grade.shadows;
   constants.params[kGradeSlotBase + 9] = grade.highlights;

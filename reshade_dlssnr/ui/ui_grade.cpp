@@ -47,16 +47,16 @@ void DrawGradeSection(const char* id,
   ImGui::TextUnformatted(label);
 
   WithDisabled(!grade.enabled, [&] {
-    changed |= DrawFloatRow(0, "black_point", "Black Point",
+    changed |= DrawFloatRow(0, "black_level", "Black Level",
                             "The linear value mapped to black. Raising "
                             "crushes the shadows; lowering lifts black.",
-                            &grade.black_point, nullptr, 0.0f,
-                            kGradeBlackPointMin, kGradeBlackPointMax, 0.0f);
+                            &grade.black_level, nullptr, 0.0f,
+                            kGradeBlackLevelMin, kGradeBlackLevelMax, 0.0f);
 
-    changed |= DrawFloatRow(0, "white_point", "White Point",
+    changed |= DrawFloatRow(0, "white_level", "White Level",
                             "The linear value mapped to white.",
-                            &grade.white_point, nullptr, 1.0f,
-                            kGradeWhitePointMin, kGradeWhitePointMax, 1.0f);
+                            &grade.white_level, nullptr, 1.0f,
+                            kGradeWhiteLevelMin, kGradeWhiteLevelMax, 1.0f);
 
     changed |= DrawFloatRow(0, "contrast", "Contrast",
                             "Stretches the image around mid grey. Positive "

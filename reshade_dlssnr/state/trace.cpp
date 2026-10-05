@@ -75,8 +75,8 @@ void AppendGrade(Snapshot& snap, const std::string& prefix,
   Append(snap, prefix + ".chroma", FloatText(grade.chroma));
   Append(snap, prefix + ".luma_mode", LumaModeText(grade.luma_mode));
   Append(snap, prefix + ".chroma_mode", ChromaModeText(grade.chroma_mode));
-  Append(snap, prefix + ".black_point", FloatText(grade.black_point));
-  Append(snap, prefix + ".white_point", FloatText(grade.white_point));
+  Append(snap, prefix + ".black_level", FloatText(grade.black_level));
+  Append(snap, prefix + ".white_level", FloatText(grade.white_level));
   Append(snap, prefix + ".contrast", FloatText(grade.contrast));
   Append(snap, prefix + ".shadows", FloatText(grade.shadows));
   Append(snap, prefix + ".highlights", FloatText(grade.highlights));

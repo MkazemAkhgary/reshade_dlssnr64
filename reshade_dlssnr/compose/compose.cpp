@@ -80,8 +80,8 @@ bool ComposeOutput(
           static_cast<float>(static_cast<int>(grade_input->luma_mode));
       constants.params[kGradeSlotBase + 4] =
           static_cast<float>(static_cast<int>(grade_input->chroma_mode));
-      constants.params[kGradeSlotBase + 5] = grade_input->black_point;
-      constants.params[kGradeSlotBase + 6] = grade_input->white_point;
+      constants.params[kGradeSlotBase + 5] = grade_input->black_level;
+      constants.params[kGradeSlotBase + 6] = grade_input->white_level;
       constants.params[kGradeSlotBase + 7] = grade_input->contrast;
       constants.params[kGradeSlotBase + 8] = grade_input->shadows;
       constants.params[kGradeSlotBase + 9] = grade_input->highlights;

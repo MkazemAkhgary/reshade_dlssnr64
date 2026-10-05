@@ -25,8 +25,8 @@ inline constexpr const char* kComposeModelOutputHdrSource = R"(
 #define kGradeChroma     gParams[2].z
 #define kGradeLumaMode   gParams[2].w
 #define kGradeChromaMode gParams[3].x
-#define kGradeBlackPoint gParams[3].y
-#define kGradeWhitePoint gParams[3].z
+#define kGradeBlackLevel gParams[3].y
+#define kGradeWhiteLevel gParams[3].z
 #define kGradeContrast   gParams[3].w
 #define kGradeShadows    gParams[4].x
 #define kGradeHighlights gParams[4].y

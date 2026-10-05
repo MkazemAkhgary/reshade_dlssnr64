@@ -32,18 +32,18 @@ struct GradeSettings {
   float chroma = 0.0f;
   GradeLumaMode luma_mode = GradeLumaMode::Gamma;
   GradeChromaMode chroma_mode = GradeChromaMode::Saturation;
-  float black_point = 0.0f;
-  float white_point = 1.0f;
+  float black_level = 0.0f;
+  float white_level = 1.0f;
   float contrast = 0.0f;
   float shadows = 0.0f;
   float highlights = 0.0f;
 };
 
-constexpr float kGradeBlackPointMin = -0.25f;
-constexpr float kGradeBlackPointMax =  0.20f;
+constexpr float kGradeBlackLevelMin = -0.25f;
+constexpr float kGradeBlackLevelMax =  0.20f;
 
-constexpr float kGradeWhitePointMin =  0.25f;
-constexpr float kGradeWhitePointMax =  4.0f;
+constexpr float kGradeWhiteLevelMin =  0.25f;
+constexpr float kGradeWhiteLevelMax =  4.0f;
 
 void LoadGrade(const std::string& prefix, GradeSettings& grade);
 void SaveGrade(const std::string& prefix, const GradeSettings& grade);

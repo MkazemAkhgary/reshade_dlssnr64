@@ -44,9 +44,9 @@ void LoadGrade(const std::string& p, GradeSettings& grade) {
   grade.chroma_mode = static_cast<GradeChromaMode>(chroma_mode);
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            (p + "BlackPoint").c_str(), grade.black_point);
+                            (p + "BlackLevel").c_str(), grade.black_level);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            (p + "WhitePoint").c_str(), grade.white_point);
+                            (p + "WhiteLevel").c_str(), grade.white_level);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             (p + "Contrast").c_str(), grade.contrast);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
@@ -56,10 +56,10 @@ void LoadGrade(const std::string& p, GradeSettings& grade) {
 
   grade.luma = ClampGradeAmount(grade.luma);
   grade.chroma = ClampGradeAmount(grade.chroma);
-  grade.black_point =
-      ClampRange(grade.black_point, kGradeBlackPointMin, kGradeBlackPointMax);
-  grade.white_point =
-      ClampRange(grade.white_point, kGradeWhitePointMin, kGradeWhitePointMax);
+  grade.black_level =
+      ClampRange(grade.black_level, kGradeBlackLevelMin, kGradeBlackLevelMax);
+  grade.white_level =
+      ClampRange(grade.white_level, kGradeWhiteLevelMin, kGradeWhiteLevelMax);
   grade.contrast = ClampGradeAmount(grade.contrast);
   grade.shadows = ClampGradeAmount(grade.shadows);
   grade.highlights = ClampGradeAmount(grade.highlights);
@@ -79,9 +79,9 @@ void SaveGrade(const std::string& p, const GradeSettings& grade) {
                             (p + "ChromaMode").c_str(),
                             static_cast<int>(grade.chroma_mode));
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            (p + "BlackPoint").c_str(), grade.black_point);
+                            (p + "BlackLevel").c_str(), grade.black_level);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            (p + "WhitePoint").c_str(), grade.white_point);
+                            (p + "WhiteLevel").c_str(), grade.white_level);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             (p + "Contrast").c_str(), grade.contrast);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
