@@ -34,7 +34,7 @@ bool PrepareInput(
   if (hdr != nullptr) {
     pass_name = "TonemapForward";
     constants.params[0] = hdr->exposure;
-    constants.params[1] = hdr->white_point;
+    constants.params[1] = hdr->tonemap_white;
     constants.params[2] = static_cast<float>(hdr->format);
   }
 

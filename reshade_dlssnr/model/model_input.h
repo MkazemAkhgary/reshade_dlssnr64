@@ -14,7 +14,7 @@ namespace reshade_dlssnr::model_pipeline {
 // Zero-initialised `format` means SDR sRGB, 1 scRGB, 2 HDR10 PQ.
 struct HdrUniforms {
   float exposure = 1.0f;
-  float white_point = 4.0f;
+  float tonemap_white = 4.0f;
   uint32_t format = 0;
 };
 

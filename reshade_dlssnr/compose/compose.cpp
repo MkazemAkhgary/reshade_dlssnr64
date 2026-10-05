@@ -45,7 +45,7 @@ bool ComposeOutput(
     pass_name = "ComposeModelOutputHdr";
     constants.params[kHdrSlotBase + 0] = static_cast<float>(hdr->format);
     constants.params[kHdrSlotBase + 1] = hdr->exposure;
-    constants.params[kHdrSlotBase + 2] = hdr->white_point;
+    constants.params[kHdrSlotBase + 2] = hdr->tonemap_white;
 
     // FsrEasuCon with inputViewport == inputSize: the working-scale textures
     // are sampled 1:1, so viewport and texture size coincide. con3 is not
