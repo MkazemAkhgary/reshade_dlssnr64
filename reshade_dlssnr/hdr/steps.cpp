@@ -15,8 +15,7 @@ PipelineStatus PassSession::StepBuildHdrUniforms(PassRun& run) {
 
   const Settings& settings = *run.settings;
   run.hdr_uniforms.exposure = run.hdr->Exposure();
-  run.hdr_uniforms.tonemap_white =
-      run.hdr->SceneWhite() * std::max(settings.hdr.highlight_headroom, 0.01f);
+  run.hdr_uniforms.tonemap_white = run.hdr->EffectiveSceneWhite(run.settings->hdr);
   run.hdr_uniforms.format = HdrFormatCode(run.hdr->ResolvedFormat());
   run.hdr_uniforms_ready = true;
   return PipelineStatus::Ok;

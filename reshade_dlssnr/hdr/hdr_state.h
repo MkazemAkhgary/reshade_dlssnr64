@@ -146,9 +146,11 @@ class HdrState {
   // Regular passes: skin-driven when a mask is available.
   float Exposure() const { return regular_.exposure; }
   float SceneWhite() const { return regular_.scene_white; }
+  float EffectiveSceneWhite(const HdrSettings& hdr) const { return CalcEffectiveSceneWhite(SceneWhite(), hdr); }
   // Skin-detect pass: depth -> full only, no skin slice.
   float FallbackExposure() const { return fallback_.exposure; }
   float FallbackSceneWhite() const { return fallback_.scene_white; }
+  float FallbackEffectiveSceneWhite(const HdrSettings& hdr) const { return CalcEffectiveSceneWhite(FallbackSceneWhite(), hdr); }
 
   HdrSnapshot GetSnapshot() const;
 

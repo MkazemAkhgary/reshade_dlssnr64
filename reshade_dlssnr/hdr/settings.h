@@ -39,4 +39,9 @@ struct HdrSettings {
 void LoadHdrSettings(HdrSettings& hdr);
 void SaveHdrSettings(const HdrSettings& hdr);
 
+inline float CalcEffectiveSceneWhite(float scene_white, const HdrSettings& hdr)
+{
+    return scene_white * std::max(hdr.highlight_headroom, 0.01f);
+}
+
 }  // namespace reshade_dlssnr

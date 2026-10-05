@@ -138,8 +138,7 @@ void DrawDiagnostics(const HdrSnapshot& snap, const HdrSettings& hdr,
 
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
-    ImGui::Text("White (post-headroom): %.3f",
-                snap.scene_white * std::max(hdr.highlight_headroom, 0.01f));
+    ImGui::Text("White (post-headroom): %.3f", CalcEffectiveSceneWhite(snap.scene_white, hdr));
 
     const char* source_name = "Full frame";
     if (snap.metering_source == 1) source_name = "Depth-filtered";
