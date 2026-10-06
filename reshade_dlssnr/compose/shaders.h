@@ -526,27 +526,18 @@ float3 ComposeHdr(float3 sdr_base, float gain,
     const float3 delta = ShapeResidual(
         ComposeRatioDelta(low_in_lin, low_out_lin), base_luma);
 
-    // Apply the model edit to the lossless carrier before the exact gain-map
-    // reconstruction. This keeps the model-facing gamut fit out of the
-    // round-trip path while preserving the model's multiplicative edit.
-    // For the ISO 21496-1 reconstruction
-    //
-    //   HDR = (SDR + base_offset) * 2^gain - alternate_offset
-    //
-    // multiplying the reconstructed HDR by an SDR ratio is only equivalent
-    // when both offsets are zero. With the chosen 1/64 offsets, the old
-    // ratio-lift error grows with 2^gain, which is why high-exposure scenes
-    // acquired an exposure-dependent color cast.
-    const float3 sdr_edited =
-        max(sdr_base * (1.0 + delta), 0.0);
-
+    // Decode once with the ISO offsets to get the true HDR source.
     const float3 hdr_src = ReconstructHdr(sdr_base, gain);
-    const float3 hdr_edited = ReconstructHdr(sdr_edited, gain);
 
-    // Blend in HDR linear light only after both variants have passed through
-    // the same gain-map reconstruction.
-    return BlendYCbCr(hdr_src, hdr_edited,
-                      kLumaStrength, kChromaStrength);
+    // Apply the model's multiplicative edit directly to HDR. Do NOT feed
+    // sdr_base * (1 + delta) back through ReconstructHdr: the affine
+    // -kAlternateOffset term adds a*(delta) of absolute error and drives
+    // highlights to black. The ratio delta is dimensionless and applies
+    // identically in the SDR model domain and the HDR reconstruction
+    // domain, because both are derived from the same carrier pixel.
+    const float3 hdr_edited = max(hdr_src * (1.0 + delta), 0.0);
+
+    return BlendYCbCr(hdr_src, hdr_edited, kLumaStrength, kChromaStrength);
 }
 
 [numthreads(8, 8, 1)]
