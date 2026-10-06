@@ -1,6 +1,8 @@
 #include "compute_engine.h"
 
 #include <cstdio>
+#include <cstring>
+#include <string>
 
 #include <reshade.hpp>
 
@@ -8,6 +10,32 @@
 #include "pipeline_trace.h"
 
 namespace reshade_dlssnr {
+
+namespace {
+
+std::string ShaderDiagnosticKey(const char* pass_name,
+                                reshade::log::level level,
+                                const std::string& text) {
+  std::string key = pass_name != nullptr ? pass_name : "<unknown>";
+  key += '\n';
+  key += level == reshade::log::level::error ? "error" : "warning";
+  key += '\n';
+  key += text;
+  return key;
+}
+
+std::string TrimShaderDiagnostic(const void* data, size_t size) {
+  if (data == nullptr || size == 0) return {};
+
+  std::string text(static_cast<const char*>(data), size);
+  while (!text.empty() && (text.back() == '\0' || text.back() == '\r' ||
+                           text.back() == '\n')) {
+    text.pop_back();
+  }
+  return text;
+}
+
+}  // namespace
 
 DXGI_FORMAT ComputeEngine::TypedFormat(DXGI_FORMAT format) const {
   switch (format) {
@@ -242,41 +270,77 @@ bool ComputeEngine::CreateRootSignature(ID3D12Device* device) {
 }
 
 bool ComputeEngine::CompilePipeline(
+    const char* pass_name,
     const char* hlsl,
     ID3D12PipelineState** out_pso) {
   if (device_ == nullptr || hlsl == nullptr || out_pso == nullptr) {
     return false;
   }
 
-  ID3DBlob* shader_blob = nullptr;
-  ID3DBlob* error_blob = nullptr;
+  *out_pso = nullptr;
 
-  if (FAILED(D3DCompile(
-          hlsl,
-          strlen(hlsl),
-          nullptr,
-          nullptr,
-          nullptr,
-          "CSMain",
-          "cs_5_1",
-          D3DCOMPILE_OPTIMIZATION_LEVEL3,
-          0,
-          &shader_blob,
-          &error_blob))) {
-    if (error_blob != nullptr) {
-      reshade::log::message(
-          reshade::log::level::error,
-          static_cast<const char*>(error_blob->GetBufferPointer()));
-      error_blob->Release();
-    } else {
-      reshade::log::message(
-          reshade::log::level::error,
-          "D3DCompile failed without an error blob");
+  ID3DBlob* shader_blob = nullptr;
+  ID3DBlob* diagnostic_blob = nullptr;
+  const HRESULT compile_hr = D3DCompile(
+      hlsl,
+      strlen(hlsl),
+      pass_name != nullptr ? pass_name : "DLSSNR compute shader",
+      nullptr,
+      nullptr,
+      "CSMain",
+      "cs_5_1",
+      D3DCOMPILE_OPTIMIZATION_LEVEL3,
+      0,
+      &shader_blob,
+      &diagnostic_blob);
+
+  if (diagnostic_blob != nullptr) {
+    const std::string diagnostic =
+        TrimShaderDiagnostic(diagnostic_blob->GetBufferPointer(),
+                             diagnostic_blob->GetBufferSize());
+    if (!diagnostic.empty()) {
+      const reshade::log::level level =
+          FAILED(compile_hr) ? reshade::log::level::error
+                             : reshade::log::level::warning;
+      const std::string key = ShaderDiagnosticKey(pass_name, level, diagnostic);
+      bool duplicate = false;
+      {
+        std::lock_guard<std::mutex> lock(diagnostic_mutex_);
+        duplicate = !logged_shader_diagnostics_.insert(key).second;
+      }
+      if (!duplicate) {
+        char header[256];
+        std::snprintf(header, sizeof(header),
+                      "DLSSNR shader %s: pass=%s",
+                      level == reshade::log::level::error ? "error" : "warning",
+                      pass_name != nullptr ? pass_name : "<unknown>");
+        reshade::log::message(level, header);
+        reshade::log::message(level, diagnostic.c_str());
+      }
     }
-    return false;
+    diagnostic_blob->Release();
+    diagnostic_blob = nullptr;
   }
 
-  if (error_blob != nullptr) error_blob->Release();
+  if (FAILED(compile_hr) || shader_blob == nullptr) {
+    char message[256];
+    std::snprintf(message, sizeof(message),
+                  "DLSSNR shader compile failed: pass=%s hr=0x%08lX",
+                  pass_name != nullptr ? pass_name : "<unknown>",
+                  static_cast<unsigned long>(compile_hr));
+    const std::string key =
+        ShaderDiagnosticKey(pass_name, reshade::log::level::error, message);
+    bool duplicate = false;
+    {
+      std::lock_guard<std::mutex> lock(diagnostic_mutex_);
+      duplicate = !logged_shader_diagnostics_.insert(key).second;
+    }
+    if (!duplicate) {
+      reshade::log::message(reshade::log::level::error, message);
+    }
+    if (shader_blob != nullptr) shader_blob->Release();
+    return false;
+  }
 
   D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {};
   pso_desc.pRootSignature = root_signature_.Get();
@@ -284,11 +348,30 @@ bool ComputeEngine::CompilePipeline(
   pso_desc.CS.BytecodeLength = shader_blob->GetBufferSize();
   pso_desc.NodeMask = 0;
 
-  const HRESULT hr = device_->CreateComputePipelineState(
+  const HRESULT pso_hr = device_->CreateComputePipelineState(
       &pso_desc, IID_PPV_ARGS(out_pso));
-
   shader_blob->Release();
-  return SUCCEEDED(hr);
+
+  if (FAILED(pso_hr) || *out_pso == nullptr) {
+    char message[256];
+    std::snprintf(message, sizeof(message),
+                  "DLSSNR shader pipeline creation failed: pass=%s hr=0x%08lX",
+                  pass_name != nullptr ? pass_name : "<unknown>",
+                  static_cast<unsigned long>(pso_hr));
+    const std::string key =
+        ShaderDiagnosticKey(pass_name, reshade::log::level::error, message);
+    bool duplicate = false;
+    {
+      std::lock_guard<std::mutex> lock(diagnostic_mutex_);
+      duplicate = !logged_shader_diagnostics_.insert(key).second;
+    }
+    if (!duplicate) {
+      reshade::log::message(reshade::log::level::error, message);
+    }
+    return false;
+  }
+
+  return true;
 }
 
 bool ComputeEngine::Dispatch(
@@ -312,16 +395,24 @@ bool ComputeEngine::Dispatch(
 
     auto it = passes_.find(pass_name);
     if (it == passes_.end()) {
-      // Refuse to compile synchronously while the worker is still running:
-      // that would reintroduce the freeze this is designed to avoid. Once
-      // the worker has finished, a miss means the pass genuinely failed to
-      // compile (or was never registered), and the synchronous retry is
-      // both cheap (D3DCompile on a bad shader fails fast) and informative
-      // (CompilePipeline logs the error).
+      // Never compile on the render thread while the background compiler is
+      // still active. After it is ready, a missing pass gets one fallback
+      // attempt unless the worker already recorded it as failed.
       if (!IsReady()) return false;
+      if (failed_passes_.find(pass_name) != failed_passes_.end()) {
+        return false;
+      }
 
       const ComputePassDef* def = FindComputePassDef(pass_name);
-      if (def == nullptr) return false;
+      if (def == nullptr) {
+        char message[256];
+        std::snprintf(message, sizeof(message),
+                      "DLSSNR shader dispatch requested unknown pass: %s",
+                      pass_name);
+        failed_passes_.insert(pass_name);
+        reshade::log::message(reshade::log::level::error, message);
+        return false;
+      }
 
       std::string combined;
       if (def->prelude != nullptr && def->prelude[0] != '\0') {
@@ -331,13 +422,11 @@ bool ComputeEngine::Dispatch(
         combined += def->prelude2;
       }
       combined += def->hlsl_source;
-      const char* source = combined.c_str();
 
       CachedPass pass;
-      if (!CompilePipeline(source, pass.pso.GetAddressOf())) {
-        std::string msg = "Failed to compile compute pass: ";
-        msg += pass_name;
-        reshade::log::message(reshade::log::level::error, msg.c_str());
+      if (!CompilePipeline(pass_name, combined.c_str(),
+                           pass.pso.GetAddressOf())) {
+        failed_passes_.insert(pass_name);
         return false;
       }
 
@@ -436,11 +525,20 @@ bool ComputeEngine::Init(ID3D12Device* device) {
 
   ready_.store(false, std::memory_order_relaxed);
 
+  {
+    std::lock_guard<std::mutex> lock(passes_mutex_);
+    passes_.clear();
+    failed_passes_.clear();
+  }
+  {
+    std::lock_guard<std::mutex> lock(diagnostic_mutex_);
+    logged_shader_diagnostics_.clear();
+  }
+
   device_ = device;
 
-  // Kick off the background compile. Dispatch still compiles synchronously
-  // on a miss, so a caller that arrives before the worker finishes sees the
-  // old behaviour rather than a new failure mode.
+  // Kick off the background compile. The render thread never compiles while
+  // the worker is active; a post-ready miss gets at most one fallback attempt.
   worker_stop_ = false;
   worker_ = std::thread(&ComputeEngine::WorkerCompileAll, this);
 
@@ -467,6 +565,11 @@ void ComputeEngine::Destroy() {
   {
     std::lock_guard<std::mutex> lock(passes_mutex_);
     passes_.clear();
+    failed_passes_.clear();
+  }
+  {
+    std::lock_guard<std::mutex> lock(diagnostic_mutex_);
+    logged_shader_diagnostics_.clear();
   }
   root_signature_.Reset();
   descriptor_heap_.Reset();
@@ -491,10 +594,10 @@ void ComputeEngine::WorkerCompileAll() {
     const char* source = combined.c_str();
 
     CachedPass pass;
-    if (!CompilePipeline(source, pass.pso.GetAddressOf())) {
-      // CompilePipeline already logged the HLSL error. Dispatch will
-      // retry synchronously once ready_ is set, so a bad shader surfaces
-      // through the normal failure path instead of silently.
+    if (!CompilePipeline(name, source, pass.pso.GetAddressOf())) {
+      std::lock_guard<std::mutex> lock(passes_mutex_);
+      if (worker_stop_) return;
+      failed_passes_.insert(name);
       continue;
     }
 

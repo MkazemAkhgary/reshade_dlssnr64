@@ -12,6 +12,7 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "shader_params.h"
 
@@ -157,8 +158,9 @@ class ComputeEngine {
  public:
   bool Init(ID3D12Device* device);
 
-  // Dispatches a registered compute pass by name. The pass is lazily
-  // compiled the first time it is used.
+  // Dispatches a registered compute pass by name. Passes are normally
+  // compiled by the background worker; a post-ready miss gets one fallback
+  // compile attempt and then is remembered as failed.
   //
   // `srvs` must point to an array of exactly kSrvCount valid
   // resources (t0..tN-1). `uavs` must point to an array of exactly
@@ -222,6 +224,16 @@ class ComputeEngine {
   // reset after it joins, so they need no additional protection.
   std::mutex passes_mutex_;
   std::unordered_map<std::string, CachedPass> passes_;
+  // Passes that were attempted by the background compiler but could not
+  // produce a usable pipeline. Remembering them prevents a bad shader from
+  // being recompiled and logged once per frame after IsReady() becomes true.
+  std::unordered_set<std::string> failed_passes_;
+
+  // Compiler diagnostics are deduplicated independently of pass state because
+  // both the worker and a post-ready fallback compile can surface the same
+  // warning/error. The key includes the pass name, severity and exact text.
+  std::mutex diagnostic_mutex_;
+  std::unordered_set<std::string> logged_shader_diagnostics_;
 
   std::thread worker_;
   bool worker_stop_ = false;
@@ -236,7 +248,9 @@ class ComputeEngine {
   void WorkerCompileAll();
 
   bool CreateRootSignature(ID3D12Device* device);
-  bool CompilePipeline(const char* hlsl, ID3D12PipelineState** out_pso);
+  bool CompilePipeline(const char* pass_name,
+                       const char* hlsl,
+                       ID3D12PipelineState** out_pso);
   void CreateShaderResourceView(ID3D12Resource* resource, D3D12_CPU_DESCRIPTOR_HANDLE handle);
   void CreateUnorderedAccessView(ID3D12Resource* resource, D3D12_CPU_DESCRIPTOR_HANDLE handle);
   void CreateConstantBufferView(ID3D12Resource* resource, uint64_t offset,
