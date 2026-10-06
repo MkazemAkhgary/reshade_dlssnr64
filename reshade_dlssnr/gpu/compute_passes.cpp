@@ -12,17 +12,17 @@
 namespace reshade_dlssnr {
 
 const ComputePassDef kComputePasses[] = {
-    {"ZeroHistogram",         kZeroHistogramSource,     nullptr},
-    {"BuildHistogram",        kBuildHistogramSource,    nullptr},
-    {"GainMapSplit",          kGainMapSplitSource,      kBoxAreaAveragePreludeSource},
-    {"ZeroGainMapStats",      kZeroGainMapStatsSource,  nullptr},
-    {"BuildGainMapStats",     kBuildGainMapStatsSource, nullptr},
-    {"PrepareModelInput",     kPrepareModelInputSource, kBoxAreaAveragePreludeSource},
-    {"ComposeModelOutput",    kComposeModelOutputSource,    kGradePreludeSource},
-    {"ComposeModelOutputHdr", kComposeModelOutputHdrSource, kGradePreludeSource},
-    {"SkinMaskDiff",          kSkinMaskDiffSource,    nullptr},
-    {"DebugDisplay",          kDebugDisplaySource,    nullptr},
-    {"ApplyGrade",            kApplyGradeSource,      kGradePreludeSource},
+    {"ZeroHistogram",         kZeroHistogramSource,     nullptr, nullptr},
+    {"BuildHistogram",        kBuildHistogramSource,    nullptr, nullptr},
+    {"GainMapSplit",          kGainMapSplitSource,      kBoxAreaAveragePreludeSource, nullptr},
+    {"ZeroGainMapStats",      kZeroGainMapStatsSource,  nullptr, nullptr},
+    {"BuildGainMapStats",     kBuildGainMapStatsSource, nullptr, nullptr},
+    {"PrepareModelInput",     kPrepareModelInputSource, kBoxAreaAveragePreludeSource, nullptr},
+    {"ComposeModelOutput",    kComposeModelOutputSource,    kGradePreludeSource, kFsrUpsamplePreludeSource},
+    {"ComposeModelOutputHdr", kComposeModelOutputHdrSource, kGradePreludeSource, kFsrUpsamplePreludeSource},
+    {"SkinMaskDiff",          kSkinMaskDiffSource,    nullptr, nullptr},
+    {"DebugDisplay",          kDebugDisplaySource,    nullptr, nullptr},
+    {"ApplyGrade",            kApplyGradeSource,      kGradePreludeSource, nullptr},
 };
 
 const uint32_t kComputePassCount =

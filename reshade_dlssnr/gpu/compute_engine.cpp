@@ -325,11 +325,13 @@ bool ComputeEngine::Dispatch(
 
       std::string combined;
       if (def->prelude != nullptr && def->prelude[0] != '\0') {
-        combined = def->prelude;
-        combined += def->hlsl_source;
+        combined += def->prelude;
       }
-      const char* source =
-          combined.empty() ? def->hlsl_source : combined.c_str();
+      if (def->prelude2 != nullptr && def->prelude2[0] != '\0') {
+        combined += def->prelude2;
+      }
+      combined += def->hlsl_source;
+      const char* source = combined.c_str();
 
       CachedPass pass;
       if (!CompilePipeline(source, pass.pso.GetAddressOf())) {
@@ -479,11 +481,14 @@ void ComputeEngine::WorkerCompileAll() {
     std::string combined;
     if (kComputePasses[i].prelude != nullptr &&
         kComputePasses[i].prelude[0] != '\0') {
-      combined = kComputePasses[i].prelude;
-      combined += kComputePasses[i].hlsl_source;
+      combined += kComputePasses[i].prelude;
     }
-    const char* source =
-        combined.empty() ? kComputePasses[i].hlsl_source : combined.c_str();
+    if (kComputePasses[i].prelude2 != nullptr &&
+        kComputePasses[i].prelude2[0] != '\0') {
+      combined += kComputePasses[i].prelude2;
+    }
+    combined += kComputePasses[i].hlsl_source;
+    const char* source = combined.c_str();
 
     CachedPass pass;
     if (!CompilePipeline(source, pass.pso.GetAddressOf())) {

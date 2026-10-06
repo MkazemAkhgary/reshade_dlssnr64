@@ -5,145 +5,20 @@
 
 namespace reshade_dlssnr {
 
-inline constexpr const char* kComposeModelOutputHdrSource = R"(
-// The constant buffer is declared in kGradePrelude. The HDR path uses the
-// packed gain-map texture instead of the original HDR resource: RGB is the
-// full-resolution linear SDR base (1.0 = 100 nits) and A is the raw f32
-// log2 luma gain.
+inline constexpr const char* kFsrUpsamplePreludeSource = R"(
+// Shared FSR 1.0 EASU + RCAS upsampler. Both SDR and HDR compose passes use
+// this exact implementation so reconstruction does not diverge by output
+// domain. The source textures are the model input/output at working scale.
 
-#define kLumaStrength    gParams[0].x
-#define kChromaStrength  gParams[0].y
-#define kSoftCompression gParams[0].z
-#define kSoftMaxBrighten gParams[0].w
-#define kSoftMaxDarken   gParams[1].x
-#define kSoftMaxChroma   gParams[1].y
-#define kSoftKnee        gParams[1].z
-
-#define kGradeEnabled    gParams[2].x
-#define kGradeLuma       gParams[2].y
-#define kGradeChroma     gParams[2].z
-#define kGradeLumaMode   gParams[2].w
-#define kGradeChromaMode gParams[3].x
-#define kGradeBlackLevel gParams[3].y
-#define kGradeWhiteLevel gParams[3].z
-#define kGradeContrast   gParams[3].w
-#define kGradeShadows    gParams[4].x
-#define kGradeHighlights gParams[4].y
-
-#define kEditStrength     gParams[6].x
-#define kResidualChroma   gParams[6].y
-#define kEditGamma        gParams[6].z
-#define kHighlightProtect gParams[6].w
-#define kShadowProtect    gParams[7].x
-#define kRatioEps         gParams[7].y
-#define kRatioBrighten    gParams[7].z
-#define kRatioDarken      gParams[7].w
-
-// HDR/gain-map region [32,44).
-#define kFormat              gParams[8].x
-#define kExposure            gParams[8].y
-#define kBt2446K1            gParams[8].z
-#define kBt2446K2            gParams[8].w
-#define kBt2446K4            gParams[9].x
-#define kCrosstalk           gParams[9].y
-#define kBaseOffset          gParams[9].z
-#define kAlternateOffset     gParams[9].w
-#define kGainMinLog2         gParams[10].x
-#define kGainMaxLog2         gParams[10].y
-#define kEffectiveSceneWhite gParams[10].z
-
-// EASU [44,56), RCAS [56,60).
 #define kEasuCon0        gParams[11]
 #define kEasuCon1        gParams[12]
 #define kEasuCon2        gParams[13]
 #define kRcasEnabled     gParams[14].x
 #define kRcasStrength    gParams[14].y
 
-Texture2D<float4> gOriginal    : register(t0);
 Texture2D<float4> gLowInput    : register(t1);
 Texture2D<float4> gLowEnhanced : register(t2);
-RWTexture2D<float4> gOutput    : register(u0);
 SamplerState s0 : register(s0);
-
-float SoftCompress(float x, float max_pos, float max_neg, float knee)
-{
-    knee = max(knee, 1e-6);
-    max_pos = max(max_pos, 1e-6);
-    max_neg = max(max_neg, 1e-6);
-    if (x >= 0.0)
-        return max_pos * x / (max_pos + knee * abs(x));
-    else
-        return max_neg * x / (max_neg + knee * abs(x));
-}
-
-float safe_log(float x)
-{
-    return log(max(x, 0.0) + kRatioEps);
-}
-
-float3 safe_log3(float3 v)
-{
-    return log(max(v, 0.0) + kRatioEps);
-}
-
-// Blend original and edited with independent luma and chroma strengths.
-//
-// Chroma is interpolated in *normalized* space (chroma / luma) rather than
-// as absolute color-difference values. Absolute Cb/Cr do not scale with
-// luminance, so blending them independently of luma causes saturation
-// swings: keeping the original's Cb/Cr while adopting the model's luma
-// produces a much more saturated color at the new luminance, and the
-// reverse produces a pale one. Normalized chroma is scale-invariant and
-// preserves perceived hue and saturation.
-float3 HdrLumaWeights()
-{
-    int fmt = (int)(kFormat + 0.5);
-    return fmt == 2 ? float3(0.2627, 0.6780, 0.0593)
-                    : float3(0.2126, 0.7152, 0.0722);
-}
-
-float3 BlendYCbCr(float3 original, float3 edited,
-                  float luma_strength, float chroma_strength)
-{
-    const float3 kL = HdrLumaWeights();
-    const float wr = kL.r;
-    const float wg = max(kL.g, 1e-6);
-    const float wb = kL.b;
-
-    // Derive the normalized chroma basis from the active luma weights rather
-    // than hard-coding BT.709 coefficients. This keeps HDR10/BT.2020 and
-    // scRGB/BT.709 reconstruction colorimetrically self-consistent.
-    const float cb_scale = 2.0 * (1.0 - wb);
-    const float cr_scale = 2.0 * (1.0 - wr);
-    const float g_cb = 2.0 * wb * (1.0 - wb) / wg;
-    const float g_cr = 2.0 * wr * (1.0 - wr) / wg;
-
-    float orig_y = dot(original, kL);
-    float edit_y = dot(edited, kL);
-    float final_y = lerp(orig_y, edit_y, luma_strength);
-
-    float safe_orig_y = max(orig_y, 1e-4);
-    float safe_edit_y = max(edit_y, 1e-4);
-    float safe_final_y = max(final_y, 1e-4);
-
-    float orig_cbn = (original.b - orig_y) / (cb_scale * safe_orig_y);
-    float orig_crn = (original.r - orig_y) / (cr_scale * safe_orig_y);
-    float edit_cbn = (edited.b - edit_y) / (cb_scale * safe_edit_y);
-    float edit_crn = (edited.r - edit_y) / (cr_scale * safe_edit_y);
-
-    float final_cbn = lerp(orig_cbn, edit_cbn, chroma_strength);
-    float final_crn = lerp(orig_crn, edit_crn, chroma_strength);
-
-    float final_cb = final_cbn * safe_final_y;
-    float final_cr = final_crn * safe_final_y;
-
-    float3 result;
-    result.r = final_y + cr_scale * final_cr;
-    result.b = final_y + cb_scale * final_cb;
-    result.g = final_y - g_cb * final_cb - g_cr * final_cr;
-    return result;
-}
-
 
 // ---------------------------------------------------------------------------
 // FSR 1.0 EASU + RCAS
@@ -362,6 +237,137 @@ float3 FsrRcasF(float3 b, float3 d, float3 e, float3 f, float3 h,
     c.g = (lobe * bG + lobe * dG + lobe * hG + lobe * fG + eG) * rcpL;
     c.b = (lobe * bB + lobe * dB + lobe * hB + lobe * fB + eB) * rcpL;
     return c;
+}
+
+)";
+
+inline constexpr const char* kComposeModelOutputHdrSource = R"(
+// The constant buffer is declared in kGradePrelude. The HDR path uses the
+// packed gain-map texture instead of the original HDR resource: RGB is the
+// full-resolution linear SDR base (1.0 = 100 nits) and A is the raw f32
+// log2 luma gain.
+
+#define kLumaStrength    gParams[0].x
+#define kChromaStrength  gParams[0].y
+#define kSoftCompression gParams[0].z
+#define kSoftMaxBrighten gParams[0].w
+#define kSoftMaxDarken   gParams[1].x
+#define kSoftMaxChroma   gParams[1].y
+#define kSoftKnee        gParams[1].z
+
+#define kGradeEnabled    gParams[2].x
+#define kGradeLuma       gParams[2].y
+#define kGradeChroma     gParams[2].z
+#define kGradeLumaMode   gParams[2].w
+#define kGradeChromaMode gParams[3].x
+#define kGradeBlackLevel gParams[3].y
+#define kGradeWhiteLevel gParams[3].z
+#define kGradeContrast   gParams[3].w
+#define kGradeShadows    gParams[4].x
+#define kGradeHighlights gParams[4].y
+
+#define kEditStrength     gParams[6].x
+#define kResidualChroma   gParams[6].y
+#define kEditGamma        gParams[6].z
+#define kHighlightProtect gParams[6].w
+#define kShadowProtect    gParams[7].x
+#define kRatioEps         gParams[7].y
+#define kRatioBrighten    gParams[7].z
+#define kRatioDarken      gParams[7].w
+
+// HDR/gain-map region [32,44).
+#define kFormat              gParams[8].x
+#define kExposure            gParams[8].y
+#define kBt2446K1            gParams[8].z
+#define kBt2446K2            gParams[8].w
+#define kBt2446K4            gParams[9].x
+#define kCrosstalk           gParams[9].y
+#define kBaseOffset          gParams[9].z
+#define kAlternateOffset     gParams[9].w
+#define kGainMinLog2         gParams[10].x
+#define kGainMaxLog2         gParams[10].y
+#define kEffectiveSceneWhite gParams[10].z
+
+Texture2D<float4> gOriginal    : register(t0);
+RWTexture2D<float4> gOutput    : register(u0);
+
+float SoftCompress(float x, float max_pos, float max_neg, float knee)
+{
+    knee = max(knee, 1e-6);
+    max_pos = max(max_pos, 1e-6);
+    max_neg = max(max_neg, 1e-6);
+    if (x >= 0.0)
+        return max_pos * x / (max_pos + knee * abs(x));
+    else
+        return max_neg * x / (max_neg + knee * abs(x));
+}
+
+float safe_log(float x)
+{
+    return log(max(x, 0.0) + kRatioEps);
+}
+
+float3 safe_log3(float3 v)
+{
+    return log(max(v, 0.0) + kRatioEps);
+}
+
+// Blend original and edited with independent luma and chroma strengths.
+//
+// Chroma is interpolated in *normalized* space (chroma / luma) rather than
+// as absolute color-difference values. Absolute Cb/Cr do not scale with
+// luminance, so blending them independently of luma causes saturation
+// swings: keeping the original's Cb/Cr while adopting the model's luma
+// produces a much more saturated color at the new luminance, and the
+// reverse produces a pale one. Normalized chroma is scale-invariant and
+// preserves perceived hue and saturation.
+float3 HdrLumaWeights()
+{
+    int fmt = (int)(kFormat + 0.5);
+    return fmt == 2 ? float3(0.2627, 0.6780, 0.0593)
+                    : float3(0.2126, 0.7152, 0.0722);
+}
+
+float3 BlendYCbCr(float3 original, float3 edited,
+                  float luma_strength, float chroma_strength)
+{
+    const float3 kL = HdrLumaWeights();
+    const float wr = kL.r;
+    const float wg = max(kL.g, 1e-6);
+    const float wb = kL.b;
+
+    // Derive the normalized chroma basis from the active luma weights rather
+    // than hard-coding BT.709 coefficients. This keeps HDR10/BT.2020 and
+    // scRGB/BT.709 reconstruction colorimetrically self-consistent.
+    const float cb_scale = 2.0 * (1.0 - wb);
+    const float cr_scale = 2.0 * (1.0 - wr);
+    const float g_cb = 2.0 * wb * (1.0 - wb) / wg;
+    const float g_cr = 2.0 * wr * (1.0 - wr) / wg;
+
+    float orig_y = dot(original, kL);
+    float edit_y = dot(edited, kL);
+    float final_y = lerp(orig_y, edit_y, luma_strength);
+
+    float safe_orig_y = max(orig_y, 1e-4);
+    float safe_edit_y = max(edit_y, 1e-4);
+    float safe_final_y = max(final_y, 1e-4);
+
+    float orig_cbn = (original.b - orig_y) / (cb_scale * safe_orig_y);
+    float orig_crn = (original.r - orig_y) / (cr_scale * safe_orig_y);
+    float edit_cbn = (edited.b - edit_y) / (cb_scale * safe_edit_y);
+    float edit_crn = (edited.r - edit_y) / (cr_scale * safe_edit_y);
+
+    float final_cbn = lerp(orig_cbn, edit_cbn, chroma_strength);
+    float final_crn = lerp(orig_crn, edit_crn, chroma_strength);
+
+    float final_cb = final_cbn * safe_final_y;
+    float final_cr = final_crn * safe_final_y;
+
+    float3 result;
+    result.r = final_y + cr_scale * final_cr;
+    result.b = final_y + cb_scale * final_cb;
+    result.g = final_y - g_cb * final_cb - g_cr * final_cr;
+    return result;
 }
 
 
@@ -610,10 +616,7 @@ inline constexpr const char* kComposeModelOutputSource = R"(
 #define kRatioDarken      gParams[7].w
 
 Texture2D<float4> gOriginal : register(t0);
-Texture2D<float4> gLowInput : register(t1);
-Texture2D<float4> gLowEnhanced : register(t2);
 RWTexture2D<float4> gOutput : register(u0);
-SamplerState s0 : register(s0);
 
 float SoftCompress(float x, float max_pos, float max_neg, float knee)
 {
@@ -717,11 +720,30 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float2 uv = (float2(id.xy) + 0.5) / float2(gWidth, gHeight);
 
     float4 original = gOriginal.SampleLevel(s0, uv, 0);
-    float4 low_input = gLowInput.SampleLevel(s0, uv, 0);
-    float4 low_enhanced = gLowEnhanced.SampleLevel(s0, uv, 0);
 
-    float3 in_rgb = low_input.rgb;
-    float3 out_rgb = low_enhanced.rgb;
+    // FSR 1.0 EASU upsample from the actual model working resolution back to
+    // full SDR resolution. Both HDR and SDR compose use the same reconstruction.
+    const float2 easu_con3 = float2(0.0, 4.0 * kEasuCon1.y);
+    float3 in_rgb = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
+                             easu_con3, 0);
+    float3 out_rgb = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
+                              easu_con3, 1);
+
+    if (kRcasEnabled > 0.5) {
+        const float2 texel = float2(kEasuCon1.x, kEasuCon1.y);
+
+        float3 b_in = gLowInput.SampleLevel(s0, uv + float2(0.0, -texel.y), 0).rgb;
+        float3 d_in = gLowInput.SampleLevel(s0, uv + float2(-texel.x, 0.0), 0).rgb;
+        float3 f_in = gLowInput.SampleLevel(s0, uv + float2(texel.x, 0.0), 0).rgb;
+        float3 h_in = gLowInput.SampleLevel(s0, uv + float2(0.0, texel.y), 0).rgb;
+        in_rgb = FsrRcasF(b_in, d_in, in_rgb, f_in, h_in, kRcasStrength);
+
+        float3 b_out = gLowEnhanced.SampleLevel(s0, uv + float2(0.0, -texel.y), 0).rgb;
+        float3 d_out = gLowEnhanced.SampleLevel(s0, uv + float2(-texel.x, 0.0), 0).rgb;
+        float3 f_out = gLowEnhanced.SampleLevel(s0, uv + float2(texel.x, 0.0), 0).rgb;
+        float3 h_out = gLowEnhanced.SampleLevel(s0, uv + float2(0.0, texel.y), 0).rgb;
+        out_rgb = FsrRcasF(b_out, d_out, out_rgb, f_out, h_out, kRcasStrength);
+    }
 
     // The model's edit as a per-channel ratio, held in log space so the
     // compression sliders can bound it on both sides of 1.0.

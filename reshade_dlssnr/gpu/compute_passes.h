@@ -8,11 +8,12 @@ namespace reshade_dlssnr {
 struct ComputePassDef {
   const char* name;
   const char* hlsl_source;
-  // Prepended to hlsl_source before compilation. Empty for passes that do not
-  // need it. This is how the colour grade's forward and inverse share one
-  // definition across the three passes that use it, rather than three copies
-  // that can drift.
+  // Optional first prelude. Empty for passes that do not need it.
   const char* prelude;
+  // Optional second prelude, concatenated after `prelude` and before the
+  // pass-specific shader source. This lets independent shared shader blocks
+  // compose without copying one prelude into another.
+  const char* prelude2;
 };
 
 extern const ComputePassDef kComputePasses[];
