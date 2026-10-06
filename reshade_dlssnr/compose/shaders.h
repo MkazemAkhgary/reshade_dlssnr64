@@ -106,6 +106,17 @@ float3 BlendYCbCr(float3 original, float3 edited,
                   float luma_strength, float chroma_strength)
 {
     const float3 kL = HdrLumaWeights();
+    const float wr = kL.r;
+    const float wg = max(kL.g, 1e-6);
+    const float wb = kL.b;
+
+    // Derive the normalized chroma basis from the active luma weights rather
+    // than hard-coding BT.709 coefficients. This keeps HDR10/BT.2020 and
+    // scRGB/BT.709 reconstruction colorimetrically self-consistent.
+    const float cb_scale = 2.0 * (1.0 - wb);
+    const float cr_scale = 2.0 * (1.0 - wr);
+    const float g_cb = 2.0 * wb * (1.0 - wb) / wg;
+    const float g_cr = 2.0 * wr * (1.0 - wr) / wg;
 
     float orig_y = dot(original, kL);
     float edit_y = dot(edited, kL);
@@ -115,10 +126,10 @@ float3 BlendYCbCr(float3 original, float3 edited,
     float safe_edit_y = max(edit_y, 1e-4);
     float safe_final_y = max(final_y, 1e-4);
 
-    float orig_cbn = (original.b - orig_y) / (1.8556 * safe_orig_y);
-    float orig_crn = (original.r - orig_y) / (1.5748 * safe_orig_y);
-    float edit_cbn = (edited.b - edit_y) / (1.8556 * safe_edit_y);
-    float edit_crn = (edited.r - edit_y) / (1.5748 * safe_edit_y);
+    float orig_cbn = (original.b - orig_y) / (cb_scale * safe_orig_y);
+    float orig_crn = (original.r - orig_y) / (cr_scale * safe_orig_y);
+    float edit_cbn = (edited.b - edit_y) / (cb_scale * safe_edit_y);
+    float edit_crn = (edited.r - edit_y) / (cr_scale * safe_edit_y);
 
     float final_cbn = lerp(orig_cbn, edit_cbn, chroma_strength);
     float final_crn = lerp(orig_crn, edit_crn, chroma_strength);
@@ -127,9 +138,9 @@ float3 BlendYCbCr(float3 original, float3 edited,
     float final_cr = final_crn * safe_final_y;
 
     float3 result;
-    result.r = final_y + 1.5748 * final_cr;
-    result.g = final_y - 0.1873 * final_cb - 0.4681 * final_cr;
-    result.b = final_y + 1.8556 * final_cb;
+    result.r = final_y + cr_scale * final_cr;
+    result.b = final_y + cb_scale * final_cb;
+    result.g = final_y - g_cb * final_cb - g_cr * final_cr;
     return result;
 }
 
@@ -501,13 +512,24 @@ float3 ComposeHdr(float3 sdr_base, float gain,
     const float3 delta = ShapeResidual(
         ComposeRatioDelta(low_in_lin, low_out_lin), base_luma);
 
+    // The model edits the linear SDR base. Apply that edit in SDR first, then
+    // feed both the unedited and edited SDR pixels through the exact same gain
+    // map. For the ISO 21496-1 reconstruction
+    //
+    //   HDR = (SDR + base_offset) * 2^gain - alternate_offset
+    //
+    // multiplying the reconstructed HDR by an SDR ratio is only equivalent
+    // when both offsets are zero. With the chosen 1/64 offsets, the old
+    // ratio-lift error grows with 2^gain, which is why high-exposure scenes
+    // acquired an exposure-dependent color cast.
+    const float3 sdr_edited =
+        max(sdr_base * (1.0 + delta), 0.0);
 
     const float3 hdr_src = ReconstructHdr(sdr_base, gain);
-    const float3 hdr_edited = hdr_src * (1.0 + delta);
+    const float3 hdr_edited = ReconstructHdr(sdr_edited, gain);
 
-    // Blend in HDR linear light. The residual itself is dimensionless, so the
-    // gain map's original headroom remains intact even when the SDR base was
-    // clipped or exceeded 1.0.
+    // Blend in HDR linear light only after both variants have passed through
+    // the same gain-map reconstruction.
     return BlendYCbCr(hdr_src, hdr_edited,
                       kLumaStrength, kChromaStrength);
 }
@@ -646,6 +668,13 @@ float3 BlendYCbCr(float3 original, float3 edited,
                   float luma_strength, float chroma_strength)
 {
     const float3 kL = float3(0.2126, 0.7152, 0.0722);
+    const float wr = kL.r;
+    const float wg = max(kL.g, 1e-6);
+    const float wb = kL.b;
+    const float cb_scale = 2.0 * (1.0 - wb);
+    const float cr_scale = 2.0 * (1.0 - wr);
+    const float g_cb = 2.0 * wb * (1.0 - wb) / wg;
+    const float g_cr = 2.0 * wr * (1.0 - wr) / wg;
 
     float orig_y = dot(original, kL);
     float edit_y = dot(edited, kL);
@@ -655,10 +684,10 @@ float3 BlendYCbCr(float3 original, float3 edited,
     float safe_edit_y = max(edit_y, 1e-4);
     float safe_final_y = max(final_y, 1e-4);
 
-    float orig_cbn = (original.b - orig_y) / (1.8556 * safe_orig_y);
-    float orig_crn = (original.r - orig_y) / (1.5748 * safe_orig_y);
-    float edit_cbn = (edited.b - edit_y) / (1.8556 * safe_edit_y);
-    float edit_crn = (edited.r - edit_y) / (1.5748 * safe_edit_y);
+    float orig_cbn = (original.b - orig_y) / (cb_scale * safe_orig_y);
+    float orig_crn = (original.r - orig_y) / (cr_scale * safe_orig_y);
+    float edit_cbn = (edited.b - edit_y) / (cb_scale * safe_edit_y);
+    float edit_crn = (edited.r - edit_y) / (cr_scale * safe_edit_y);
 
     float final_cbn = lerp(orig_cbn, edit_cbn, chroma_strength);
     float final_crn = lerp(orig_crn, edit_crn, chroma_strength);
@@ -667,9 +696,9 @@ float3 BlendYCbCr(float3 original, float3 edited,
     float final_cr = final_crn * safe_final_y;
 
     float3 result;
-    result.r = final_y + 1.5748 * final_cr;
-    result.g = final_y - 0.1873 * final_cb - 0.4681 * final_cr;
-    result.b = final_y + 1.8556 * final_cb;
+    result.r = final_y + cr_scale * final_cr;
+    result.b = final_y + cb_scale * final_cb;
+    result.g = final_y - g_cb * final_cb - g_cr * final_cr;
     return result;
 }
 
