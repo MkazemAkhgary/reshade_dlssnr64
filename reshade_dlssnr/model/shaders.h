@@ -93,14 +93,26 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     gSource.GetDimensions(src_width, src_height);
     float4 color = BoxAreaAverage(gSource, id.xy, uint2(gWidth, gHeight),
                                   uint2(src_width, src_height));
-    // HDR gain-map sources are a lossless linear SDR carrier and may contain
-    // super-whites. Fit that carrier into the SDR model gamut without changing
-    // RGB ratios, then apply the model's sRGB transfer function. The packed
-    // carrier remains untouched and is what HDR compose reconstructs from.
-    float3 linColor = color.rgb;
+
+    float3 result;
     if (gGainMapSource != 0u)
-        linColor = GamutFitPreserveChroma(linColor);
-    gOutput[id.xy] = float4(LinearToSrgb(linColor), 1.0);
+    {
+        // HDR gain-map sources are a lossless linear SDR carrier and may contain
+        // super-whites. Fit that carrier into the SDR model gamut without changing
+        // RGB ratios, then apply the model's sRGB transfer function. The packed
+        // carrier remains untouched and is what HDR compose reconstructs from.
+        float3 linearColor = color.rgb;
+        linearColor = GamutFitPreserveChroma(linearColor);
+        result = LinearToSrgb(linearColor);
+    }
+    else
+    {
+        // SDR path: the source is already in the target (sRGB) space, so pass
+        // it through without an extra transfer-function conversion.
+        result = color.rgb;
+    }
+
+    gOutput[id.xy] = float4(result, 1.0);
 }
 )";
 
