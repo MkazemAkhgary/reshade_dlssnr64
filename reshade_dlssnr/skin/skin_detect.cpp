@@ -179,7 +179,8 @@ bool SkinDetect::Run(CommandContext& cmd,
   cmd.Transition(command_list, mask_[prev].Get(),
                  D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-  // 1. Build the model-domain SDR base and resize it into working_input_.
+  // 1. Build the model-domain SDR base and downsample it into working_input_
+  //    using exact pixel-footprint box/area averaging.
   // The HDR case deliberately uses the same gain-map split as the main path;
   // the fallback exposure EMA prevents this diagnostic model from feeding its
   // own skin mask back into the exposure loop.

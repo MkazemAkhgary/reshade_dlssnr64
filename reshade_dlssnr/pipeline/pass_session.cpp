@@ -993,7 +993,8 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
   return PipelineStatus::Ok;
 }
 
-// Resample the already-split linear SDR base to working resolution, and
+// Downsample the already-split linear SDR base to working resolution with
+// exact pixel-footprint box/area averaging, and
 // report the resolution the model will actually run at. Gain-map splitting is
 // a distinct step so the packed HDR representation is also available to the
 // debug and compose paths at full resolution.

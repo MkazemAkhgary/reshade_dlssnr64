@@ -1,5 +1,5 @@
-// Model input preparation. Resamples the source into the working-scale buffer
-// the model reads, resampling the already split linear SDR base.
+// Model input preparation. Downsamples the source into the working-scale
+// buffer with exact pixel-footprint box/area averaging.
 #pragma once
 
 #include <d3d12.h>
@@ -34,7 +34,7 @@ struct HdrUniforms {
 };
 
 // The source is already in the model domain (gain-map split happens in its
-// own pipeline step for HDR). This pass only resamples it to working scale.
+// own pipeline step for HDR). This pass only downsamples it to working scale.
 bool PrepareInput(
     CommandContext& state,
     ID3D12GraphicsCommandList* command_list,

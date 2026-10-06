@@ -1,8 +1,53 @@
-// Model input shader. Plain resample of the source into the working-scale
-// buffer the model reads.
+// Model input preparation. Downsampling into the model working resolution
+// uses exact pixel-footprint box/area averaging rather than the compute engine's
+// linear sampler. The shared helper is also used by the HDR gain-map split when
+// the skin detector is evaluated directly at its reduced working resolution.
 #pragma once
 
 namespace reshade_dlssnr {
+
+inline constexpr const char* kBoxAreaAveragePreludeSource = R"(
+float4 BoxAreaAverage(Texture2D<float4> source,
+                      uint2 dst_xy,
+                      uint2 dst_size,
+                      uint2 src_size)
+{
+    const float2 src_min = float2(dst_xy) *
+                           (float2(src_size) / float2(dst_size));
+    const float2 src_max = (float2(dst_xy) + 1.0) *
+                           (float2(src_size) / float2(dst_size));
+
+    const int x0 = max(0, (int)floor(src_min.x));
+    const int y0 = max(0, (int)floor(src_min.y));
+    const int x1 = min((int)src_size.x - 1, (int)ceil(src_max.x) - 1);
+    const int y1 = min((int)src_size.y - 1, (int)ceil(src_max.y) - 1);
+
+    float4 accum = 0.0;
+    float total_weight = 0.0;
+
+    for (int y = y0; y <= y1; ++y) {
+        const float wy = max(0.0,
+                             min(src_max.y, (float)y + 1.0) -
+                             max(src_min.y, (float)y));
+        if (wy <= 0.0)
+            continue;
+
+        for (int x = x0; x <= x1; ++x) {
+            const float wx = max(0.0,
+                                 min(src_max.x, (float)x + 1.0) -
+                                 max(src_min.x, (float)x));
+            if (wx <= 0.0)
+                continue;
+
+            const float weight = wx * wy;
+            accum += source.Load(int3(x, y, 0)) * weight;
+            total_weight += weight;
+        }
+    }
+
+    return accum / max(total_weight, 1e-8);
+}
+)";
 
 inline constexpr const char* kPrepareModelInputSource = R"(
 cbuffer Params : register(b0)
@@ -40,8 +85,14 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     if (id.x >= gWidth || id.y >= gHeight)
         return;
 
-    float2 uv = (float2(id.xy) + 0.5) / float2(gWidth, gHeight);
-    float4 color = gSource.SampleLevel(s0, uv, 0);
+    // Exact area average over the source footprint covered by this working
+    // pixel. This is the downsampling filter for both SDR and HDR carrier
+    // inputs; it does not depend on the global linear-clamp sampler.
+    uint src_width = 0;
+    uint src_height = 0;
+    gSource.GetDimensions(src_width, src_height);
+    float4 color = BoxAreaAverage(gSource, id.xy, uint2(gWidth, gHeight),
+                                  uint2(src_width, src_height));
     // HDR gain-map sources are a lossless linear SDR carrier and may contain
     // super-whites. Fit that carrier into the SDR model gamut without changing
     // RGB ratios, then apply the model's sRGB transfer function. The packed

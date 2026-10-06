@@ -266,8 +266,14 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     if (id.x >= gWidth || id.y >= gHeight)
         return;
 
-    float2 uv = (float2(id.xy) + 0.5) / float2(gWidth, gHeight);
-    float4 src = gSource.SampleLevel(s0, uv, 0);
+    // When the split itself is evaluated below the source resolution (the skin
+    // detector path), use the same exact footprint box as the main SDR model
+    // input path. At 1:1 resolution this collapses to a single source texel.
+    uint src_width = 0;
+    uint src_height = 0;
+    gSource.GetDimensions(src_width, src_height);
+    float4 src = BoxAreaAverage(gSource, id.xy, uint2(gWidth, gHeight),
+                                uint2(src_width, src_height));
 
     const float3 luma = HdrLumaWeights();
     float3 hdr = DecodeToLinear(src.rgb);
