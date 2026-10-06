@@ -502,6 +502,15 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
 
   const PipelineStatus status = PipelineRunner::RunStage(stage, run);
 
+  // A Present-stage step can stop after StepSeedResourceStates has already
+  // opened this pass's private command list, but before the normal
+  // StepSubmitAndWait tail is reached. Discard that abandoned recording so the
+  // next frame never tries to Reset an allocator/list that is still recording.
+  // This is transient frame cleanup, not a GPU execution error.
+  if (status != PipelineStatus::Ok && !stage.is_post_dlss) {
+    command_.Abort();
+  }
+
   TRACE_EVT(this, "EXIT stage=%s pass=%u status=%d", stage.name, pass_index_,
             static_cast<int>(status));
   return status;

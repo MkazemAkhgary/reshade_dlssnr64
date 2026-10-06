@@ -53,7 +53,13 @@ bool CommandContext::Ensure(ID3D12Device* device) {
     return false;
   }
 
-  command_list_->Close();
+  recording_ = true;
+  const HRESULT initial_close_hr = command_list_->Close();
+  if (SUCCEEDED(initial_close_hr)) {
+    recording_ = false;
+  } else {
+    LogFailureOnce("initial command list close", initial_close_hr);
+  }
 
   if (FAILED(device->CreateFence(
           0,
@@ -75,16 +81,49 @@ bool CommandContext::Ensure(ID3D12Device* device) {
   return true;
 }
 
-void CommandContext::Reset() {
-  if (command_allocator_ != nullptr && command_list_ != nullptr) {
-    // Both of these fail rather than corrupt anything when the allocator is
-    // still referenced by work the GPU has not finished -- which is a bug on
-    // our side, and one that shows up as a removed device several frames
-    // later rather than here.
-    LogFailureOnce("command allocator reset", command_allocator_->Reset());
-    LogFailureOnce("command list reset",
-                   command_list_->Reset(command_allocator_.Get(), nullptr));
+bool CommandContext::Abort() {
+  if (command_list_ == nullptr || command_allocator_ == nullptr) return true;
+
+  // A skipped/failed Present stage can return before StepSubmitAndWait closes
+  // the private list. D3D12 does not permit resetting an allocator while a
+  // list that references it is still recording. Close the abandoned list and
+  // discard its commands instead of letting the next frame report a spurious
+  // allocator/list reset error.
+  if (recording_) {
+    const HRESULT hr = command_list_->Close();
+    if (FAILED(hr)) {
+      LogFailureOnce("abandoned command list close", hr);
+      return false;
+    }
+    recording_ = false;
   }
+
+  return true;
+}
+
+void CommandContext::Reset() {
+  if (command_allocator_ == nullptr || command_list_ == nullptr) return;
+
+  // Normal frame flow has already waited on the internal fence. This guard is
+  // only for an abnormal caller path; do not submit or execute anything here.
+  if (recording_ && !Abort()) {
+    return;
+  }
+
+  const HRESULT allocator_hr = command_allocator_->Reset();
+  if (FAILED(allocator_hr)) {
+    LogFailureOnce("command allocator reset", allocator_hr);
+    return;
+  }
+
+  const HRESULT list_hr =
+      command_list_->Reset(command_allocator_.Get(), nullptr);
+  if (FAILED(list_hr)) {
+    LogFailureOnce("command list reset", list_hr);
+    return;
+  }
+
+  recording_ = true;
 }
 
 void CommandContext::ClearState() {
@@ -94,7 +133,10 @@ void CommandContext::ClearState() {
 void CommandContext::CloseAndSubmit(ID3D12CommandQueue* command_queue) {
   if (command_list_ == nullptr || command_queue == nullptr) return;
 
-  LogFailureOnce("command list close", command_list_->Close());
+  const HRESULT close_hr = command_list_->Close();
+  LogFailureOnce("command list close", close_hr);
+  if (FAILED(close_hr)) return;
+  recording_ = false;
 
   ID3D12CommandList* lists[] = {command_list_.Get()};
   command_queue->ExecuteCommandLists(1, lists);
@@ -225,6 +267,7 @@ void CommandContext::Shutdown() {
   resource_states_.clear();
 
   fence_value_ = 0;
+  recording_ = false;
 }
 
 }  // namespace reshade_dlssnr

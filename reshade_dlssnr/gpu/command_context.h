@@ -13,7 +13,13 @@ class CommandContext {
  public:
   bool Ensure(ID3D12Device* device);
 
+  // Starts a fresh recording after safely discarding any abandoned recording
+  // from a skipped/failed frame.
   void Reset();
+  // Closes and discards an in-progress recording without executing it. Safe
+  // to call after a stage exits early; a subsequent Reset can reuse the
+  // allocator/list pair without tripping D3D12 lifetime validation.
+  bool Abort();
   // Clears tracked resource states. Call when resources are recreated or
   // when the tracked state may no longer reflect the GPU's actual state.
   void ClearState();
@@ -66,6 +72,7 @@ class CommandContext {
   Microsoft::WRL::ComPtr<ID3D12Fence> fence_;
   HANDLE fence_event_ = INVALID_HANDLE_VALUE;
   UINT64 fence_value_ = 0;
+  bool recording_ = false;
 
   std::unordered_map<ID3D12Resource*, D3D12_RESOURCE_STATES> resource_states_;
 };
