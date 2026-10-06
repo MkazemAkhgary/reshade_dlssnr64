@@ -265,10 +265,6 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float curve_scale = 100.0 / effective_peak_nits;
     // Keep the explicit exposure in the uniform contract: scene white is the
     // EMA's exposure-adjusted quantity, so multiplying again would double it.
-    //(void)kExposure;
-    //(void)kBt2446K3;
-    //(void)kGainMinLog2;
-    //(void)kGainMaxLog2;
 
     float y_curve = y_hdr * 80.0 * curve_scale;
     float y_sdr_pct = Bt2446C(y_curve);

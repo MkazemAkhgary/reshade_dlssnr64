@@ -417,6 +417,15 @@ float3 ComposeRatioDelta(float3 low_in_lin, float3 low_out_lin) {
 
 
 
+float3 SrgbToLinearExtLocal(float3 v)
+{
+    float3 av = abs(v);
+    float3 lo = av / 12.92;
+    float3 hi = pow((av + 0.055) / 1.055, 2.4);
+    float3 lin = lerp(lo, hi, step(0.04045, av));
+    return sign(v) * lin;
+}
+
 float3 DecodePackedHdr(float4 packed)
 {
     return packed.rgb;
@@ -461,12 +470,12 @@ float3 EncodeHdr(float3 lin)
 float3 ComposeHdr(float3 sdr_base, float gain,
                   float3 low_in, float3 low_out)
 {
-    float3 low_in_lin = max(low_in, 0.0);
-    float3 low_out_lin = max(low_out, 0.0);
+    // The model interface is sRGB-encoded SDR. Decode after the model's
+    // working-scale resample/sharpening, then undo the optional input grade so
+    // the residual is measured in the same linear SDR domain as the gain map.
+    float3 low_in_lin = max(SrgbToLinearExtLocal(low_in), 0.0);
+    float3 low_out_lin = max(SrgbToLinearExtLocal(low_out), 0.0);
     if (kGradeEnabled > 0.5) {
-        // GradeModelInput receives linear SDR in the HDR path, then GradeLinearFwd
-        // is applied. Undo it before measuring the model residual so the residual
-        // belongs to the ungraded SDR base that the gain map reconstructs.
         low_in_lin = max(GradeLinearInv(low_in_lin), 0.0);
     }
 
@@ -475,11 +484,6 @@ float3 ComposeHdr(float3 sdr_base, float gain,
     const float3 delta = ShapeResidual(
         ComposeRatioDelta(low_in_lin, low_out_lin), base_luma);
 
-    //(void)kExposure;
-    //(void)kGainMinLog2;
-    //(void)kGainMaxLog2;
-    //(void)kBt2446K1;
-    //(void)kBt2446K2;
 
     const float3 hdr_src = ReconstructHdr(sdr_base, gain);
     const float3 hdr_edited = hdr_src * (1.0 + delta);

@@ -10,12 +10,12 @@ namespace reshade_dlssnr {
 namespace {
 
 int GradeFormatCode(const PassRun& run, ID3D12Resource* target) {
-  // The HDR split stores a *linear SDR* base, not an sRGB-encoded image.
-  // Give the grade shader an explicit format code so it does not apply the
-  // sRGB transfer function to already-linear model input.
-  if (run.hdr_uniforms_ready && run.hdr != nullptr &&
-      run.hdr->ResolvedFormat() != HdrFormat::Sdr &&
-      target == run.model_color) return 3;
+  // DLSSNR.Color is sRGB-encoded SDR in the HDR gain-map path, matching the
+  // pre-gain-map TonemapForward output. GradeInPlace therefore decodes/encodes
+  // it through the ordinary SDR path.
+  if (run.hdr_uniforms_ready && target == run.model_color) {
+    return HdrFormatCode(HdrFormat::Sdr);
+  }
   return target != nullptr ? HdrFormatCode(DetectFormatFromDxgi(target->GetDesc().Format))
                            : 0;
 }

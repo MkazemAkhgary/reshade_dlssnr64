@@ -14,8 +14,6 @@ bool PrepareInput(
     ID3D12Resource** out_model_output,
     unsigned int* out_eval_width,
     unsigned int* out_eval_height,
-    unsigned int full_width,
-    unsigned int full_height,
     unsigned int work_width,
     unsigned int work_height) {
   if (out_model_color == nullptr || out_model_output == nullptr ||
@@ -26,9 +24,6 @@ bool PrepareInput(
   ComputeConstants constants = {};
   constants.Width = work_width;
   constants.Height = work_height;
-  //(void)full_width;
-  //(void)full_height;
-
   const char* pass_name = "PrepareModelInput";
 
   state.Transition(command_list, full_input,

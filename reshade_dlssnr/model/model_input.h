@@ -45,8 +45,6 @@ bool PrepareInput(
     ID3D12Resource** out_model_output,
     unsigned int* out_eval_width,
     unsigned int* out_eval_height,
-    unsigned int full_width,
-    unsigned int full_height,
     unsigned int work_width,
     unsigned int work_height);
 

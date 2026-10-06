@@ -21,8 +21,7 @@ const char* const kFormatTips[] = {
     "Treat the source as linear scRGB (1.0 = 80 nits).",
     "Treat the source as HDR10 PQ (ST.2084)."};
 
-void DrawStatus(const HdrSnapshot& snap, const HdrSettings& hdr,
-                bool hdr_relevant) {
+void DrawStatus(const HdrSnapshot& snap, bool hdr_relevant) {
   const char* format_name = "SDR";
   switch (snap.resolved_format) {
     case HdrFormat::Auto: format_name = "Auto"; break;
@@ -38,7 +37,6 @@ void DrawStatus(const HdrSnapshot& snap, const HdrSettings& hdr,
   }
   ImGui::SameLine(kControlLabelWidth);
 
-  //(void)hdr;
   if (!hdr_relevant) {
     ImGui::TextDisabled("Inactive (no DLSS Output pass)");
   } else if (!snap.ready) {
@@ -246,8 +244,7 @@ void DrawHdrSection(Settings& settings, bool hdr_relevant, bool& changed) {
   const bool hdr_on = settings.hdr.enable;
 
   if (hdr_on) {
-    DrawStatus(AddonController::Get().GetHdrSnapshot(), settings.hdr,
-               hdr_relevant);
+    DrawStatus(AddonController::Get().GetHdrSnapshot(), hdr_relevant);
   }
 
   WithDisabled(!hdr_on, [&] { DrawControls(settings.hdr, changed); });

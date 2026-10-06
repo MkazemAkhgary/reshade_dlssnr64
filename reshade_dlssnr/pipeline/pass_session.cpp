@@ -1013,8 +1013,8 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
   if (!model_pipeline::PrepareInput(
           self->command_, self->StageList(run, self->command_),
           self->resources_, run.codec, model_input,
-          &model_color, &model_output, &eval_width, &eval_height, run.width,
-          run.height, run.work_width, run.work_height)) {
+          &model_color, &model_output, &eval_width, &eval_height,
+          run.work_width, run.work_height)) {
     self->FailForStep("failed to prepare model input");
     return PipelineStatus::Fail;
   }
