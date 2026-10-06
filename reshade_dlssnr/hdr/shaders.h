@@ -43,6 +43,7 @@ RWBuffer<uint>    gHistogram : register(u0);
 SamplerState      s0 : register(s0);
 
 static const float3 kLuma709 = float3(0.2126, 0.7152, 0.0722);
+static const float3 kLuma2020 = float3(0.2627, 0.6780, 0.0593);
 static const uint kHistogramStride = 256u;
 
 float3 SrgbToLinear(float3 v)
@@ -111,7 +112,10 @@ void CSMain(uint3 gid : SV_GroupID,
     if (dtid.x < gWidth && dtid.y < gHeight) {
         float3 c = gSource.Load(int3(dtid.xy, 0)).rgb;
         float3 lin = DecodeToLinear(c);
-        float luma = dot(max(lin, 0.0), kLuma709);
+        float3 luma_weights = ((int)(kFormat + 0.5) == 2)
+                                  ? kLuma2020
+                                  : kLuma709;
+        float luma = dot(max(lin, 0.0), luma_weights);
 
         float l2 = log2(max(luma, 1e-8));
         float span = max(kLumaMaxLog2 - kLumaMinLog2, 1e-4);
@@ -178,6 +182,13 @@ RWTexture2D<float4> gOutput : register(u0);
 SamplerState s0 : register(s0);
 
 static const float3 kLuma709 = float3(0.2126, 0.7152, 0.0722);
+static const float3 kLuma2020 = float3(0.2627, 0.6780, 0.0593);
+
+float3 HdrLumaWeights()
+{
+    int fmt = (int)(kFormat + 0.5);
+    return fmt == 2 ? kLuma2020 : kLuma709;
+}
 
 float3 PqToNits(float3 v)
 {
@@ -204,21 +215,29 @@ float3 SrgbToLinear(float3 v)
 float3 DecodeToLinear(float3 c)
 {
     int fmt = (int)(kFormat + 0.5);
+    // The gain-map domain uses 1.0 = 100 nits, i.e. the SDR white reference.
+    // scRGB is 1.0 = 80 nits, so it needs the 80/100 reference scaling here.
     if (fmt == 1)
-        return c;                               // scRGB: 1.0 == 80 nits; signed
+        return c * (80.0 / 100.0);
     if (fmt == 2)
-        return max(PqToNits(c), 0.0) / 80.0;  // normalize to 80-nit units
+        return max(PqToNits(c), 0.0) / 100.0;
     return SrgbToLinear(c);
 }
 
 float3 PreDesaturate(float3 c, float a)
 {
-    // Reference matrix used by BT.2446C's gain-map splitter:
-    // diag = 1 - 2a, off-diagonal = a. It preserves neutral greys and is
-    // exactly inverted after the luma tone map.
+    // Reference crosstalk matrix:
+    //   [1-2a, a,    a   ]
+    //   [a,    1-2a, a   ]
+    //   [a,    a,    1-2a]
+    // The cross-channel term is therefore a * (sum - channel). Adding
+    // a * sum directly would silently change the diagonal to 1-a, making
+    // InversePreDesaturate no longer the inverse and producing hue shifts.
     float d = 1.0 - 2.0 * a;
-    float s = a * (c.r + c.g + c.b);
-    return float3(d * c.r + s, d * c.g + s, d * c.b + s);
+    float sum = c.r + c.g + c.b;
+    return float3(d * c.r + a * (sum - c.r),
+                  d * c.g + a * (sum - c.g),
+                  d * c.b + a * (sum - c.b));
 }
 
 float3 InversePreDesaturate(float3 c, float a)
@@ -234,8 +253,6 @@ float3 InversePreDesaturate(float3 c, float a)
 
 float Bt2446C(float y_nits)
 {
-    // Method C, written in the parameterization used by the reference
-    // implementation: Y_ip = k4 / k1 and a logarithmic shoulder above it.
     float y = max(y_nits, 0.0);
     float y_ip = kBt2446K4 / max(kBt2446K1, 1e-6);
     if (y < y_ip)
@@ -252,46 +269,48 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float2 uv = (float2(id.xy) + 0.5) / float2(gWidth, gHeight);
     float4 src = gSource.SampleLevel(s0, uv, 0);
 
+    const float3 luma = HdrLumaWeights();
     float3 hdr = DecodeToLinear(src.rgb);
     float3 pre_hdr = PreDesaturate(hdr, saturate(kCrosstalk));
-    float y_hdr = max(dot(pre_hdr, kLuma709), 0.0);
 
-    // Exposure is a scene-adaptation control, not part of the source white
-    // point. Apply it to the sampled HDR signal before BT.2446C, while keeping
-    // the gain-map reconstruction anchored to the original HDR signal below.
-    // This is the critical separation that keeps dark-scene exposure effective.
+    // Exposure is a scene-adaptation control. It changes the image presented
+    // to the SDR model, but never becomes part of the alternate HDR image or
+    // its gain-map reconstruction.
     float exposure = max(kExposure, 1e-6);
-    float y_exposed = y_hdr * exposure;
+    float3 pre_exposed = pre_hdr * exposure;
+    float y_exposed = max(dot(pre_exposed, luma), 0.0);
 
-    // kEffectiveSceneWhite is the measured source-domain white percentile times
-    // the user-selected headroom. It deliberately does NOT include exposure;
-    // exposure changes the signal, while this value defines the tone-map peak.
-    float effective_peak_nits = max(100.0,
-        80.0 * max(kEffectiveSceneWhite, 0.01));
-    float curve_scale = 100.0 / effective_peak_nits;
-
-    float y_curve = y_exposed * 80.0 * curve_scale;
+    // kEffectiveSceneWhite is measured in the histogram's scRGB-like 80-nit
+    // domain. Convert the resulting peak to nits, while this gain-map working
+    // domain remains normalized to SDR white = 100 nits.
+    float effective_peak_nits = max(
+        100.0, 80.0 * max(kEffectiveSceneWhite, 0.01));
+    float y_curve = y_exposed * 10000.0 / effective_peak_nits;
     float y_sdr_pct = Bt2446C(y_curve);
     float y_sdr = max(y_sdr_pct / 100.0, 0.0);
 
-    // Raw ISO 21496-1 log2 gain. The numerator intentionally uses the
-    // ORIGINAL HDR luminance, not the exposure-adjusted luminance: compose must
-    // reconstruct the game's original HDR signal, not the temporary adapted one.
-    float gain = log2(max(y_hdr + kAlternateOffset, 1e-12) /
-                      max(y_sdr + kBaseOffset, 1e-12));
-    float gain_scale = exp2(gain);
+    // BT.2446C is used as a luma-only curve. Preserve chromaticity by scaling
+    // the entire RGB triple by the luma ratio, then undo the reference
+    // crosstalk matrix. This is the defining LumaGainMapSplitter architecture:
+    // a single scalar gain map must not be used to solve RGB channels
+    // independently with a constant per-channel offset, because those offsets
+    // pull dark chromatic pixels toward neutral grey and make highlights pale.
+    float chroma_scale = y_exposed > 1e-8 ? y_sdr / y_exposed : 0.0;
+    float3 pre_sdr = pre_exposed * chroma_scale;
+    float3 sdr = max(
+        InversePreDesaturate(pre_sdr, saturate(kCrosstalk)), 0.0);
+    sdr = saturate(sdr);
 
-    // Apply the exact gain-map formula in the original pre-desaturated RGB
-    // space. Because the crosstalk matrix preserves neutral values, the scalar
-    // gain and offsets remain algebraically invertible.
-    float3 pre_sdr = (pre_hdr + kAlternateOffset) / max(gain_scale, 1e-12)
-                   - kBaseOffset;
-    float3 sdr = saturate(InversePreDesaturate(pre_sdr, saturate(kCrosstalk)));
+    // The gain is derived from the actual linear HDR and SDR lumas, not from
+    // the temporary exposure-adjusted HDR sample. Applying this scalar gain to
+    // the SDR luma reconstructs the original HDR luma exactly (within float
+    // precision) when the SDR base was not clipped.
+    float y_hdr_gain = max(dot(max(hdr, 0.0), luma), 0.0);
+    float y_sdr_gain = max(dot(sdr, luma), 0.0);
+    float gain = log2(
+        max(y_hdr_gain + kAlternateOffset, 1e-12) /
+        max(y_sdr_gain + kBaseOffset, 1e-12));
 
-    // Keep the base in the ordinary linear SDR range. The raw f32 gain is
-    // deliberately not clipped or quantized, so highlight information can
-    // continue to ride in the gain channel even when the SDR rendition clips.
-    // BuildGainMapStats reports those excursions for tuning exposure/headroom.
     gOutput[id.xy] = float4(sdr, gain);
 }
 )";

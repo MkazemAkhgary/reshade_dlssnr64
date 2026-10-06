@@ -8,7 +8,8 @@ namespace reshade_dlssnr {
 inline constexpr const char* kComposeModelOutputHdrSource = R"(
 // The constant buffer is declared in kGradePrelude. The HDR path uses the
 // packed gain-map texture instead of the original HDR resource: RGB is the
-// full-resolution linear SDR base and A is the raw f32 log2 gain.
+// full-resolution linear SDR base (1.0 = 100 nits) and A is the raw f32
+// log2 luma gain.
 
 #define kLumaStrength    gParams[0].x
 #define kChromaStrength  gParams[0].y
@@ -94,10 +95,17 @@ float3 safe_log3(float3 v)
 // produces a much more saturated color at the new luminance, and the
 // reverse produces a pale one. Normalized chroma is scale-invariant and
 // preserves perceived hue and saturation.
+float3 HdrLumaWeights()
+{
+    int fmt = (int)(kFormat + 0.5);
+    return fmt == 2 ? float3(0.2627, 0.6780, 0.0593)
+                    : float3(0.2126, 0.7152, 0.0722);
+}
+
 float3 BlendYCbCr(float3 original, float3 edited,
                   float luma_strength, float chroma_strength)
 {
-    const float3 kL = float3(0.2126, 0.7152, 0.0722);
+    const float3 kL = HdrLumaWeights();
 
     float orig_y = dot(original, kL);
     float edit_y = dot(edited, kL);
@@ -433,7 +441,17 @@ float3 DecodePackedHdr(float4 packed)
 
 float3 ReconstructHdr(float3 sdr_base, float gain)
 {
-    return (sdr_base + kBaseOffset) * exp2(gain) - kAlternateOffset;
+    // A is a single luma gain. Apply the ISO offsets to the luma, recover the
+    // original HDR luma, then rescale the SDR RGB triple so chromaticity is
+    // preserved. Applying the scalar gain independently to RGB with the
+    // offsets would add the same offset to every channel and desaturate dark
+    // colours.
+    const float3 luma = HdrLumaWeights();
+    float y_sdr = max(dot(max(sdr_base, 0.0), luma), 0.0);
+    float y_hdr = (y_sdr + kBaseOffset) * exp2(gain) - kAlternateOffset;
+    y_hdr = max(y_hdr, 0.0);
+    float scale = y_sdr > 1e-8 ? y_hdr / y_sdr : 0.0;
+    return max(sdr_base, 0.0) * scale;
 }
 
 float3 NitsToPq(float3 nits)
@@ -454,12 +472,11 @@ float3 EncodeHdr(float3 lin)
 {
     int fmt = (int)(kFormat + 0.5);
     if (fmt == 1) {
-        // scRGB is signed linear and uses the same 80-nit reference as the
-        // gain-map working domain. Preserve negative channels exactly.
-        return lin;
+        // Gain-map HDR is normalized to 100 nits; scRGB uses 80 nits/unit.
+        return lin * (100.0 / 80.0);
     }
     if (fmt == 2) {
-        return NitsToPq(max(lin, 0.0) * 80.0);
+        return NitsToPq(max(lin, 0.0) * 100.0);
     }
     return max(lin, 0.0);
 }
@@ -479,7 +496,7 @@ float3 ComposeHdr(float3 sdr_base, float gain,
         low_in_lin = max(GradeLinearInv(low_in_lin), 0.0);
     }
 
-    const float3 kL = float3(0.2126, 0.7152, 0.0722);
+    const float3 kL = HdrLumaWeights();
     const float base_luma = dot(max(sdr_base, 0.0), kL);
     const float3 delta = ShapeResidual(
         ComposeRatioDelta(low_in_lin, low_out_lin), base_luma);
@@ -506,7 +523,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float4 packed = gOriginal.SampleLevel(s0, uv, 0);
 
     // EASU upsample from the actual model working resolution back to full HDR
-    // resolution. Both textures are in the same linear SDR model domain.
+    // resolution. Both textures are in the same sRGB-encoded model domain.
     const float2 easu_con3 = float2(0.0, 4.0 * kEasuCon1.y);
     float3 low_in = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
                              easu_con3, 0);
@@ -533,8 +550,9 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     const float3 final_lin = ComposeHdr(sdr_base, packed.a, low_in, low_out);
     const float3 final_out = EncodeHdr(final_lin);
 
-    // Packed resources are linear HDR-side data; the destination is the game's
-    // original HDR encoding. Alpha is preserved from the packed path only when
+    // Packed resources are linear gain-map data in the 100-nit normalized domain;
+    // the destination is the game's original HDR encoding. Alpha is preserved
+    // from the packed path only when
     // the target format conceptually carries it; for the game resource the
     // color channels are the only meaningful data.
     gOutput[id.xy] = float4(final_out, 1.0);

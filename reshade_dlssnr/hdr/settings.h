@@ -42,8 +42,9 @@ struct HdrSettings {
   float bt2446_k4 = 78.99439f;
   float bt2446_crosstalk = 0.04f;
 
-  // Raw gain-map metadata. The gain channel itself remains raw f32 log2;
-  // these bounds are metadata/diagnostic limits rather than quantization.
+  // Raw gain-map metadata. A is a single luma gain in linear space; the
+  // offsets are applied to luminance during gain generation/application.
+  // They do not get added independently to RGB channels.
   float gain_base_offset = 1.0f / 64.0f;
   float gain_alternate_offset = 1.0f / 64.0f;
   float gain_min_log2 = -4.0f;

@@ -105,12 +105,12 @@ void DrawControls(HdrSettings& hdr, bool& changed) {
 
   changed |= DrawFloatRow(
       0, "hdr_gain_base_offset", "Gain Base Offset",
-      "ISO 21496-1 base offset. Stored directly in the linear SDR gain-map math.",
+      "ISO 21496-1 base offset. Applied to SDR luminance for the single-channel gain map; it is not added independently to RGB channels.",
       &hdr.gain_base_offset, nullptr, 0.0f, 0.0f, 1.0f, 1.0f / 64.0f);
 
   changed |= DrawFloatRow(
       0, "hdr_gain_alternate_offset", "Gain Alternate Offset",
-      "ISO 21496-1 alternate offset. Stored directly in the linear HDR gain-map math.",
+      "ISO 21496-1 alternate offset. Applied to HDR luminance for the single-channel gain map; it is not added independently to RGB channels.",
       &hdr.gain_alternate_offset, nullptr, 0.0f, 0.0f, 1.0f, 1.0f / 64.0f);
 
   changed |= DrawFloatRow(
