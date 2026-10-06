@@ -251,6 +251,24 @@ float3 InversePreDesaturate(float3 c, float a)
                   diag * c.b + off * (sum - c.b));
 }
 
+// Keep the SDR base inside [0, 1] without changing its RGB ratios. A scalar
+// gain map is capable of recording this luminance rescaling exactly, whereas
+// per-channel clipping is not: clipping one channel changes chromaticity and
+// that information cannot be recovered from the single luma gain. This is the
+// gain-map-friendly form of gamut mapping: move the whole RGB triple along its
+// chromaticity ray until it fits the SDR cube.
+float3 GamutFitPreserveChroma(float3 c)
+{
+    // The luma-only BT.2446C path plus an exactly matched matrix inverse keeps
+    // a valid non-negative HDR RGB triple non-negative. Clamp only tiny
+    // negative round-off before determining the fit scale.
+    c = max(c, 0.0);
+    float max_channel = max(c.r, max(c.g, c.b));
+    if (max_channel > 1.0)
+        c /= max_channel;
+    return c;
+}
+
 float Bt2446C(float y_nits)
 {
     float y = max(y_nits, 0.0);
@@ -297,9 +315,16 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     // pull dark chromatic pixels toward neutral grey and make highlights pale.
     float chroma_scale = y_exposed > 1e-8 ? y_sdr / y_exposed : 0.0;
     float3 pre_sdr = pre_exposed * chroma_scale;
-    float3 sdr = max(
-        InversePreDesaturate(pre_sdr, saturate(kCrosstalk)), 0.0);
-    sdr = saturate(sdr);
+    float3 sdr =
+        InversePreDesaturate(pre_sdr, saturate(kCrosstalk));
+
+    // Never hard-clip R/G/B independently here. At elevated exposure the
+    // luma-only BT.2446C output can legitimately push one or more channels
+    // above 1.0. Independent saturate() would alter R:G:B ratios, and the
+    // one-channel gain map could not restore that lost chromaticity. Fit the
+    // whole triple to the SDR gamut instead, so the gain map can carry the
+    // resulting luminance change exactly.
+    sdr = GamutFitPreserveChroma(sdr);
 
     // The gain is derived from the actual linear HDR and SDR lumas, not from
     // the temporary exposure-adjusted HDR sample. Applying this scalar gain to
@@ -323,7 +348,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 {
     if (id.x == 0u) gStats[0] = 0xffffffffu; // min sentinel in sortable order
     if (id.x == 1u) gStats[1] = 0u;          // max sentinel in sortable order
-    if (id.x == 0u) gStats[2] = 0u;          // SDR clamp count
+    if (id.x == 0u) gStats[2] = 0u;          // SDR gamut-fit count
 }
 )";
 

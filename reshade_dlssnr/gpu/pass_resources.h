@@ -49,7 +49,7 @@ class PassResources {
   unsigned int packed_height = 0;
 
   // [0] = sortable min gain, [1] = sortable max gain, [2] = out-of-range or
-  // SDR-clamped pixel count.
+  // SDR gamut-fitted pixel count.
   Microsoft::WRL::ComPtr<ID3D12Resource> gain_stats;
   size_t gain_stats_bytes = 0;
 
