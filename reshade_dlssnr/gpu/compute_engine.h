@@ -31,16 +31,16 @@ namespace reshade_dlssnr {
 // anywhere: the shader still compiles, the dispatch still succeeds, and the
 // image is simply wrong.
 //
-// Passes whose parameters are theirs alone — DebugDisplay, TonemapForward,
+// Passes whose parameters are theirs alone — DebugDisplay and the histogram /
 // the histogram passes — keep their own layout starting at 0. Nothing else
 // writes those slots in the same dispatch, so they need no region.
 //
 //   [0,  kShaderParamCount)  the kShaderParams table (per-pass sliders)
 //   [8,  24)                 the colour grade block
 //   [24, 32)                 the residual edit block
-//   [32, 36)                 the HDR uniforms
-//   [36, 48)                 the FSR EASU constants
-//   [48, 52)                 the FSR RCAS constants
+//   [32, 44)                 the HDR + gain-map uniform block
+//   [44, 56)                 the FSR EASU constants
+//   [56, 60)                 the FSR RCAS constants
 //
 // Gaps between regions are deliberate headroom, not waste: they let a region
 // grow a little before anything else has to move.
@@ -53,13 +53,13 @@ constexpr uint32_t kGradeSlotCount = 16;
 constexpr uint32_t kResidualSlotBase = 24;
 constexpr uint32_t kResidualSlotCount = 8;
 constexpr uint32_t kHdrSlotBase = 32;
-constexpr uint32_t kHdrSlotCount = 4;
-constexpr uint32_t kEasuSlotBase = 36;
+constexpr uint32_t kHdrSlotCount = 12;
+constexpr uint32_t kEasuSlotBase = 44;
 constexpr uint32_t kEasuSlotCount = 12;
-constexpr uint32_t kRcasSlotBase = 48;
+constexpr uint32_t kRcasSlotBase = 56;
 constexpr uint32_t kRcasSlotCount = 4;
 
-constexpr uint32_t kParamSlotCount = 52;
+constexpr uint32_t kParamSlotCount = 60;
 
 static_assert(kShaderParamCount <= kGradeSlotBase,
               "the kShaderParams table has grown into the grade block - move "
@@ -93,10 +93,10 @@ struct alignas(256) ComputeConstants {
   // Dynamic shader parameters. Consumers write one region of this array
   // rather than the whole thing; the region map is at the top of this header.
   //
-  // Must align with HLSL `float4 gParams[12]`, i.e. 48 floats: one float per
-  // parameter, four parameters per float4. 48 floats leaves headroom for
-  // future effects without reaching the 256-byte CBV ceiling (16-byte header
-  // + 48*4 = 208 bytes used).
+  // The HLSL declaration is `float4 gParams[15]`: 15*16 bytes plus the 16-byte
+  // header exactly fills the 256-byte CBV. Region indices above are float
+  // offsets into that array, so a shared shader can consume all 60 payload
+  // floats without crossing the CBV boundary.
   float params[kParamSlotCount] = {};
 };
 static_assert(sizeof(ComputeConstants) <= 256, "Constants must fit in a 256-byte CBV");
@@ -139,11 +139,12 @@ static_assert(sizeof(ComputeConstants) <= 256, "Constants must fit in a 256-byte
 // so the third pass made the ring overwrite constants a pending dispatch was
 // still going to read.
 constexpr uint32_t kMaxFramesInFlight = 16;  // DXGI's maximum swapchain buffers
-// Worst case for one frame at kMaxPasses == 3: three passes each recording
-// a prepare, two grades, a compose and a debug view (15), the HDR histogram
-// adding two (17), and the Release stage's backbuffer grade (18). The
-// static_assert in pass_session.cpp ties the pass count to kMaxPasses.
-constexpr uint32_t kMaxDispatchesPerFrame = 3 * 5 + 3;
+// Worst case for one frame at kMaxPasses == 3: each Post-DLSS pass records
+// a gain-map split, zero/build gain statistics, prepare, two grades, a compose
+// and a debug view (21), the HDR histogram adds two (23), and the Present
+// stage's backbuffer grade adds one (24). The static_assert in pass_session.cpp
+// ties the pass count to kMaxPasses.
+constexpr uint32_t kMaxDispatchesPerFrame = 3 * 8 + 3;
 constexpr uint32_t kDescriptorRingSize =
     kMaxFramesInFlight * kMaxDispatchesPerFrame;
 
@@ -207,10 +208,9 @@ class ComputeEngine {
   uint32_t descriptor_size_ = 0;
   uint32_t heap_index_ = 0;
 
-  // One upload buffer holding every slot's constants, one kConstantStride
-  // block per slot. A single allocation rather than one resource per slot,
-  // because a committed resource costs 64 KB whatever its size and the ring is
-  // deep on purpose.
+  // One upload buffer holding every dispatch slot's 256-byte constants. A
+  // single allocation avoids a committed resource per dispatch while the
+  // descriptor/constant ring is intentionally deep.
   static constexpr uint32_t kConstantStride = 256;  // CBV alignment requirement
   Microsoft::WRL::ComPtr<ID3D12Resource> constants_;
 

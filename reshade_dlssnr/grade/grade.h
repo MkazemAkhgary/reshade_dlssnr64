@@ -23,7 +23,7 @@ bool ApplyGrade(CommandContext& state,
                 ID3D12Resource* scratch,
                 unsigned int width,
                 unsigned int height,
-                HdrFormat format,
+                int format_code,
                 const GradeSettings& grade);
 
 }  // namespace reshade_dlssnr::model_pipeline

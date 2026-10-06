@@ -1,5 +1,5 @@
 // Model input preparation. Resamples the source into the working-scale buffer
-// the model reads, optionally tonemapping HDR -> SDR first.
+// the model reads, resampling the already split linear SDR base.
 #pragma once
 
 #include <d3d12.h>
@@ -10,16 +10,31 @@
 
 namespace reshade_dlssnr::model_pipeline {
 
-// HDR tonemap uniforms, written at kHdrSlotBase in ComputeConstants::params.
+// HDR gain-map split/compose uniforms, written at kHdrSlotBase in ComputeConstants::params.
 // Zero-initialised `format` means SDR sRGB, 1 scRGB, 2 HDR10 PQ.
 struct HdrUniforms {
+  // Shader format code: 0 = SDR sRGB, 1 = scRGB, 2 = HDR10 PQ.
+  float format = 0.0f;
   float exposure = 1.0f;
-  float tonemap_white = 4.0f;
-  uint32_t format = 0;
+
+  // BT.2446 Method C. k2/k4 are derived from k1/k3 when settings are loaded.
+  float bt2446_k1 = 0.83802f;
+  float bt2446_k2 = 15.09968f;
+  float bt2446_k3 = 0.74204f;
+  float bt2446_k4 = 78.99439f;
+  float bt2446_crosstalk = 0.04f;
+
+  // Raw ISO 21496-1 gain-map apply parameters. Gain itself is stored as raw
+  // log2 in packed.a, so no unnormalization/gamma step is needed.
+  float gain_base_offset = 1.0f / 64.0f;
+  float gain_alternate_offset = 1.0f / 64.0f;
+  float gain_min_log2 = -4.0f;
+  float gain_max_log2 = 6.0f;
+  float effective_scene_white = 1.0f;
 };
 
-// With `hdr == nullptr`, plain resample. With `hdr != nullptr`, additionally
-// tonemaps HDR -> SDR. Model always runs at `work_width x work_height`.
+// The source is already in the model domain (gain-map split happens in its
+// own pipeline step for HDR). This pass only resamples it to working scale.
 bool PrepareInput(
     CommandContext& state,
     ID3D12GraphicsCommandList* command_list,
@@ -33,7 +48,6 @@ bool PrepareInput(
     unsigned int full_width,
     unsigned int full_height,
     unsigned int work_width,
-    unsigned int work_height,
-    const HdrUniforms* hdr = nullptr);
+    unsigned int work_height);
 
 }  // namespace reshade_dlssnr::model_pipeline

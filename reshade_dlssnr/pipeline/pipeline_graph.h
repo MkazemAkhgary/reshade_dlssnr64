@@ -91,7 +91,7 @@ enum class PipelineNodeId : uint32_t {
   // -- model input ----------------------------------------------------------
   ResolveModelInput = 15,  // first pass -> guide color; else scratch snapshot
   BuildHdrUniforms = 16,
-  TonemapForward = 17,     // dispatches "TonemapForward"
+  GainMapSplit = 17,       // dispatches "GainMapSplit"
   PrepareModelInput = 18,  // dispatches "PrepareModelInput"
   // Grades the image the model is about to read. Follows PrepareModelInput
   // because that is what fills the working input, and precedes the evaluate
@@ -247,8 +247,8 @@ struct PassRun {
   // early cannot be mistaken for a clean evaluation.
   int eval_result = 0;
 
-  // HDR tonemap uniforms, built by BuildHdrUniforms and consumed by the
-  // PrepareModelInput / ComposeModelOutput steps. `hdr_uniforms_ready` false
+  // HDR gain-map uniforms, built by BuildHdrUniforms and consumed by the
+  // split / compose steps. `hdr_uniforms_ready` false
   // means the SDR variant of each pass is selected, which is what the
   // pre-refactor `hdr_ptr == nullptr` test expressed.
   model_pipeline::HdrUniforms hdr_uniforms = {};
@@ -392,7 +392,7 @@ struct PipelineStageDef {
   // The PostDLSS stage records onto the game's list and must never submit.
   bool owns_submit = false;
 
-  // True when the stage may use the HDR path (tonemap + HDR compose).
+  // True when the stage may use the HDR path (gain-map split + HDR compose).
   bool hdr_capable = false;
 
   // True when the stage consumes a captured DLSS output as its input, rather
@@ -650,6 +650,7 @@ inline constexpr PipelineNodeId kPostDlssStepNodes[] = {
     PipelineNodeId::EnsureFeature,
     PipelineNodeId::SnapshotGuides,
     PipelineNodeId::BuildHdrUniforms,
+    PipelineNodeId::GainMapSplit,
     PipelineNodeId::PrepareModelInput,
     PipelineNodeId::GradeModelInput,
     PipelineNodeId::FillEvaluateParams,

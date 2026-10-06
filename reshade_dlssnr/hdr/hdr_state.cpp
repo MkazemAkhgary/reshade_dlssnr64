@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <bit>
 
 #include <reshade.hpp>
 
@@ -246,7 +247,8 @@ bool HdrState::Ensure(ID3D12Device* device) {
     return false;
   }
 
-  if (!readback_.Ensure(device, kHistogramBytes)) {
+  if (!readback_.Ensure(device, kHistogramBytes) ||
+      !gain_readback_.Ensure(device, kGainStatsBytes)) {
     Shutdown();
     return false;
   }
@@ -257,11 +259,14 @@ bool HdrState::Ensure(ID3D12Device* device) {
 
 void HdrState::Shutdown() {
   readback_.Shutdown();
+  gain_readback_.Shutdown();
   histogram_.Reset();
   fence_.Reset();
   fence_value_ = 0;
   pending_fence_value_ = 0;
   pending_measurement_ = false;
+  pending_gain_fence_value_ = 0;
+  pending_gain_stats_ = false;
   device_.Reset();
 
   enabled_ = false;
@@ -279,6 +284,10 @@ void HdrState::Shutdown() {
   }
   p_hi_luma_ = 0.0f;
   last_samples_ = 0;
+  have_gain_stats_ = false;
+  gain_min_log2_ = 0.0f;
+  gain_max_log2_ = 0.0f;
+  gain_clipped_pixels_ = 0;
 }
 
 HdrSnapshot HdrState::GetSnapshot() const {
@@ -308,6 +317,10 @@ HdrSnapshot HdrState::GetSnapshot() const {
   s.target_is_skin = regular_.target_is_skin;
   s.depth_filter_survived = regular_.depth_filter_survived;
   s.metering_source = static_cast<int>(regular_.metering_source);
+  s.gain_map_ready = have_gain_stats_;
+  s.gain_min_log2 = gain_min_log2_;
+  s.gain_max_log2 = gain_max_log2_;
+  s.gain_clipped_pixels = gain_clipped_pixels_;
   return s;
 }
 
@@ -436,9 +449,16 @@ void HdrState::BeginFrame(CommandContext& cmd,
   }
 
   // Clear then build.
-  codec.Dispatch("ZeroHistogram", command_list, constants, srvs, uavs,
-                 /*threads_x=*/1, /*threads_y=*/1, /*threads_z=*/1);
-  codec.Dispatch("BuildHistogram", command_list, constants, srvs, uavs);
+  if (!codec.Dispatch("ZeroHistogram", command_list, constants, srvs, uavs,
+                      /*threads_x=*/1, /*threads_y=*/1, /*threads_z=*/1)) {
+    frame_counter_++;
+    return;
+  }
+  cmd.UavBarrier(command_list, histogram_.Get());
+  if (!codec.Dispatch("BuildHistogram", command_list, constants, srvs, uavs)) {
+    frame_counter_++;
+    return;
+  }
 
   // Copy into the readback ring. The fence value is signaled later at
   // Present, once the game's queue has advanced past this command list.
@@ -459,45 +479,92 @@ void HdrState::BeginFrame(CommandContext& cmd,
   frame_counter_++;
 }
 
-void HdrState::SignalAtPresent(ID3D12CommandQueue* queue) {
-  if (!pending_measurement_ || queue == nullptr || fence_ == nullptr) return;
+bool HdrState::EnqueueGainMapStatsReadback(
+    ID3D12GraphicsCommandList* command_list, ID3D12Resource* stats) {
+  if (command_list == nullptr || stats == nullptr || fence_ == nullptr ||
+      !device_ || pending_gain_stats_) {
+    return false;
+  }
 
-  // Signal the fence with the value we promised to the readback ring. The
-  // game has already submitted its command list (which contained our
-  // histogram + copy), so this signal marks the point at which the copy
-  // is complete.
-  queue->Signal(fence_.Get(), pending_fence_value_);
-  fence_value_ = pending_fence_value_;
+  // If the histogram copy from BeginFrame is still pending, reuse its fence
+  // value so both readback rings are guaranteed complete at the same queue
+  // signal. Otherwise allocate the next value.
+  const uint64_t next_value =
+      pending_measurement_ ? pending_fence_value_ : (fence_value_ + 1u);
+  if (!gain_readback_.EnqueueCopy(command_list, stats, kGainStatsBytes,
+                                  fence_.Get(), next_value)) {
+    return false;
+  }
+
+  pending_gain_fence_value_ = next_value;
+  pending_gain_stats_ = true;
+  return true;
+}
+
+void HdrState::SignalAtPresent(ID3D12CommandQueue* queue) {
+  if (queue == nullptr || fence_ == nullptr ||
+      (!pending_measurement_ && !pending_gain_stats_)) {
+    return;
+  }
+
+  uint64_t signal_value = fence_value_;
+  if (pending_measurement_) signal_value = std::max(signal_value, pending_fence_value_);
+  if (pending_gain_stats_) signal_value = std::max(signal_value, pending_gain_fence_value_);
+
+  queue->Signal(fence_.Get(), signal_value);
+  fence_value_ = signal_value;
 }
 
 void HdrState::PollReadback(ID3D12Fence* fence, const Settings& settings) {
-  if (!pending_measurement_ || fence == nullptr) return;
+  if (fence == nullptr) return;
 
-  if (fence->GetCompletedValue() < pending_fence_value_) return;
+  const uint64_t completed = fence->GetCompletedValue();
 
-  uint32_t bytes = 0;
-  const void* mapped = readback_.TryGet(fence, &bytes);
-  pending_measurement_ = false;
+  if (pending_measurement_ && completed >= pending_fence_value_) {
+    uint32_t bytes = 0;
+    const void* mapped = readback_.TryGet(fence, &bytes);
+    pending_measurement_ = false;
 
-  if (mapped == nullptr || bytes < kHistogramBytes) return;
-
-  const uint32_t* bins = static_cast<const uint32_t*>(mapped);
-  uint32_t total = 0;
-  for (uint32_t i = 0; i < kHistogramTotalBins; ++i) total += bins[i];
-  if (total == 0) return;
-
-  UpdateExposure(bins, settings);
-
-  // Copy the two diagnostic halves. Full-frame feeds the histogram plot,
-  // skin is kept alongside it.
-  for (uint32_t i = 0; i < kHistogramBins; ++i) {
-    last_histogram_[i] = bins[i];
-    last_histogram_skin_[i] = bins[2u * kHistogramBins + i];
+    if (mapped != nullptr && bytes >= kHistogramBytes) {
+      const uint32_t* bins = static_cast<const uint32_t*>(mapped);
+      uint32_t total = 0;
+      for (uint32_t i = 0; i < kHistogramTotalBins; ++i) total += bins[i];
+      if (total != 0) {
+        UpdateExposure(bins, settings);
+        for (uint32_t i = 0; i < kHistogramBins; ++i) {
+          last_histogram_[i] = bins[i];
+          last_histogram_skin_[i] = bins[2u * kHistogramBins + i];
+        }
+        have_histogram_ = true;
+        last_samples_ = total;
+        frames_since_measure_ = 0;
+      }
+    }
   }
-  have_histogram_ = true;
-  last_samples_ = total;
 
-  frames_since_measure_ = 0;
+  if (pending_gain_stats_ && completed >= pending_gain_fence_value_) {
+    uint32_t bytes = 0;
+    const void* mapped = gain_readback_.TryGet(fence, &bytes);
+    pending_gain_stats_ = false;
+
+    if (mapped != nullptr && bytes >= kGainStatsBytes) {
+      const uint32_t* stats = static_cast<const uint32_t*>(mapped);
+      const uint32_t min_sortable = stats[0];
+      const uint32_t max_sortable = stats[1];
+      auto unsort = [](uint32_t sortable) {
+        return (sortable & 0x80000000u) != 0u
+            ? (sortable ^ 0x80000000u)
+            : ~sortable;
+      };
+
+      gain_min_log2_ = std::bit_cast<float>(unsort(min_sortable));
+      gain_max_log2_ = std::bit_cast<float>(unsort(max_sortable));
+      gain_clipped_pixels_ = stats[2];
+      if (std::isfinite(gain_min_log2_) && std::isfinite(gain_max_log2_)) {
+        have_gain_stats_ = true;
+      }
+    }
+  }
 }
 
 void HdrState::UpdateExposure(const uint32_t* bins, const Settings& settings) {

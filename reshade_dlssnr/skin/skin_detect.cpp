@@ -138,8 +138,13 @@ bool SkinDetect::Run(CommandContext& cmd,
   const unsigned int work_h = std::max(
       1u, static_cast<unsigned int>(guides.output_height * scale + 0.5f));
   const DXGI_FORMAT source_format = guides.dlss_output_color->GetDesc().Format;
+  const HdrFormat hdr_format = DetectFormatFromDxgi(source_format);
+  const DXGI_FORMAT working_format =
+      (hdr != nullptr && hdr->Enabled() && hdr_format != HdrFormat::Sdr)
+          ? DXGI_FORMAT_R16G16B16A16_FLOAT
+          : source_format;
 
-  if (!EnsureResources(device.Get(), work_w, work_h, source_format)) {
+  if (!EnsureResources(device.Get(), work_w, work_h, working_format)) {
     return false;
   }
 
@@ -174,27 +179,45 @@ bool SkinDetect::Run(CommandContext& cmd,
   cmd.Transition(command_list, mask_[prev].Get(),
                  D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-  // 1. Tonemap + resize into working_input_.
+  // 1. Build the model-domain SDR base and resize it into working_input_.
+  // The HDR case deliberately uses the same gain-map split as the main path;
+  // the fallback exposure EMA prevents this diagnostic model from feeding its
+  // own skin mask back into the exposure loop.
   ComputeConstants constants = {};
   constants.Width = work_w;
   constants.Height = work_h;
-  const char* pass_name = "PrepareModelInput";
-  if (hdr != nullptr && hdr->Enabled()) {
-    // Fallback EMA: no skin slice, so the mask this pass produces cannot
-    // drive its own input exposure.
-    pass_name = "TonemapForward";
-    constants.params[0] = hdr->FallbackExposure();
-    constants.params[1] = hdr->FallbackEffectiveSceneWhite(settings.hdr);
-    constants.params[2] = static_cast<float>(HdrFormatCode(hdr->ResolvedFormat()));
-  }
-
   ID3D12Resource* prep_srvs[kSrvCount] = {guides.dlss_output_color,
                                           guides.dlss_output_color,
                                           guides.dlss_output_color};
   ID3D12Resource* prep_uavs[kUavCount] = {working_input_.Get()};
-  if (!codec.Dispatch(pass_name, command_list, constants, prep_srvs,
-                      prep_uavs)) {
-    return false;
+
+  const bool hdr_active = hdr != nullptr && hdr->Enabled() &&
+                          hdr->ResolvedFormat() != HdrFormat::Sdr;
+  if (hdr_active) {
+    const uint32_t h = kHdrSlotBase;
+    constants.params[h + 0] =
+        static_cast<float>(HdrFormatCode(hdr->ResolvedFormat()));
+    constants.params[h + 1] = hdr->FallbackExposure();
+    constants.params[h + 2] = settings.hdr.bt2446_k1;
+    constants.params[h + 3] = settings.hdr.bt2446_k2;
+    constants.params[h + 4] = settings.hdr.bt2446_k4;
+    constants.params[h + 5] = settings.hdr.bt2446_crosstalk;
+    constants.params[h + 6] = settings.hdr.gain_base_offset;
+    constants.params[h + 7] = settings.hdr.gain_alternate_offset;
+    constants.params[h + 8] = settings.hdr.gain_min_log2;
+    constants.params[h + 9] = settings.hdr.gain_max_log2;
+    constants.params[h + 10] =
+        hdr->FallbackEffectiveSceneWhite(settings.hdr);
+    constants.params[h + 11] = 0.0f;
+    if (!codec.Dispatch("GainMapSplit", command_list, constants,
+                        prep_srvs, prep_uavs)) {
+      return false;
+    }
+  } else {
+    if (!codec.Dispatch("PrepareModelInput", command_list, constants,
+                        prep_srvs, prep_uavs)) {
+      return false;
+    }
   }
   cmd.Transition(command_list, working_input_.Get(),
                  D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);

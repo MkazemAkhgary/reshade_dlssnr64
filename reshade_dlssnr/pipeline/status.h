@@ -54,6 +54,10 @@ struct StatusSnapshot {
   bool hdr_ready = false;        // has consumed at least one measurement
   float hdr_exposure = 1.0f;
   float hdr_scene_white = 1.0f;
+  bool gain_map_ready = false;
+  float gain_map_min_log2 = 0.0f;
+  float gain_map_max_log2 = 0.0f;
+  uint32_t gain_map_clipped_pixels = 0;
   char hdr_reason[kStatusTextLength] = {};
 
   // Per-pass state.

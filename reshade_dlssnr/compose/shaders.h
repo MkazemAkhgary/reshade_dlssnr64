@@ -6,10 +6,10 @@
 namespace reshade_dlssnr {
 
 inline constexpr const char* kComposeModelOutputHdrSource = R"(
-// The constant buffer is declared in kGradePrelude, which is prepended to this
-// source. Only the pass-specific macros belong here.
+// The constant buffer is declared in kGradePrelude. The HDR path uses the
+// packed gain-map texture instead of the original HDR resource: RGB is the
+// full-resolution linear SDR base and A is the raw f32 log2 gain.
 
-// User shader params (identical to ComposeModelOutput):
 #define kLumaStrength    gParams[0].x
 #define kChromaStrength  gParams[0].y
 #define kSoftCompression gParams[0].z
@@ -17,9 +17,7 @@ inline constexpr const char* kComposeModelOutputHdrSource = R"(
 #define kSoftMaxDarken   gParams[1].x
 #define kSoftMaxChroma   gParams[1].y
 #define kSoftKnee        gParams[1].z
-// Input grade, at kGradeSlotBase = float 8 = gParams[2]. Same layout the
-// ApplyGrade pass reads, but the compose reads it so it can apply the grade
-// the model's input went through before the ratio, and invert it after.
+
 #define kGradeEnabled    gParams[2].x
 #define kGradeLuma       gParams[2].y
 #define kGradeChroma     gParams[2].z
@@ -30,110 +28,41 @@ inline constexpr const char* kComposeModelOutputHdrSource = R"(
 #define kGradeContrast   gParams[3].w
 #define kGradeShadows    gParams[4].x
 #define kGradeHighlights gParams[4].y
-// HDR uniforms, at kHdrSlotBase = float 32 = gParams[8]. See the region map
-// in compute_engine.h.
-#define kFormat          gParams[8].x
-#define kExposure        gParams[8].y
-#define kWhitePoint      gParams[8].z
-// FSR EASU constants, at kEasuSlotBase = float 36 = gParams[9]. con3 is
-// derived in the compose from con1.y. See the region map in compute_engine.h.
-#define kEasuCon0        gParams[9]
-#define kEasuCon1        gParams[10]
-#define kEasuCon2        gParams[11]
-// FSR RCAS, at kRcasSlotBase = float 48 = gParams[12].
-#define kRcasEnabled     gParams[12].x
-#define kRcasStrength    gParams[12].y
-// Residual block, at kResidualSlotBase = float 24 = gParams[6].
-#define kEditStrength    gParams[6].x
-#define kResidualChroma  gParams[6].y
-#define kEditGamma       gParams[6].z
+
+#define kEditStrength     gParams[6].x
+#define kResidualChroma   gParams[6].y
+#define kEditGamma        gParams[6].z
 #define kHighlightProtect gParams[6].w
-#define kShadowProtect   gParams[7].x
-#define kRatioEps        gParams[7].y
-#define kRatioBrighten   gParams[7].z
-#define kRatioDarken     gParams[7].w
+#define kShadowProtect    gParams[7].x
+#define kRatioEps         gParams[7].y
+#define kRatioBrighten    gParams[7].z
+#define kRatioDarken      gParams[7].w
+
+// HDR/gain-map region [32,44).
+#define kFormat              gParams[8].x
+#define kExposure            gParams[8].y
+#define kBt2446K1            gParams[8].z
+#define kBt2446K2            gParams[8].w
+#define kBt2446K4            gParams[9].x
+#define kCrosstalk           gParams[9].y
+#define kBaseOffset          gParams[9].z
+#define kAlternateOffset     gParams[9].w
+#define kGainMinLog2         gParams[10].x
+#define kGainMaxLog2         gParams[10].y
+#define kEffectiveSceneWhite gParams[10].z
+
+// EASU [44,56), RCAS [56,60).
+#define kEasuCon0        gParams[11]
+#define kEasuCon1        gParams[12]
+#define kEasuCon2        gParams[13]
+#define kRcasEnabled     gParams[14].x
+#define kRcasStrength    gParams[14].y
 
 Texture2D<float4> gOriginal    : register(t0);
 Texture2D<float4> gLowInput    : register(t1);
 Texture2D<float4> gLowEnhanced : register(t2);
 RWTexture2D<float4> gOutput    : register(u0);
 SamplerState s0 : register(s0);
-
-// --- Decode / encode, matching TonemapForward ---
-
-float3 SrgbToLinear(float3 v)
-{
-    v = saturate(v);
-    return lerp(v / 12.92, pow((v + 0.055) / 1.055, 2.4),
-                step(0.04045, v));
-}
-
-float3 LinearToSrgb(float3 v)
-{
-    v = saturate(v);
-    return lerp(v * 12.92, 1.055 * pow(max(v, 1e-8), 1.0 / 2.4) - 0.055,
-                step(0.0031308, v));
-}
-
-float3 PqToNits(float3 v)
-{
-    v = saturate(v);
-    const float m1 = 0.1593017578125;
-    const float m2 = 78.84375;
-    const float c1 = 0.8359375;
-    const float c2 = 18.8515625;
-    const float c3 = 18.6875;
-    float3 p = pow(max(v, 0.0), 1.0 / m2);
-    float3 num = max(p - c1, 0.0);
-    float3 den = c2 - c3 * p;
-    return 10000.0 * pow(num / max(den, 1e-6), 1.0 / m1);
-}
-
-float3 NitsToPq(float3 nits)
-{
-    const float m1 = 0.1593017578125;
-    const float m2 = 78.84375;
-    const float c1 = 0.8359375;
-    const float c2 = 18.8515625;
-    const float c3 = 18.6875;
-    float3 Y = max(nits / 10000.0, 0.0);
-    float3 Ym1 = pow(Y, m1);
-    float3 num = c1 + c2 * Ym1;
-    float3 den = 1.0 + c3 * Ym1;
-    return pow(num / den, m2);
-}
-
-// The compose's pair of this function normalises to scRGB (1.0 == 80 nits),
-// which is scale-invariant for the ratio it carries. The grade is not: its
-// pivot, shaping windows and Lift/Soft headroom all assume 1.0 is SDR white.
-// So this copy normalises to SDR white instead.
-static const float kSdrWhiteNits = 100.0;
-
-float3 DecodeToLinear(float3 c)
-{
-    int fmt = (int)(kFormat + 0.5);
-    if (fmt == 1) {
-        return max(c, 0.0) * (80.0 / kSdrWhiteNits);
-    } else if (fmt == 2) {
-        return max(PqToNits(c), 0.0) / kSdrWhiteNits;
-    } else {
-        return SrgbToLinear(c);
-    }
-}
-
-float3 EncodeFromLinear(float3 lin)
-{
-    int fmt = (int)(kFormat + 0.5);
-    if (fmt == 1) {
-        return max(lin, 0.0) * (kSdrWhiteNits / 80.0);
-    } else if (fmt == 2) {
-        return NitsToPq(max(lin, 0.0) * kSdrWhiteNits);
-    } else {
-        return LinearToSrgb(lin);
-    }
-}
-
-// --- Soft compression, identical to ComposeModelOutput ---
 
 float SoftCompress(float x, float max_pos, float max_neg, float knee)
 {
@@ -195,6 +124,7 @@ float3 BlendYCbCr(float3 original, float3 edited,
     result.b = final_y + 1.8556 * final_cb;
     return result;
 }
+
 
 // ---------------------------------------------------------------------------
 // FSR 1.0 EASU + RCAS
@@ -415,28 +345,6 @@ float3 FsrRcasF(float3 b, float3 d, float3 e, float3 f, float3 h,
     return c;
 }
 
-// Inverse of ReinhardForward for a fixed W, positive root. The signature must
-// be float3 -> float3 for the same reason as ReinhardForward: a float
-// parameter makes HLSL read only .x and broadcast, which collapses the ratio
-// to a uniform scale and kills chroma transfer entirely.
-float3 ReinhardInverse(float3 y, float W) {
-    float W2 = max(W * W, 1e-6);
-    float3 u = W2 * (1.0 - y);
-    return 0.5 * (sqrt(max(u * u + 4.0 * W2 * y, 0.0)) - u);
-}
-
-// Inverting both sides, rather than the output against the unbounded
-// source, is what makes this work at clipped highlights. LinearToSrgb
-// saturates, so a clipped pixel inverts to the white point regardless of
-// how bright the source was; dividing that by the source collapses the
-// pixel to a fixed value in every channel, which is grey. Dividing by the
-// inverted input instead leaves the ratio at 1 there, and the highlight
-// survives.
-// Forward extended Reinhard, matching the tonemap the input was put through.
-float3 ReinhardForward(float3 x, float W) {
-    float W2 = max(W * W, 1e-6);
-    return x * (1.0 + x / W2) / (1.0 + x);
-}
 
 // The model's edit as a per-channel delta ratio in linear SDR, measured
 // between the two working-scale images the model saw. Delta alone: the caller
@@ -507,36 +415,80 @@ float3 ComposeRatioDelta(float3 low_in_lin, float3 low_out_lin) {
     return ratio - 1.0;
 }
 
-// The whole compose. Build the same full-resolution SDR reference used for
-// region protection, but lift the model residual back to HDR as a gain rather
-// than tone-mapping the HDR source and inverting that tone map afterward.
-float3 ComposeRatio(float3 src_lin, float3 low_in, float3 low_out,
-                    float exposure, float W) {
-    float3 src_pos = max(src_lin, 0.0);
 
-    float3 sdr_orig = ReinhardForward(src_pos * exposure, W);
-    float3 sdr_graded = (kGradeEnabled > 0.5) ? GradeLinearFwd(sdr_orig)
-                                              : sdr_orig;
 
-    // The low-res textures are the model's actual SDR-domain input/output.
-    // Undo the input grade before measuring the residual so the resulting
-    // gain is expressed in the ungraded linear SDR domain.
-    float3 low_in_lin = SrgbToLinear(low_in);
-    float3 low_out_lin = SrgbToLinear(low_out);
+float3 DecodePackedHdr(float4 packed)
+{
+    return packed.rgb;
+}
+
+float3 ReconstructHdr(float3 sdr_base, float gain)
+{
+    return (sdr_base + kBaseOffset) * exp2(gain) - kAlternateOffset;
+}
+
+float3 NitsToPq(float3 nits)
+{
+    const float m1 = 0.1593017578125;
+    const float m2 = 78.84375;
+    const float c1 = 0.8359375;
+    const float c2 = 18.8515625;
+    const float c3 = 18.6875;
+    float3 Y = max(nits / 10000.0, 0.0);
+    float3 Ym1 = pow(Y, m1);
+    float3 num = c1 + c2 * Ym1;
+    float3 den = 1.0 + c3 * Ym1;
+    return pow(num / max(den, 1e-6), m2);
+}
+
+float3 EncodeHdr(float3 lin)
+{
+    int fmt = (int)(kFormat + 0.5);
+    if (fmt == 1) {
+        // scRGB is signed linear and uses the same 80-nit reference as the
+        // gain-map working domain. Preserve negative channels exactly.
+        return lin;
+    }
+    if (fmt == 2) {
+        return NitsToPq(max(lin, 0.0) * 80.0);
+    }
+    return max(lin, 0.0);
+}
+
+// `kExposure` is retained in the uniform contract because the exposure EMA
+// feeds the effective scene white on the CPU. The split and compose never
+// multiply the image by it a second time.
+float3 ComposeHdr(float3 sdr_base, float gain,
+                  float3 low_in, float3 low_out)
+{
+    float3 low_in_lin = max(low_in, 0.0);
+    float3 low_out_lin = max(low_out, 0.0);
     if (kGradeEnabled > 0.5) {
+        // GradeModelInput receives linear SDR in the HDR path, then GradeLinearFwd
+        // is applied. Undo it before measuring the model residual so the residual
+        // belongs to the ungraded SDR base that the gain map reconstructs.
         low_in_lin = max(GradeLinearInv(low_in_lin), 0.0);
-        low_out_lin = max(GradeLinearInv(low_out_lin), 0.0);
     }
 
-    float sdr_luma = dot(sdr_graded, float3(0.2126, 0.7152, 0.0722));
-    float3 delta = ShapeResidual(
-        ComposeRatioDelta(low_in_lin, low_out_lin), sdr_luma);
+    const float3 kL = float3(0.2126, 0.7152, 0.0722);
+    const float base_luma = dot(max(sdr_base, 0.0), kL);
+    const float3 delta = ShapeResidual(
+        ComposeRatioDelta(low_in_lin, low_out_lin), base_luma);
 
-    // Apply the dimensionless residual to the original HDR signal. This is
-    // exactly identity when the model output equals its input, including
-    // clipped SDR highlights, so original HDR headroom is preserved.
-    float3 edited = src_pos * (1.0 + delta);
-    return max(edited, 0.0);
+    //(void)kExposure;
+    //(void)kGainMinLog2;
+    //(void)kGainMaxLog2;
+    //(void)kBt2446K1;
+    //(void)kBt2446K2;
+
+    const float3 hdr_src = ReconstructHdr(sdr_base, gain);
+    const float3 hdr_edited = hdr_src * (1.0 + delta);
+
+    // Blend in HDR linear light. The residual itself is dimensionless, so the
+    // gain map's original headroom remains intact even when the SDR base was
+    // clipped or exceeded 1.0.
+    return BlendYCbCr(hdr_src, hdr_edited,
+                      kLumaStrength, kChromaStrength);
 }
 
 [numthreads(8, 8, 1)]
@@ -547,62 +499,41 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     float2 uv = (float2(id.xy) + 0.5) / float2(gWidth, gHeight);
 
-    float4 orig_hdr = gOriginal.SampleLevel(s0, uv, 0);
+    float4 packed = gOriginal.SampleLevel(s0, uv, 0);
 
-    // EASU in place of the bilinear sample. Bilinear is what produced the
-    // visible blockiness at working scales below 1.0; the constants come
-    // from the two resolutions, built CPU-side in ComposeOutput.
+    // EASU upsample from the actual model working resolution back to full HDR
+    // resolution. Both textures are in the same linear SDR model domain.
     const float2 easu_con3 = float2(0.0, 4.0 * kEasuCon1.y);
-    float3 low_in  = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
-                              easu_con3, 0);
+    float3 low_in = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
+                             easu_con3, 0);
     float3 low_out = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
                               easu_con3, 1);
 
-    // RCAS on the EASU result. Neighbors come from a bilinear sample rather
-    // than a second EASU: the four extra EASU invocations per texture would
-    // cost more than the sharpening is worth, and RCAS only uses them for
-    // local contrast. The center is the EASU value, so nothing is lost where
-    // it matters most.
     if (kRcasEnabled > 0.5) {
         const float2 texel = float2(kEasuCon1.x, kEasuCon1.y);
 
-        float3 b_in = gLowInput.SampleLevel(s0,
-            uv + float2(0.0, -texel.y), 0).rgb;
-        float3 d_in = gLowInput.SampleLevel(s0,
-            uv + float2(-texel.x, 0.0), 0).rgb;
-        float3 f_in = gLowInput.SampleLevel(s0,
-            uv + float2(texel.x, 0.0), 0).rgb;
-        float3 h_in = gLowInput.SampleLevel(s0,
-            uv + float2(0.0, texel.y), 0).rgb;
+        float3 b_in = gLowInput.SampleLevel(s0, uv + float2(0.0, -texel.y), 0).rgb;
+        float3 d_in = gLowInput.SampleLevel(s0, uv + float2(-texel.x, 0.0), 0).rgb;
+        float3 f_in = gLowInput.SampleLevel(s0, uv + float2(texel.x, 0.0), 0).rgb;
+        float3 h_in = gLowInput.SampleLevel(s0, uv + float2(0.0, texel.y), 0).rgb;
         low_in = FsrRcasF(b_in, d_in, low_in, f_in, h_in, kRcasStrength);
 
-        float3 b_out = gLowEnhanced.SampleLevel(s0,
-            uv + float2(0.0, -texel.y), 0).rgb;
-        float3 d_out = gLowEnhanced.SampleLevel(s0,
-            uv + float2(-texel.x, 0.0), 0).rgb;
-        float3 f_out = gLowEnhanced.SampleLevel(s0,
-            uv + float2(texel.x, 0.0), 0).rgb;
-        float3 h_out = gLowEnhanced.SampleLevel(s0,
-            uv + float2(0.0, texel.y), 0).rgb;
+        float3 b_out = gLowEnhanced.SampleLevel(s0, uv + float2(0.0, -texel.y), 0).rgb;
+        float3 d_out = gLowEnhanced.SampleLevel(s0, uv + float2(-texel.x, 0.0), 0).rgb;
+        float3 f_out = gLowEnhanced.SampleLevel(s0, uv + float2(texel.x, 0.0), 0).rgb;
+        float3 h_out = gLowEnhanced.SampleLevel(s0, uv + float2(0.0, texel.y), 0).rgb;
         low_out = FsrRcasF(b_out, d_out, low_out, f_out, h_out, kRcasStrength);
     }
 
-    float3 src_lin = DecodeToLinear(orig_hdr.rgb);
+    const float3 sdr_base = DecodePackedHdr(packed);
+    const float3 final_lin = ComposeHdr(sdr_base, packed.a, low_in, low_out);
+    const float3 final_out = EncodeHdr(final_lin);
 
-    float3 edited_src_lin = ComposeRatio(src_lin, low_in, low_out,
-                                         kExposure, kWhitePoint);
-
-    // Blend original and edited in linear space using luma / chroma
-    // strengths. Chroma is interpolated in normalized space so that
-    // moving luma alone preserves perceived saturation, and moving
-    // chroma alone preserves brightness.
-    float3 final_lin = BlendYCbCr(src_lin, edited_src_lin,
-                                  kLumaStrength, kChromaStrength);
-
-    // Encode back to the source's own format.
-    float3 final_out = EncodeFromLinear(max(final_lin, 0.0));
-
-    gOutput[id.xy] = float4(final_out, orig_hdr.a);
+    // Packed resources are linear HDR-side data; the destination is the game's
+    // original HDR encoding. Alpha is preserved from the packed path only when
+    // the target format conceptually carries it; for the game resource the
+    // color channels are the only meaningful data.
+    gOutput[id.xy] = float4(final_out, 1.0);
 }
 )";
 

@@ -98,6 +98,14 @@ struct HdrSnapshot {
   float depth_filter_survived = 0.0f;
   int metering_source = 0;  // MeteringSource, as an int for the UI
 
+  // Gain-map diagnostics. The range is the raw f32 log2 gain stored in the
+  // packed texture; the count includes gain values outside the configured
+  // metadata range and SDR-base channel excursions.
+  bool gain_map_ready = false;
+  float gain_min_log2 = 0.0f;
+  float gain_max_log2 = 0.0f;
+  uint32_t gain_clipped_pixels = 0;
+
   // Fallback EMA, used by the skin-detect pass. Depth -> full only, no skin
   // slice, so it does not depend on the mask.
   float fallback_exposure = 1.0f;
@@ -135,9 +143,13 @@ class HdrState {
                   const Settings& settings,
                   ComputeEngine& codec);
 
-  // Called by AddonController at Present, with the game's queue. Signals
-  // the internal fence so the pending measurement can be validated on the
-  // next frame.
+  // Queue the 12-byte gain-map diagnostic buffer for readback. It shares the
+  // same fence as the histogram, but has its own GpuReadback ring.
+  bool EnqueueGainMapStatsReadback(ID3D12GraphicsCommandList* command_list,
+                                   ID3D12Resource* stats);
+
+  // Called by AddonController at Present, with the game's queue. Signals the
+  // internal fence so pending copies can be consumed on the next frame.
   void SignalAtPresent(ID3D12CommandQueue* queue);
 
   // Accessors used by the pass session.
@@ -167,6 +179,11 @@ class HdrState {
   bool pending_measurement_ = false;
   GpuReadback readback_;
 
+  static constexpr size_t kGainStatsBytes = 3u * sizeof(uint32_t);
+  uint64_t pending_gain_fence_value_ = 0;
+  bool pending_gain_stats_ = false;
+  GpuReadback gain_readback_;
+
   bool enabled_ = false;
   HdrFormat resolved_format_ = HdrFormat::Sdr;
 
@@ -184,6 +201,11 @@ class HdrState {
   uint32_t last_histogram_skin_[256] = {};
   float p_hi_luma_ = 0.0f;
   uint32_t last_samples_ = 0;
+
+  bool have_gain_stats_ = false;
+  float gain_min_log2_ = 0.0f;
+  float gain_max_log2_ = 0.0f;
+  uint32_t gain_clipped_pixels_ = 0;
 };
 
 }  // namespace reshade_dlssnr

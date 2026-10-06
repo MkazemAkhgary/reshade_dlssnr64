@@ -1,5 +1,7 @@
 #include "hdr/settings.h"
 
+#include <algorithm>
+
 #include <reshade.hpp>
 
 namespace reshade_dlssnr {
@@ -27,6 +29,41 @@ void LoadHdrSettings(HdrSettings& hdr) {
                             hdr.highlight_headroom);
   if (hdr.highlight_headroom > 16.0f || hdr.highlight_headroom < 0.25f) {
     hdr.highlight_headroom = 8.0f;
+  }
+
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.BT2446.K1",
+                            hdr.bt2446_k1);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.BT2446.K2",
+                            hdr.bt2446_k2);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.BT2446.K3",
+                            hdr.bt2446_k3);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.BT2446.K4",
+                            hdr.bt2446_k4);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.BT2446.Crosstalk",
+                            hdr.bt2446_crosstalk);
+  hdr.bt2446_k1 = std::max(hdr.bt2446_k1, 1e-4f);
+  hdr.bt2446_k2 = std::max(hdr.bt2446_k2, 1e-4f);
+  hdr.bt2446_k3 = std::clamp(hdr.bt2446_k3, 0.001f, 0.999f);
+  hdr.bt2446_k4 = std::max(hdr.bt2446_k4, 1e-4f);
+  hdr.bt2446_crosstalk = std::clamp(hdr.bt2446_crosstalk, 0.0f, 0.33f);
+
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.GainMap.BaseOffset",
+                            hdr.gain_base_offset);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.GainMap.AlternateOffset",
+                            hdr.gain_alternate_offset);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.GainMap.MinLog2", hdr.gain_min_log2);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.GainMap.MaxLog2", hdr.gain_max_log2);
+  hdr.gain_base_offset = std::clamp(hdr.gain_base_offset, 0.0f, 1.0f);
+  hdr.gain_alternate_offset = std::clamp(hdr.gain_alternate_offset, 0.0f, 1.0f);
+  hdr.gain_min_log2 = std::clamp(hdr.gain_min_log2, -32.0f, 0.0f);
+  hdr.gain_max_log2 = std::clamp(hdr.gain_max_log2, 0.0f, 32.0f);
+  if (hdr.gain_max_log2 <= hdr.gain_min_log2) {
+    hdr.gain_min_log2 = -4.0f;
+    hdr.gain_max_log2 = 6.0f;
   }
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.RateCap",
@@ -65,6 +102,24 @@ void SaveHdrSettings(const HdrSettings& hdr) {
                             hdr.white_percentile);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.HighlightHeadroom",
                             hdr.highlight_headroom);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.BT2446.K1",
+                            hdr.bt2446_k1);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.BT2446.K2",
+                            hdr.bt2446_k2);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.BT2446.K3",
+                            hdr.bt2446_k3);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.BT2446.K4",
+                            hdr.bt2446_k4);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.BT2446.Crosstalk",
+                            hdr.bt2446_crosstalk);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.GainMap.BaseOffset", hdr.gain_base_offset);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.GainMap.AlternateOffset", hdr.gain_alternate_offset);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.GainMap.MinLog2", hdr.gain_min_log2);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.GainMap.MaxLog2", hdr.gain_max_log2);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.RateCap",
                             hdr.rate_cap);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",

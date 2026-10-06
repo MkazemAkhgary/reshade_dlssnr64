@@ -19,6 +19,13 @@ PipelineStatus PassSession::StepRenderDebugView(PassRun& run) {
                      : run.backbuffer;
   debug.source_width = run.width;
   debug.source_height = run.height;
+  if (run.hdr_uniforms_ready && run.hdr != nullptr &&
+      run.hdr->ResolvedFormat() != HdrFormat::Sdr) {
+    debug.packed_hdr_sdr = self->resources_.GetPackedOutput();
+    debug.packed_hdr_gain = debug.packed_hdr_sdr;
+    debug.packed_width = run.width;
+    debug.packed_height = run.height;
+  }
   debug.prepared_input = run.model_color;
   debug.prepared_input_width = run.eval_width;
   debug.prepared_input_height = run.eval_height;

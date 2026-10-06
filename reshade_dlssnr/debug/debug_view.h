@@ -29,6 +29,13 @@ struct DebugSnapshot {
 
   // Model input after HDR normalization and optional resize — what the
   // model actually sees.
+  // Full-resolution HDR gain-map split. Both selectors point at the packed
+  // R32G32B32A32_FLOAT texture; RGB is the SDR base, A is raw log2 gain.
+  ID3D12Resource* packed_hdr_sdr = nullptr;
+  ID3D12Resource* packed_hdr_gain = nullptr;
+  unsigned int packed_width = 0;
+  unsigned int packed_height = 0;
+
   ID3D12Resource* prepared_input = nullptr;
   unsigned int prepared_input_width = 0;
   unsigned int prepared_input_height = 0;
@@ -68,6 +75,8 @@ enum class DebugDisplayMode : uint32_t {
   Motion = 1,  // remap [-1,1] xy to [0,1] and show as R=x, G=y
   Depth = 2,   // replicate the red channel
   Mask = 3,    // replicate the red channel (skin mask)
+  PackedSdr = 4, // RGB from packed gain-map texture
+  GainMap = 5,   // alpha mapped from [-4,6] for display
 };
 
 struct DebugViewDef {

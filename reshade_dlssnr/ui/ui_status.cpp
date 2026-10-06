@@ -138,6 +138,13 @@ void DrawStatusSection(Settings& settings, bool& changed) {
     ImGui::EndTable();
   }
 
+  if (settings.hdr.enable && hdr_in_use && snap.gain_map_ready) {
+    ImGui::Spacing();
+    ImGui::Text("Gain map: %.3f .. %.3f log2 · flagged pixels: %u",
+                snap.gain_map_min_log2, snap.gain_map_max_log2,
+                snap.gain_map_clipped_pixels);
+  }
+
   if (snap.post_dlss_blocked) {
     ImGui::Spacing();
     bullet(false);

@@ -38,7 +38,7 @@ void DrawStatus(const HdrSnapshot& snap, const HdrSettings& hdr,
   }
   ImGui::SameLine(kControlLabelWidth);
 
-  (void)hdr;
+  //(void)hdr;
   if (!hdr_relevant) {
     ImGui::TextDisabled("Inactive (no DLSS Output pass)");
   } else if (!snap.ready) {
@@ -76,8 +76,54 @@ void DrawControls(HdrSettings& hdr, bool& changed) {
 
   changed |= DrawFloatRow(
       0, "hdr_highlight_headroom", "Highlight Headroom",
-      "Extra room above the detected white point before highlights clip.",
+      "Scales the effective HDR peak used by BT.2446C. Higher values preserve more SDR headroom so the model can add highlights without consuming the gain map.",
       &hdr.highlight_headroom, nullptr, 0.0f, 0.25f, 16.0f, 8.0f);
+
+  changed |= DrawFloatRow(
+      0, "hdr_bt2446_k1", "BT.2446C k1",
+      "Linear-region slope. Default matches zentone's skin-tone-tuned Method C.",
+      &hdr.bt2446_k1, nullptr, 0.001f, 0.001f, 2.0f, 0.83802f);
+
+  changed |= DrawFloatRow(
+      0, "hdr_bt2446_k2", "BT.2446C k2",
+      "Log-region slope. Default matches the gain-map reference implementation.",
+      &hdr.bt2446_k2, nullptr, 0.001f, 0.001f, 32.0f, 15.09968f);
+
+  changed |= DrawFloatRow(
+      0, "hdr_bt2446_k3", "BT.2446C k3",
+      "Reference construction parameter retained for parity/trace. The direct Method-C formula uses k1, k2 and k4.",
+      &hdr.bt2446_k3, nullptr, 0.001f, 0.001f, 1.0f, 0.74204f);
+
+  changed |= DrawFloatRow(
+      0, "hdr_bt2446_k4", "BT.2446C k4",
+      "Log-region intercept in nits.",
+      &hdr.bt2446_k4, nullptr, 0.001f, 0.001f, 200.0f, 78.99439f);
+
+  changed |= DrawFloatRow(
+      0, "hdr_bt2446_crosstalk", "Crosstalk",
+      "BT.2446C pre-desaturation amount. Higher values protect highlight hue at the cost of highlight saturation.",
+      &hdr.bt2446_crosstalk, nullptr, 0.0f, 0.0f, 0.33f, 0.04f);
+
+
+  changed |= DrawFloatRow(
+      0, "hdr_gain_base_offset", "Gain Base Offset",
+      "ISO 21496-1 base offset. Stored directly in the linear SDR gain-map math.",
+      &hdr.gain_base_offset, nullptr, 0.0f, 0.0f, 1.0f, 1.0f / 64.0f);
+
+  changed |= DrawFloatRow(
+      0, "hdr_gain_alternate_offset", "Gain Alternate Offset",
+      "ISO 21496-1 alternate offset. Stored directly in the linear HDR gain-map math.",
+      &hdr.gain_alternate_offset, nullptr, 0.0f, 0.0f, 1.0f, 1.0f / 64.0f);
+
+  changed |= DrawFloatRow(
+      0, "hdr_gain_min_log2", "Gain Min",
+      "Configured ISO 21496-1 log2 gain metadata minimum. Raw f32 gain remains unquantized.",
+      &hdr.gain_min_log2, nullptr, 0.0f, -32.0f, 0.0f, -4.0f);
+
+  changed |= DrawFloatRow(
+      0, "hdr_gain_max_log2", "Gain Max",
+      "Configured ISO 21496-1 log2 gain metadata maximum. Raw f32 gain remains unquantized.",
+      &hdr.gain_max_log2, nullptr, 0.0f, 0.0f, 32.0f, 6.0f);
 
   changed |= DrawFloatRow(
       0, "hdr_rate_cap", "Response Cap",
@@ -113,10 +159,9 @@ void DrawDiagnostics(const HdrSnapshot& snap, const HdrSettings& hdr,
 
   if (!snap.has_histogram) {
     ImGui::TextDisabled("Waiting for first histogram measurement...");
-    return;
   }
 
-  if (ImGui::BeginTable("hdr_diag", 2, ImGuiTableFlags_SizingStretchSame)) {
+  if (snap.has_histogram && ImGui::BeginTable("hdr_diag", 2, ImGuiTableFlags_SizingStretchSame)) {
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
     ImGui::Text("Samples: %u", snap.samples);
@@ -159,6 +204,15 @@ void DrawDiagnostics(const HdrSnapshot& snap, const HdrSettings& hdr,
 
     ImGui::EndTable();
   }
+
+  if (snap.gain_map_ready) {
+    ImGui::Separator();
+    ImGui::Text("Gain map range: %.4f .. %.4f log2",
+                snap.gain_min_log2, snap.gain_max_log2);
+    ImGui::Text("Flagged pixels: %u", snap.gain_clipped_pixels);
+  }
+
+  if (!snap.has_histogram) return;
 
   ImGui::Separator();
   ImGui::TextUnformatted("Histogram (log2 luminance)");

@@ -1,6 +1,8 @@
 // HDR settings: format detection, exposure metering, and skin priority.
 #pragma once
 
+#include <algorithm>
+
 namespace reshade_dlssnr {
 
 enum class HdrFormat : int {
@@ -30,6 +32,22 @@ struct HdrSettings {
   float white_percentile = 0.99f;
   float highlight_headroom = 8.0f;
   float rate_cap = 0.1f;
+
+  // BT.2446-C tuning. These defaults match the reference implementation
+  // used for the gain-map architecture and are intentionally persisted so
+  // advanced users can tune the curve without changing the shader.
+  float bt2446_k1 = 0.83802f;
+  float bt2446_k2 = 15.09968f;
+  float bt2446_k3 = 0.74204f;
+  float bt2446_k4 = 78.99439f;
+  float bt2446_crosstalk = 0.04f;
+
+  // Raw gain-map metadata. The gain channel itself remains raw f32 log2;
+  // these bounds are metadata/diagnostic limits rather than quantization.
+  float gain_base_offset = 1.0f / 64.0f;
+  float gain_alternate_offset = 1.0f / 64.0f;
+  float gain_min_log2 = -4.0f;
+  float gain_max_log2 = 6.0f;
 
   float skin_fraction_threshold = 0.01f;
   float skin_priority = 0.7f;

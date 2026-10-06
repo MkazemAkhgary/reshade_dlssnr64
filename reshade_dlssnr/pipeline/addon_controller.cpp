@@ -192,7 +192,7 @@ void AddonController::GradeBackbuffer(ComputeEngine& codec,
 
   const bool graded = model_pipeline::ApplyGrade(
       release_command_, list, &codec, grade_scratch_out_.Get(),
-      grade_scratch_.Get(), width, height, DetectFormatFromDxgi(desc.Format), grade);
+      grade_scratch_.Get(), width, height, HdrFormatCode(DetectFormatFromDxgi(desc.Format)), grade);
 
   if (!graded) {
     TRACE_EVT(this, "grade_backbuffer_failed");
@@ -463,6 +463,10 @@ void AddonController::RefreshStatus(const Settings& settings) {
   status_.hdr_ready = hdr.ready;
   status_.hdr_exposure = hdr.exposure;
   status_.hdr_scene_white = hdr.scene_white;
+  status_.gain_map_ready = hdr.gain_map_ready;
+  status_.gain_map_min_log2 = hdr.gain_min_log2;
+  status_.gain_map_max_log2 = hdr.gain_max_log2;
+  status_.gain_map_clipped_pixels = hdr.gain_clipped_pixels;
 
   status_.pass_count = kMaxPasses;
   for (uint32_t i = 0; i < kMaxPasses; ++i) {

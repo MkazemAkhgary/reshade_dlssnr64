@@ -91,6 +91,7 @@ class PassSession {
   static PipelineStatus StepSeedGuideStates(PassRun& run);
   static PipelineStatus StepResolveModelInput(PassRun& run);
   static PipelineStatus StepBuildHdrUniforms(PassRun& run);
+  static PipelineStatus StepGainMapSplit(PassRun& run);
   static PipelineStatus StepEnsureFeature(PassRun& run);
   static PipelineStatus StepSnapshotGuides(PassRun& run);
   static PipelineStatus StepPrepareModelInput(PassRun& run);

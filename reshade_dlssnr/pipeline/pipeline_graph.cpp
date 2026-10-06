@@ -34,7 +34,7 @@ const char* const kNodeNames[] = {
     "HistogramReadback",
     "ResolveModelInput",
     "BuildHdrUniforms",
-    "TonemapForward",
+    "GainMapSplit",
     "PrepareModelInput",
     "GradeModelInput",
     "EnsureFeature",
@@ -253,6 +253,7 @@ constexpr PipelineNodeId kPostDlssSteps[] = {
     PipelineNodeId::EnsureFeature,
     PipelineNodeId::SnapshotGuides,
     PipelineNodeId::BuildHdrUniforms,
+    PipelineNodeId::GainMapSplit,
     PipelineNodeId::PrepareModelInput,
     PipelineNodeId::GradeModelInput,
     PipelineNodeId::FillEvaluateParams,
@@ -270,10 +271,10 @@ constexpr PipelinePhaseDef kPostDlssPhases[] = {
                                 // HdrBeginFrame
     {"resources", 5, 4, nullptr},
     {"feature", 9, 3, nullptr},
-    {"prepare", 12, 3, nullptr},
-    {"evaluate", 15, 3, nullptr},
-    {"compose", 18, 2, nullptr},
-    {"output", 20, 2, nullptr},
+    {"prepare", 12, 4, nullptr},
+    {"evaluate", 16, 3, nullptr},
+    {"compose", 19, 2, nullptr},
+    {"output", 21, 2, nullptr},
 };
 
 // -- Release stage ----------------------------------------------------------

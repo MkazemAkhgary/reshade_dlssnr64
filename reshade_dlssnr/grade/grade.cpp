@@ -12,7 +12,7 @@ bool ApplyGrade(CommandContext& state,
                 ID3D12Resource* scratch,
                 unsigned int width,
                 unsigned int height,
-                HdrFormat format,
+                int format_code,
                 const GradeSettings& grade) {
   if (!grade.enabled) return true;
 
@@ -37,7 +37,7 @@ bool ApplyGrade(CommandContext& state,
   constants.params[kGradeSlotBase + 8] = grade.shadows;
   constants.params[kGradeSlotBase + 9] = grade.highlights;
   constants.params[kGradeSlotBase + 10] =
-      static_cast<float>(HdrFormatCode(format));
+      static_cast<float>(format_code);
 
   state.Transition(command_list, target, D3D12_RESOURCE_STATE_COPY_SOURCE);
   state.Transition(command_list, scratch, D3D12_RESOURCE_STATE_COPY_DEST);

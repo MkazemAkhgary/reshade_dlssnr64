@@ -23,7 +23,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     float2 uv = (float2(id.xy) + 0.5) / float2(gWidth, gHeight);
     float4 color = gSource.SampleLevel(s0, uv, 0);
-    gOutput[id.xy] = color;
+    gOutput[id.xy] = float4(color.rgb, 1.0);
 }
 )";
 

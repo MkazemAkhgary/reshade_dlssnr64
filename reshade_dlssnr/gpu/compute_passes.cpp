@@ -14,7 +14,9 @@ namespace reshade_dlssnr {
 const ComputePassDef kComputePasses[] = {
     {"ZeroHistogram",         kZeroHistogramSource,     nullptr},
     {"BuildHistogram",        kBuildHistogramSource,    nullptr},
-    {"TonemapForward",        kTonemapForwardSource,    nullptr},
+    {"GainMapSplit",          kGainMapSplitSource,      nullptr},
+    {"ZeroGainMapStats",      kZeroGainMapStatsSource,  nullptr},
+    {"BuildGainMapStats",     kBuildGainMapStatsSource, nullptr},
     {"PrepareModelInput",     kPrepareModelInputSource, nullptr},
     {"ComposeModelOutput",    kComposeModelOutputSource,    kGradePreludeSource},
     {"ComposeModelOutputHdr", kComposeModelOutputHdrSource, kGradePreludeSource},

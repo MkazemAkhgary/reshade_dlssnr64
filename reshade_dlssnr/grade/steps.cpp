@@ -9,12 +9,15 @@ namespace reshade_dlssnr {
 
 namespace {
 
-HdrFormat GradeFormat(const PassRun& run, ID3D12Resource* target) {
-  if (run.hdr_uniforms_ready && target == run.model_color) {
-    return HdrFormat::Sdr;
-  }
-  return target != nullptr ? DetectFormatFromDxgi(target->GetDesc().Format)
-                           : HdrFormat::Sdr;
+int GradeFormatCode(const PassRun& run, ID3D12Resource* target) {
+  // The HDR split stores a *linear SDR* base, not an sRGB-encoded image.
+  // Give the grade shader an explicit format code so it does not apply the
+  // sRGB transfer function to already-linear model input.
+  if (run.hdr_uniforms_ready && run.hdr != nullptr &&
+      run.hdr->ResolvedFormat() != HdrFormat::Sdr &&
+      target == run.model_color) return 3;
+  return target != nullptr ? HdrFormatCode(DetectFormatFromDxgi(target->GetDesc().Format))
+                           : 0;
 }
 
 }  // namespace
@@ -41,7 +44,7 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
   if (!model_pipeline::ApplyGrade(
           self->command_, list, run.codec, target,
           self->resources_.GetScratch(scratch_slot), width, height,
-          GradeFormat(run, target), grade)) {
+          GradeFormatCode(run, target), grade)) {
     self->FailForStep("failed to apply the grade");
     return PipelineStatus::Fail;
   }

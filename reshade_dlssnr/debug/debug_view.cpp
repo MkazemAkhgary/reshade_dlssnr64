@@ -15,6 +15,20 @@ ID3D12Resource* SelectSource(const DebugSnapshot& s,
   return s.source;
 }
 
+ID3D12Resource* SelectPackedSdr(const DebugSnapshot& s,
+                                unsigned int* w, unsigned int* h) {
+  *w = s.packed_width;
+  *h = s.packed_height;
+  return s.packed_hdr_sdr;
+}
+
+ID3D12Resource* SelectGainMap(const DebugSnapshot& s,
+                              unsigned int* w, unsigned int* h) {
+  *w = s.packed_width;
+  *h = s.packed_height;
+  return s.packed_hdr_gain;
+}
+
 ID3D12Resource* SelectPreparedInput(const DebugSnapshot& s,
                                     unsigned int* w, unsigned int* h) {
   *w = s.prepared_input_width;
@@ -109,6 +123,13 @@ const DebugViewDef kDebugViews[] = {
      "White = the model classified the pixel as skin. This is what gates "
      "the HDR skin histogram.",
      DebugDisplayMode::Mask, SelectSkinMask},
+    {"SDR Base (pre-model)",
+     "Full-resolution linear SDR base produced by the BT.2446C gain-map split. "
+     "This is the RGB payload the model is downsampled from.",
+     DebugDisplayMode::PackedSdr, SelectPackedSdr},
+    {"Gain Map",
+     "Raw f32 log2 gain from the gain-map split. Displayed with -4 as black and +6 as white.",
+     DebugDisplayMode::GainMap, SelectGainMap},
     {nullptr, nullptr, DebugDisplayMode::Color, nullptr},
 };
 

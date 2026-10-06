@@ -11,8 +11,8 @@ namespace reshade_dlssnr {
 void DrawSharedDebugView(Settings& settings, bool& changed) {
   std::vector<const char*> names;
   std::vector<const char*> tips;
-  names.reserve(8);
-  tips.reserve(8);
+  names.reserve(16);
+  tips.reserve(16);
 
   names.push_back("Off");
   tips.push_back(

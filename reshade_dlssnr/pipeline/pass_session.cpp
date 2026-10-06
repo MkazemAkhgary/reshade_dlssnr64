@@ -171,15 +171,37 @@ bool PassSession::EnsureFrameResources(
     const D3D12_RESOURCE_DESC& desc,
     unsigned int work_width,
     unsigned int work_height) {
-  if (!resources_.EnsureOutput(device, desc) ||
-      !resources_.EnsureCompositeOutput(device, desc)) {
-    reason_ = "failed to create DLSSNR pass resources";
+  if (!resources_.EnsureCompositeOutput(device, desc)) {
+    reason_ = "failed to create DLSSNR composite resource";
     return false;
   }
 
-  if (!resources_.EnsureWorkingResources(device, desc, work_width, work_height)) {
-    reason_ = "failed to create DLSSNR working resources";
+  // HDR model intermediates must stay in full-range float. The published
+  // composite retains the game's original DXGI format. Keeping the model
+  // buffers in the source's 10-bit/16F representation would quantize the SDR
+  // edit before the gain map is reapplied, defeating the point of the raw-f32
+  // round trip.
+  D3D12_RESOURCE_DESC model_desc = desc;
+  const HdrFormat frame_format = DetectFormatFromDxgi(desc.Format);
+  const bool hdr_frame = frame_format == HdrFormat::ScRgb ||
+                         frame_format == HdrFormat::Hdr10;
+  if (hdr_frame) {
+    model_desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+  }
+
+  if (!resources_.EnsureOutput(device, model_desc) ||
+      !resources_.EnsureWorkingResources(device, model_desc,
+                                         work_width, work_height)) {
+    reason_ = "failed to create DLSSNR model resources";
     return false;
+  }
+
+  if (hdr_frame) {
+    if (!resources_.EnsurePackedOutput(device, desc) ||
+        !resources_.EnsureGainStats(device)) {
+      reason_ = "failed to create HDR gain-map resources";
+      return false;
+    }
   }
 
   return true;
@@ -263,6 +285,14 @@ void PassSession::SeedFrameState(ID3D12Resource* backbuffer) {
                             D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   command_.SetResourceState(resources_.GetWorkingOutput(),
                             D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  if (resources_.GetPackedOutput() != nullptr) {
+    command_.SetResourceState(resources_.GetPackedOutput(),
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
+  if (resources_.GetGainStats() != nullptr) {
+    command_.SetResourceState(resources_.GetGainStats(),
+                              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  }
 }
 
 void PassSession::CleanupFrameState(ID3D12GraphicsCommandList* command_list) {
@@ -275,6 +305,14 @@ void PassSession::CleanupFrameState(ID3D12GraphicsCommandList* command_list) {
                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   command_.Transition(command_list, resources_.GetWorkingOutput(),
                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  if (resources_.GetPackedOutput() != nullptr) {
+    command_.Transition(command_list, resources_.GetPackedOutput(),
+                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
+  if (resources_.GetGainStats() != nullptr) {
+    command_.Transition(command_list, resources_.GetGainStats(),
+                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  }
 }
 
 void PassSession::SubmitAndWait() {
@@ -869,27 +907,114 @@ PipelineStatus PassSession::StepEnsureFeature(PassRun& run) {
   return PipelineStatus::Ok;
 }
 
-// Resample (and optionally tonemap) the model input to working resolution, and
-// report the resolution the model will actually run at.
+PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
+  PassSession* self = run.session;
+  if (self == nullptr || run.codec == nullptr || run.list == nullptr ||
+      !run.hdr_uniforms_ready || run.hdr == nullptr ||
+      run.hdr->ResolvedFormat() == HdrFormat::Sdr) {
+    return PipelineStatus::Ok;
+  }
+
+  ID3D12Resource* source = run.model_input;
+  ID3D12Resource* packed = self->resources_.GetPackedOutput();
+  ID3D12Resource* stats = self->resources_.GetGainStats();
+  if (source == nullptr || packed == nullptr || stats == nullptr) {
+    self->FailForStep("HDR gain-map resources are unavailable");
+    return PipelineStatus::Fail;
+  }
+
+  ComputeConstants constants = {};
+  constants.Width = run.width;
+  constants.Height = run.height;
+  const uint32_t h = kHdrSlotBase;
+  constants.params[h + 0] = run.hdr_uniforms.format;
+  constants.params[h + 1] = run.hdr_uniforms.exposure;
+  constants.params[h + 2] = run.hdr_uniforms.bt2446_k1;
+  constants.params[h + 3] = run.hdr_uniforms.bt2446_k2;
+  // k3 remains a persisted BT.2446C construction parameter for trace/UI parity,
+  // but the direct Method-C evaluation uses k1, k2 and k4 plus Y_ip = k4/k1.
+  constants.params[h + 4] = run.hdr_uniforms.bt2446_k4;
+  constants.params[h + 5] = run.hdr_uniforms.bt2446_crosstalk;
+  constants.params[h + 6] = run.hdr_uniforms.gain_base_offset;
+  constants.params[h + 7] = run.hdr_uniforms.gain_alternate_offset;
+  constants.params[h + 8] = run.hdr_uniforms.gain_min_log2;
+  constants.params[h + 9] = run.hdr_uniforms.gain_max_log2;
+  constants.params[h + 10] = run.hdr_uniforms.effective_scene_white;
+  constants.params[h + 11] = 0.0f;
+
+  ID3D12Resource* srvs[kSrvCount] = {source, source, source};
+  ID3D12Resource* uavs[kUavCount] = {packed};
+  self->command_.Transition(run.list, source,
+                            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  self->command_.Transition(run.list, packed,
+                            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  if (!run.codec->Dispatch("GainMapSplit", run.list, constants, srvs, uavs)) {
+    self->FailForStep("failed to split HDR into SDR + gain map");
+    return PipelineStatus::Fail;
+  }
+  self->command_.UavBarrier(run.list, packed);
+  self->command_.Transition(run.list, packed,
+                            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+  // Statistics are intentionally a second pass: the packed gain map is the
+  // canonical value that will be used by ComposeModelOutputHdr, and reading it
+  // here also counts SDR-domain excursions caused by the crosstalk/tone-map.
+  ID3D12Resource* stats_srvs[kSrvCount] = {packed, packed, packed};
+  ID3D12Resource* stats_uavs[kUavCount] = {stats};
+  self->command_.Transition(run.list, stats,
+                            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  ComputeConstants stat_constants = constants;
+  if (!run.codec->Dispatch("ZeroGainMapStats", run.list, stat_constants,
+                           stats_srvs, stats_uavs, 2, 1, 1)) {
+    self->FailForStep("failed to initialize HDR gain-map statistics");
+    return PipelineStatus::Fail;
+  }
+  self->command_.UavBarrier(run.list, stats);
+  if (!run.codec->Dispatch("BuildGainMapStats", run.list, stat_constants,
+                           stats_srvs, stats_uavs)) {
+    self->FailForStep("failed to build HDR gain-map statistics");
+    return PipelineStatus::Fail;
+  }
+  self->command_.UavBarrier(run.list, stats);
+  self->command_.Transition(run.list, stats, D3D12_RESOURCE_STATE_COPY_SOURCE);
+
+  // One readback per game frame is enough. The first pass owns the frame-level
+  // diagnostic so chained passes do not enqueue duplicate copies.
+  if (run.is_first_pass && run.hdr != nullptr) {
+    if (!run.hdr->EnqueueGainMapStatsReadback(run.list, stats)) {
+      TRACE_EVT(self, "gain_stats_readback unavailable");
+    }
+  }
+
+  self->command_.Transition(run.list, stats,
+                            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  return PipelineStatus::Ok;
+}
+
+// Resample the already-split linear SDR base to working resolution, and
+// report the resolution the model will actually run at. Gain-map splitting is
+// a distinct step so the packed HDR representation is also available to the
+// debug and compose paths at full resolution.
 PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
   PassSession* self = run.session;
   if (run.codec == nullptr) return PipelineStatus::SkipFrame;
 
   ID3D12Resource* model_input = run.stage != nullptr && run.stage->is_post_dlss
-                                    ? run.model_input
+                                    ? (run.hdr_uniforms_ready && run.hdr != nullptr &&
+                                             run.hdr->ResolvedFormat() != HdrFormat::Sdr
+                                           ? self->resources_.GetPackedOutput()
+                                           : run.model_input)
                                     : run.backbuffer;
   ID3D12Resource* model_color = model_input;
   ID3D12Resource* model_output = self->resources_.GetOutput();
   unsigned int eval_width = run.width;
   unsigned int eval_height = run.height;
 
-  const model_pipeline::HdrUniforms* hdr_ptr =
-      run.hdr_uniforms_ready ? &run.hdr_uniforms : nullptr;
-
   if (!model_pipeline::PrepareInput(
-          self->command_, self->StageList(run, self->command_), self->resources_, run.codec, model_input,
+          self->command_, self->StageList(run, self->command_),
+          self->resources_, run.codec, model_input,
           &model_color, &model_output, &eval_width, &eval_height, run.width,
-          run.height, run.work_width, run.work_height, hdr_ptr)) {
+          run.height, run.work_width, run.work_height)) {
     self->FailForStep("failed to prepare model input");
     return PipelineStatus::Fail;
   }
@@ -1065,7 +1190,7 @@ PipelineStatus PassSession::StepModelOutputBarrier(PassRun& run) {
 // ---------------------------------------------------------------------------
 
 // Compose the model output into PassResources::GetCompositeOutput(). With HDR
-// on, this inverse-tonemaps the model's SDR edit back into the HDR source's own
+// on, this reconstructs the original HDR source from the packed gain-map's
 // range and encoding.
 PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
   PassSession* self = run.session;
@@ -1075,12 +1200,17 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
 
   // Present composes the model edit against the backbuffer; PostDLSS composes
   // it against the model input, which is the DLSS output or a snapshot of it.
-  ID3D12Resource* original = run.stage != nullptr && run.stage->is_post_dlss
-                                 ? run.model_input
-                                 : run.backbuffer;
+  const bool hdr_active = run.hdr_uniforms_ready &&
+                          run.hdr != nullptr &&
+                          run.hdr->ResolvedFormat() != HdrFormat::Sdr;
+  ID3D12Resource* original = hdr_active
+                                 ? self->resources_.GetPackedOutput()
+                                 : (run.stage != nullptr && run.stage->is_post_dlss
+                                        ? run.model_input
+                                        : run.backbuffer);
 
   const model_pipeline::HdrUniforms* hdr_ptr =
-      run.hdr_uniforms_ready ? &run.hdr_uniforms : nullptr;
+      hdr_active ? &run.hdr_uniforms : nullptr;
 
   if (!model_pipeline::ComposeOutput(
           self->command_, self->StageList(run, self->command_),
@@ -1226,6 +1356,8 @@ constexpr PipelineStepDef kSessionSteps[] = {
      &PassSession::StepResolveModelInput, kNoDeps, StageInput::None, false},
     {PipelineNodeId::BuildHdrUniforms, "BuildHdrUniforms",
      &PassSession::StepBuildHdrUniforms, kNoDeps, StageInput::None, true},
+    {PipelineNodeId::GainMapSplit, "GainMapSplit",
+     &PassSession::StepGainMapSplit, kNoDeps, StageInput::None, true},
 
     // -- model evaluation ---------------------------------------------------
     {PipelineNodeId::EnsureFeature, "EnsureFeature", &PassSession::StepEnsureFeature,
@@ -1341,7 +1473,7 @@ static_assert(
 // backbuffer grade contributes one. Leaving the Release grade out sized the
 // ring for fifteen frames of work rather than sixteen, which is what
 // kMaxFramesInFlight promises.
-static_assert(kMaxDispatchesPerFrame >= kMaxPasses * 5 + 3,
+static_assert(kMaxDispatchesPerFrame >= kMaxPasses * 8 + 3,
               "kMaxDispatchesPerFrame no longer covers a frame at kMaxPasses - "
               "raise it, and kDescriptorRingSize with it");
 

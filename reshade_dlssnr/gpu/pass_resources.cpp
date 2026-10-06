@@ -101,6 +101,81 @@ bool PassResources::EnsureCompositeOutput(
   return true;
 }
 
+bool PassResources::CreateUavBuffer(
+    ID3D12Device* device,
+    uint64_t byte_width,
+    ID3D12Resource** out_resource) {
+  if (device == nullptr || out_resource == nullptr || byte_width == 0) {
+    return false;
+  }
+
+  D3D12_HEAP_PROPERTIES heap = {};
+  heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+  D3D12_RESOURCE_DESC desc = {};
+  desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+  desc.Width = byte_width;
+  desc.Height = 1;
+  desc.DepthOrArraySize = 1;
+  desc.MipLevels = 1;
+  desc.Format = DXGI_FORMAT_UNKNOWN;
+  desc.SampleDesc.Count = 1;
+  desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+  desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+  return SUCCEEDED(device->CreateCommittedResource(
+      &heap, D3D12_HEAP_FLAG_NONE, &desc,
+      D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr,
+      IID_PPV_ARGS(out_resource)));
+}
+
+bool PassResources::EnsurePackedOutput(
+    ID3D12Device* device, const D3D12_RESOURCE_DESC& desc) {
+  if (packed_hdr_sdr != nullptr &&
+      packed_width == desc.Width &&
+      packed_height == desc.Height &&
+      packed_hdr_sdr->GetDesc().Format == DXGI_FORMAT_R32G32B32A32_FLOAT) {
+    return true;
+  }
+
+  Dispose(packed_hdr_sdr);
+
+  D3D12_RESOURCE_DESC packed_desc = desc;
+  packed_desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+  packed_desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+  D3D12_HEAP_PROPERTIES heap = {};
+  heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+  ID3D12Resource* raw = nullptr;
+  if (FAILED(device->CreateCommittedResource(
+          &heap, D3D12_HEAP_FLAG_NONE, &packed_desc,
+          D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, nullptr,
+          IID_PPV_ARGS(&raw)))) {
+    return false;
+  }
+  packed_hdr_sdr.Attach(raw);
+  packed_width = static_cast<unsigned int>(desc.Width);
+  packed_height = desc.Height;
+  trace::NameResource(packed_hdr_sdr.Get(), "packed_hdr_sdr");
+  TRACE_CMD(this, "create packed_hdr_sdr res=%d %ux%u",
+            trace::ResourceId(packed_hdr_sdr.Get()), packed_width, packed_height);
+  return true;
+}
+
+bool PassResources::EnsureGainStats(ID3D12Device* device) {
+  constexpr size_t kBytes = 3 * sizeof(uint32_t);
+  if (gain_stats != nullptr && gain_stats_bytes == kBytes) return true;
+
+  Dispose(gain_stats);
+  ID3D12Resource* raw = nullptr;
+  if (!CreateUavBuffer(device, kBytes, &raw)) return false;
+  gain_stats.Attach(raw);
+  gain_stats_bytes = kBytes;
+  trace::NameResource(gain_stats.Get(), "gain_stats");
+  TRACE_CMD(this, "create gain_stats res=%d bytes=%zu",
+            trace::ResourceId(gain_stats.Get()), gain_stats_bytes);
+  return true;
+}
+
 bool PassResources::EnsureWorkingResources(
     ID3D12Device* device,
     const D3D12_RESOURCE_DESC& desc,
@@ -196,6 +271,8 @@ void PassResources::Shutdown() {
 
   output.Reset();
   composite_output.Reset();
+  packed_hdr_sdr.Reset();
+  gain_stats.Reset();
   working_input.Reset();
   working_output.Reset();
 
@@ -211,6 +288,9 @@ void PassResources::Shutdown() {
   composite_output_width = 0;
   composite_output_height = 0;
   composite_output_format = DXGI_FORMAT_UNKNOWN;
+  packed_width = 0;
+  packed_height = 0;
+  gain_stats_bytes = 0;
   working_width = 0;
   working_height = 0;
   working_format = DXGI_FORMAT_UNKNOWN;

@@ -9,7 +9,7 @@ bool ComposeOutput(
     ID3D12GraphicsCommandList* command_list,
     PassResources& resources,
     ComputeEngine* codec,
-    ID3D12Resource* original,
+    ID3D12Resource* packed_source,
     ID3D12Resource* low_input,
     ID3D12Resource* low_enhanced,
     unsigned int full_width,
@@ -20,7 +20,7 @@ bool ComposeOutput(
     float rcas_strength,
     const GradeSettings* grade_input,
     const HdrUniforms* hdr) {
-  if (codec == nullptr || command_list == nullptr || original == nullptr ||
+  if (codec == nullptr || command_list == nullptr || packed_source == nullptr ||
       low_input == nullptr || low_enhanced == nullptr || params == nullptr) {
     return false;
   }
@@ -43,9 +43,18 @@ bool ComposeOutput(
   const char* pass_name = "ComposeModelOutput";
   if (hdr != nullptr) {
     pass_name = "ComposeModelOutputHdr";
-    constants.params[kHdrSlotBase + 0] = static_cast<float>(hdr->format);
+    constants.params[kHdrSlotBase + 0] = hdr->format;
     constants.params[kHdrSlotBase + 1] = hdr->exposure;
-    constants.params[kHdrSlotBase + 2] = hdr->tonemap_white;
+    constants.params[kHdrSlotBase + 2] = hdr->bt2446_k1;
+    constants.params[kHdrSlotBase + 3] = hdr->bt2446_k2;
+    constants.params[kHdrSlotBase + 4] = hdr->bt2446_k4;
+    constants.params[kHdrSlotBase + 5] = hdr->bt2446_crosstalk;
+    constants.params[kHdrSlotBase + 6] = hdr->gain_base_offset;
+    constants.params[kHdrSlotBase + 7] = hdr->gain_alternate_offset;
+    constants.params[kHdrSlotBase + 8] = hdr->gain_min_log2;
+    constants.params[kHdrSlotBase + 9] = hdr->gain_max_log2;
+    constants.params[kHdrSlotBase + 10] = hdr->effective_scene_white;
+    constants.params[kHdrSlotBase + 11] = 0.0f;
 
     // FsrEasuCon with inputViewport == inputSize: the working-scale textures
     // are sampled 1:1, so viewport and texture size coincide. con3 is not
@@ -88,14 +97,14 @@ bool ComposeOutput(
     }
   }
 
-  state.Transition(command_list, original,
+  state.Transition(command_list, packed_source,
                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   state.Transition(command_list, low_input,
                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   state.Transition(command_list, low_enhanced,
                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-  ID3D12Resource* srvs[kSrvCount] = {original, low_input, low_enhanced};
+  ID3D12Resource* srvs[kSrvCount] = {packed_source, low_input, low_enhanced};
   ID3D12Resource* uavs[kUavCount] = {resources.GetCompositeOutput()};
 
   return codec->Dispatch(pass_name, command_list, constants, srvs, uavs);

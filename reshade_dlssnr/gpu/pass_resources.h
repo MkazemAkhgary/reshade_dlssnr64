@@ -41,6 +41,18 @@ class PassResources {
   unsigned int composite_output_height = 0;
   DXGI_FORMAT composite_output_format = DXGI_FORMAT_UNKNOWN;
 
+  // Full-resolution packed HDR gain-map representation. RGB is the linear SDR
+  // base; A is raw f32 log2 gain. This is deliberately RGBA32F: no quantization
+  // is acceptable in the round-trip path.
+  Microsoft::WRL::ComPtr<ID3D12Resource> packed_hdr_sdr;
+  unsigned int packed_width = 0;
+  unsigned int packed_height = 0;
+
+  // [0] = sortable min gain, [1] = sortable max gain, [2] = out-of-range or
+  // SDR-clamped pixel count.
+  Microsoft::WRL::ComPtr<ID3D12Resource> gain_stats;
+  size_t gain_stats_bytes = 0;
+
   Microsoft::WRL::ComPtr<ID3D12Resource> working_input;
   Microsoft::WRL::ComPtr<ID3D12Resource> working_output;
   unsigned int working_width = 0;
@@ -60,6 +72,8 @@ class PassResources {
 
   bool EnsureOutput(ID3D12Device* device, const D3D12_RESOURCE_DESC& desc);
   bool EnsureCompositeOutput(ID3D12Device* device, const D3D12_RESOURCE_DESC& desc);
+  bool EnsurePackedOutput(ID3D12Device* device, const D3D12_RESOURCE_DESC& desc);
+  bool EnsureGainStats(ID3D12Device* device);
   bool EnsureWorkingResources(
       ID3D12Device* device,
       const D3D12_RESOURCE_DESC& desc,
@@ -78,6 +92,8 @@ class PassResources {
 
   ID3D12Resource* GetOutput() const { return output.Get(); }
   ID3D12Resource* GetCompositeOutput() const { return composite_output.Get(); }
+  ID3D12Resource* GetPackedOutput() const { return packed_hdr_sdr.Get(); }
+  ID3D12Resource* GetGainStats() const { return gain_stats.Get(); }
   ID3D12Resource* GetWorkingInput() const { return working_input.Get(); }
   ID3D12Resource* GetWorkingOutput() const { return working_output.Get(); }
   // True when slot `index` already holds a texture of the given shape. Lets a
@@ -112,6 +128,10 @@ class PassResources {
   static bool CreateUavTexture(
       ID3D12Device* device,
       const D3D12_RESOURCE_DESC& desc,
+      ID3D12Resource** out_resource);
+  static bool CreateUavBuffer(
+      ID3D12Device* device,
+      uint64_t byte_width,
       ID3D12Resource** out_resource);
 };
 

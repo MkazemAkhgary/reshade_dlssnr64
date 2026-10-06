@@ -13,7 +13,7 @@ cbuffer Params : register(b0)
 {
     uint  gWidth;
     uint  gHeight;
-    float4 gParams[13];
+    float4 gParams[15];
 };
 
 #define kGradeEnabled    gParams[2].x
@@ -644,6 +644,10 @@ float3 DecodeSource(float3 c)
     if (fmt == 2)
         return PqToNits(c) / 100.0;
 
+    // Code 3 is the gain-map path's linear SDR model domain.
+    if (fmt == 3)
+        return c;
+
     return SrgbToLinearExt(c);
 }
 
@@ -656,6 +660,10 @@ float3 EncodeSource(float3 lin)
 
     if (fmt == 2)
         return NitsToPq(max(lin, 0.0) * 100.0);
+
+    // Code 3 is already linear SDR.
+    if (fmt == 3)
+        return lin;
 
     // Standard SDR sRGB encoding.
     //
