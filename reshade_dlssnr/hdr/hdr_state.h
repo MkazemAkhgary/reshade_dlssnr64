@@ -55,6 +55,7 @@ struct ExposureParams {
 // exposure, which changes the tonemap that produced the mask.
 struct ExposureTracker {
   float exposure = 1.0f;
+  // Measured source-domain white percentile, before exposure and headroom.
   float scene_white = 1.0f;
   float target_exposure = 1.0f;
   float p50_luma = 0.0f;

@@ -99,8 +99,10 @@ float Lerp(float a, float b, float t) {
 void ExposureTracker::Reset() { *this = ExposureTracker{}; }
 
 // Same EMA logic for both trackers; `params` and `use_skin` are the only
-// differences between them. Headroom is not applied here: it belongs at the
-// shader uniform, so this stays the exposure-adjusted scene white.
+// differences between them. Headroom and exposure are not applied here.
+// `scene_white` is the measured source-domain white percentile; the split
+// applies the exposure to the image and keeps headroom as a separate peak
+// control so exposure cannot cancel out of the tone-map normalization.
 void ExposureTracker::Update(const uint32_t* bins, const ExposureParams& params,
                              bool use_skin) {
   const uint32_t* full_bins = bins;
@@ -203,7 +205,10 @@ void ExposureTracker::Update(const uint32_t* bins, const ExposureParams& params,
                           : (0.02f + resp * 0.38f);
 
   exposure = Lerp(exposure, capped_target, alpha);
-  const float W_target = std::max(1.0f, luma_hi * exposure);
+  // Keep the measured white point in source units. Exposure is applied to the
+  // sampled HDR pixel by GainMapSplit; folding exposure into this white point
+  // would cancel the very control that is meant to lift dark scenes.
+  const float W_target = std::max(luma_hi, 1e-6f);
   scene_white = Lerp(scene_white, W_target, alpha);
 
   have_measurement = true;

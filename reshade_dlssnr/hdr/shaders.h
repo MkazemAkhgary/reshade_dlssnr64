@@ -256,30 +256,34 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float3 pre_hdr = PreDesaturate(hdr, saturate(kCrosstalk));
     float y_hdr = max(dot(pre_hdr, kLuma709), 0.0);
 
-    // The histogram/exposure tracker already reports scene white after the
-    // exposure EMA. HighlightHeadroom scales that reference into the effective
-    // HDR peak used by Method C, while the gain map keeps the original HDR
-    // values untouched for reconstruction.
+    // Exposure is a scene-adaptation control, not part of the source white
+    // point. Apply it to the sampled HDR signal before BT.2446C, while keeping
+    // the gain-map reconstruction anchored to the original HDR signal below.
+    // This is the critical separation that keeps dark-scene exposure effective.
+    float exposure = max(kExposure, 1e-6);
+    float y_exposed = y_hdr * exposure;
+
+    // kEffectiveSceneWhite is the measured source-domain white percentile times
+    // the user-selected headroom. It deliberately does NOT include exposure;
+    // exposure changes the signal, while this value defines the tone-map peak.
     float effective_peak_nits = max(100.0,
         80.0 * max(kEffectiveSceneWhite, 0.01));
     float curve_scale = 100.0 / effective_peak_nits;
-    // Keep the explicit exposure in the uniform contract: scene white is the
-    // EMA's exposure-adjusted quantity, so multiplying again would double it.
 
-    float y_curve = y_hdr * 80.0 * curve_scale;
+    float y_curve = y_exposed * 80.0 * curve_scale;
     float y_sdr_pct = Bt2446C(y_curve);
-    float y_sdr = y_sdr_pct / 100.0;
-    y_sdr = max(y_sdr, 0.0);
+    float y_sdr = max(y_sdr_pct / 100.0, 0.0);
 
-    // Raw ISO 21496-1 log2 gain. Store it directly as f32 in alpha; there is
-    // deliberately no normalization, gamma, or integer quantization here.
+    // Raw ISO 21496-1 log2 gain. The numerator intentionally uses the
+    // ORIGINAL HDR luminance, not the exposure-adjusted luminance: compose must
+    // reconstruct the game's original HDR signal, not the temporary adapted one.
     float gain = log2(max(y_hdr + kAlternateOffset, 1e-12) /
                       max(y_sdr + kBaseOffset, 1e-12));
     float gain_scale = exp2(gain);
 
-    // Apply the exact gain-map formula in the pre-desaturated RGB space.
-    // Because the crosstalk matrix preserves the all-ones vector, the scalar
-    // offsets commute with the matrix and the inverse is algebraically exact.
+    // Apply the exact gain-map formula in the original pre-desaturated RGB
+    // space. Because the crosstalk matrix preserves neutral values, the scalar
+    // gain and offsets remain algebraically invertible.
     float3 pre_sdr = (pre_hdr + kAlternateOffset) / max(gain_scale, 1e-12)
                    - kBaseOffset;
     float3 sdr = saturate(InversePreDesaturate(pre_sdr, saturate(kCrosstalk)));
