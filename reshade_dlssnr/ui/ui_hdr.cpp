@@ -207,7 +207,9 @@ void DrawDiagnostics(const HdrSnapshot& snap, const HdrSettings& hdr,
     ImGui::Separator();
     ImGui::Text("Gain map range: %.4f .. %.4f log2",
                 snap.gain_min_log2, snap.gain_max_log2);
-    ImGui::Text("Flagged pixels: %u", snap.gain_clipped_pixels);
+    ImGui::Text("SDR excursions: %u  |  Gain outside range: %u",
+                snap.gain_sdr_clipped_pixels,
+                snap.gain_out_of_range_pixels);
   }
 
   if (!snap.has_histogram) return;

@@ -15,7 +15,8 @@ bool PrepareInput(
     unsigned int* out_eval_width,
     unsigned int* out_eval_height,
     unsigned int work_width,
-    unsigned int work_height) {
+    unsigned int work_height,
+    bool gain_map_source) {
   if (out_model_color == nullptr || out_model_output == nullptr ||
       codec == nullptr || command_list == nullptr || full_input == nullptr) {
     return false;
@@ -24,6 +25,7 @@ bool PrepareInput(
   ComputeConstants constants = {};
   constants.Width = work_width;
   constants.Height = work_height;
+  constants.pad0 = gain_map_source ? 1u : 0u;
   const char* pass_name = "PrepareModelInput";
 
   state.Transition(command_list, full_input,

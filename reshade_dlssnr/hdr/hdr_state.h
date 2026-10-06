@@ -100,12 +100,14 @@ struct HdrSnapshot {
   int metering_source = 0;  // MeteringSource, as an int for the UI
 
   // Gain-map diagnostics. The range is the raw f32 log2 gain stored in the
-  // packed texture; the count includes gain values outside the configured
-  // metadata range and SDR-base channel excursions.
+  // packed texture. SDR carrier excursions are counted separately from gain
+  // values outside the configured metadata envelope. Neither count modifies
+  // the raw carrier.
   bool gain_map_ready = false;
   float gain_min_log2 = 0.0f;
   float gain_max_log2 = 0.0f;
-  uint32_t gain_clipped_pixels = 0;
+  uint32_t gain_sdr_clipped_pixels = 0;
+  uint32_t gain_out_of_range_pixels = 0;
 
   // Fallback EMA, used by the skin-detect pass. Depth -> full only, no skin
   // slice, so it does not depend on the mask.
@@ -144,7 +146,7 @@ class HdrState {
                   const Settings& settings,
                   ComputeEngine& codec);
 
-  // Queue the 12-byte gain-map diagnostic buffer for readback. It shares the
+  // Queue the 16-byte gain-map diagnostic buffer for readback. It shares the
   // same fence as the histogram, but has its own GpuReadback ring.
   bool EnqueueGainMapStatsReadback(ID3D12GraphicsCommandList* command_list,
                                    ID3D12Resource* stats);
@@ -180,7 +182,7 @@ class HdrState {
   bool pending_measurement_ = false;
   GpuReadback readback_;
 
-  static constexpr size_t kGainStatsBytes = 3u * sizeof(uint32_t);
+  static constexpr size_t kGainStatsBytes = 4u * sizeof(uint32_t);
   uint64_t pending_gain_fence_value_ = 0;
   bool pending_gain_stats_ = false;
   GpuReadback gain_readback_;
@@ -206,7 +208,8 @@ class HdrState {
   bool have_gain_stats_ = false;
   float gain_min_log2_ = 0.0f;
   float gain_max_log2_ = 0.0f;
-  uint32_t gain_clipped_pixels_ = 0;
+  uint32_t gain_sdr_clipped_pixels_ = 0;
+  uint32_t gain_out_of_range_pixels_ = 0;
 };
 
 }  // namespace reshade_dlssnr

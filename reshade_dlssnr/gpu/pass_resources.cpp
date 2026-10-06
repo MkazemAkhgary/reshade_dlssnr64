@@ -162,7 +162,7 @@ bool PassResources::EnsurePackedOutput(
 }
 
 bool PassResources::EnsureGainStats(ID3D12Device* device) {
-  constexpr size_t kBytes = 3 * sizeof(uint32_t);
+  constexpr size_t kBytes = 4 * sizeof(uint32_t);
   if (gain_stats != nullptr && gain_stats_bytes == kBytes) return true;
 
   Dispose(gain_stats);

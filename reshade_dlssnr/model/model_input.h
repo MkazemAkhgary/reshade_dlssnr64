@@ -46,6 +46,7 @@ bool PrepareInput(
     unsigned int* out_eval_width,
     unsigned int* out_eval_height,
     unsigned int work_width,
-    unsigned int work_height);
+    unsigned int work_height,
+    bool gain_map_source);
 
 }  // namespace reshade_dlssnr::model_pipeline

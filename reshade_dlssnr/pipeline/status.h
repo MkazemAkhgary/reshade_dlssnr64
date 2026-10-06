@@ -57,7 +57,8 @@ struct StatusSnapshot {
   bool gain_map_ready = false;
   float gain_map_min_log2 = 0.0f;
   float gain_map_max_log2 = 0.0f;
-  uint32_t gain_map_clipped_pixels = 0;
+  uint32_t gain_map_sdr_clipped_pixels = 0;
+  uint32_t gain_map_out_of_range_pixels = 0;
   char hdr_reason[kStatusTextLength] = {};
 
   // Per-pass state.

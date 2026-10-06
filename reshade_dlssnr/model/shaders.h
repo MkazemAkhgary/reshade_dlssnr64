@@ -9,6 +9,8 @@ cbuffer Params : register(b0)
 {
     uint  gWidth;
     uint  gHeight;
+    uint  gGainMapSource;
+    uint  gPad0;
 };
 
 Texture2D<float4> gSource : register(t0);
@@ -23,6 +25,15 @@ float3 LinearToSrgb(float3 v)
                 step(0.0031308, v));
 }
 
+float3 GamutFitPreserveChroma(float3 c)
+{
+    c = max(c, 0.0);
+    float max_channel = max(c.r, max(c.g, c.b));
+    if (max_channel > 1.0)
+        c /= max_channel;
+    return c;
+}
+
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
@@ -31,11 +42,14 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     float2 uv = (float2(id.xy) + 0.5) / float2(gWidth, gHeight);
     float4 color = gSource.SampleLevel(s0, uv, 0);
-    // GainMapSplit stores the SDR base in linear light. The DLSSNR.Color
-    // contract, however, is the same SDR-encoded domain used by the previous
-    // HDR path (TonemapForward ended with LinearToSrgb). Keep that boundary
-    // explicit here; the packed gain-map itself remains linear and lossless.
-    gOutput[id.xy] = float4(LinearToSrgb(color.rgb), 1.0);
+    // HDR gain-map sources are a lossless linear SDR carrier and may contain
+    // super-whites. Fit that carrier into the SDR model gamut without changing
+    // RGB ratios, then apply the model's sRGB transfer function. The packed
+    // carrier remains untouched and is what HDR compose reconstructs from.
+    float3 linColor = color.rgb;
+    if (gGainMapSource != 0u)
+        linColor = GamutFitPreserveChroma(linColor);
+    gOutput[id.xy] = float4(LinearToSrgb(linColor), 1.0);
 }
 )";
 

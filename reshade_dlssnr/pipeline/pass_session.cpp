@@ -956,9 +956,11 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
   self->command_.Transition(run.list, packed,
                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-  // Statistics are intentionally a second pass: the packed gain map is the
-  // canonical value that will be used by ComposeModelOutputHdr, and reading it
-  // here also counts SDR-domain excursions caused by the crosstalk/tone-map.
+  // Statistics are intentionally a second pass. The packed gain map is the
+  // canonical lossless carrier used by ComposeModelOutputHdr. Its RGB channels
+  // may legitimately contain super-white SDR values; those are reported as
+  // carrier excursions while gain values outside the configured metadata
+  // envelope are tracked separately. Neither diagnostic alters the carrier.
   ID3D12Resource* stats_srvs[kSrvCount] = {packed, packed, packed};
   ID3D12Resource* stats_uavs[kUavCount] = {stats};
   self->command_.Transition(run.list, stats,
@@ -1014,7 +1016,9 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
           self->command_, self->StageList(run, self->command_),
           self->resources_, run.codec, model_input,
           &model_color, &model_output, &eval_width, &eval_height,
-          run.work_width, run.work_height)) {
+          run.work_width, run.work_height,
+          run.hdr_uniforms_ready && run.hdr != nullptr &&
+              run.hdr->ResolvedFormat() != HdrFormat::Sdr)) {
     self->FailForStep("failed to prepare model input");
     return PipelineStatus::Fail;
   }
@@ -1212,10 +1216,16 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
   const model_pipeline::HdrUniforms* hdr_ptr =
       hdr_active ? &run.hdr_uniforms : nullptr;
 
+  // Intensity == 0 means the model edit is explicitly disabled. Use the
+  // exact model input as the compose reference so tiny NGX/evaluation noise
+  // cannot turn into an HDR residual after gain-map reconstruction.
+  ID3D12Resource* enhanced_for_compose =
+      run.pass->intensity <= 0.0f ? run.model_color : run.model_output;
+
   if (!model_pipeline::ComposeOutput(
           self->command_, self->StageList(run, self->command_),
           self->resources_, run.codec, original, run.model_color,
-          run.model_output, run.width, run.height, run.pass->params,
+          enhanced_for_compose, run.width, run.height, run.pass->params,
           run.pass->residual, run.pass->rcas_enabled,
           run.pass->rcas_strength, &run.pass->grade_input, hdr_ptr)) {
     self->FailForStep("failed to compose model output");

@@ -450,6 +450,15 @@ float3 DecodePackedHdr(float4 packed)
     return packed.rgb;
 }
 
+float3 GamutFitPreserveChroma(float3 c)
+{
+    c = max(c, 0.0);
+    float max_channel = max(c.r, max(c.g, c.b));
+    if (max_channel > 1.0)
+        c /= max_channel;
+    return c;
+}
+
 float3 ReconstructHdr(float3 sdr_base, float gain)
 {
     // A is a single luma gain. Apply the ISO offsets to the luma, recover the
@@ -507,14 +516,20 @@ float3 ComposeHdr(float3 sdr_base, float gain,
         low_in_lin = max(GradeLinearInv(low_in_lin), 0.0);
     }
 
+    // The model sees a hue-preserving gamut fit of the carrier, not the carrier
+    // itself. Those two are colinear per pixel, so a multiplicative model
+    // residual measured in the model domain transfers directly back to the
+    // lossless carrier. The carrier itself remains unclipped.
+    const float3 model_sdr_base = GamutFitPreserveChroma(sdr_base);
     const float3 kL = HdrLumaWeights();
-    const float base_luma = dot(max(sdr_base, 0.0), kL);
+    const float base_luma = dot(max(model_sdr_base, 0.0), kL);
     const float3 delta = ShapeResidual(
         ComposeRatioDelta(low_in_lin, low_out_lin), base_luma);
 
-    // The model edits the linear SDR base. Apply that edit in SDR first, then
-    // feed both the unedited and edited SDR pixels through the exact same gain
-    // map. For the ISO 21496-1 reconstruction
+    // Apply the model edit to the lossless carrier before the exact gain-map
+    // reconstruction. This keeps the model-facing gamut fit out of the
+    // round-trip path while preserving the model's multiplicative edit.
+    // For the ISO 21496-1 reconstruction
     //
     //   HDR = (SDR + base_offset) * 2^gain - alternate_offset
     //
