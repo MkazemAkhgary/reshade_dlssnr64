@@ -173,6 +173,8 @@ class AddonController {
   // "the list is open and has work in it" from "the list was never opened",
   // which is what keeps an idle frame from paying a submit and a GPU wait.
   bool release_list_begun_ = false;
+  // Real ApplyGrade failures are logged once; startup-not-ready is not a failure.
+  bool grade_backbuffer_failure_logged_ = false;
 
   // Ping-pong target for the backbuffer grade, sized from the backbuffer it
   // was last used with. Recreated on a size or format change, which is safe

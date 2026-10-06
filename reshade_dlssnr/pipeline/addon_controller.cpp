@@ -133,6 +133,20 @@ void AddonController::GradeBackbuffer(ComputeEngine& codec,
   if (!grade.enabled) return;
   if (command_queue == nullptr || swapchain == nullptr) return;
 
+  // The grade shader is compiled by the background worker. During startup the
+  // pass can be temporarily unavailable; that is normal initialization, not a
+  // failed grade. Most importantly, do not touch the swapchain in this state.
+  if (!codec.IsReady()) return;
+  if (!codec.IsPassCompiled("ApplyGrade")) {
+    if (codec.IsPassFailed("ApplyGrade") && !grade_backbuffer_failure_logged_) {
+      grade_backbuffer_failure_logged_ = true;
+      reshade::log::message(
+          reshade::log::level::error,
+          "DLSSNR: ApplyGrade shader failed to compile; backbuffer grade disabled");
+    }
+    return;
+  }
+
   ID3D12GraphicsCommandList* list = BeginReleaseCommands(command_queue);
   if (list == nullptr) return;
 
@@ -196,9 +210,13 @@ void AddonController::GradeBackbuffer(ComputeEngine& codec,
 
   if (!graded) {
     TRACE_EVT(this, "grade_backbuffer_failed");
-    reshade::log::message(
-        reshade::log::level::error,
-        "DLSSNR: backbuffer grade failed; returning the swapchain image to PRESENT");
+    if (!grade_backbuffer_failure_logged_) {
+      grade_backbuffer_failure_logged_ = true;
+      reshade::log::message(
+          reshade::log::level::error,
+          "DLSSNR: backbuffer grade failed after ApplyGrade was ready; "
+          "returning the swapchain image to PRESENT");
+    }
   } else {
     release_command_.Transition(list, grade_scratch_out_.Get(),
                                 D3D12_RESOURCE_STATE_COPY_SOURCE);
@@ -480,6 +498,7 @@ void AddonController::RefreshStatus(const Settings& settings) {
 }
 
 void AddonController::Shutdown() {
+  grade_backbuffer_failure_logged_ = false;
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
   for (auto& pass : passes_) {

@@ -203,6 +203,12 @@ class ComputeEngine {
   // cannot reintroduce the hitch.
   bool IsReady() const { return ready_.load(std::memory_order_acquire); }
 
+  // Query the background compiler result for one pass without triggering a
+  // synchronous compile. Used by optional stages that may legitimately wait
+  // for the shader worker during startup.
+  bool IsPassCompiled(const char* pass_name);
+  bool IsPassFailed(const char* pass_name);
+
  private:
   ID3D12Device* device_ = nullptr;
   Microsoft::WRL::ComPtr<ID3D12RootSignature> root_signature_;

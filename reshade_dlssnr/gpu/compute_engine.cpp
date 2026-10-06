@@ -374,6 +374,18 @@ bool ComputeEngine::CompilePipeline(
   return true;
 }
 
+bool ComputeEngine::IsPassCompiled(const char* pass_name) {
+  if (pass_name == nullptr) return false;
+  std::lock_guard<std::mutex> lock(passes_mutex_);
+  return passes_.find(pass_name) != passes_.end();
+}
+
+bool ComputeEngine::IsPassFailed(const char* pass_name) {
+  if (pass_name == nullptr) return false;
+  std::lock_guard<std::mutex> lock(passes_mutex_);
+  return failed_passes_.find(pass_name) != failed_passes_.end();
+}
+
 bool ComputeEngine::Dispatch(
     const char* pass_name,
     ID3D12GraphicsCommandList* command_list,
