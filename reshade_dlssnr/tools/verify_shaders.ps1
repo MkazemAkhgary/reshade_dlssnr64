@@ -24,9 +24,24 @@ if ([string]::IsNullOrWhiteSpace($FxcPath) -or -not (Test-Path $FxcPath)) {
 }
 
 $roots = Get-ChildItem -Path (Join-Path $ProjectDir "shaders") -Filter *.hlsl -Recurse -File | Sort-Object FullName
-foreach ($shader in $roots) {
-  & $FxcPath /nologo /T cs_5_1 /E CSMain /O3 /I (Join-Path $ProjectDir "shaders") /Fo NUL $shader.FullName
-  if ($LASTEXITCODE -ne 0) {
-    throw "Shader verification failed: $($shader.FullName)"
+$verifyTemp = Join-Path ([System.IO.Path]::GetTempPath()) ("reshade_dlssnr_fxc_" + [Guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Force -Path $verifyTemp | Out-Null
+try {
+  $index = 0
+  foreach ($shader in $roots) {
+    $index++
+    $objectPath = Join-Path $verifyTemp ("shader_{0:D4}.cso" -f $index)
+    $output = @(& $FxcPath /nologo /T cs_5_1 /E CSMain /O3 /I (Join-Path $ProjectDir "shaders") /Fo $objectPath $shader.FullName 2>&1)
+    $exitCode = $LASTEXITCODE
+    if ($output.Count -gt 0) {
+      # Preserve compiler diagnostics, but do not print FXC's successful object-save message.
+      $diagnostics = $output | Where-Object { $_ -match '(?i)\bwarning\b|(?i)\berror\b' }
+      if ($diagnostics) { $diagnostics | Write-Output }
+    }
+    if ($exitCode -ne 0) {
+      throw "Shader verification failed: $($shader.FullName)"
+    }
   }
+} finally {
+  Remove-Item -Recurse -Force -LiteralPath $verifyTemp -ErrorAction SilentlyContinue
 }
