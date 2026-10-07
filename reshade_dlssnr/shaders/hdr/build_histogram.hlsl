@@ -18,13 +18,6 @@ SamplerState      s0 : register(s0);
 
 static const uint kHistogramStride = 256u;
 
-float3 DecodeToLinear(float3 c)
-{
-    int fmt = (int)(kFormat + 0.5);
-    if (fmt == 1) return max(c, 0.0);
-    if (fmt == 2) return PqToNits(c) / 80.0;
-    return SrgbToLinear(c);
-}
 
 bool IsSkin(float3 lin)
 {
@@ -62,7 +55,7 @@ void CSMain(uint3 gid : SV_GroupID,
 
     if (dtid.x < Width && dtid.y < Height) {
         float3 c = gSource.Load(int3(dtid.xy, 0)).rgb;
-        float3 lin = DecodeToLinear(c);
+        float3 lin = DecodeToLinear(c, (int)(kFormat + 0.5), 80.0);
         float3 luma_weights = ((int)(kFormat + 0.5) == 2)
                                   ? kLuma2020
                                   : kLuma709;

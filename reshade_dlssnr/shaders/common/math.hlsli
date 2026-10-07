@@ -22,15 +22,5 @@ float3 safe_log3(float3 v)
     return log(max(v, 0.0) + max(kRatioEps, 1e-8));
 }
 
-float safe_log_sdr(float x)
-{
-    return log(max(x, 0.0) + kRatioEps);
-}
-
-float3 safe_log3_sdr(float3 v)
-{
-    return log(max(v, 0.0) + kRatioEps);
-}
-
 
 #endif

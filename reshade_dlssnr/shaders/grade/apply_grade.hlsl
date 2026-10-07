@@ -36,7 +36,7 @@ float3 EncodeSource(float3 lin)
         return max(lin, 0.0) * (100.0 / 80.0);
 
     if (fmt == 2)
-        return NitsToPqGrade(max(lin, 0.0) * 100.0);
+        return NitsToPq(max(lin, 0.0) * 100.0);
 
     // Code 3 is already linear SDR.
     if (fmt == 3)

@@ -9,17 +9,6 @@ Texture2D<float4> gSource : register(t0);
 RWTexture2D<float4> gOutput : register(u0);
 SamplerState s0 : register(s0);
 
-float3 DecodeToLinear(float3 c)
-{
-    int fmt = (int)(kFormat + 0.5);
-    // The gain-map domain uses 1.0 = 100 nits, i.e. the SDR white reference.
-    // scRGB is 1.0 = 80 nits, so it needs the 80/100 reference scaling here.
-    if (fmt == 1)
-        return c * (80.0 / 100.0);
-    if (fmt == 2)
-        return max(PqToNits(c), 0.0) / 100.0;
-    return SrgbToLinear(c);
-}
 
 float3 PreDesaturate(float3 c, float a)
 {
@@ -73,7 +62,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
                                 uint2(src_width, src_height));
 
     const float3 luma = HdrLumaWeights();
-    float3 hdr = DecodeToLinear(src.rgb);
+    float3 hdr = DecodeToLinear(src.rgb, (int)(kFormat + 0.5), 100.0);
     float3 pre_hdr = PreDesaturate(hdr, saturate(kCrosstalk));
 
     // Exposure is a scene-adaptation control. It changes the image presented

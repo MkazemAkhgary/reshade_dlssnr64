@@ -90,10 +90,10 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         float in_luma = max(dot(in_rgb, float3(0.2126, 0.7152, 0.0722)), 1e-6);
         float out_luma = max(dot(out_rgb, float3(0.2126, 0.7152, 0.0722)), 1e-6);
 
-        float residual_luma = safe_log_sdr(out_luma) - safe_log_sdr(in_luma);
+        float residual_luma = safe_log(out_luma) - safe_log(in_luma);
         float3 residual_chroma =
-            safe_log3_sdr(out_rgb) - safe_log_sdr(out_luma) -
-            safe_log3_sdr(in_rgb) + safe_log_sdr(in_luma);
+            safe_log3(out_rgb) - safe_log(out_luma) -
+            safe_log3(in_rgb) + safe_log(in_luma);
 
         residual_luma = SoftCompress(
             residual_luma, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
@@ -106,7 +106,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
         residual_log = residual_luma + residual_chroma;
     } else {
-        residual_log = safe_log3_sdr(out_rgb) - safe_log3_sdr(in_rgb);
+        residual_log = safe_log3(out_rgb) - safe_log3(in_rgb);
     }
 
     residual_log = clamp(residual_log,
