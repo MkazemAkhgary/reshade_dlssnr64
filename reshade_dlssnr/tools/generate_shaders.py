@@ -56,7 +56,18 @@ def main() -> None:
 
     # Runtime-default stub. The opt-in precompile target replaces this file.
     (generated / "shader_bytecode.h").write_text("""#pragma once\n#include <cstddef>\n\nnamespace reshade_dlssnr {\nstruct EmbeddedShaderBytecode { const char* name; const unsigned char* data; std::size_t size; };\nextern const EmbeddedShaderBytecode kEmbeddedShaderBytecodes[];\nextern const std::size_t kEmbeddedShaderBytecodeCount;\nconst EmbeddedShaderBytecode* FindEmbeddedShaderBytecode(const char* name);\n}\n""", encoding="utf-8")
-    (generated / "shader_bytecode.cpp").write_text("#include \"shader_bytecode.h\"\n\nnamespace reshade_dlssnr {\nconst EmbeddedShaderBytecode kEmbeddedShaderBytecodes[] = {};\nconst std::size_t kEmbeddedShaderBytecodeCount = 0;\nconst EmbeddedShaderBytecode* FindEmbeddedShaderBytecode(const char*) { return nullptr; }\n}\n", encoding="utf-8")
+    bytecode_stub = """#include \"shader_bytecode.h\"
+
+namespace reshade_dlssnr {
+static const unsigned char kNoEmbeddedShaderBytecode = 0;
+const EmbeddedShaderBytecode kEmbeddedShaderBytecodes[] = {
+  {nullptr, &kNoEmbeddedShaderBytecode, 0},
+};
+const std::size_t kEmbeddedShaderBytecodeCount = 0;
+const EmbeddedShaderBytecode* FindEmbeddedShaderBytecode(const char*) { return nullptr; }
+}
+"""
+    (generated / "shader_bytecode.cpp").write_text(bytecode_stub, encoding="utf-8")
 
 
 if __name__ == "__main__":

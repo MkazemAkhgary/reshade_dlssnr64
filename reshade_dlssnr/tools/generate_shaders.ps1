@@ -82,7 +82,10 @@ $bytecodeStub = @'
 #include "shader_bytecode.h"
 
 namespace reshade_dlssnr {
-const EmbeddedShaderBytecode kEmbeddedShaderBytecodes[] = {};
+static const unsigned char kNoEmbeddedShaderBytecode = 0;
+const EmbeddedShaderBytecode kEmbeddedShaderBytecodes[] = {
+  {nullptr, &kNoEmbeddedShaderBytecode, 0},
+};
 const std::size_t kEmbeddedShaderBytecodeCount = 0;
 const EmbeddedShaderBytecode* FindEmbeddedShaderBytecode(const char*) { return nullptr; }
 }
