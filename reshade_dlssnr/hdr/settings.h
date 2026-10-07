@@ -68,7 +68,7 @@ inline float CalcEffectiveSceneWhite(float scene_white, const HdrSettings& hdr)
 inline float CalcEffectiveSceneWhiteNits(float scene_white, const HdrSettings& hdr)
 {
     return CalcEffectiveSceneWhite(scene_white, hdr) *
-           color_constants::kScRgbReferenceWhiteNits;
+           color_constants::kSdrReferenceWhiteNits;
 }
 
 }  // namespace reshade_dlssnr

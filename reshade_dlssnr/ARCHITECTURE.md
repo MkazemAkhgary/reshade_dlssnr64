@@ -371,7 +371,7 @@ The non-HDR `PrepareModelInput` path therefore treats the source as already in t
 
 Both SDR and HDR compose paths use the same FSR 1.0 EASU and optional RCAS implementation from `shaders/common/fsr.hlsli` to reconstruct full resolution from the working-scale model images. The EASU constants and RCAS controls come from the shared cbuffer.
 
-The common helpers are also consolidated. `math.hlsli` owns the single `safe_log`/`safe_log3` implementation; `color.hlsli` owns the single `NitsToPq` and parameterized `DecodeToLinear` implementation; `color_constants.h` is the shared C++/HLSL source of truth for color-domain constants. The HDR pipeline intentionally keeps two domains: the histogram meters in the format-defined scRGB 80-nit reference-white domain, while the gain-map/BT.2446 working domain is normalized to 100-nit SDR white. The CPU converts the measured scene-white value from the 80-nit domain to absolute nits once before passing it to the gain-map shaders.
+The common helpers are also consolidated. `math.hlsli` owns the single `safe_log`/`safe_log3` implementation; `color.hlsli` owns `NitsToPq` and `DecodeToLinear`; and `color_constants.h` is the shared C++/HLSL source of truth for color-domain constants.
 
 ## The pipeline graph
 
@@ -482,7 +482,7 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 **Format detection is explicit and overridable.** Auto detection treats `R16G16B16A16_FLOAT` and `R11G11B10_FLOAT` as scRGB, `R10G10B10A2_UNORM` as HDR10, and 8-bit RGBA/BGRA formats as SDR. `HdrSettings::format` can override auto detection.
 
 **Exposure is measurement state, not compose state.** Histogram-derived exposure changes what the model sees; the HDR compose reconstructs the source from its own gain map and applies the model residual directly in HDR rather than re-running the source through the exposure transform.
-**HDR white-reference domains are explicit.** `kScRgbReferenceWhiteNits` is the format-defined 80-nit scRGB white; `kSdrReferenceWhiteNits` is the 100-nit SDR/gain-map working white. Do not substitute one for the other. The measured scene-white value crosses from the 80-nit metering domain to absolute nits on the CPU before `GainMapSplit`.
+**HDR uses two reference whites for different jobs.** `kScRgbReferenceWhiteNits` (80 nits) is only for interpreting scRGB values. `kSdrReferenceWhiteNits` (100 nits) is the normalized domain used by the histogram, exposure, gain map, and model. This keeps `midtone` in the same scale as the model input. For example, scRGB 0.18 becomes 0.144 in the 100-nit domain; exposure then scales it to the requested 0.18. There is no separate 80/100 correction later.
 
 **The packed HDR carrier is lossless in format and precision.** `PassResources::packed_hdr_sdr` is an RGBA32F carrier where RGB is the linear SDR base and A is raw log2 gain. Quantizing this representation would break the intended round trip.
 

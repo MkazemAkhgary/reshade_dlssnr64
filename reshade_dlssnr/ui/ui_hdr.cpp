@@ -168,9 +168,9 @@ void DrawDiagnostics(const HdrSnapshot& snap, const HdrSettings& hdr,
 
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
-    ImGui::Text("Median (P50): %.4f", snap.p50_luma);
+    ImGui::Text("Median (P50, 100-nit domain): %.4f", snap.p50_luma);
     ImGui::TableNextColumn();
-    ImGui::Text("White source (P%.1f): %.4f",
+    ImGui::Text("White source (P%.1f, 100-nit domain): %.4f",
                 hdr.white_percentile * 100.0f, snap.p_hi_luma);
 
     ImGui::TableNextRow();
@@ -181,7 +181,7 @@ void DrawDiagnostics(const HdrSnapshot& snap, const HdrSettings& hdr,
 
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
-    ImGui::Text("White (post-headroom): %.3f", CalcEffectiveSceneWhite(snap.scene_white, hdr));
+    ImGui::Text("White (post-headroom, 100-nit domain): %.3f", CalcEffectiveSceneWhite(snap.scene_white, hdr));
 
     const char* source_name = "Full frame";
     if (snap.metering_source == 1) source_name = "Depth-filtered";
