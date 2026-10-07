@@ -23,7 +23,6 @@
     <DlssnrGeneratedDir>$(MSBuildProjectDirectory)\generated</DlssnrGeneratedDir>
     <VerifyShaders Condition="'$(VerifyShaders)' == ''">true</VerifyShaders>
     <PrecompileShaders Condition="'$(PrecompileShaders)' == ''">false</PrecompileShaders>
-    <FxcPath Condition="'$(FxcPath)' == ''"></FxcPath>
   </PropertyGroup>
 
   <Target Name="GenerateEmbeddedShaders" BeforeTargets="ClCompile">
@@ -52,6 +51,9 @@
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <FxcPath Condition="'$(FxcPath)' == '' and '$(WindowsSdkDir)' != '' and '$(WindowsTargetPlatformVersion)' != ''">$(WindowsSdkDir)bin\$(WindowsTargetPlatformVersion.TrimEnd('\'))\x64\fxc.exe</FxcPath>
+  </PropertyGroup>
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>
   <ImportGroup Label="Shared">
