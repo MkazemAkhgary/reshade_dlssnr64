@@ -10,7 +10,7 @@
 
 namespace reshade_dlssnr::model_pipeline {
 
-// HDR gain-map split/compose uniforms, written at kHdrSlotBase in ComputeConstants::params.
+// HDR gain-map split/compose uniforms, written to ComputeConstants::hdr for the shared HDR/gain-map block.
 // Zero-initialised `format` means SDR sRGB, 1 scRGB, 2 HDR10 PQ.
 struct HdrUniforms {
   // Shader format code: 0 = SDR sRGB, 1 = scRGB, 2 = HDR10 PQ.

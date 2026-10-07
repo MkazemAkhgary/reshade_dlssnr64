@@ -1,39 +1,20 @@
-// Skin mask shader. Compares the detection model's input and output,
-// thresholds the difference, spatially smooths, and applies a temporal EMA
-// against the previous frame's mask.
-#pragma once
+#include "common/cbuffer.hlsli"
+#include "common/registers.hlsli"
+#include "common/luma.hlsli"
 
-namespace reshade_dlssnr {
-
-inline constexpr const char* kSkinMaskDiffSource = R"(
-cbuffer Params : register(b0)
-{
-    uint  gWidth;
-    uint  gHeight;
-    float4 gParams[12];
-};
-
-// gParams[0].x = absolute luma threshold (noise floor)
-// gParams[0].y = relative luma threshold (fraction of luma)
-// gParams[0].z = chroma threshold
-// gParams[0].w = saturation bound
-// gParams[1].x = edit strength (amplifies the model's diff)
-// gParams[1].y = mask smoothing (0..1 -> majority radius 0..2)
-// gParams[1].z = temporal EMA alpha
-#define kLumaAbs       gParams[0].x
-#define kLumaRel       gParams[0].y
-#define kChromaAbs     gParams[0].z
-#define kSatBound      gParams[0].w
-#define kEditStrength  gParams[1].x
-#define kMaskSmoothing gParams[1].y
-#define kMaskAlpha     gParams[1].z
+// Skin-mask parameters live in the generic shader block for this pass.
+#define kLumaAbs       shader.Params0.x
+#define kLumaRel       shader.Params0.y
+#define kChromaAbs     shader.Params0.z
+#define kSatBound      shader.Params0.w
+#define kEditStrength  shader.Params1.x
+#define kMaskSmoothing shader.Params1.y
+#define kMaskAlpha     shader.Params1.z
 
 Texture2D<float4> gInput    : register(t0);
 Texture2D<float4> gOutput   : register(t1);
 Texture2D<float>  gPrevMask : register(t2);
 RWTexture2D<float> gMask    : register(u0);
-
-static const float3 kLuma709 = float3(0.2126, 0.7152, 0.0722);
 
 bool PixelIsSkin(int2 xy)
 {
@@ -70,7 +51,7 @@ bool PixelIsSkin(int2 xy)
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
-    if (id.x >= gWidth || id.y >= gHeight) return;
+    if (id.x >= Width || id.y >= Height) return;
 
     int r = (int)(kMaskSmoothing * 2.0 + 0.5);
     int2 center = int2(id.xy);
@@ -79,7 +60,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     for (int dy = -r; dy <= r; ++dy) {
         for (int dx = -r; dx <= r; ++dx) {
             int2 p = center + int2(dx, dy);
-            if (p.x < 0 || p.y < 0 || p.x >= (int)gWidth || p.y >= (int)gHeight)
+            if (p.x < 0 || p.y < 0 || p.x >= (int)Width || p.y >= (int)Height)
                 continue;
             total++;
             if (PixelIsSkin(p)) hits++;
@@ -89,6 +70,3 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float prev = gPrevMask.Load(int3(id.xy, 0));
     gMask[id.xy] = lerp(prev, vote, kMaskAlpha);
 }
-)";
-
-}  // namespace reshade_dlssnr

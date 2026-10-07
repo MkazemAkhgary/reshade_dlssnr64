@@ -172,13 +172,13 @@ bool RenderDebugView(
   ComputeConstants constants = {};
   constants.Width = target_width;
   constants.Height = target_height;
-  constants.params[0] = static_cast<float>(
+  constants.shader.Params0.x = static_cast<float>(
       static_cast<uint32_t>(kDebugViews[index].display_mode));
-  constants.params[1] = static_cast<float>(content_w);
-  constants.params[2] = static_cast<float>(content_h);
-  constants.params[3] = static_cast<float>(
+  constants.shader.Params0.y = static_cast<float>(content_w);
+  constants.shader.Params0.z = static_cast<float>(content_h);
+  constants.shader.Params0.w = static_cast<float>(
       static_cast<unsigned int>(source_desc.Width));
-  constants.params[4] = static_cast<float>(
+  constants.shader.Params1.x = static_cast<float>(
       static_cast<unsigned int>(source_desc.Height));
 
   state.Transition(command_list, source,

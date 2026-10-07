@@ -2,27 +2,33 @@
 
 #include <cstring>
 
-#include "compose/shaders.h"
-#include "debug/shaders.h"
-#include "grade/shaders.h"
-#include "hdr/shaders.h"
-#include "model/shaders.h"
-#include "skin/shaders.h"
+#include "generated/shader_bytecode.h"
 
 namespace reshade_dlssnr {
 
+namespace {
+const unsigned char* BytecodeData(const char* root) {
+  const EmbeddedShaderBytecode* bc = FindEmbeddedShaderBytecode(root);
+  return bc != nullptr ? bc->data : nullptr;
+}
+std::size_t BytecodeSize(const char* root) {
+  const EmbeddedShaderBytecode* bc = FindEmbeddedShaderBytecode(root);
+  return bc != nullptr ? bc->size : 0;
+}
+}  // namespace
+
 const ComputePassDef kComputePasses[] = {
-    {"ZeroHistogram",         kZeroHistogramSource,     nullptr, nullptr},
-    {"BuildHistogram",        kBuildHistogramSource,    nullptr, nullptr},
-    {"GainMapSplit",          kGainMapSplitSource,      kBoxAreaAveragePreludeSource, nullptr},
-    {"ZeroGainMapStats",      kZeroGainMapStatsSource,  nullptr, nullptr},
-    {"BuildGainMapStats",     kBuildGainMapStatsSource, nullptr, nullptr},
-    {"PrepareModelInput",     kPrepareModelInputSource, kBoxAreaAveragePreludeSource, nullptr},
-    {"ComposeModelOutput",    kComposeModelOutputSource,    kGradePreludeSource, kFsrUpsamplePreludeSource},
-    {"ComposeModelOutputHdr", kComposeModelOutputHdrSource, kGradePreludeSource, kFsrUpsamplePreludeSource},
-    {"SkinMaskDiff",          kSkinMaskDiffSource,    nullptr, nullptr},
-    {"DebugDisplay",          kDebugDisplaySource,    nullptr, nullptr},
-    {"ApplyGrade",            kApplyGradeSource,      kGradePreludeSource, nullptr},
+    {"ZeroHistogram",         "hdr/zero_histogram.hlsl",        BytecodeData("hdr/zero_histogram.hlsl"),        BytecodeSize("hdr/zero_histogram.hlsl")},
+    {"BuildHistogram",        "hdr/build_histogram.hlsl",       BytecodeData("hdr/build_histogram.hlsl"),       BytecodeSize("hdr/build_histogram.hlsl")},
+    {"GainMapSplit",          "hdr/gain_map_split.hlsl",        BytecodeData("hdr/gain_map_split.hlsl"),        BytecodeSize("hdr/gain_map_split.hlsl")},
+    {"ZeroGainMapStats",      "hdr/zero_gain_map_stats.hlsl",   BytecodeData("hdr/zero_gain_map_stats.hlsl"),   BytecodeSize("hdr/zero_gain_map_stats.hlsl")},
+    {"BuildGainMapStats",     "hdr/build_gain_map_stats.hlsl",  BytecodeData("hdr/build_gain_map_stats.hlsl"),  BytecodeSize("hdr/build_gain_map_stats.hlsl")},
+    {"PrepareModelInput",     "model/prepare_model_input.hlsl", BytecodeData("model/prepare_model_input.hlsl"), BytecodeSize("model/prepare_model_input.hlsl")},
+    {"ComposeModelOutput",    "compose/compose_model_output.hlsl", BytecodeData("compose/compose_model_output.hlsl"), BytecodeSize("compose/compose_model_output.hlsl")},
+    {"ComposeModelOutputHdr", "compose/compose_model_output_hdr.hlsl", BytecodeData("compose/compose_model_output_hdr.hlsl"), BytecodeSize("compose/compose_model_output_hdr.hlsl")},
+    {"SkinMaskDiff",          "skin/skin_mask_diff.hlsl",      BytecodeData("skin/skin_mask_diff.hlsl"),      BytecodeSize("skin/skin_mask_diff.hlsl")},
+    {"DebugDisplay",          "debug/debug_display.hlsl",      BytecodeData("debug/debug_display.hlsl"),      BytecodeSize("debug/debug_display.hlsl")},
+    {"ApplyGrade",            "grade/apply_grade.hlsl",        BytecodeData("grade/apply_grade.hlsl"),        BytecodeSize("grade/apply_grade.hlsl")},
 };
 
 const uint32_t kComputePassCount =
@@ -36,11 +42,6 @@ const ComputePassDef* FindComputePassDef(const char* name) {
     }
   }
   return nullptr;
-}
-
-const char* FindComputePassSource(const char* name) {
-  const ComputePassDef* def = FindComputePassDef(name);
-  return def != nullptr ? def->hlsl_source : nullptr;
 }
 
 }  // namespace reshade_dlssnr

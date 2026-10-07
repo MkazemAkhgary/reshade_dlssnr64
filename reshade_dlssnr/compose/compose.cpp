@@ -28,17 +28,18 @@ bool ComposeOutput(
   ComputeConstants constants = {};
   constants.Width = full_width;
   constants.Height = full_height;
+  float* shader_params = &constants.shader.Params0.x;
   for (uint32_t i = 0; i < kShaderParamCount; ++i) {
-    constants.params[kShaderParamSlotBase + i] = params[i];
+    shader_params[i] = params[i];
   }
-  constants.params[kResidualSlotBase + 0] = residual.edit_strength;
-  constants.params[kResidualSlotBase + 1] = residual.chroma_strength;
-  constants.params[kResidualSlotBase + 2] = residual.edit_gamma;
-  constants.params[kResidualSlotBase + 3] = residual.highlight_protect;
-  constants.params[kResidualSlotBase + 4] = residual.shadow_protect;
-  constants.params[kResidualSlotBase + 5] = residual.ratio_eps;
-  constants.params[kResidualSlotBase + 6] = residual.ratio_brighten;
-  constants.params[kResidualSlotBase + 7] = residual.ratio_darken;
+  constants.residual.EditStrength = residual.edit_strength;
+  constants.residual.ChromaStrength = residual.chroma_strength;
+  constants.residual.EditGamma = residual.edit_gamma;
+  constants.residual.HighlightProtect = residual.highlight_protect;
+  constants.residual.ShadowProtect = residual.shadow_protect;
+  constants.residual.RatioEps = residual.ratio_eps;
+  constants.residual.RatioBrighten = residual.ratio_brighten;
+  constants.residual.RatioDarken = residual.ratio_darken;
 
   const char* pass_name = "ComposeModelOutput";
 
@@ -52,50 +53,50 @@ bool ComposeOutput(
   const float out_w = static_cast<float>(full_width);
   const float out_h = static_cast<float>(full_height);
 
-  constants.params[kEasuSlotBase + 0] = in_w / out_w;
-  constants.params[kEasuSlotBase + 1] = in_h / out_h;
-  constants.params[kEasuSlotBase + 2] = 0.5f * in_w / out_w - 0.5f;
-  constants.params[kEasuSlotBase + 3] = 0.5f * in_h / out_h - 0.5f;
-  constants.params[kEasuSlotBase + 4] = 1.0f / in_w;
-  constants.params[kEasuSlotBase + 5] = 1.0f / in_h;
-  constants.params[kEasuSlotBase + 6] = 1.0f / in_w;
-  constants.params[kEasuSlotBase + 7] = -1.0f / in_h;
-  constants.params[kEasuSlotBase + 8] = -1.0f / in_w;
-  constants.params[kEasuSlotBase + 9] = 2.0f / in_h;
-  constants.params[kEasuSlotBase + 10] = 1.0f / in_w;
-  constants.params[kEasuSlotBase + 11] = 2.0f / in_h;
+  constants.easu.Con0.x = in_w / out_w;
+  constants.easu.Con0.y = in_h / out_h;
+  constants.easu.Con0.z = 0.5f * in_w / out_w - 0.5f;
+  constants.easu.Con0.w = 0.5f * in_h / out_h - 0.5f;
+  constants.easu.Con1.x = 1.0f / in_w;
+  constants.easu.Con1.y = 1.0f / in_h;
+  constants.easu.Con1.z = 1.0f / in_w;
+  constants.easu.Con1.w = -1.0f / in_h;
+  constants.easu.Con2.x = -1.0f / in_w;
+  constants.easu.Con2.y = 2.0f / in_h;
+  constants.easu.Con2.z = 1.0f / in_w;
+  constants.easu.Con2.w = 2.0f / in_h;
 
-  constants.params[kRcasSlotBase + 0] = rcas_enabled ? 1.0f : 0.0f;
-  constants.params[kRcasSlotBase + 1] = rcas_strength;
+  constants.rcas.Enabled = rcas_enabled ? 1.0f : 0.0f;
+  constants.rcas.Strength = rcas_strength;
 
   if (hdr != nullptr) {
     pass_name = "ComposeModelOutputHdr";
-    constants.params[kHdrSlotBase + 0] = hdr->format;
-    constants.params[kHdrSlotBase + 1] = hdr->exposure;
-    constants.params[kHdrSlotBase + 2] = hdr->bt2446_k1;
-    constants.params[kHdrSlotBase + 3] = hdr->bt2446_k2;
-    constants.params[kHdrSlotBase + 4] = hdr->bt2446_k4;
-    constants.params[kHdrSlotBase + 5] = hdr->bt2446_crosstalk;
-    constants.params[kHdrSlotBase + 6] = hdr->gain_base_offset;
-    constants.params[kHdrSlotBase + 7] = hdr->gain_alternate_offset;
-    constants.params[kHdrSlotBase + 8] = hdr->gain_min_log2;
-    constants.params[kHdrSlotBase + 9] = hdr->gain_max_log2;
-    constants.params[kHdrSlotBase + 10] = hdr->effective_scene_white;
-    constants.params[kHdrSlotBase + 11] = 0.0f;
+    constants.hdr.Format = hdr->format;
+    constants.hdr.Exposure = hdr->exposure;
+    constants.hdr.Bt2446K1 = hdr->bt2446_k1;
+    constants.hdr.Bt2446K2 = hdr->bt2446_k2;
+    constants.hdr.Bt2446K4 = hdr->bt2446_k4;
+    constants.hdr.Crosstalk = hdr->bt2446_crosstalk;
+    constants.hdr.BaseOffset = hdr->gain_base_offset;
+    constants.hdr.AlternateOffset = hdr->gain_alternate_offset;
+    constants.hdr.GainMinLog2 = hdr->gain_min_log2;
+    constants.hdr.GainMaxLog2 = hdr->gain_max_log2;
+    constants.hdr.EffectiveSceneWhite = hdr->effective_scene_white;
+    constants.hdr.pad0 = 0.0f;
 
     if (grade_input != nullptr) {
-      constants.params[kGradeSlotBase + 0] = grade_input->enabled ? 1.0f : 0.0f;
-      constants.params[kGradeSlotBase + 1] = grade_input->luma;
-      constants.params[kGradeSlotBase + 2] = grade_input->chroma;
-      constants.params[kGradeSlotBase + 3] =
+      constants.grade.Enabled = grade_input->enabled ? 1.0f : 0.0f;
+      constants.grade.Luma = grade_input->luma;
+      constants.grade.Chroma = grade_input->chroma;
+      constants.grade.LumaMode =
           static_cast<float>(static_cast<int>(grade_input->luma_mode));
-      constants.params[kGradeSlotBase + 4] =
+      constants.grade.ChromaMode =
           static_cast<float>(static_cast<int>(grade_input->chroma_mode));
-      constants.params[kGradeSlotBase + 5] = grade_input->black_level;
-      constants.params[kGradeSlotBase + 6] = grade_input->white_level;
-      constants.params[kGradeSlotBase + 7] = grade_input->contrast;
-      constants.params[kGradeSlotBase + 8] = grade_input->shadows;
-      constants.params[kGradeSlotBase + 9] = grade_input->highlights;
+      constants.grade.BlackLevel = grade_input->black_level;
+      constants.grade.WhiteLevel = grade_input->white_level;
+      constants.grade.Contrast = grade_input->contrast;
+      constants.grade.Shadows = grade_input->shadows;
+      constants.grade.Highlights = grade_input->highlights;
     }
   }
 

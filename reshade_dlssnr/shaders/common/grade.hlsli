@@ -1,79 +1,7 @@
-// Grade shaders. Applies user-selected levels, contrast, region weights,
-// luma and chroma operators. Used at three points: model input, model
-// output, and the backbuffer.
-#pragma once
-
-namespace reshade_dlssnr {
-
-// Prepend to any shader that calls GradeLinearFwd / GradeLinearInv. Declares
-// the grade cbuffer, the uniform layout, and the operator chain. ApplyGrade
-// reads the same layout.
-    inline constexpr const char* kGradePreludeSource = R"(
-cbuffer Params : register(b0)
-{
-    uint  gWidth;
-    uint  gHeight;
-    float4 gParams[15];
-};
-
-#define kGradeEnabled    gParams[2].x
-#define kGradeLuma       gParams[2].y
-#define kGradeChroma     gParams[2].z
-#define kGradeLumaMode   gParams[2].w
-#define kGradeChromaMode gParams[3].x
-#define kGradeBlackLevel gParams[3].y
-#define kGradeWhiteLevel gParams[3].z
-#define kGradeContrast   gParams[3].w
-#define kGradeShadows    gParams[4].x
-#define kGradeHighlights gParams[4].y
-#define kGradeFormat     gParams[4].z
-
-static const float3 kL709 = float3(0.2126, 0.7152, 0.0722);
-
-// Exact BT.709 YCbCr-style scale factors derived from the luma weights.
-// Using the ratios below rather than rounded reconstruction coefficients
-// keeps chroma gain exactly luma-preserving (to floating-point precision).
-static const float kCbScale = 2.0 * (1.0 - kL709.z); // 1.8556
-static const float kCrScale = 2.0 * (1.0 - kL709.x); // 1.5748
-static const float kGCb = (kL709.z * kCbScale) / kL709.y;
-static const float kGCr = (kL709.x * kCrScale) / kL709.y;
+#ifndef DLSSNR_GRADE_HLSLI
+#define DLSSNR_GRADE_HLSLI
 
 static const float kGradeEps = 1e-6;
-
-// -----------------------------------------------------------------------------
-// Extended sRGB transfer.
-//
-// The standard sRGB formulas are defined for non-negative normalized values.
-// These versions use a signed extension for floating-point/HDR intermediates,
-// which avoids silently destroying negative values created by an intermediate
-// grade operation.
-// -----------------------------------------------------------------------------
-
-float3 SrgbToLinearExt(float3 v)
-{
-    float3 av = abs(v);
-
-    float3 lo = av / 12.92;
-    float3 hi = pow((av + 0.055) / 1.055, 2.4);
-
-    float3 lin = lerp(lo, hi, step(0.04045, av));
-    return sign(v) * lin;
-}
-
-float3 LinearToSrgbExt(float3 v)
-{
-    float3 av = abs(v);
-
-    float3 lo = av * 12.92;
-    float3 hi = 1.055 * pow(av, 1.0 / 2.4) - 0.055;
-
-    float3 srgb = lerp(lo, hi, step(0.0031308, av));
-    return sign(v) * srgb;
-}
-
-// -----------------------------------------------------------------------------
-// Levels
-// -----------------------------------------------------------------------------
 
 float GradeLevelSpan()
 {
@@ -416,7 +344,7 @@ float3 GradeChromaVibranceInv(float3 c, float a)
 // Chroma Gain.
 //
 // This uses a YCbCr-style decomposition whose coefficients are derived from
-// the same kL709 weights used everywhere else. Therefore changing chroma
+// the same kLuma709 weights used everywhere else. Therefore changing chroma
 // cannot change luma except for normal floating-point rounding.
 //
 // Mathematically this is equivalent to uniformly scaling the chroma plane,
@@ -590,108 +518,5 @@ float3 GradeLinearInv(float3 lin)
 
     return GradeLinearCoreInv(lin);
 }
-)";
 
-// Standalone pass: decodes the target from its own format, applies the grade,
-// re-encodes.
-    inline constexpr const char* kApplyGradeSource = R"(
-Texture2D<float4> gSource : register(t0);
-RWTexture2D<float4> gOutput : register(u0);
-SamplerState s0 : register(s0);
-
-float3 PqToNits(float3 v)
-{
-    v = saturate(v);
-
-    const float m1 = 0.1593017578125;
-    const float m2 = 78.84375;
-    const float c1 = 0.8359375;
-    const float c2 = 18.8515625;
-    const float c3 = 18.6875;
-
-    float3 p = pow(max(v, 0.0), 1.0 / m2);
-    float3 num = max(p - c1, 0.0);
-    float3 den = c2 - c3 * p;
-
-    return 10000.0 *
-           pow(num / max(den, 1e-6), 1.0 / m1);
-}
-
-float3 NitsToPq(float3 nits)
-{
-    const float m1 = 0.1593017578125;
-    const float m2 = 78.84375;
-    const float c1 = 0.8359375;
-    const float c2 = 18.8515625;
-    const float c3 = 18.6875;
-
-    float3 Y = max(nits / 10000.0, 0.0);
-    float3 Ym1 = pow(Y, m1);
-
-    float3 num = c1 + c2 * Ym1;
-    float3 den = 1.0 + c3 * Ym1;
-
-    return pow(num / den, m2);
-}
-
-float3 DecodeSource(float3 c)
-{
-    int fmt = (int)(kGradeFormat + 0.5);
-
-    if (fmt == 1)
-        return max(c, 0.0) * (80.0 / 100.0);
-
-    if (fmt == 2)
-        return PqToNits(c) / 100.0;
-
-    // Code 3 is the gain-map path's linear SDR model domain.
-    if (fmt == 3)
-        return c;
-
-    return SrgbToLinearExt(c);
-}
-
-float3 EncodeSource(float3 lin)
-{
-    int fmt = (int)(kGradeFormat + 0.5);
-
-    if (fmt == 1)
-        return max(lin, 0.0) * (100.0 / 80.0);
-
-    if (fmt == 2)
-        return NitsToPq(max(lin, 0.0) * 100.0);
-
-    // Code 3 is already linear SDR.
-    if (fmt == 3)
-        return lin;
-
-    // Standard SDR sRGB encoding.
-    //
-    // Values below zero cannot be represented in SDR.
-    // Values above one cannot be represented either, so the final saturate()
-    // is the correct gamut/range operation rather than a creative shoulder.
-    return saturate(LinearToSrgbExt(max(lin, 0.0)));
-}
-
-[numthreads(8, 8, 1)]
-void CSMain(uint3 id : SV_DispatchThreadID)
-{
-    if (id.x >= gWidth || id.y >= gHeight)
-        return;
-
-    float2 uv =
-        (float2(id.xy) + 0.5) /
-        float2(gWidth, gHeight);
-
-    float4 src =
-        gSource.SampleLevel(s0, uv, 0);
-
-    float3 lin = DecodeSource(src.rgb);
-    float3 graded = GradeLinearFwd(lin);
-
-    gOutput[id.xy] =
-        float4(EncodeSource(graded), src.a);
-}
-)";
-
-}  // namespace reshade_dlssnr
+#endif

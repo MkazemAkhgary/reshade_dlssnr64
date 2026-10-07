@@ -25,7 +25,7 @@ bool PrepareInput(
   ComputeConstants constants = {};
   constants.Width = work_width;
   constants.Height = work_height;
-  constants.pad0 = gain_map_source ? 1u : 0u;
+  constants.shader.Params0.w = gain_map_source ? 1.0f : 0.0f;
   const char* pass_name = "PrepareModelInput";
 
   state.Transition(command_list, full_input,

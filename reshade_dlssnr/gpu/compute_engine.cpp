@@ -7,6 +7,8 @@
 #include <reshade.hpp>
 
 #include "compute_passes.h"
+#include "generated/shader_sources.h"
+#include "generated/shader_bytecode.h"
 #include "pipeline_trace.h"
 
 namespace reshade_dlssnr {
@@ -34,6 +36,27 @@ std::string TrimShaderDiagnostic(const void* data, size_t size) {
   }
   return text;
 }
+
+class EmbeddedInclude final : public ID3DInclude {
+ public:
+  HRESULT STDMETHODCALLTYPE Open(
+      D3D_INCLUDE_TYPE,
+      LPCSTR file_name,
+      LPCVOID,
+      LPCVOID* data,
+      UINT* bytes) override {
+    if (data == nullptr || bytes == nullptr || file_name == nullptr)
+      return E_INVALIDARG;
+    const EmbeddedShader* shader = FindEmbeddedShader(file_name);
+    if (shader == nullptr)
+      return E_FAIL;
+    *data = shader->source;
+    *bytes = static_cast<UINT>(shader->size);
+    return S_OK;
+  }
+
+  HRESULT STDMETHODCALLTYPE Close(LPCVOID) override { return S_OK; }
+};
 
 }  // namespace
 
@@ -270,93 +293,133 @@ bool ComputeEngine::CreateRootSignature(ID3D12Device* device) {
 }
 
 bool ComputeEngine::CompilePipeline(
-    const char* pass_name,
-    const char* hlsl,
+    const ComputePassDef& def,
     ID3D12PipelineState** out_pso) {
-  if (device_ == nullptr || hlsl == nullptr || out_pso == nullptr) {
-    return false;
-  }
+  if (device_ == nullptr || out_pso == nullptr) return false;
 
   *out_pso = nullptr;
 
+  const char* pass_name = def.name != nullptr ? def.name : "<unknown>";
+  const EmbeddedShader* source =
+      def.root != nullptr ? FindEmbeddedShader(def.root) : nullptr;
+
+  const unsigned char* bytecode = def.bytecode;
+  std::size_t bytecode_size = def.bytecode_size;
+  if (bytecode == nullptr || bytecode_size == 0) {
+    const EmbeddedShaderBytecode* embedded_bytecode =
+        def.root != nullptr ? FindEmbeddedShaderBytecode(def.root) : nullptr;
+    if (embedded_bytecode != nullptr) {
+      bytecode = embedded_bytecode->data;
+      bytecode_size = embedded_bytecode->size;
+    }
+  }
+
   ID3DBlob* shader_blob = nullptr;
   ID3DBlob* diagnostic_blob = nullptr;
-  const HRESULT compile_hr = D3DCompile(
-      hlsl,
-      strlen(hlsl),
-      pass_name != nullptr ? pass_name : "DLSSNR compute shader",
-      nullptr,
-      nullptr,
-      "CSMain",
-      "cs_5_1",
-      D3DCOMPILE_OPTIMIZATION_LEVEL3,
-      0,
-      &shader_blob,
-      &diagnostic_blob);
 
-  if (diagnostic_blob != nullptr) {
-    const std::string diagnostic =
-        TrimShaderDiagnostic(diagnostic_blob->GetBufferPointer(),
-                             diagnostic_blob->GetBufferSize());
-    if (!diagnostic.empty()) {
-      const reshade::log::level level =
-          FAILED(compile_hr) ? reshade::log::level::error
-                             : reshade::log::level::warning;
-      const std::string key = ShaderDiagnosticKey(pass_name, level, diagnostic);
+  if (bytecode == nullptr || bytecode_size == 0) {
+    if (source == nullptr) {
+      char message[384];
+      std::snprintf(message, sizeof(message),
+                    "DLSSNR shader source missing: pass=%s root=%s",
+                    pass_name, def.root != nullptr ? def.root : "<null>");
+      const std::string key =
+          ShaderDiagnosticKey(pass_name, reshade::log::level::error, message);
       bool duplicate = false;
       {
         std::lock_guard<std::mutex> lock(diagnostic_mutex_);
         duplicate = !logged_shader_diagnostics_.insert(key).second;
       }
-      if (!duplicate) {
-        char header[256];
-        std::snprintf(header, sizeof(header),
-                      "DLSSNR shader %s: pass=%s",
-                      level == reshade::log::level::error ? "error" : "warning",
-                      pass_name != nullptr ? pass_name : "<unknown>");
-        reshade::log::message(level, header);
-        reshade::log::message(level, diagnostic.c_str());
-      }
+      if (!duplicate)
+        reshade::log::message(reshade::log::level::error, message);
+      return false;
     }
-    diagnostic_blob->Release();
-    diagnostic_blob = nullptr;
-  }
 
-  if (FAILED(compile_hr) || shader_blob == nullptr) {
-    char message[256];
-    std::snprintf(message, sizeof(message),
-                  "DLSSNR shader compile failed: pass=%s hr=0x%08lX",
-                  pass_name != nullptr ? pass_name : "<unknown>",
-                  static_cast<unsigned long>(compile_hr));
-    const std::string key =
-        ShaderDiagnosticKey(pass_name, reshade::log::level::error, message);
-    bool duplicate = false;
-    {
-      std::lock_guard<std::mutex> lock(diagnostic_mutex_);
-      duplicate = !logged_shader_diagnostics_.insert(key).second;
+    EmbeddedInclude include;
+    const HRESULT compile_hr = D3DCompile(
+        source->source,
+        source->size,
+        def.root,
+        nullptr,
+        &include,
+        "CSMain",
+        "cs_5_1",
+        D3DCOMPILE_OPTIMIZATION_LEVEL3,
+        0,
+        &shader_blob,
+        &diagnostic_blob);
+
+    if (diagnostic_blob != nullptr) {
+      const std::string diagnostic =
+          TrimShaderDiagnostic(diagnostic_blob->GetBufferPointer(),
+                               diagnostic_blob->GetBufferSize());
+      if (!diagnostic.empty()) {
+        const reshade::log::level level =
+            FAILED(compile_hr) ? reshade::log::level::error
+                               : reshade::log::level::warning;
+        const std::string key = ShaderDiagnosticKey(pass_name, level, diagnostic);
+        bool duplicate = false;
+        {
+          std::lock_guard<std::mutex> lock(diagnostic_mutex_);
+          duplicate = !logged_shader_diagnostics_.insert(key).second;
+        }
+        if (!duplicate) {
+          char header[384];
+          std::snprintf(header, sizeof(header),
+                        "DLSSNR shader %s: pass=%s root=%s",
+                        level == reshade::log::level::error ? "error" : "warning",
+                        pass_name,
+                        def.root != nullptr ? def.root : "<null>");
+          reshade::log::message(level, header);
+          reshade::log::message(level, diagnostic.c_str());
+        }
+      }
+      diagnostic_blob->Release();
+      diagnostic_blob = nullptr;
     }
-    if (!duplicate) {
-      reshade::log::message(reshade::log::level::error, message);
+
+    if (FAILED(compile_hr) || shader_blob == nullptr) {
+      char message[384];
+      std::snprintf(message, sizeof(message),
+                    "DLSSNR shader compile failed: pass=%s root=%s hr=0x%08lX",
+                    pass_name,
+                    def.root != nullptr ? def.root : "<null>",
+                    static_cast<unsigned long>(compile_hr));
+      const std::string key =
+          ShaderDiagnosticKey(pass_name, reshade::log::level::error, message);
+      bool duplicate = false;
+      {
+        std::lock_guard<std::mutex> lock(diagnostic_mutex_);
+        duplicate = !logged_shader_diagnostics_.insert(key).second;
+      }
+      if (!duplicate)
+        reshade::log::message(reshade::log::level::error, message);
+      if (shader_blob != nullptr) shader_blob->Release();
+      return false;
     }
-    if (shader_blob != nullptr) shader_blob->Release();
-    return false;
   }
 
   D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {};
   pso_desc.pRootSignature = root_signature_.Get();
-  pso_desc.CS.pShaderBytecode = shader_blob->GetBufferPointer();
-  pso_desc.CS.BytecodeLength = shader_blob->GetBufferSize();
+  if (shader_blob != nullptr) {
+    pso_desc.CS.pShaderBytecode = shader_blob->GetBufferPointer();
+    pso_desc.CS.BytecodeLength = shader_blob->GetBufferSize();
+  } else {
+    pso_desc.CS.pShaderBytecode = bytecode;
+    pso_desc.CS.BytecodeLength = bytecode_size;
+  }
   pso_desc.NodeMask = 0;
 
   const HRESULT pso_hr = device_->CreateComputePipelineState(
       &pso_desc, IID_PPV_ARGS(out_pso));
-  shader_blob->Release();
+  if (shader_blob != nullptr) shader_blob->Release();
 
   if (FAILED(pso_hr) || *out_pso == nullptr) {
-    char message[256];
+    char message[384];
     std::snprintf(message, sizeof(message),
-                  "DLSSNR shader pipeline creation failed: pass=%s hr=0x%08lX",
-                  pass_name != nullptr ? pass_name : "<unknown>",
+                  "DLSSNR shader pipeline creation failed: pass=%s root=%s hr=0x%08lX",
+                  pass_name,
+                  def.root != nullptr ? def.root : "<null>",
                   static_cast<unsigned long>(pso_hr));
     const std::string key =
         ShaderDiagnosticKey(pass_name, reshade::log::level::error, message);
@@ -365,9 +428,8 @@ bool ComputeEngine::CompilePipeline(
       std::lock_guard<std::mutex> lock(diagnostic_mutex_);
       duplicate = !logged_shader_diagnostics_.insert(key).second;
     }
-    if (!duplicate) {
+    if (!duplicate)
       reshade::log::message(reshade::log::level::error, message);
-    }
     return false;
   }
 
@@ -426,18 +488,8 @@ bool ComputeEngine::Dispatch(
         return false;
       }
 
-      std::string combined;
-      if (def->prelude != nullptr && def->prelude[0] != '\0') {
-        combined += def->prelude;
-      }
-      if (def->prelude2 != nullptr && def->prelude2[0] != '\0') {
-        combined += def->prelude2;
-      }
-      combined += def->hlsl_source;
-
       CachedPass pass;
-      if (!CompilePipeline(pass_name, combined.c_str(),
-                           pass.pso.GetAddressOf())) {
+      if (!CompilePipeline(*def, pass.pso.GetAddressOf())) {
         failed_passes_.insert(pass_name);
         return false;
       }
@@ -451,22 +503,22 @@ bool ComputeEngine::Dispatch(
   // Logged before BindAndDispatch so the pass name and constants line up with
   // the transitions that precede and follow it in the trace.
   if (trace::Enabled()) {
-    // Only the used prefix carries information: every param past the last
-    // non-zero one is zero, so formatting them is cost and noise.
+    const float* params = &constants.shader.Params0.x;
     constexpr uint32_t kParamCapacity =
-        sizeof(constants.params) / sizeof(constants.params[0]);
+        (sizeof(ShaderBlock) + sizeof(GradeBlock) + sizeof(ResidualBlock) +
+         sizeof(HdrBlock) + sizeof(EasuBlock) + sizeof(RcasBlock)) / sizeof(float);
     uint32_t param_count = 0;
     for (uint32_t i = 0; i < kParamCapacity; ++i) {
-      if (constants.params[i] != 0.0f) param_count = i + 1;
+      if (params[i] != 0.0f) param_count = i + 1;
     }
 
-    char params[48 * 10] = {};
+    char params_text[48 * 10] = {};
     int used = 0;
     for (uint32_t i = 0;
-         i < param_count && used < static_cast<int>(sizeof(params)) - 12; ++i) {
-      const int n = std::snprintf(params + used, sizeof(params) - used,
+         i < param_count && used < static_cast<int>(sizeof(params_text)) - 12; ++i) {
+      const int n = std::snprintf(params_text + used, sizeof(params_text) - used,
                                   "%s%.6g", i == 0 ? "" : ",",
-                                  static_cast<double>(constants.params[i]));
+                                  static_cast<double>(params[i]));
       if (n <= 0) break;
       used += n;
     }
@@ -480,7 +532,7 @@ bool ComputeEngine::Dispatch(
                 trace::ResourceId(srvs[0]),
                 kSrvCount > 1 ? trace::ResourceId(srvs[1]) : -1,
                 kSrvCount > 2 ? trace::ResourceId(srvs[2]) : -1,
-                trace::ResourceId(uavs[0]), params);
+                trace::ResourceId(uavs[0]), params_text);
   }
 
   return BindAndDispatch(
@@ -593,20 +645,8 @@ void ComputeEngine::WorkerCompileAll() {
   for (uint32_t i = 0; i < kComputePassCount; ++i) {
     const char* name = kComputePasses[i].name;
 
-    std::string combined;
-    if (kComputePasses[i].prelude != nullptr &&
-        kComputePasses[i].prelude[0] != '\0') {
-      combined += kComputePasses[i].prelude;
-    }
-    if (kComputePasses[i].prelude2 != nullptr &&
-        kComputePasses[i].prelude2[0] != '\0') {
-      combined += kComputePasses[i].prelude2;
-    }
-    combined += kComputePasses[i].hlsl_source;
-    const char* source = combined.c_str();
-
     CachedPass pass;
-    if (!CompilePipeline(name, source, pass.pso.GetAddressOf())) {
+    if (!CompilePipeline(kComputePasses[i], pass.pso.GetAddressOf())) {
       std::lock_guard<std::mutex> lock(passes_mutex_);
       if (worker_stop_) return;
       failed_passes_.insert(name);

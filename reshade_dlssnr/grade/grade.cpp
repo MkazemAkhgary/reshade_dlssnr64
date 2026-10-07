@@ -24,19 +24,19 @@ bool ApplyGrade(CommandContext& state,
   ComputeConstants constants = {};
   constants.Width = width;
   constants.Height = height;
-  constants.params[kGradeSlotBase + 0] = 1.0f;
-  constants.params[kGradeSlotBase + 1] = grade.luma;
-  constants.params[kGradeSlotBase + 2] = grade.chroma;
-  constants.params[kGradeSlotBase + 3] =
+  constants.grade.Enabled = 1.0f;
+  constants.grade.Luma = grade.luma;
+  constants.grade.Chroma = grade.chroma;
+  constants.grade.LumaMode =
       static_cast<float>(static_cast<int>(grade.luma_mode));
-  constants.params[kGradeSlotBase + 4] =
+  constants.grade.ChromaMode =
       static_cast<float>(static_cast<int>(grade.chroma_mode));
-  constants.params[kGradeSlotBase + 5] = grade.black_level;
-  constants.params[kGradeSlotBase + 6] = grade.white_level;
-  constants.params[kGradeSlotBase + 7] = grade.contrast;
-  constants.params[kGradeSlotBase + 8] = grade.shadows;
-  constants.params[kGradeSlotBase + 9] = grade.highlights;
-  constants.params[kGradeSlotBase + 10] =
+  constants.grade.BlackLevel = grade.black_level;
+  constants.grade.WhiteLevel = grade.white_level;
+  constants.grade.Contrast = grade.contrast;
+  constants.grade.Shadows = grade.shadows;
+  constants.grade.Highlights = grade.highlights;
+  constants.grade.Format =
       static_cast<float>(format_code);
 
   state.Transition(command_list, target, D3D12_RESOURCE_STATE_COPY_SOURCE);

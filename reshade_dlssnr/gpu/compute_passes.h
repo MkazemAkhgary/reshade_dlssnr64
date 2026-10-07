@@ -1,25 +1,21 @@
-// Compute pass registry. Add new HLSL passes here without touching the codec.
+// Compute pass registry. Each pass names its shader root relative to shaders/.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 namespace reshade_dlssnr {
 
 struct ComputePassDef {
-  const char* name;
-  const char* hlsl_source;
-  // Optional first prelude. Empty for passes that do not need it.
-  const char* prelude;
-  // Optional second prelude, concatenated after `prelude` and before the
-  // pass-specific shader source. This lets independent shared shader blocks
-  // compose without copying one prelude into another.
-  const char* prelude2;
+  const char* name;         // trace name, matches the pass registry
+  const char* root;         // path relative to shaders/
+  const unsigned char* bytecode;
+  std::size_t bytecode_size;
 };
 
 extern const ComputePassDef kComputePasses[];
 extern const uint32_t kComputePassCount;
 
-const char* FindComputePassSource(const char* name);
 const ComputePassDef* FindComputePassDef(const char* name);
 
 }  // namespace reshade_dlssnr

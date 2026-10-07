@@ -18,6 +18,23 @@
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup>
+    <VerifyShaders Condition="'$(VerifyShaders)' == ''">true</VerifyShaders>
+    <PrecompileShaders Condition="'$(PrecompileShaders)' == ''">false</PrecompileShaders>
+    <FxcPath Condition="'$(FxcPath)' == ''"></FxcPath>
+  </PropertyGroup>
+
+  <Target Name="GenerateEmbeddedShaders" BeforeTargets="ClCompile">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\generate_shaders.ps1&quot; -ProjectDir &quot;$(ProjectDir)&quot; -GeneratedDir &quot;$(ProjectDir)generated&quot;" />
+  </Target>
+
+  <Target Name="VerifyShaders" BeforeTargets="ClCompile" DependsOnTargets="GenerateEmbeddedShaders" Condition="'$(VerifyShaders)' == 'true'">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\verify_shaders.ps1&quot; -ProjectDir &quot;$(ProjectDir)&quot; -FxcPath &quot;$(FxcPath)&quot;" />
+  </Target>
+
+  <Target Name="PrecompileShaders" BeforeTargets="ClCompile" DependsOnTargets="VerifyShaders" Condition="'$(PrecompileShaders)' == 'true'">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\precompile_shaders.ps1&quot; -ProjectDir &quot;$(ProjectDir)&quot; -GeneratedDir &quot;$(ProjectDir)generated&quot; -FxcPath &quot;$(FxcPath)&quot;" />
+  </Target>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
@@ -68,7 +85,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <Optimization>Disabled</Optimization>
       <ObjectFileName>$(IntDir)%(RelativeDir)%(Filename).obj</ObjectFileName>
-<AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)third_party\reshade\include;$(ProjectDir)third_party\reshade;$(ProjectDir)third_party\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\FidelityFX-FSR\ffx-fsr;$(ProjectDir)third_party\nvngx_dlss_sdk;$(ProjectDir)third_party\d3dx;$(ProjectDir)third_party\detours;$(ProjectDir)gpu;$(ProjectDir)model;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)compose;$(ProjectDir)grade;$(ProjectDir)hdr;$(ProjectDir)skin;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+<AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)generated;$(ProjectDir)third_party\reshade\include;$(ProjectDir)third_party\reshade;$(ProjectDir)third_party\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\FidelityFX-FSR\ffx-fsr;$(ProjectDir)third_party\nvngx_dlss_sdk;$(ProjectDir)third_party\d3dx;$(ProjectDir)third_party\detours;$(ProjectDir)gpu;$(ProjectDir)model;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)compose;$(ProjectDir)grade;$(ProjectDir)hdr;$(ProjectDir)skin;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -90,7 +107,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <ErrorLog>$(IntDir)$(MSBuildProjectName).error.log;%(ErrorLog)</ErrorLog>
       <ObjectFileName>$(IntDir)%(RelativeDir)%(Filename).obj</ObjectFileName>
-	  <AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)..\..\reshade\include;$(SolutionDir)..\..\reshade;$(SolutionDir)..\..\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\nvngx_dlss_sdk;$(ProjectDir)third_party\d3dx;$(ProjectDir)third_party\detours;$(ProjectDir)gpu;$(ProjectDir)model;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)compose;$(ProjectDir)grade;$(ProjectDir)hdr;$(ProjectDir)skin;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+	  <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)generated;$(SolutionDir)..\..\reshade\include;$(SolutionDir)..\..\reshade;$(SolutionDir)..\..\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\nvngx_dlss_sdk;$(ProjectDir)third_party\d3dx;$(ProjectDir)third_party\detours;$(ProjectDir)gpu;$(ProjectDir)model;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)compose;$(ProjectDir)grade;$(ProjectDir)hdr;$(ProjectDir)skin;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -103,6 +120,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="addon.cpp" />
+    <ClCompile Include="generated\shader_sources.cpp" />
+    <ClCompile Include="generated\shader_bytecode.cpp" />
     <ClCompile Include="gpu\compute_engine.cpp" />
     <ClCompile Include="gpu\compute_passes.cpp" />
     <ClCompile Include="gpu\command_context.cpp" />
@@ -145,6 +164,9 @@
     <ClCompile Include="ui\ui_widgets.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="gpu\compute_constants.h" />
+    <ClInclude Include="generated\shader_sources.h" />
+    <ClInclude Include="generated\shader_bytecode.h" />
     <ClInclude Include="gpu\command_context.h" />
     <ClInclude Include="gpu\compute_engine.h" />
     <ClInclude Include="gpu\compute_passes.h" />
@@ -164,13 +186,7 @@
     <ClInclude Include="skin\settings.h" />
     <ClInclude Include="state\pass.h" />
     <ClInclude Include="state\trace.h" />
-    <ClInclude Include="compose\shaders.h" />
-    <ClInclude Include="debug\shaders.h" />
-    <ClInclude Include="grade\shaders.h" />
-    <ClInclude Include="hdr\shaders.h" />
     <ClInclude Include="hooks\streamline_compat.h" />
-    <ClInclude Include="model\shaders.h" />
-    <ClInclude Include="skin\shaders.h" />
     <ClInclude Include="pipeline\addon_controller.h" />
     <ClInclude Include="pipeline\crash_trace.h" />
     <ClInclude Include="debug\debug_view.h" />
@@ -194,6 +210,15 @@
     <ClInclude Include="ui\ui.h" />
     <ClInclude Include="ui\ui_sections.h" />
     <ClInclude Include="ui\ui_widgets.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\**\*.hlsl" />
+    <None Include="shaders\**\*.hlsli" />
+    <None Include="shaders\common\params.h" />
+    <None Include="tools\generate_shaders.py" />
+    <None Include="tools\generate_shaders.ps1" />
+    <None Include="tools\verify_shaders.ps1" />
+    <None Include="tools\precompile_shaders.ps1" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -14,118 +14,14 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include "shader_params.h"
+#include "compute_constants.h"
 
 namespace reshade_dlssnr {
 
-// ---------------------------------------------------------------------------
-// ComputeConstants::params region map
-// ---------------------------------------------------------------------------
-//
-// `params` is one flat float array, and a single dispatch can have more than
-// one consumer writing it: ComposeModelOutputHdr receives both the
-// kShaderParams table (copied in by the caller) and the HDR uniforms. Those
-// shared regions are pinned here rather than left to each caller's literal
-// indices, because the previous arrangement — the table filling [0, N) and
-// the HDR uniforms hardcoded at [8..12] — was safe only while N was 7. The
-// eighth parameter would have overwritten the exposure with no diagnostic
-// anywhere: the shader still compiles, the dispatch still succeeds, and the
-// image is simply wrong.
-//
-// Passes whose parameters are theirs alone — DebugDisplay and the histogram /
-// the histogram passes — keep their own layout starting at 0. Nothing else
-// writes those slots in the same dispatch, so they need no region.
-//
-//   [0,  kShaderParamCount)  the kShaderParams table (per-pass sliders)
-//   [8,  24)                 the colour grade block
-//   [24, 32)                 the residual edit block
-//   [32, 44)                 the HDR + gain-map uniform block
-//   [44, 56)                 the FSR EASU constants
-//   [56, 60)                 the FSR RCAS constants
-//
-// Gaps between regions are deliberate headroom, not waste: they let a region
-// grow a little before anything else has to move.
-//
-// So: a consumer that shares a dispatch takes a base from here, and the
-// asserts below prove the regions cannot overlap or run off the end.
-constexpr uint32_t kShaderParamSlotBase = 0;
-constexpr uint32_t kGradeSlotBase = 8;
-constexpr uint32_t kGradeSlotCount = 16;
-constexpr uint32_t kResidualSlotBase = 24;
-constexpr uint32_t kResidualSlotCount = 8;
-constexpr uint32_t kHdrSlotBase = 32;
-constexpr uint32_t kHdrSlotCount = 12;
-constexpr uint32_t kEasuSlotBase = 44;
-constexpr uint32_t kEasuSlotCount = 12;
-constexpr uint32_t kRcasSlotBase = 56;
-constexpr uint32_t kRcasSlotCount = 4;
+struct ComputePassDef;
 
-constexpr uint32_t kParamSlotCount = 60;
-
-static_assert(kShaderParamCount <= kGradeSlotBase,
-              "the kShaderParams table has grown into the grade block - move "
-              "kGradeSlotBase up");
-static_assert(kGradeSlotBase + kGradeSlotCount <= kResidualSlotBase,
-              "the grade block has grown into the residual block - move "
-              "kResidualSlotBase up");
-static_assert(kResidualSlotBase + kResidualSlotCount <= kHdrSlotBase,
-              "the residual block has grown into the HDR uniforms - move "
-              "kHdrSlotBase up");
-static_assert(kHdrSlotBase + kHdrSlotCount <= kEasuSlotBase,
-              "the HDR uniforms have grown into the EASU constants - move "
-              "kEasuSlotBase up");
-static_assert(kEasuSlotBase + kEasuSlotCount <= kRcasSlotBase,
-              "the EASU constants have grown into the RCAS block - move "
-              "kRcasSlotBase up");
-static_assert(kRcasSlotBase + kRcasSlotCount <= kParamSlotCount,
-              "the RCAS constants have grown past the end of params");
-
-// Size and alignment are pinned to 256 bytes for two reasons: the CBV
-// created in BindAndDispatch hardcodes SizeInBytes = 256, and the D3D12
-// root signature requires CBVs to be 256-byte aligned. Growing `params`
-// past 48 floats is fine until the struct exceeds 256 bytes, at which
-// point the static_assert below fires.
-struct alignas(256) ComputeConstants {
-  uint32_t Width = 0;
-  uint32_t Height = 0;
-  uint32_t pad0 = 0;
-  uint32_t pad1 = 0;
-
-  // Dynamic shader parameters. Consumers write one region of this array
-  // rather than the whole thing; the region map is at the top of this header.
-  //
-  // The HLSL declaration is `float4 gParams[15]`: 15*16 bytes plus the 16-byte
-  // header exactly fills the 256-byte CBV. Region indices above are float
-  // offsets into that array, so a shared shader can consume all 60 payload
-  // floats without crossing the CBV boundary.
-  float params[kParamSlotCount] = {};
-};
-static_assert(sizeof(ComputeConstants) <= 256, "Constants must fit in a 256-byte CBV");
-
-// Descriptor layout contract for every compute pass.
-//
-// The single root descriptor table (root param 0) exposes, in order:
-//   - kSrvCount SRVs   at shader registers t0..t(kSrvCount-1)
-//   - kUavCount UAVs   at shader registers u0..u(kUavCount-1)
-//   - kCbvCount CBV    at shader register b0
-//   - one static linear-clamp sampler at s0
-//
-// Every Dispatch() call MUST provide exactly kSrvCount SRVs and
-// kUavCount UAVs. Passing fewer leaves stale descriptors from the
-// previous dispatch in the unused slots. Shaders that do not declare a
-// register simply ignore that slot, so it is safe (and required) to fill
-// unused slots with any valid resource — typically the same texture or
-// output resource repeated.
-//
-// Resources may be 2D textures or buffers. Buffer views are created as
-// typed R32_UINT (HLSL `Buffer<uint>` / `RWBuffer<uint>`), so a buffer of
-// N 32-bit elements has `Width = N*4` in bytes. This lets a pass use
-// atomics (`InterlockedAdd`) for accumulation — e.g. histograms.
-//
-// If a pass needs more bindings, increase the count here; the root
-// signature, descriptor heap, and BindAndDispatch loop scale with it
-// automatically. Grid size is derived from constants.Width/Height using
-// a fixed 8x8 thread group (see BindAndDispatch).
+// Binding contract: shaders/common/registers.hlsli.
+// Register assignment code is implemented in CreateRootSignature/BindAndDispatch.
 
 // Ring depth for the per-dispatch descriptor and constant slots.
 //
@@ -254,8 +150,7 @@ class ComputeEngine {
   void WorkerCompileAll();
 
   bool CreateRootSignature(ID3D12Device* device);
-  bool CompilePipeline(const char* pass_name,
-                       const char* hlsl,
+  bool CompilePipeline(const ComputePassDef& def,
                        ID3D12PipelineState** out_pso);
   void CreateShaderResourceView(ID3D12Resource* resource, D3D12_CPU_DESCRIPTOR_HANDLE handle);
   void CreateUnorderedAccessView(ID3D12Resource* resource, D3D12_CPU_DESCRIPTOR_HANDLE handle);

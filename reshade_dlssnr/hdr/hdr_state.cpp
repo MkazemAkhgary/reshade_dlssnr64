@@ -404,13 +404,13 @@ void HdrState::BeginFrame(CommandContext& cmd,
   ComputeConstants constants = {};
   constants.Width = width;
   constants.Height = height;
-  constants.params[0] = FormatToShaderValue(resolved_format_);
-  constants.params[1] = kLumaMinLog2;
-  constants.params[2] = kLumaMaxLog2;
-  // gParams[1] in the shader: depth availability, orientation, mask bound.
-  constants.params[4] = depth != nullptr ? 1.0f : 0.0f;
-  constants.params[5] = depth_inverted ? 1.0f : 0.0f;
-  constants.params[6] = mask != nullptr ? 1.0f : 0.0f;
+  constants.shader.Params0.x = FormatToShaderValue(resolved_format_);
+  constants.shader.Params0.y = kLumaMinLog2;
+  constants.shader.Params0.z = kLumaMaxLog2;
+  // shader.Params1 in the shader: depth availability, orientation, mask bound.
+  constants.shader.Params1.x = depth != nullptr ? 1.0f : 0.0f;
+  constants.shader.Params1.y = depth_inverted ? 1.0f : 0.0f;
+  constants.shader.Params1.z = mask != nullptr ? 1.0f : 0.0f;
 
   // Seed the state tracker with the actual current states. Without this,
   // inference would guess from the resource descriptor, which is wrong for

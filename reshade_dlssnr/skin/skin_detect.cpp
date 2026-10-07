@@ -195,21 +195,18 @@ bool SkinDetect::Run(CommandContext& cmd,
   const bool hdr_active = hdr != nullptr && hdr->Enabled() &&
                           hdr->ResolvedFormat() != HdrFormat::Sdr;
   if (hdr_active) {
-    const uint32_t h = kHdrSlotBase;
-    constants.params[h + 0] =
-        static_cast<float>(HdrFormatCode(hdr->ResolvedFormat()));
-    constants.params[h + 1] = hdr->FallbackExposure();
-    constants.params[h + 2] = settings.hdr.bt2446_k1;
-    constants.params[h + 3] = settings.hdr.bt2446_k2;
-    constants.params[h + 4] = settings.hdr.bt2446_k4;
-    constants.params[h + 5] = settings.hdr.bt2446_crosstalk;
-    constants.params[h + 6] = settings.hdr.gain_base_offset;
-    constants.params[h + 7] = settings.hdr.gain_alternate_offset;
-    constants.params[h + 8] = settings.hdr.gain_min_log2;
-    constants.params[h + 9] = settings.hdr.gain_max_log2;
-    constants.params[h + 10] =
-        hdr->FallbackEffectiveSceneWhite(settings.hdr);
-    constants.params[h + 11] = 0.0f;
+    constants.hdr.Format = static_cast<float>(HdrFormatCode(hdr->ResolvedFormat()));
+    constants.hdr.Exposure = hdr->FallbackExposure();
+    constants.hdr.Bt2446K1 = settings.hdr.bt2446_k1;
+    constants.hdr.Bt2446K2 = settings.hdr.bt2446_k2;
+    constants.hdr.Bt2446K4 = settings.hdr.bt2446_k4;
+    constants.hdr.Crosstalk = settings.hdr.bt2446_crosstalk;
+    constants.hdr.BaseOffset = settings.hdr.gain_base_offset;
+    constants.hdr.AlternateOffset = settings.hdr.gain_alternate_offset;
+    constants.hdr.GainMinLog2 = settings.hdr.gain_min_log2;
+    constants.hdr.GainMaxLog2 = settings.hdr.gain_max_log2;
+    constants.hdr.EffectiveSceneWhite = hdr->FallbackEffectiveSceneWhite(settings.hdr);
+    constants.hdr.pad0 = 0.0f;
     if (!codec.Dispatch("GainMapSplit", command_list, constants,
                         prep_srvs, prep_uavs)) {
       return false;
@@ -292,13 +289,13 @@ bool SkinDetect::Run(CommandContext& cmd,
   float alpha = 0.02f + settings.skin.mask_response * 0.98f;
   if (warmup) alpha = 1.0f;
 
-  mask_constants.params[0] = settings.skin.luma_threshold;
-  mask_constants.params[1] = settings.skin.luma_relative;
-  mask_constants.params[2] = settings.skin.chroma_threshold;
-  mask_constants.params[3] = settings.skin.clip_threshold;
-  mask_constants.params[4] = settings.skin.edit_strength;
-  mask_constants.params[5] = settings.skin.mask_smoothing;
-  mask_constants.params[6] = alpha;
+  mask_constants.shader.Params0.x = settings.skin.luma_threshold;
+  mask_constants.shader.Params0.y = settings.skin.luma_relative;
+  mask_constants.shader.Params0.z = settings.skin.chroma_threshold;
+  mask_constants.shader.Params0.w = settings.skin.clip_threshold;
+  mask_constants.shader.Params1.x = settings.skin.edit_strength;
+  mask_constants.shader.Params1.y = settings.skin.mask_smoothing;
+  mask_constants.shader.Params1.z = alpha;
 
   ID3D12Resource* mask_srvs[kSrvCount] = {working_input_.Get(),
                                           working_output_.Get(),

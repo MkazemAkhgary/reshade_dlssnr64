@@ -935,21 +935,20 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
   ComputeConstants constants = {};
   constants.Width = run.width;
   constants.Height = run.height;
-  const uint32_t h = kHdrSlotBase;
-  constants.params[h + 0] = run.hdr_uniforms.format;
-  constants.params[h + 1] = run.hdr_uniforms.exposure;
-  constants.params[h + 2] = run.hdr_uniforms.bt2446_k1;
-  constants.params[h + 3] = run.hdr_uniforms.bt2446_k2;
+  constants.hdr.Format = run.hdr_uniforms.format;
+  constants.hdr.Exposure = run.hdr_uniforms.exposure;
+  constants.hdr.Bt2446K1 = run.hdr_uniforms.bt2446_k1;
+  constants.hdr.Bt2446K2 = run.hdr_uniforms.bt2446_k2;
   // k3 remains a persisted BT.2446C construction parameter for trace/UI parity,
   // but the direct Method-C evaluation uses k1, k2 and k4 plus Y_ip = k4/k1.
-  constants.params[h + 4] = run.hdr_uniforms.bt2446_k4;
-  constants.params[h + 5] = run.hdr_uniforms.bt2446_crosstalk;
-  constants.params[h + 6] = run.hdr_uniforms.gain_base_offset;
-  constants.params[h + 7] = run.hdr_uniforms.gain_alternate_offset;
-  constants.params[h + 8] = run.hdr_uniforms.gain_min_log2;
-  constants.params[h + 9] = run.hdr_uniforms.gain_max_log2;
-  constants.params[h + 10] = run.hdr_uniforms.effective_scene_white;
-  constants.params[h + 11] = 0.0f;
+  constants.hdr.Bt2446K4 = run.hdr_uniforms.bt2446_k4;
+  constants.hdr.Crosstalk = run.hdr_uniforms.bt2446_crosstalk;
+  constants.hdr.BaseOffset = run.hdr_uniforms.gain_base_offset;
+  constants.hdr.AlternateOffset = run.hdr_uniforms.gain_alternate_offset;
+  constants.hdr.GainMinLog2 = run.hdr_uniforms.gain_min_log2;
+  constants.hdr.GainMaxLog2 = run.hdr_uniforms.gain_max_log2;
+  constants.hdr.EffectiveSceneWhite = run.hdr_uniforms.effective_scene_white;
+  constants.hdr.pad0 = 0.0f;
 
   ID3D12Resource* srvs[kSrvCount] = {source, source, source};
   ID3D12Resource* uavs[kUavCount] = {packed};
