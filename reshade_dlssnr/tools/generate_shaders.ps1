@@ -50,7 +50,7 @@ foreach ($file in $files) {
 
 $lines.Add('const EmbeddedShader kEmbeddedShaders[] = {')
 foreach ($entry in $entries) {
-  $lines.Add("  {\"$($entry.Name)\", $($entry.Symbol), sizeof($($entry.Symbol)) - 1},")
+  $lines.Add(('  {{"{0}", {1}, sizeof({1}) - 1}},' -f $entry.Name, $entry.Symbol))
 }
 $lines.Add('};')
 $lines.Add('const std::size_t kEmbeddedShaderCount = sizeof(kEmbeddedShaders) / sizeof(kEmbeddedShaders[0]);')
