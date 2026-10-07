@@ -62,8 +62,8 @@ void CSMain(uint3 id : SV_DispatchThreadID)
                                 uint2(src_width, src_height));
 
     const float3 luma = HdrLumaWeights();
-    float3 hdr = DecodeToLinear(src.rgb, (int)(kFormat + 0.5), 100.0);
-    float3 pre_hdr = PreDesaturate(hdr, saturate(kCrosstalk));
+    float3 hdr_linear = DecodeToLinear(src.rgb, (int)(kFormat + 0.5), 100.0);
+    float3 pre_hdr = PreDesaturate(hdr_linear, saturate(kCrosstalk));
 
     // Exposure is a scene-adaptation control. It changes the image presented
     // to the SDR model, but never becomes part of the alternate HDR image or
@@ -100,7 +100,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     // The gain is derived from the actual linear HDR and lossless SDR carrier
     // lumas, not from the temporary exposure-adjusted HDR sample.
-    float y_hdr_gain = max(dot(max(hdr, 0.0), luma), 0.0);
+    float y_hdr_gain = max(dot(max(hdr_linear, 0.0), luma), 0.0);
     float y_sdr_gain = max(dot(sdr, luma), 0.0);
     float gain = log2(
         max(y_hdr_gain + kAlternateOffset, 1e-12) /
