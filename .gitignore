@@ -20,23 +20,21 @@ reshade_dlssnr/generated/
 mono_crash.*
 
 # Build results
-[Dd]ebug/
-[Dd]ebugPublic/
-[Rr]elease/
-[Rr]eleases/
-x64/
-x86/
+reshade_dlssnr/build/[Dd]ebug/
+reshade_dlssnr/build/[Dd]ebugPublic/
+reshade_dlssnr/build/[Rr]elease/
+reshade_dlssnr/build/[Rr]eleases/
+reshade_dlssnr/build/x64/
+reshade_dlssnr/build/x86/
 
-# Source directory named debug/ — not build output
-!reshade_dlssnr/debug/
-[Ww][Ii][Nn]32/
-[Aa][Rr][Mm]/
-[Aa][Rr][Mm]64/
-bld/
-[Bb]in/
-[Oo]bj/
-[Ll]og/
-[Ll]ogs/
+reshade_dlssnr/build/[Ww][Ii][Nn]32/
+reshade_dlssnr/build/[Aa][Rr][Mm]/
+reshade_dlssnr/build/[Aa][Rr][Mm]64/
+reshade_dlssnr/build/bld/
+reshade_dlssnr/build/[Bb]in/
+reshade_dlssnr/build/[Oo]bj/
+reshade_dlssnr/build/[Ll]og/
+reshade_dlssnr/build/[Ll]ogs/
 
 # ffx-sdk
 external/ffx-sdk/*
