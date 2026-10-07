@@ -14,40 +14,31 @@ SamplerState s0 : register(s0);
 float3 DecodeSource(float3 c)
 {
     int fmt = (int)(kGradeFormat + 0.5);
+    float3 result = SrgbToLinearExt(c);
 
     if (fmt == 1)
-        return max(c, 0.0) * (80.0 / 100.0);
+        result = max(c, 0.0) * (80.0 / 100.0);
+    else if (fmt == 2)
+        result = PqToNits(c) / 100.0;
+    else if (fmt == 3)
+        result = c;
 
-    if (fmt == 2)
-        return PqToNits(c) / 100.0;
-
-    // Code 3 is the gain-map path's linear SDR model domain.
-    if (fmt == 3)
-        return c;
-
-    return SrgbToLinearExt(c);
+    return result;
 }
 
 float3 EncodeSource(float3 lin)
 {
     int fmt = (int)(kGradeFormat + 0.5);
+    float3 result = saturate(LinearToSrgbExt(max(lin, 0.0)));
 
     if (fmt == 1)
-        return max(lin, 0.0) * (100.0 / 80.0);
+        result = max(lin, 0.0) * (100.0 / 80.0);
+    else if (fmt == 2)
+        result = NitsToPq(max(lin, 0.0) * 100.0);
+    else if (fmt == 3)
+        result = lin;
 
-    if (fmt == 2)
-        return NitsToPq(max(lin, 0.0) * 100.0);
-
-    // Code 3 is already linear SDR.
-    if (fmt == 3)
-        return lin;
-
-    // Standard SDR sRGB encoding.
-    //
-    // Values below zero cannot be represented in SDR.
-    // Values above one cannot be represented either, so the final saturate()
-    // is the correct gamut/range operation rather than a creative shoulder.
-    return saturate(LinearToSrgbExt(max(lin, 0.0)));
+    return result;
 }
 
 [numthreads(8, 8, 1)]

@@ -41,9 +41,10 @@ float Bt2446C(float y_nits)
 {
     float y = max(y_nits, 0.0);
     float y_ip = kBt2446K4 / max(kBt2446K1, 1e-6);
-    if (y < y_ip)
-        return kBt2446K1 * y;
-    return kBt2446K2 * log(max(y / y_ip, 1e-6)) + kBt2446K4;
+    float result = kBt2446K1 * y;
+    if (y >= y_ip)
+        result = kBt2446K2 * log(max(y / y_ip, 1e-6)) + kBt2446K4;
+    return result;
 }
 
 [numthreads(8, 8, 1)]

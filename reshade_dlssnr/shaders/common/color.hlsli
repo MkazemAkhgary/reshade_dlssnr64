@@ -65,12 +65,13 @@ float3 LinearToSrgb(float3 v)
 
 float3 DecodeToLinear(float3 c, int format_code, float reference_nits)
 {
+    float3 result = SrgbToLinear(c);
     int fmt = format_code;
     if (fmt == 1)
-        return max(c, 0.0) * (80.0 / max(reference_nits, 1e-6));
-    if (fmt == 2)
-        return max(PqToNits(c), 0.0) / max(reference_nits, 1e-6);
-    return SrgbToLinear(c);
+        result = max(c, 0.0) * (80.0 / max(reference_nits, 1e-6));
+    else if (fmt == 2)
+        result = max(PqToNits(c), 0.0) / max(reference_nits, 1e-6);
+    return result;
 }
 
 float3 GamutFitPreserveChroma(float3 c)

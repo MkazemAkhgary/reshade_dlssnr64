@@ -27,18 +27,18 @@ float GradeLevelsInv(float y)
 
 float GradeContrastFwd(float y)
 {
-    if (kGradeContrast == 0.0)
-        return y;
-
-    return (y - 0.5) * exp2(kGradeContrast) + 0.5;
+    float result = y;
+    if (kGradeContrast != 0.0)
+        result = (y - 0.5) * exp2(kGradeContrast) + 0.5;
+    return result;
 }
 
 float GradeContrastInv(float y)
 {
-    if (kGradeContrast == 0.0)
-        return y;
-
-    return (y - 0.5) / exp2(kGradeContrast) + 0.5;
+    float result = y;
+    if (kGradeContrast != 0.0)
+        result = (y - 0.5) / exp2(kGradeContrast) + 0.5;
+    return result;
 }
 
 // -----------------------------------------------------------------------------
@@ -61,91 +61,80 @@ float GradeContrastInv(float y)
 
 float GradeShadowFwd(float y, float a)
 {
-    if (a == 0.0)
-        return y;
-
-    float t = saturate(y);
-    float room = 1.0 - t;
-
-    return y + 0.5 * a * y * room * room;
+    float result = y;
+    if (a != 0.0)
+    {
+        float t = saturate(y);
+        float room = 1.0 - t;
+        result = y + 0.5 * a * y * room * room;
+    }
+    return result;
 }
 
 float GradeShadowInv(float y_out, float a)
 {
-    if (a == 0.0)
-        return y_out;
-
-    // Below black, the mapping is simply y*(1 + 0.5*a).
-    if (y_out <= 0.0)
-        return y_out / (1.0 + 0.5 * a);
-
-    // Above white, shadow shaping is disabled.
-    if (y_out >= 1.0)
-        return y_out;
-
-    // Exact inverse of the cubic on [0,1].
-    float y = saturate(y_out);
-
-    [unroll]
-    for (int i = 0; i < 6; ++i)
+    float result = y_out;
+    if (a != 0.0)
     {
-        float room = 1.0 - y;
-        float f = y + 0.5 * a * y * room * room - y_out;
-
-        float df = 1.0 + 0.5 * a *
-                   (room * room - 2.0 * y * room);
-
-        y -= f / max(abs(df), kGradeEps) *
-             sign(df);
-
-        y = saturate(y);
+        if (y_out <= 0.0)
+        {
+            result = y_out / (1.0 + 0.5 * a);
+        }
+        else if (y_out < 1.0)
+        {
+            float y = saturate(y_out);
+            [unroll]
+            for (int i = 0; i < 6; ++i)
+            {
+                float room = 1.0 - y;
+                float f = y + 0.5 * a * y * room * room - y_out;
+                float df = 1.0 + 0.5 * a *
+                           (room * room - 2.0 * y * room);
+                y -= f / max(abs(df), kGradeEps) * sign(df);
+                y = saturate(y);
+            }
+            result = y;
+        }
     }
-
-    return y;
+    return result;
 }
 
 float GradeHighlightFwd(float y, float a)
 {
-    if (a == 0.0)
-        return y;
-
-    float t = saturate(y);
-
-    return y + 0.5 * a * t * t * (1.0 - y);
+    float result = y;
+    if (a != 0.0)
+    {
+        float t = saturate(y);
+        result = y + 0.5 * a * t * t * (1.0 - y);
+    }
+    return result;
 }
 
 float GradeHighlightInv(float y_out, float a)
 {
-    if (a == 0.0)
-        return y_out;
-
-    // Below black, highlight shaping is disabled.
-    if (y_out <= 0.0)
-        return y_out;
-
-    // Above white, the mapping is linear:
-    // y_out = y + 0.5*a*(1-y)
-    if (y_out >= 1.0)
-        return (y_out - 0.5 * a) / (1.0 - 0.5 * a);
-
-    // Exact inverse of the cubic on [0,1].
-    float y = saturate(y_out);
-
-    [unroll]
-    for (int i = 0; i < 6; ++i)
+    float result = y_out;
+    if (a != 0.0)
     {
-        float f = y + 0.5 * a * y * y * (1.0 - y) - y_out;
-
-        float df = 1.0 + 0.5 * a *
-                   (2.0 * y * (1.0 - y) - y * y);
-
-        y -= f / max(abs(df), kGradeEps) *
-             sign(df);
-
-        y = saturate(y);
+        if (y_out >= 1.0)
+        {
+            result = (y_out - 0.5 * a) / (1.0 - 0.5 * a);
+        }
+        else if (y_out > 0.0)
+        {
+            float y = saturate(y_out);
+            [unroll]
+            for (int i = 0; i < 6; ++i)
+            {
+                float f = y + 0.5 * a * y * y * (1.0 - y) - y_out;
+                float df = 1.0 + 0.5 * a *
+                           (2.0 * y * (1.0 - y) - y * y);
+                y -= f / max(abs(df), kGradeEps) * sign(df);
+                y = saturate(y);
+            }
+            result = y;
+        }
     }
-
-    return y;
+    return result;
 }
 
 // -----------------------------------------------------------------------------
@@ -154,100 +143,78 @@ float GradeHighlightInv(float y_out, float a)
 
 float SignedPow(float y, float p)
 {
-    if (y == 0.0)
-        return 0.0;
-
-    return (y < 0.0 ? -1.0 : 1.0) *
-           pow(abs(y), p);
+    float result = 0.0;
+    if (y != 0.0)
+        result = (y < 0.0 ? -1.0 : 1.0) * pow(abs(y), p);
+    return result;
 }
 
 float GradeLumaFwd(float y, float a, int mode)
 {
-    if (a == 0.0)
-        return y;
-
-    if (mode == 0)
+    float result = y;
+    if (a != 0.0)
     {
-        // Gain
-        return y * exp2(a);
+        if (mode == 0)
+        {
+            result = y * exp2(a);
+        }
+        else if (mode == 1)
+        {
+            result = SignedPow(y, exp2(-a));
+        }
+        else if (mode == 2)
+        {
+            float lift = 0.5 * a;
+            if (lift > 0.0)
+                result = y + lift * (1.0 - y);
+            else if (lift < 0.0)
+                result = y + lift * y;
+        }
+        else
+        {
+            float t = saturate(y);
+            result = y + 0.5 * a * t * (1.0 - t);
+        }
     }
-
-    if (mode == 1)
-    {
-        // Gamma. Signed extension keeps HDR/negative intermediates invertible.
-        return SignedPow(y, exp2(-a));
-    }
-
-    if (mode == 2)
-    {
-        // Lift. Exact inverse for the full [-1,1] UI range.
-        float lift = 0.5 * a;
-
-        if (lift > 0.0)
-            return y + lift * (1.0 - y);
-
-        if (lift < 0.0)
-            return y + lift * y;
-
-        return y;
-    }
-
-    // Soft:
-    // zero at both ends, strongest at mid-grey.
-    //
-    // saturate(y) makes the effect disappear outside [0,1], avoiding
-    // surprising HDR amplification.
-    float t = saturate(y);
-    return y + 0.5 * a * t * (1.0 - t);
+    return result;
 }
 
 float GradeLumaInv(float y, float a, int mode)
 {
-    if (a == 0.0)
-        return y;
-
-    if (mode == 0)
+    float result = y;
+    if (a != 0.0)
     {
-        return y / exp2(a);
+        if (mode == 0)
+        {
+            result = y / exp2(a);
+        }
+        else if (mode == 1)
+        {
+            result = SignedPow(y, exp2(a));
+        }
+        else if (mode == 2)
+        {
+            float lift = 0.5 * a;
+            if (lift > 0.0)
+                result = (y - lift) / (1.0 - lift);
+            else if (lift < 0.0)
+                result = y / (1.0 + lift);
+        }
+        else if (y > 0.0 && y < 1.0)
+        {
+            float x = saturate(y);
+            [unroll]
+            for (int i = 0; i < 6; ++i)
+            {
+                float f = x + 0.5 * a * x * (1.0 - x) - y;
+                float df = 1.0 + 0.5 * a * (1.0 - 2.0 * x);
+                x -= f / max(abs(df), kGradeEps) * sign(df);
+                x = saturate(x);
+            }
+            result = x;
+        }
     }
-
-    if (mode == 1)
-    {
-        return SignedPow(y, exp2(a));
-    }
-
-    if (mode == 2)
-    {
-        float lift = 0.5 * a;
-
-        if (lift > 0.0)
-            return (y - lift) / (1.0 - lift);
-
-        if (lift < 0.0)
-            return y / (1.0 + lift);
-
-        return y;
-    }
-
-    // Soft inverse.
-    if (y <= 0.0 || y >= 1.0)
-        return y;
-
-    float x = saturate(y);
-
-    [unroll]
-    for (int i = 0; i < 6; ++i)
-    {
-        float f = x + 0.5 * a * x * (1.0 - x) - y;
-        float df = 1.0 + 0.5 * a * (1.0 - 2.0 * x);
-
-        x -= f / max(abs(df), kGradeEps) *
-             sign(df);
-
-        x = saturate(x);
-    }
-
-    return x;
+    return result;
 }
 
 // -----------------------------------------------------------------------------
@@ -390,30 +357,32 @@ float3 GradeChromaGainInv(float3 c, float a)
 
 float3 GradeChromaFwd(float3 c, float a, int mode)
 {
-    if (a == 0.0)
-        return c;
-
-    if (mode == 0)
-        return GradeChromaSaturationFwd(c, a);
-
-    if (mode == 1)
-        return GradeChromaVibranceFwd(c, a);
-
-    return GradeChromaGainFwd(c, a);
+    float3 result = c;
+    if (a != 0.0)
+    {
+        if (mode == 0)
+            result = GradeChromaSaturationFwd(c, a);
+        else if (mode == 1)
+            result = GradeChromaVibranceFwd(c, a);
+        else
+            result = GradeChromaGainFwd(c, a);
+    }
+    return result;
 }
 
 float3 GradeChromaInv(float3 c, float a, int mode)
 {
-    if (a == 0.0)
-        return c;
-
-    if (mode == 0)
-        return GradeChromaSaturationInv(c, a);
-
-    if (mode == 1)
-        return GradeChromaVibranceInv(c, a);
-
-    return GradeChromaGainInv(c, a);
+    float3 result = c;
+    if (a != 0.0)
+    {
+        if (mode == 0)
+            result = GradeChromaSaturationInv(c, a);
+        else if (mode == 1)
+            result = GradeChromaVibranceInv(c, a);
+        else
+            result = GradeChromaGainInv(c, a);
+    }
+    return result;
 }
 
 // -----------------------------------------------------------------------------
@@ -505,18 +474,18 @@ float3 GradeSdrInv(float3 sdr)
 
 float3 GradeLinearFwd(float3 lin)
 {
-    if (kGradeEnabled < 0.5)
-        return lin;
-
-    return GradeLinearCoreFwd(lin);
+    float3 result = lin;
+    if (kGradeEnabled >= 0.5)
+        result = GradeLinearCoreFwd(lin);
+    return result;
 }
 
 float3 GradeLinearInv(float3 lin)
 {
-    if (kGradeEnabled < 0.5)
-        return lin;
-
-    return GradeLinearCoreInv(lin);
+    float3 result = lin;
+    if (kGradeEnabled >= 0.5)
+        result = GradeLinearCoreInv(lin);
+    return result;
 }
 
 #endif

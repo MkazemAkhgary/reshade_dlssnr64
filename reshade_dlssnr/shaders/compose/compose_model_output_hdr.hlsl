@@ -39,14 +39,15 @@ float3 ReconstructHdr(float3 sdr_base, float gain)
 float3 EncodeHdr(float3 lin)
 {
     int fmt = (int)(kFormat + 0.5);
+    float3 result = max(lin, 0.0);
     if (fmt == 1) {
         // Gain-map HDR is normalized to 100 nits; scRGB uses 80 nits/unit.
-        return lin * (100.0 / 80.0);
+        result = lin * (100.0 / 80.0);
     }
-    if (fmt == 2) {
-        return NitsToPq(max(lin, 0.0) * 100.0);
+    else if (fmt == 2) {
+        result = NitsToPq(max(lin, 0.0) * 100.0);
     }
-    return max(lin, 0.0);
+    return result;
 }
 
 // `kExposure` is retained in the uniform contract because the exposure EMA

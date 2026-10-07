@@ -21,19 +21,21 @@ static const uint kHistogramStride = 256u;
 
 bool IsSkin(float3 lin)
 {
+    bool result = false;
     float3 p = pow(max(lin, 1e-6), 1.0 / 2.2);
     float mx = max(p.r, max(p.g, p.b));
     float mn = min(p.r, min(p.g, p.b));
     float d = mx - mn;
-    if (d < 1e-5 || mx < 1e-5) return false;
-    if (d / mx < 0.15) return false;
-
-    float h;
-    if (mx == p.r) h = 60.0 * ((p.g - p.b) / d);
-    else if (mx == p.g) h = 60.0 * ((p.b - p.r) / d + 2.0);
-    else h = 60.0 * ((p.r - p.g) / d + 4.0);
-    if (h < 0.0) h += 360.0;
-    return h >= 15.0 && h <= 45.0;
+    if (d >= 1e-5 && mx >= 1e-5 && d / mx >= 0.15)
+    {
+        float h = 0.0;
+        if (mx == p.r) h = 60.0 * ((p.g - p.b) / d);
+        else if (mx == p.g) h = 60.0 * ((p.b - p.r) / d + 2.0);
+        else h = 60.0 * ((p.r - p.g) / d + 4.0);
+        if (h < 0.0) h += 360.0;
+        result = h >= 15.0 && h <= 45.0;
+    }
+    return result;
 }
 
 bool IsSky(float d)
@@ -91,8 +93,8 @@ void CSMain(uint3 gid : SV_GroupID,
 
     GroupMemoryBarrierWithGroupSync();
 
-    for (uint i = lidx; i < 768u; i += 64u) {
-        if (gSharedHist[i] > 0u)
-            InterlockedAdd(gHistogram[i], gSharedHist[i]);
+    for (uint hist_idx = lidx; hist_idx < 768u; hist_idx += 64u) {
+        if (gSharedHist[hist_idx] > 0u)
+            InterlockedAdd(gHistogram[hist_idx], gSharedHist[hist_idx]);
     }
 }
