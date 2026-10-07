@@ -19,21 +19,23 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup>
+    <DlssnrProjectDir>$(MSBuildProjectDirectory)</DlssnrProjectDir>
+    <DlssnrGeneratedDir>$(MSBuildProjectDirectory)\generated</DlssnrGeneratedDir>
     <VerifyShaders Condition="'$(VerifyShaders)' == ''">true</VerifyShaders>
     <PrecompileShaders Condition="'$(PrecompileShaders)' == ''">false</PrecompileShaders>
     <FxcPath Condition="'$(FxcPath)' == ''"></FxcPath>
   </PropertyGroup>
 
   <Target Name="GenerateEmbeddedShaders" BeforeTargets="ClCompile">
-    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\generate_shaders.ps1&quot; -ProjectDir &quot;$(ProjectDir)&quot; -GeneratedDir &quot;$(ProjectDir)generated&quot;" />
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\generate_shaders.ps1&quot; -ProjectDir &quot;$(DlssnrProjectDir)&quot; -GeneratedDir &quot;$(DlssnrGeneratedDir)&quot;" />
   </Target>
 
   <Target Name="VerifyShaders" BeforeTargets="ClCompile" DependsOnTargets="GenerateEmbeddedShaders" Condition="'$(VerifyShaders)' == 'true'">
-    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\verify_shaders.ps1&quot; -ProjectDir &quot;$(ProjectDir)&quot; -FxcPath &quot;$(FxcPath)&quot;" />
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\verify_shaders.ps1&quot; -ProjectDir &quot;$(DlssnrProjectDir)&quot; -FxcPath &quot;$(FxcPath)&quot;" />
   </Target>
 
   <Target Name="PrecompileShaders" BeforeTargets="ClCompile" DependsOnTargets="VerifyShaders" Condition="'$(PrecompileShaders)' == 'true'">
-    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\precompile_shaders.ps1&quot; -ProjectDir &quot;$(ProjectDir)&quot; -GeneratedDir &quot;$(ProjectDir)generated&quot; -FxcPath &quot;$(FxcPath)&quot;" />
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\precompile_shaders.ps1&quot; -ProjectDir &quot;$(DlssnrProjectDir)&quot; -GeneratedDir &quot;$(DlssnrGeneratedDir)&quot; -FxcPath &quot;$(FxcPath)&quot;" />
   </Target>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>

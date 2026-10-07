@@ -1,9 +1,12 @@
 param(
   [Parameter(Mandatory=$true)][string]$ProjectDir,
-  [Parameter(Mandatory=$true)][string]$GeneratedDir
+  [string]$GeneratedDir = ""
 )
 
 $ProjectDir = (Resolve-Path $ProjectDir).Path
+if ([string]::IsNullOrWhiteSpace($GeneratedDir)) {
+  $GeneratedDir = Join-Path $ProjectDir "generated"
+}
 New-Item -ItemType Directory -Force -Path $GeneratedDir | Out-Null
 $shaderRoot = Join-Path $ProjectDir "shaders"
 
