@@ -1,6 +1,8 @@
 #ifndef DLSSNR_COLOR_HLSLI
 #define DLSSNR_COLOR_HLSLI
 
+#include "common/color_constants.h"
+
 float3 SrgbToLinear(float3 v)
 {
     v = saturate(v);
@@ -37,7 +39,7 @@ float3 PqToNits(float3 v)
     float3 p = pow(max(v, 0.0), 1.0 / m2);
     float3 num = max(p - c1, 0.0);
     float3 den = c2 - c3 * p;
-    return 10000.0 * pow(num / max(den, 1e-6), 1.0 / m1);
+    return kPqPeakNits * pow(num / max(den, 1e-6), 1.0 / m1);
 }
 
 float3 NitsToPq(float3 nits)
@@ -47,7 +49,7 @@ float3 NitsToPq(float3 nits)
     const float c1 = 0.8359375;
     const float c2 = 18.8515625;
     const float c3 = 18.6875;
-    float3 Y = max(nits / 10000.0, 0.0);
+    float3 Y = max(nits / kPqPeakNits, 0.0);
     float3 Ym1 = pow(Y, m1);
     float3 num = c1 + c2 * Ym1;
     float3 den = 1.0 + c3 * Ym1;
@@ -68,7 +70,8 @@ float3 DecodeToLinear(float3 c, int format_code, float reference_nits)
     float3 result = SrgbToLinear(c);
     int fmt = format_code;
     if (fmt == 1)
-        result = max(c, 0.0) * (80.0 / max(reference_nits, 1e-6));
+        result = max(c, 0.0) *
+                 (kScRgbReferenceWhiteNits / max(reference_nits, 1e-6));
     else if (fmt == 2)
         result = max(PqToNits(c), 0.0) / max(reference_nits, 1e-6);
     return result;

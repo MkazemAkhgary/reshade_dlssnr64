@@ -63,7 +63,8 @@ void CSMain(uint3 id : SV_DispatchThreadID)
                                 uint2(src_width, src_height));
 
     const float3 luma = HdrLumaWeights();
-    float3 hdr_linear = DecodeToLinear(src.rgb, (int)(kFormat + 0.5), 100.0);
+    float3 hdr_linear = DecodeToLinear(
+        src.rgb, (int)(kFormat + 0.5), kSdrReferenceWhiteNits);
     float3 pre_hdr = PreDesaturate(hdr_linear, saturate(kCrosstalk));
 
     // Exposure is a scene-adaptation control. It changes the image presented
@@ -73,12 +74,12 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float3 pre_exposed = pre_hdr * exposure;
     float y_exposed = max(dot(pre_exposed, luma), 0.0);
 
-    // kEffectiveSceneWhite is measured in the histogram's scRGB-like 80-nit
-    // domain. Convert the resulting peak to nits, while this gain-map working
-    // domain remains normalized to SDR white = 100 nits.
+    // The gain-map working domain is normalized to SDR white = 100 nits.
+    // The CPU has already converted the measured 80-nit scRGB-domain scene
+    // white into absolute nits, so there is one explicit domain crossing.
     float effective_peak_nits = max(
-        100.0, 80.0 * max(kEffectiveSceneWhite, 0.01));
-    float y_curve = y_exposed * 10000.0 / effective_peak_nits;
+        kSdrReferenceWhiteNits, max(kEffectiveSceneWhiteNits, 0.01));
+    float y_curve = y_exposed * kPqPeakNits / effective_peak_nits;
     float y_sdr_pct = Bt2446C(y_curve);
     float y_sdr = max(y_sdr_pct / 100.0, 0.0);
 

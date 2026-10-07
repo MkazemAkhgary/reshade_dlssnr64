@@ -17,9 +17,10 @@ float3 DecodeSource(float3 c)
     float3 result = SrgbToLinearExt(c);
 
     if (fmt == 1)
-        result = max(c, 0.0) * (80.0 / 100.0);
+        result = max(c, 0.0) *
+                 (kScRgbReferenceWhiteNits / kSdrReferenceWhiteNits);
     else if (fmt == 2)
-        result = PqToNits(c) / 100.0;
+        result = PqToNits(c) / kSdrReferenceWhiteNits;
     else if (fmt == 3)
         result = c;
 
@@ -32,9 +33,10 @@ float3 EncodeSource(float3 lin)
     float3 result = saturate(LinearToSrgbExt(max(lin, 0.0)));
 
     if (fmt == 1)
-        result = max(lin, 0.0) * (100.0 / 80.0);
+        result = max(lin, 0.0) *
+                 (kSdrReferenceWhiteNits / kScRgbReferenceWhiteNits);
     else if (fmt == 2)
-        result = NitsToPq(max(lin, 0.0) * 100.0);
+        result = NitsToPq(max(lin, 0.0) * kSdrReferenceWhiteNits);
     else if (fmt == 3)
         result = lin;
 

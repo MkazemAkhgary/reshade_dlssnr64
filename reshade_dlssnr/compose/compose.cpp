@@ -81,7 +81,7 @@ bool ComposeOutput(
     constants.hdr.AlternateOffset = hdr->gain_alternate_offset;
     constants.hdr.GainMinLog2 = hdr->gain_min_log2;
     constants.hdr.GainMaxLog2 = hdr->gain_max_log2;
-    constants.hdr.EffectiveSceneWhite = hdr->effective_scene_white;
+    constants.hdr.EffectiveSceneWhiteNits = hdr->effective_scene_white_nits;
     constants.hdr.pad0 = 0.0f;
 
     if (grade_input != nullptr) {

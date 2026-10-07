@@ -25,8 +25,8 @@ PipelineStatus PassSession::StepBuildHdrUniforms(PassRun& run) {
   run.hdr_uniforms.gain_alternate_offset = hs.gain_alternate_offset;
   run.hdr_uniforms.gain_min_log2 = hs.gain_min_log2;
   run.hdr_uniforms.gain_max_log2 = hs.gain_max_log2;
-  run.hdr_uniforms.effective_scene_white =
-      run.hdr->EffectiveSceneWhite(hs);
+  run.hdr_uniforms.effective_scene_white_nits =
+      run.hdr->EffectiveSceneWhiteNits(hs);
   run.hdr_uniforms_ready = true;
   return PipelineStatus::Ok;
 }

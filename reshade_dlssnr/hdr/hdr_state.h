@@ -55,7 +55,8 @@ struct ExposureParams {
 // exposure, which changes the tonemap that produced the mask.
 struct ExposureTracker {
   float exposure = 1.0f;
-  // Measured source-domain white percentile, before exposure and headroom.
+  // Measured source-domain white percentile in the format-defined
+  // scRGB-equivalent 80-nit reference-white domain, before headroom.
   float scene_white = 1.0f;
   float target_exposure = 1.0f;
   float p50_luma = 0.0f;
@@ -162,10 +163,16 @@ class HdrState {
   float Exposure() const { return regular_.exposure; }
   float SceneWhite() const { return regular_.scene_white; }
   float EffectiveSceneWhite(const HdrSettings& hdr) const { return CalcEffectiveSceneWhite(SceneWhite(), hdr); }
+  float EffectiveSceneWhiteNits(const HdrSettings& hdr) const {
+    return CalcEffectiveSceneWhiteNits(SceneWhite(), hdr);
+  }
   // Skin-detect pass: depth -> full only, no skin slice.
   float FallbackExposure() const { return fallback_.exposure; }
   float FallbackSceneWhite() const { return fallback_.scene_white; }
   float FallbackEffectiveSceneWhite(const HdrSettings& hdr) const { return CalcEffectiveSceneWhite(FallbackSceneWhite(), hdr); }
+  float FallbackEffectiveSceneWhiteNits(const HdrSettings& hdr) const {
+    return CalcEffectiveSceneWhiteNits(FallbackSceneWhite(), hdr);
+  }
 
   HdrSnapshot GetSnapshot() const;
 

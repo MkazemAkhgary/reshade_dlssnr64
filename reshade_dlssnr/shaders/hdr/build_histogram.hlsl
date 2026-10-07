@@ -57,7 +57,7 @@ void CSMain(uint3 gid : SV_GroupID,
 
     if (dtid.x < Width && dtid.y < Height) {
         float3 c = gSource.Load(int3(dtid.xy, 0)).rgb;
-        float3 lin = DecodeToLinear(c, (int)(kFormat + 0.5), 80.0);
+        float3 lin = DecodeToLinear(c, (int)(kFormat + 0.5), kScRgbReferenceWhiteNits);
         float3 luma_weights = ((int)(kFormat + 0.5) == 2)
                                   ? kLuma2020
                                   : kLuma709;

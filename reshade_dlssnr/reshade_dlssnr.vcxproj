@@ -216,6 +216,7 @@
     <ClInclude Include="ui\ui_widgets.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="shaders\common\color_constants.h" />
     <None Include="shaders\common\params.h" />
     <None Include="tools\generate_shaders.py" />
     <None Include="tools\generate_shaders.ps1" />

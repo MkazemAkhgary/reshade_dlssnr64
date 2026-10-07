@@ -3,6 +3,8 @@
 
 #include <algorithm>
 
+#include "shaders/common/color_constants.h"
+
 namespace reshade_dlssnr {
 
 enum class HdrFormat : int {
@@ -61,6 +63,12 @@ void SaveHdrSettings(const HdrSettings& hdr);
 inline float CalcEffectiveSceneWhite(float scene_white, const HdrSettings& hdr)
 {
     return scene_white * std::max(hdr.highlight_headroom, 0.01f);
+}
+
+inline float CalcEffectiveSceneWhiteNits(float scene_white, const HdrSettings& hdr)
+{
+    return CalcEffectiveSceneWhite(scene_white, hdr) *
+           color_constants::kScRgbReferenceWhiteNits;
 }
 
 }  // namespace reshade_dlssnr

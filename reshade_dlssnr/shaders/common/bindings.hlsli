@@ -35,7 +35,7 @@
 #define kAlternateOffset     hdr.AlternateOffset
 #define kGainMinLog2         hdr.GainMinLog2
 #define kGainMaxLog2         hdr.GainMaxLog2
-#define kEffectiveSceneWhite hdr.EffectiveSceneWhite
+#define kEffectiveSceneWhiteNits hdr.EffectiveSceneWhiteNits
 
 // FSR
 #define kEasuCon0     easu.Con0

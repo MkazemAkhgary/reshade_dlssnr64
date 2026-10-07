@@ -67,7 +67,8 @@ DLSSNR_BLOCK(HdrBlock)
     float AlternateOffset;
     float GainMinLog2;
     float GainMaxLog2;
-    float EffectiveSceneWhite;
+    // Absolute effective scene-white peak in nits.
+    float EffectiveSceneWhiteNits;
     float pad0;
 };
 

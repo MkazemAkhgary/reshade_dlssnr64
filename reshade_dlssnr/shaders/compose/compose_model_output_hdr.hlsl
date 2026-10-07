@@ -41,11 +41,12 @@ float3 EncodeHdr(float3 lin)
     int fmt = (int)(kFormat + 0.5);
     float3 result = max(lin, 0.0);
     if (fmt == 1) {
-        // Gain-map HDR is normalized to 100 nits; scRGB uses 80 nits/unit.
-        result = lin * (100.0 / 80.0);
+        // The gain-map working domain uses 100-nit SDR white; scRGB encodes
+        // scene-referred 1.0 as 80 nits. Convert back at the boundary.
+        result = lin * (kSdrReferenceWhiteNits / kScRgbReferenceWhiteNits);
     }
     else if (fmt == 2) {
-        result = NitsToPq(max(lin, 0.0) * 100.0);
+        result = NitsToPq(max(lin, 0.0) * kSdrReferenceWhiteNits);
     }
     return result;
 }

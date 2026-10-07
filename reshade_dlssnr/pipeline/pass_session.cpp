@@ -947,7 +947,7 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
   constants.hdr.AlternateOffset = run.hdr_uniforms.gain_alternate_offset;
   constants.hdr.GainMinLog2 = run.hdr_uniforms.gain_min_log2;
   constants.hdr.GainMaxLog2 = run.hdr_uniforms.gain_max_log2;
-  constants.hdr.EffectiveSceneWhite = run.hdr_uniforms.effective_scene_white;
+  constants.hdr.EffectiveSceneWhiteNits = run.hdr_uniforms.effective_scene_white_nits;
   constants.hdr.pad0 = 0.0f;
 
   ID3D12Resource* srvs[kSrvCount] = {source, source, source};

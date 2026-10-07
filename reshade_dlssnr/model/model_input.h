@@ -7,6 +7,7 @@
 #include "command_context.h"
 #include "compute_engine.h"
 #include "pass_resources.h"
+#include "shaders/common/color_constants.h"
 
 namespace reshade_dlssnr::model_pipeline {
 
@@ -30,7 +31,11 @@ struct HdrUniforms {
   float gain_alternate_offset = 1.0f / 64.0f;
   float gain_min_log2 = -4.0f;
   float gain_max_log2 = 6.0f;
-  float effective_scene_white = 1.0f;
+  // Absolute effective scene-white peak in nits. The histogram meters in the
+  // format-defined 80-nit scRGB domain; this uniform crosses into the gain-map
+  // working domain as absolute luminance once on the CPU.
+  float effective_scene_white_nits =
+      color_constants::kScRgbReferenceWhiteNits;
 };
 
 // The source is already in the model domain (gain-map split happens in its
