@@ -1,11 +1,11 @@
 #include "skin/skin_detect.h"
 
 #include <algorithm>
+#include <chrono>
 
 #include <reshade.hpp>
 
 #include "dlss_guides.h"
-#include "hdr/hdr_state.h"
 #include "model/model_pipeline.h"
 #include "model/ngx_model_params.h"
 #include "pipeline/pipeline_graph.h"
@@ -16,9 +16,8 @@ namespace reshade_dlssnr {
 
 namespace {
 
-// Tuning for the detection pass. Built entirely from the dedicated
-// skin_detect_* settings; nothing here inherits from or shares with any
-// PassSettings.
+// Tuning for the detection pass. Built entirely from the dedicated structure-
+// detection settings; nothing here inherits from or shares with PassSettings.
 PassSettings BuildDetectionTuning(const Settings& s) {
   PassSettings pass;
   pass.preset = std::clamp(s.skin.preset, 0, 2);
@@ -65,6 +64,7 @@ bool RetireAndCreate(ID3D12Device* device,
 void SkinDetect::Shutdown(NgxRuntime& runtime) {
   feature_.Shutdown(runtime);
   working_input_.Reset();
+  prepared_input_.Reset();
   working_output_.Reset();
   mask_[0].Reset();
   mask_[1].Reset();
@@ -73,6 +73,9 @@ void SkinDetect::Shutdown(NgxRuntime& runtime) {
   width_ = 0;
   height_ = 0;
   format_ = DXGI_FORMAT_UNKNOWN;
+  exposure_tracker_.Reset();
+  last_measurement_generation_ = 0;
+  have_exposure_time_ = false;
   output_ = {};
 }
 
@@ -97,6 +100,7 @@ bool SkinDetect::EnsureResources(ID3D12Device* device,
   color_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 
   if (!RetireAndCreate(device, working_input_, color_desc)) return false;
+  if (!RetireAndCreate(device, prepared_input_, color_desc)) return false;
   if (!RetireAndCreate(device, working_output_, color_desc)) return false;
 
   D3D12_RESOURCE_DESC mask_desc = color_desc;
@@ -112,6 +116,82 @@ bool SkinDetect::EnsureResources(ID3D12Device* device,
   format_ = format;
   return true;
 }
+
+namespace {
+
+struct DetectionExposureValues {
+  float exposure = 1.0f;
+  float scene_white = 1.0f;
+  float local_strength = 0.0f;
+  float local_max_brighten = 0.0f;
+  float local_max_darken = 0.0f;
+  float midtone = 0.18f;
+};
+
+DetectionExposureValues ResolveDetectionExposure(
+    SkinDetect* self, HdrState* hdr, const SkinSettings& skin,
+    const Settings& settings) {
+  DetectionExposureValues out;
+  if (hdr == nullptr) return out;
+
+  const HdrSnapshot snapshot = hdr->GetSnapshot();
+  if (skin.exposure_mode == DetectionExposureMode::FollowMain) {
+    out.exposure = snapshot.exposure;
+    out.scene_white = snapshot.scene_white;
+    out.midtone = settings.hdr.midtone;
+    out.local_strength =
+        settings.hdr.exposure_method == HdrExposureMethod::AutoLocal
+            ? settings.hdr.local_exposure_strength
+            : 0.0f;
+    out.local_max_brighten = settings.hdr.local_max_brighten;
+    out.local_max_darken = settings.hdr.local_max_darken;
+    return out;
+  }
+
+  if (snapshot.has_histogram && snapshot.samples != 0 &&
+      snapshot.measurement_generation != 0 &&
+      self->last_measurement_generation_ != snapshot.measurement_generation) {
+    ExposureParams params;
+    params.midtone = skin.exposure_midtone;
+    params.white_percentile = skin.exposure_auto_high_percent;
+    params.exposure_method =
+        skin.exposure_mode == DetectionExposureMode::AutoLocal
+            ? HdrExposureMethod::AutoLocal
+            : HdrExposureMethod::Median;
+    params.auto_low_percent = skin.exposure_auto_low_percent;
+    params.auto_high_percent = skin.exposure_auto_high_percent;
+    params.speed_up = skin.exposure_speed_up;
+    params.speed_down = skin.exposure_speed_down;
+    params.rate_cap = skin.exposure_rate_cap;
+    params.measure_interval =
+        static_cast<uint32_t>(std::max(skin.exposure_measure_interval, 1));
+
+    const auto now = std::chrono::steady_clock::now();
+    const float dt = self->have_exposure_time_
+        ? std::chrono::duration<float>(now - self->last_exposure_time_).count()
+        : 1.0f / 60.0f;
+    self->last_exposure_time_ = now;
+    self->have_exposure_time_ = true;
+    self->exposure_tracker_.Update(snapshot.histogram, params, dt);
+    self->last_measurement_generation_ = snapshot.measurement_generation;
+  }
+
+  out.exposure = self->exposure_tracker_.have_measurement
+      ? self->exposure_tracker_.exposure
+      : snapshot.exposure;
+  out.scene_white = self->exposure_tracker_.have_measurement
+      ? self->exposure_tracker_.scene_white
+      : snapshot.scene_white;
+  out.midtone = skin.exposure_midtone;
+  if (skin.exposure_mode == DetectionExposureMode::AutoLocal) {
+    out.local_strength = skin.exposure_local_strength;
+    out.local_max_brighten = skin.exposure_local_max_brighten;
+    out.local_max_darken = skin.exposure_local_max_darken;
+  }
+  return out;
+}
+
+}  // namespace
 
 bool SkinDetect::Run(CommandContext& cmd,
                      NgxRuntime& runtime,
@@ -158,6 +238,8 @@ bool SkinDetect::Run(CommandContext& cmd,
                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   cmd.SetResourceState(working_input_.Get(),
                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  cmd.SetResourceState(prepared_input_.Get(),
+                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   cmd.SetResourceState(working_output_.Get(),
                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   cmd.SetResourceState(mask_[cur].Get(),
@@ -172,6 +254,8 @@ bool SkinDetect::Run(CommandContext& cmd,
                  D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   cmd.Transition(command_list, working_input_.Get(),
                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  cmd.Transition(command_list, prepared_input_.Get(),
+                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   cmd.Transition(command_list, working_output_.Get(),
                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   cmd.Transition(command_list, mask_[cur].Get(),
@@ -179,25 +263,20 @@ bool SkinDetect::Run(CommandContext& cmd,
   cmd.Transition(command_list, mask_[prev].Get(),
                  D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-  // 1. Build the model-domain SDR base and downsample it into working_input_
-  //    using exact pixel-footprint box/area averaging.
-  // The HDR case deliberately uses the same gain-map split as the main path;
-  // the fallback exposure EMA prevents this diagnostic model from feeding its
-  // own skin mask back into the exposure loop.
+  // 1. Build the model-facing input at the detection working scale.
+  const bool hdr_active = hdr != nullptr && hdr->Enabled() &&
+                          hdr->ResolvedFormat() != HdrFormat::Sdr;
+  const DetectionExposureValues exposure =
+      ResolveDetectionExposure(this, hdr, settings.skin, settings);
+
   ComputeConstants constants = {};
   constants.Width = work_w;
   constants.Height = work_h;
-  ID3D12Resource* prep_srvs[kSrvCount] = {guides.dlss_output_color,
-                                          guides.dlss_output_color,
-                                          guides.dlss_output_color,
-                                          guides.dlss_output_color};
-  ID3D12Resource* prep_uavs[kUavCount] = {working_input_.Get()};
+  ID3D12Resource* source = guides.dlss_output_color;
 
-  const bool hdr_active = hdr != nullptr && hdr->Enabled() &&
-                          hdr->ResolvedFormat() != HdrFormat::Sdr;
   if (hdr_active) {
     constants.hdr.Format = static_cast<float>(HdrFormatCode(hdr->ResolvedFormat()));
-    constants.hdr.Exposure = hdr->FallbackExposure();
+    constants.hdr.Exposure = exposure.exposure;
     constants.hdr.Bt2446K1 = settings.hdr.bt2446_k1;
     constants.hdr.Bt2446K2 = settings.hdr.bt2446_k2;
     constants.hdr.Bt2446K4 = settings.hdr.bt2446_k4;
@@ -207,21 +286,59 @@ bool SkinDetect::Run(CommandContext& cmd,
     constants.hdr.GainMinLog2 = settings.hdr.gain_min_log2;
     constants.hdr.GainMaxLog2 = settings.hdr.gain_max_log2;
     constants.hdr.EffectiveSceneWhiteNits =
-        hdr->FallbackEffectiveSceneWhiteNits(settings.hdr);
-      if (!codec.Dispatch("GainMapSplit", command_list, constants,
-                        prep_srvs, prep_uavs)) {
-      return false;
-    }
-  } else {
-    if (!codec.Dispatch("PrepareModelInput", command_list, constants,
-                        prep_srvs, prep_uavs)) {
-      return false;
-    }
-  }
-  cmd.Transition(command_list, working_input_.Get(),
-                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        CalcEffectiveSceneWhiteNits(exposure.scene_white, settings.hdr);
+    constants.hdr.LocalExposure.x = exposure.local_strength;
+    constants.hdr.LocalExposure.y = exposure.local_max_brighten;
+    constants.hdr.LocalExposure.z = exposure.local_max_darken;
+    constants.hdr.LocalExposure.w = exposure.midtone;
 
-  // 2. Build at full frame resolution; working scale only shapes the eval.
+    ID3D12Resource* srvs[kSrvCount] = {source, source, source, source};
+    ID3D12Resource* uavs[kUavCount] = {working_input_.Get()};
+    cmd.Transition(command_list, source,
+                   D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    cmd.Transition(command_list, working_input_.Get(),
+                   D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    if (!codec.Dispatch("GainMapSplit", command_list, constants,
+                        srvs, uavs)) {
+      return false;
+    }
+    cmd.UavBarrier(command_list, working_input_.Get());
+    cmd.Transition(command_list, working_input_.Get(),
+                   D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+    ComputeConstants prepare = {};
+    prepare.Width = work_w;
+    prepare.Height = work_h;
+    prepare.shader.Params0.w = 1.0f;
+    ID3D12Resource* prepare_srvs[kSrvCount] = {
+        working_input_.Get(), working_input_.Get(), working_input_.Get(),
+        working_input_.Get()};
+    ID3D12Resource* prepare_uavs[kUavCount] = {prepared_input_.Get()};
+    if (!codec.Dispatch("PrepareModelInput", command_list, prepare,
+                        prepare_srvs, prepare_uavs)) {
+      return false;
+    }
+    cmd.Transition(command_list, prepared_input_.Get(),
+                   D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  } else {
+    ComputeConstants prepare = {};
+    prepare.Width = work_w;
+    prepare.Height = work_h;
+    prepare.shader.Params0.w = 0.0f;
+    ID3D12Resource* prepare_srvs[kSrvCount] = {source, source, source, source};
+    ID3D12Resource* prepare_uavs[kUavCount] = {prepared_input_.Get()};
+    cmd.Transition(command_list, source,
+                   D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    if (!codec.Dispatch("PrepareModelInput", command_list, prepare,
+                        prepare_srvs, prepare_uavs)) {
+      return false;
+    }
+    cmd.Transition(command_list, prepared_input_.Get(),
+                   D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
+
+  // 2. The model feature is created at full output resolution, matching the
+  // main feature lifecycle. The evaluation itself uses the detection scale.
   if (!feature_.EnsureFeature(runtime, tuning_, command_list,
                               guides.output_width, guides.output_height)) {
     return false;
@@ -235,7 +352,7 @@ bool SkinDetect::Run(CommandContext& cmd,
   NVSDK_NGX_Parameter* params = block.Get();
   if (params == nullptr) return false;
 
-  block.SetResource("DLSSNR.Color", working_input_.Get());
+  block.SetResource("DLSSNR.Color", prepared_input_.Get());
   block.SetResource("DLSSNR.Output", working_output_.Get());
   block.SetUInt("DLSSNR.Width", work_w);
   block.SetUInt("DLSSNR.Height", work_h);
@@ -297,6 +414,8 @@ bool SkinDetect::Run(CommandContext& cmd,
   mask_constants.shader.Params1.x = settings.skin.edit_strength;
   mask_constants.shader.Params1.y = settings.skin.mask_smoothing;
   mask_constants.shader.Params1.z = alpha;
+  mask_constants.shader.Params1.w =
+      static_cast<float>(static_cast<int>(settings.skin.target_mode));
 
   ID3D12Resource* mask_srvs[kSrvCount] = {working_input_.Get(),
                                           working_output_.Get(),
@@ -310,7 +429,7 @@ bool SkinDetect::Run(CommandContext& cmd,
   mask_index_ = prev;
   mask_valid_ = true;
   output_.mask = mask_[cur].Get();
-  output_.detect_input = working_input_.Get();
+  output_.detect_input = prepared_input_.Get();
   output_.detect_output = working_output_.Get();
   output_.width = work_w;
   output_.height = work_h;

@@ -140,10 +140,10 @@ reshade_dlssnr/
     pipeline_trace.cpp              Trace writer and frame stream tracking
     status.h                        Runtime status snapshot definitions
   skin/
-    settings.h                      Skin-detection settings structure
-    settings.cpp                    Skin-detection persistence
-    skin_detect.h                   Model-driven mask interface
-    skin_detect.cpp                 Model evaluation and temporal mask generation
+    settings.h                      Structure/skin detection settings
+    settings.cpp                    Structure/skin detection persistence
+    skin_detect.h                   Model-driven analysis mask interface
+    skin_detect.cpp                 Model evaluation, exposure preparation and temporal mask generation
   state/
     pass.h                          Pass status/runtime support
     pass.cpp                        Pass state implementation
@@ -160,7 +160,7 @@ reshade_dlssnr/
     ui_hdr.cpp                      HDR controls and diagnostics
     ui_pass.cpp                     Per-pass controls
     ui_sections.h                   Section-drawer declarations
-    ui_skin.cpp                     Skin-detection controls
+    ui_skin.cpp                     Structure/skin detection controls
     ui_status.cpp                   Status and retry controls
     ui_widgets.h                    Shared widget declarations
     ui_widgets.cpp                  Shared widget implementation
@@ -208,8 +208,8 @@ The current Post-DLSS step order is:
 ResolveDevice
 EnsureHdr
 EnsureComputeEngine
-SkinDetect
 HdrBeginFrame
+SkinDetect
 ResolveWorkingScale
 EnsureFrameResources
 SeedResourceStates
@@ -230,7 +230,7 @@ RenderDebugView
 WriteToGameResource
 ```
 
-`SkinDetect` and `HdrBeginFrame` are effectively first-pass operations even though they are present in the stage table for every Post-DLSS pass. The controller marks only the first enabled Post-DLSS pass as `is_first_pass`; subsequent passes reuse the HDR measurement state and do not rerun skin detection.
+`HdrBeginFrame` and `SkinDetect` are effectively first-pass operations even though they are present in the stage table for every Post-DLSS pass. The controller marks only the first enabled Post-DLSS pass as `is_first_pass`; subsequent passes reuse the HDR measurement state and do not rerun structure detection.
 
 ### Present injection
 
@@ -519,6 +519,8 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 **HDR exposure is a global UI setting.** The HDR section exposes `Exposure Method` with `Auto Exposure + Local` and `Median (Legacy)`. The choice is persisted as `Hdr.ExposureMethod`; the default is Auto Exposure + Local.
 
+**Structure detection has its own model-facing exposure controls.** The `Structure Detection` section can follow the main HDR exposure, use a dedicated median exposure, or use a dedicated `Auto + Local` histogram exposure. Its local exposure is applied through the same BT.2446 carrier path used by the main model input.
+
 **Once the first Present pass exists, later passes are forced to Present.** This keeps the pass chain monotonic: Post-DLSS can feed later Post-DLSS work, while a Present pass cannot hand its output back into the earlier DLSS injection point.
 
 **The debug selection is not per-pass.** The active UI tab selects which pass renders the shared debug view.
@@ -530,7 +532,7 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 The HDR path is gain-map based and exists only in Post-DLSS processing.
 
 1. `HdrState` detects the source format and maintains exposure/scene-white state from the histogram. Auto Exposure + Local uses the full-frame histogram for global adaptation and the same histogram for white point. Median (Legacy) is also full-frame and does not use skin or depth.
-2. `SkinDetect`, when enabled and when the first Post-DLSS pass is HDR, prepares a working-scale image with the same model-domain preparation machinery, evaluates a model pass, and builds a temporal mask from the input/output difference. The mask is fed into the skin feature.
+2. `SkinDetect` (shown as `Structure Detection` in the UI), when enabled, prepares a working-scale model input using its selected exposure method, evaluates a dedicated model feature built at full output resolution, and builds a temporal mask from the input/output difference. The target can be skin-oriented or general model structure. The detection pass has three additional compute dispatches in its HDR worst case, and the descriptor/constant ring is sized for those dispatches in addition to the normal frame budget.
 3. `GainMapSplit` converts the full-resolution HDR source into an RGBA32F carrier: RGB is the linear SDR base and A is log2 gain. BT.2446-C parameters, gain-map offsets and scene-white control the split.
 4. `PrepareModelInput` performs exact Box Area downsampling. For the HDR carrier path it applies the reversible model highlight/gamut fit and sRGB encoding. The packed carrier is not modified.
 5. The model feature evaluates at the selected working scale while being built at full frame resolution.

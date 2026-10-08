@@ -10,7 +10,7 @@ namespace reshade_dlssnr {
 
 namespace {
 
-void DrawModelGroup(SkinSettings& skin, bool& model_open, bool& changed) {
+void DrawModelGroup(SkinSettings& detection, bool& model_open, bool& changed) {
   IndentScope indent;
   if (!PersistentSubHeader("Model", model_open, changed)) return;
 
@@ -20,104 +20,163 @@ void DrawModelGroup(SkinSettings& skin, bool& model_open, bool& changed) {
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("Preset");
   ImGui::SameLine(kControlLabelWidth);
-  const int clicked = DrawGroupButtons("skin_detect_preset", kNames, kTips, 3,
-                                       skin.preset, nullptr);
+  const int clicked = DrawGroupButtons("structure_detect_preset", kNames,
+                                       kTips, 3, detection.preset, nullptr);
   if (clicked >= 0) {
-    skin.preset = clicked;
+    detection.preset = clicked;
     changed = true;
   }
 
-  changed |= DrawFloatRow(0, "skin_detect_intensity", "Intensity", nullptr,
-                          &skin.intensity, nullptr, 1.0f, 0.0f, 2.0f, 1.0f);
-  changed |= DrawFloatRow(0, "skin_detect_local_tone", "Local Tone", nullptr,
-                          &skin.local_tone, nullptr, 0.0f, 0.0f, 2.0f, 0.0f);
-  changed |= DrawFloatRow(0, "skin_detect_local_structure", "Local Structure",
-                          nullptr, &skin.local_structure, nullptr, 0.0f,
+  changed |= DrawFloatRow(0, "structure_detect_intensity", "Intensity", nullptr,
+                          &detection.intensity, nullptr, 1.0f, 0.0f, 2.0f, 1.0f);
+  changed |= DrawFloatRow(0, "structure_detect_local_tone", "Local Tone", nullptr,
+                          &detection.local_tone, nullptr, 0.0f, 0.0f, 2.0f, 0.0f);
+  changed |= DrawFloatRow(0, "structure_detect_local_structure", "Local Structure",
+                          nullptr, &detection.local_structure, nullptr, 0.0f,
                           0.0f, 2.0f, 0.0f);
-  changed |= DrawFloatRow(0, "skin_detect_skin_structure", "Skin Structure",
-                          nullptr, &skin.skin_structure, nullptr, 1.0f,
+  changed |= DrawFloatRow(0, "structure_detect_target_structure", "Target Structure",
+                          nullptr, &detection.skin_structure, nullptr, 1.0f,
                           0.0f, 1.0f, 1.0f);
 
   ImGui::AlignTextToFramePadding();
-  changed |= DrawCheckboxAtLabel("skin_detect_ui_correction",
-                                 &skin.ui_correction);
+  changed |= DrawCheckboxAtLabel("structure_detect_ui_correction",
+                                 &detection.ui_correction);
   ImGui::SameLine();
   ImGui::TextUnformatted("UI Correction");
 }
 
-void DrawMaskGroup(SkinSettings& skin, bool& mask_open, bool& changed) {
+void DrawTargetGroup(SkinSettings& detection, bool& changed) {
+  static const char* kNames[] = {"Skin", "Structure"};
+  static const char* kTips[] = {
+      "Use the model edit with the skin-color gate.",
+      "Use the model edit without the skin-color gate. This can capture faces, clothing, geometry, and other structure.",
+  };
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted("Detection Target");
+  ImGui::SameLine(kControlLabelWidth);
+  const int current = static_cast<int>(detection.target_mode);
+  const int clicked = DrawGroupButtons("structure_detect_target", kNames,
+                                       kTips, 2, current, nullptr);
+  if (clicked >= 0 && clicked != current) {
+    detection.target_mode = static_cast<DetectionTargetMode>(clicked);
+    changed = true;
+  }
+}
+
+void DrawMaskGroup(SkinSettings& detection, bool& mask_open, bool& changed) {
   IndentScope indent;
   if (!PersistentSubHeader("Mask", mask_open, changed)) return;
 
-  changed |= DrawFloatRow(0, "skin_detect_edit_strength", "Edit Strength",
-                          nullptr, &skin.edit_strength, nullptr, 1.0f, 0.1f,
+  changed |= DrawFloatRow(0, "structure_detect_edit_strength", "Edit Strength",
+                          nullptr, &detection.edit_strength, nullptr, 1.0f, 0.1f,
                           8.0f, 1.0f);
-  changed |= DrawFloatRow(0, "skin_detect_mask_smoothing", "Mask Smoothing",
-                          nullptr, &skin.mask_smoothing, nullptr, 0.5f, 0.0f,
+  changed |= DrawFloatRow(0, "structure_detect_mask_smoothing", "Mask Smoothing",
+                          nullptr, &detection.mask_smoothing, nullptr, 0.5f, 0.0f,
                           1.0f, 0.5f);
-  changed |= DrawFloatRow(0, "skin_detect_mask_response", "Mask Response",
-                          nullptr, &skin.mask_response, nullptr, 0.15f, 0.0f,
+  changed |= DrawFloatRow(0, "structure_detect_mask_response", "Mask Response",
+                          nullptr, &detection.mask_response, nullptr, 0.15f, 0.0f,
                           1.0f, 0.15f);
+  changed |= DrawFloatRow(0, "structure_detect_luma_threshold", "Luma Threshold",
+                          nullptr, &detection.luma_threshold, nullptr, 0.02f,
+                          0.0f, 0.5f, 0.02f);
+  changed |= DrawFloatRow(0, "structure_detect_luma_relative", "Luma Relative",
+                          nullptr, &detection.luma_relative, nullptr, 0.05f,
+                          0.0f, 1.0f, 0.05f);
+  changed |= DrawFloatRow(0, "structure_detect_chroma_threshold",
+                          "Chroma Threshold", nullptr,
+                          &detection.chroma_threshold, nullptr, 0.02f, 0.0f, 0.5f,
+                          0.02f);
+  changed |= DrawFloatRow(0, "structure_detect_clip_threshold", "Clip Threshold",
+                          nullptr, &detection.clip_threshold, nullptr, 0.97f, 0.5f,
+                          1.0f, 0.97f);
 }
 
-void DrawHdrGroup(SkinSettings& skin, bool& hdr_open, bool& changed) {
+void DrawExposureGroup(Settings& settings, SkinSettings& detection,
+                       bool& hdr_open, bool& changed) {
   IndentScope indent;
-  if (!PersistentSubHeader("HDR Response", hdr_open, changed)) return;
+  if (!PersistentSubHeader("Detection Exposure", hdr_open, changed)) return;
 
-  changed |= DrawFloatRow(0, "skin_detect_hdr_midtone", "Midtone Target",
-                          nullptr, &skin.hdr_midtone, nullptr, 0.18f, 0.01f,
-                          0.50f, 0.18f);
-  changed |= DrawFloatRow(0, "skin_detect_hdr_rate_cap", "Response Cap",
-                          nullptr, &skin.hdr_rate_cap, nullptr, 0.1f, 0.0f,
-                          2.0f, 0.1f);
-  changed |= DrawIntRow("skin_detect_hdr_measure_interval", "Measure Interval",
-                        nullptr, &skin.hdr_measure_interval, 32, 1, 16);
-  changed |= DrawFloatRow(0, "skin_detect_hdr_depth_fallback_fraction",
-                          "Depth Fallback", nullptr,
-                          &skin.hdr_depth_fallback_fraction, nullptr, 0.2f,
-                          0.0f, 1.0f, 1.0f);
+  static const char* kNames[] = {"Follow Main", "Median", "Auto + Local"};
+  static const char* kTips[] = {
+      "Use the main HDR exposure and local-exposure settings.",
+      "Use a dedicated median exposure for the analysis pass, with local exposure disabled.",
+      "Use a dedicated histogram-driven eye adaptation and local exposure for the analysis pass.",
+  };
+  const int current = static_cast<int>(detection.exposure_mode);
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted("Exposure Method");
+  ImGui::SameLine(kControlLabelWidth);
+  const int clicked = DrawGroupButtons("structure_detect_exposure_method",
+                                       kNames, kTips, 3, current, nullptr);
+  if (clicked >= 0 && clicked != current) {
+    detection.exposure_mode = static_cast<DetectionExposureMode>(clicked);
+    changed = true;
+  }
+
+  if (detection.exposure_mode == DetectionExposureMode::FollowMain) return;
+
+  changed |= DrawFloatRow(0, "structure_detect_exposure_midtone", "Midtone Target",
+                          nullptr, &detection.exposure_midtone, nullptr, 0.18f,
+                          0.01f, 0.50f, 0.18f);
+  changed |= DrawIntRow("structure_detect_exposure_interval", "Measure Interval",
+                        nullptr, &detection.exposure_measure_interval, 32, 1, 4);
+
+  if (detection.exposure_mode == DetectionExposureMode::Median) {
+    changed |= DrawFloatRow(0, "structure_detect_exposure_rate_cap", "Response Cap",
+                            nullptr, &detection.exposure_rate_cap, nullptr, 0.1f,
+                            0.0f, 2.0f, 0.1f);
+    return;
+  }
+
+  changed |= DrawFloatRow(0, "structure_detect_auto_low_percent", "Low Percent",
+                          nullptr, &detection.exposure_auto_low_percent, nullptr,
+                          0.70f, 0.0f, 0.99f, 0.70f);
+  changed |= DrawFloatRow(0, "structure_detect_auto_high_percent", "High Percent",
+                          nullptr, &detection.exposure_auto_high_percent, nullptr,
+                          0.90f, 0.01f, 0.999f, 0.90f);
+  changed |= DrawFloatRow(0, "structure_detect_speed_up", "Speed Up",
+                          nullptr, &detection.exposure_speed_up, nullptr, 3.0f,
+                          0.0f, 20.0f, 3.0f);
+  changed |= DrawFloatRow(0, "structure_detect_speed_down", "Speed Down",
+                          nullptr, &detection.exposure_speed_down, nullptr, 1.0f,
+                          0.0f, 20.0f, 1.0f);
+  changed |= DrawFloatRow(0, "structure_detect_local_exposure", "Local Exposure",
+                          nullptr, &detection.exposure_local_strength, nullptr, 0.50f,
+                          0.0f, 1.0f, 0.50f);
+  changed |= DrawFloatRow(0, "structure_detect_local_brighten", "Max Brighten",
+                          nullptr, &detection.exposure_local_max_brighten, nullptr,
+                          1.75f, 0.0f, 4.0f, 1.75f);
+  changed |= DrawFloatRow(0, "structure_detect_local_darken", "Max Darken",
+                          nullptr, &detection.exposure_local_max_darken, nullptr,
+                          1.75f, 0.0f, 4.0f, 1.75f);
 }
 
 }  // namespace
 
-void DrawSkinDetectSection(Settings& settings, bool& changed) {
-  if (!PersistentHeader("Skin Detection", settings.ui_skin_detect_open,
+void DrawStructureDetectSection(Settings& settings, bool& changed) {
+  if (!PersistentHeader("Structure Detection", settings.ui_skin_detect_open,
                         changed)) {
     return;
   }
 
-  SkinSettings& skin = settings.skin;
+  SkinSettings& detection = settings.skin;
 
-  changed |= ImGui::Checkbox("Enable Skin Detection", &skin.enable);
+  changed |= ImGui::Checkbox("Enable Structure Detection", &detection.enable);
   if (ImGui::IsItemHovered()) {
     Tip(
-        "Run the model at reduced resolution with tone and structure edits "
-        "suppressed and skin edits on, and threshold the difference against "
-        "its input to build a per-pixel skin mask.\n"
-        "DLSS Output only.");
+        "Run the neural model at reduced resolution and build a persistent analysis mask from its edits."
+        " The target can be skin-oriented or general structure.");
   }
 
-  WithDisabled(!skin.enable, [&] {
-    changed |= DrawFloatRow(0, "skin_detect_scale", "Detection Scale",
-                            nullptr, &skin.scale, nullptr, 0.0f, 0.10f, 1.0f,
+  WithDisabled(!detection.enable, [&] {
+    DrawTargetGroup(detection, changed);
+    changed |= DrawFloatRow(0, "structure_detect_scale", "Detection Scale",
+                            nullptr, &detection.scale, nullptr, 0.25f, 0.10f, 1.0f,
                             0.25f);
-    changed |= DrawFloatRow(0, "skin_detect_luma_threshold", "Luma Threshold",
-                            nullptr, &skin.luma_threshold, nullptr, 0.0f,
-                            0.0f, 0.5f, 0.02f);
-    changed |= DrawFloatRow(0, "skin_detect_luma_relative", "Luma Relative",
-                            nullptr, &skin.luma_relative, nullptr, 0.0f, 0.0f,
-                            1.0f, 0.05f);
-    changed |= DrawFloatRow(0, "skin_detect_chroma_threshold",
-                            "Chroma Threshold", nullptr,
-                            &skin.chroma_threshold, nullptr, 0.0f, 0.0f, 0.5f,
-                            0.02f);
-    changed |= DrawFloatRow(0, "skin_detect_clip_threshold",
-                            "Clip Threshold", nullptr, &skin.clip_threshold,
-                            nullptr, 0.97f, 0.5f, 1.0f, 0.97f);
-
-    DrawModelGroup(skin, settings.ui_skin_detect_model_open, changed);
-    DrawMaskGroup(skin, settings.ui_skin_detect_mask_open, changed);
-    DrawHdrGroup(skin, settings.ui_skin_detect_hdr_open, changed);
+    DrawModelGroup(detection, settings.ui_skin_detect_model_open, changed);
+    DrawMaskGroup(detection, settings.ui_skin_detect_mask_open, changed);
+    DrawExposureGroup(settings, detection, settings.ui_skin_detect_hdr_open,
+                      changed);
   });
 }
 

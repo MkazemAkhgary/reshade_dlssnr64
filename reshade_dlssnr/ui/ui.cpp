@@ -205,7 +205,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   SectionDivider();
 
   // --- Skin detection (shared across passes; DLSS Output only) ---
-  DrawSkinDetectSection(settings, changed);
+  DrawStructureDetectSection(settings, changed);
 
   if (changed) {
     SaveSettings();

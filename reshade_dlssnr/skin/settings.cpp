@@ -1,5 +1,7 @@
 #include "skin/settings.h"
 
+#include <algorithm>
+
 #include <reshade.hpp>
 
 namespace reshade_dlssnr {
@@ -9,6 +11,13 @@ void LoadSkinSettings(SkinSettings& skin) {
                             skin.enable);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.Scale",
                             skin.scale);
+  int target_mode = static_cast<int>(skin.target_mode);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.Target",
+                            target_mode);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "StructureDetect.Target",
+                            target_mode);
+  if (target_mode < 0 || target_mode > 1) target_mode = 0;
+  skin.target_mode = static_cast<DetectionTargetMode>(target_mode);
   if (skin.scale < 0.10f) skin.scale = 0.10f;
   if (skin.scale > 1.0f) skin.scale = 1.0f;
 
@@ -56,24 +65,65 @@ void LoadSkinSettings(SkinSettings& skin) {
   if (skin.mask_response < 0.0f) skin.mask_response = 0.0f;
   if (skin.mask_response > 1.0f) skin.mask_response = 1.0f;
 
+  int exposure_mode = static_cast<int>(skin.exposure_mode);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            "SkinDetect.HdrMidtone", skin.hdr_midtone);
+                            "SkinDetect.ExposureMode", exposure_mode);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            "SkinDetect.HdrRateCap", skin.hdr_rate_cap);
-  if (skin.hdr_rate_cap < 0.0f) skin.hdr_rate_cap = 0.0f;
-  if (skin.hdr_rate_cap > 2.0f) skin.hdr_rate_cap = 2.0f;
+                            "StructureDetect.ExposureMode", exposure_mode);
+  if (exposure_mode < 0 || exposure_mode > 2) exposure_mode = 2;
+  skin.exposure_mode = static_cast<DetectionExposureMode>(exposure_mode);
+
+  // Read the old names first so existing configurations continue to load.
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            "SkinDetect.HdrMeasureInterval",
-                            skin.hdr_measure_interval);
-  if (skin.hdr_measure_interval < 1) skin.hdr_measure_interval = 1;
-  if (skin.hdr_measure_interval > 32) skin.hdr_measure_interval = 32;
+                            "SkinDetect.HdrMidtone", skin.exposure_midtone);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            "SkinDetect.HdrDepthFallbackFraction",
-                            skin.hdr_depth_fallback_fraction);
-  if (skin.hdr_depth_fallback_fraction < 0.0f)
-    skin.hdr_depth_fallback_fraction = 0.0f;
-  if (skin.hdr_depth_fallback_fraction > 1.0f)
-    skin.hdr_depth_fallback_fraction = 1.0f;
+                            "SkinDetect.HdrRateCap", skin.exposure_rate_cap);
+  int old_interval = skin.exposure_measure_interval;
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "SkinDetect.HdrMeasureInterval", old_interval);
+  skin.exposure_measure_interval = old_interval;
+
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "StructureDetect.ExposureMidtone", skin.exposure_midtone);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "StructureDetect.ExposureRateCap", skin.exposure_rate_cap);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "StructureDetect.ExposureMeasureInterval",
+                            skin.exposure_measure_interval);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "StructureDetect.AutoLowPercent",
+                            skin.exposure_auto_low_percent);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "StructureDetect.AutoHighPercent",
+                            skin.exposure_auto_high_percent);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "StructureDetect.SpeedUp", skin.exposure_speed_up);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "StructureDetect.SpeedDown", skin.exposure_speed_down);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "StructureDetect.LocalExposureStrength",
+                            skin.exposure_local_strength);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "StructureDetect.LocalMaxBrighten",
+                            skin.exposure_local_max_brighten);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "StructureDetect.LocalMaxDarken",
+                            skin.exposure_local_max_darken);
+
+  skin.exposure_midtone = std::clamp(skin.exposure_midtone, 0.01f, 0.50f);
+  skin.exposure_rate_cap = std::clamp(skin.exposure_rate_cap, 0.0f, 2.0f);
+  skin.exposure_measure_interval = std::clamp(skin.exposure_measure_interval, 1, 32);
+  skin.exposure_auto_low_percent = std::clamp(skin.exposure_auto_low_percent, 0.0f, 0.99f);
+  skin.exposure_auto_high_percent = std::clamp(skin.exposure_auto_high_percent, 0.01f, 0.999f);
+  if (skin.exposure_auto_high_percent <= skin.exposure_auto_low_percent) {
+    skin.exposure_auto_low_percent = 0.70f;
+    skin.exposure_auto_high_percent = 0.90f;
+  }
+  skin.exposure_speed_up = std::clamp(skin.exposure_speed_up, 0.0f, 20.0f);
+  skin.exposure_speed_down = std::clamp(skin.exposure_speed_down, 0.0f, 20.0f);
+  skin.exposure_local_strength = std::clamp(skin.exposure_local_strength, 0.0f, 1.0f);
+  skin.exposure_local_max_brighten = std::clamp(skin.exposure_local_max_brighten, 0.0f, 4.0f);
+  skin.exposure_local_max_darken = std::clamp(skin.exposure_local_max_darken, 0.0f, 4.0f);
 }
 
 void SaveSkinSettings(const SkinSettings& skin) {
@@ -81,6 +131,10 @@ void SaveSkinSettings(const SkinSettings& skin) {
                             skin.enable);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.Scale",
                             skin.scale);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "StructureDetect.Target",
+                            static_cast<int>(skin.target_mode));
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "StructureDetect.ExposureMode",
+                            static_cast<int>(skin.exposure_mode));
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.LumaThreshold", skin.luma_threshold);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
@@ -109,15 +163,27 @@ void SaveSkinSettings(const SkinSettings& skin) {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             "SkinDetect.MaskResponse", skin.mask_response);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            "SkinDetect.HdrMidtone", skin.hdr_midtone);
+                            "StructureDetect.ExposureMidtone", skin.exposure_midtone);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            "SkinDetect.HdrRateCap", skin.hdr_rate_cap);
+                            "StructureDetect.ExposureRateCap", skin.exposure_rate_cap);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            "SkinDetect.HdrMeasureInterval",
-                            skin.hdr_measure_interval);
+                            "StructureDetect.ExposureMeasureInterval",
+                            skin.exposure_measure_interval);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            "SkinDetect.HdrDepthFallbackFraction",
-                            skin.hdr_depth_fallback_fraction);
+                            "StructureDetect.AutoLowPercent", skin.exposure_auto_low_percent);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            "StructureDetect.AutoHighPercent", skin.exposure_auto_high_percent);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            "StructureDetect.SpeedUp", skin.exposure_speed_up);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            "StructureDetect.SpeedDown", skin.exposure_speed_down);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            "StructureDetect.LocalExposureStrength", skin.exposure_local_strength);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            "StructureDetect.LocalMaxBrighten", skin.exposure_local_max_brighten);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            "StructureDetect.LocalMaxDarken", skin.exposure_local_max_darken);
+
 }
 
 }  // namespace reshade_dlssnr

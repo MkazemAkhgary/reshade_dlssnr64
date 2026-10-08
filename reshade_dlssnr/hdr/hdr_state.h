@@ -62,6 +62,7 @@ struct HdrSnapshot {
   float p_hi_luma = 0.0f;
   float target_exposure = 1.0f;
   uint32_t samples = 0;
+  uint64_t measurement_generation = 0;
   int metering_source = 0;
 
   bool gain_map_ready = false;
@@ -139,6 +140,7 @@ class HdrState {
   uint32_t frame_counter_ = 0;
   uint32_t frames_until_measure_ = 0;
   uint32_t frames_since_measure_ = 0;
+  uint64_t measurement_generation_ = 0;
   bool have_logged_format_ = false;
 
   bool have_histogram_ = false;

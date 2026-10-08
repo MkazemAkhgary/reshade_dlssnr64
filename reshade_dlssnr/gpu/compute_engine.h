@@ -36,10 +36,11 @@ struct ComputePassDef;
 // so the third pass made the ring overwrite constants a pending dispatch was
 // still going to read.
 constexpr uint32_t kMaxFramesInFlight = 16;  // DXGI's maximum swapchain buffers
-// Worst case for one frame at kMaxPasses == 3: the effective local-exposure
-// map adds one dispatch to each Post-DLSS pass. The extra headroom here is kept
-// in the same relationship to kMaxPasses as the existing ring-size invariant.
-constexpr uint32_t kMaxDispatchesPerFrame = 3 * 9 + 3;
+// Worst case for one frame at kMaxPasses == 3: nine Post-DLSS dispatches per
+// pass, three HDR/Release dispatches, and three optional structure-detection
+// dispatches. The ring must cover all of them while the GPU may be up to
+// kMaxFramesInFlight frames behind the recording thread.
+constexpr uint32_t kMaxDispatchesPerFrame = kMaxPasses * 9 + 3 + 3;
 constexpr uint32_t kDescriptorRingSize =
     kMaxFramesInFlight * kMaxDispatchesPerFrame;
 

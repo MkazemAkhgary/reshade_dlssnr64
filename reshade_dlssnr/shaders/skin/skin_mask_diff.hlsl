@@ -10,6 +10,7 @@
 #define kEditStrength  shader.Params1.x
 #define kMaskSmoothing shader.Params1.y
 #define kMaskAlpha     shader.Params1.z
+#define kTargetMode     shader.Params1.w
 
 Texture2D<float4> gInput    : register(t0);
 Texture2D<float4> gOutput   : register(t1);
@@ -29,28 +30,25 @@ bool PixelIsSkin(int2 xy)
         min(min(a.r, a.g), a.b) > lo &&
         min(min(b.r, b.g), b.b) > lo;
 
-    if (range_ok)
-    {
-        // --- Hysteresis to reduce temporal flickering ---
-        // If the pixel was skin in the previous frame, lower the threshold
-        // required to keep it classified as skin.
-        float prev = gPrevMask.Load(int3(xy, 0));
-        float hysteresis = lerp(1.0, 0.5, saturate(prev * 2.0));
+    // --- Hysteresis to reduce temporal flickering ---
+    float prev = gPrevMask.Load(int3(xy, 0));
+    float hysteresis = lerp(1.0, 0.5, saturate(prev * 2.0));
 
-        float a_luma = dot(a, kLuma709);
-        float b_luma = dot(b, kLuma709);
-        float luma_diff = abs(b_luma - a_luma) * kEditStrength;
-        float luma_ref = max(a_luma, b_luma);
+    float a_luma = dot(a, kLuma709);
+    float b_luma = dot(b, kLuma709);
+    float luma_diff = abs(b_luma - a_luma) * kEditStrength;
+    float luma_ref = max(a_luma, b_luma);
 
-        bool luma_edit = luma_diff > (kLumaAbs * hysteresis) &&
-                         luma_diff > (kLumaRel * luma_ref * hysteresis);
+    bool luma_edit = luma_diff > (kLumaAbs * hysteresis) &&
+                     luma_diff > (kLumaRel * luma_ref * hysteresis);
 
-        float3 chroma_diff = (b - b_luma) - (a - a_luma);
-        bool chroma_edit =
-            length(chroma_diff) * kEditStrength > (kChromaAbs * hysteresis);
+    float3 chroma_diff = (b - b_luma) - (a - a_luma);
+    bool chroma_edit =
+        length(chroma_diff) * kEditStrength > (kChromaAbs * hysteresis);
+    bool model_edit = luma_edit || chroma_edit;
 
-        result = luma_edit || chroma_edit;
-    }
+    const int target = (int)(kTargetMode + 0.5);
+    result = target == 0 ? (range_ok && model_edit) : model_edit;
 
     return result;
 }

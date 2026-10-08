@@ -113,17 +113,16 @@ const DebugViewDef kDebugViews[] = {
     {"Depth",
      "The depth buffer the game supplied to DLSS. Shown as grayscale.",
      DebugDisplayMode::Depth, SelectDepth},
-    {"Skin Detect Input",
-     "The image the skin-detection pass fed to the model (after HDR "
+    {"Structure Detect Input",
+     "The image the structure-detection pass fed to the model (after HDR "
      "normalization and resize).",
      DebugDisplayMode::Color, SelectSkinDetectInput},
-    {"Skin Detect Output",
-     "The model's raw output from the skin-detection pass. The mask is "
+    {"Structure Detect Output",
+     "The model's raw output from the structure-detection pass. The mask is "
      "derived from the difference against the input.",
      DebugDisplayMode::Color, SelectSkinDetectOutput},
-    {"Skin Mask",
-     "White = the model classified the pixel as skin. This is what gates "
-     "the HDR skin histogram.",
+    {"Structure Mask",
+     "White = the model edit matched the selected detection target.",
      DebugDisplayMode::Mask, SelectSkinMask},
     {"SDR Base (pre-model)",
      "Full-resolution linear SDR base produced by the BT.2446C gain-map split. "

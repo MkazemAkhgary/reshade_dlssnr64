@@ -259,6 +259,7 @@ void HdrState::Shutdown() {
   frame_counter_ = 0;
   frames_until_measure_ = 0;
   frames_since_measure_ = 0;
+  measurement_generation_ = 0;
   have_logged_format_ = false;
   have_histogram_ = false;
   for (uint32_t i = 0; i < kHistogramBins; ++i)
@@ -291,6 +292,7 @@ HdrSnapshot HdrState::GetSnapshot() const {
   s.p_hi_luma = p_hi_luma_;
   s.target_exposure = regular_.target_exposure;
   s.samples = last_samples_;
+  s.measurement_generation = measurement_generation_;
   s.metering_source = static_cast<int>(regular_.metering_source);
   s.gain_map_ready = have_gain_stats_;
   s.gain_min_log2 = gain_min_log2_;
@@ -438,6 +440,7 @@ void HdrState::PollReadback(ID3D12Fence* fence, const Settings& settings) {
           last_histogram_[i] = bins[i];
         have_histogram_ = true;
         last_samples_ = total;
+        measurement_generation_ += 1;
         frames_since_measure_ = 0;
       }
     }

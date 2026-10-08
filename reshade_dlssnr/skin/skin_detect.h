@@ -3,7 +3,9 @@
 #include <d3d12.h>
 #include <wrl/client.h>
 
+#include <chrono>
 #include "command_context.h"
+#include "hdr/hdr_state.h"
 #include "compute_engine.h"
 #include "model/feature_lifecycle.h"
 #include "state/settings.h"
@@ -14,10 +16,8 @@ class HdrState;
 class NgxRuntime;
 struct DlssGuideState;
 
-// Runs the model at reduced scale with tone and structure edits suppressed
-// and skin edits on, then thresholds the difference against its input to
-// produce a per-pixel skin mask. The mask gates the HDR histogram's skin
-// slice.
+// Runs the model at reduced scale and thresholds the model edit into a
+// persistent analysis mask. The target can be skin-oriented or general structure.
 //
 // DLSS Output only. Records on the game's command list.
 class SkinDetect {
@@ -51,6 +51,7 @@ class SkinDetect {
 
   FeatureLifecycle feature_;
   Microsoft::WRL::ComPtr<ID3D12Resource> working_input_;
+  Microsoft::WRL::ComPtr<ID3D12Resource> prepared_input_;
   Microsoft::WRL::ComPtr<ID3D12Resource> working_output_;
   // Ping-pong: each frame reads the previous frame's mask and writes the
   // current one, so the shader can blend the new vote against it.
@@ -62,6 +63,10 @@ class SkinDetect {
   DXGI_FORMAT format_ = DXGI_FORMAT_UNKNOWN;
 
   PassSettings tuning_;
+  ExposureTracker exposure_tracker_;
+  uint64_t last_measurement_generation_ = 0;
+  std::chrono::steady_clock::time_point last_exposure_time_{};
+  bool have_exposure_time_ = false;
   Output output_;
 };
 
