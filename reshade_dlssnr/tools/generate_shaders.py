@@ -4,7 +4,21 @@ import argparse
 import re
 
 
+def normalize_crlf(text: str) -> str:
+    """Normalize text to Windows CRLF line endings."""
+    return text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r\n")
+
+
+def write_crlf(path: Path, text: str) -> None:
+    # newline="" prevents platform-dependent translation. The generated files
+    # themselves, and the shader source embedded inside raw string literals,
+    # are intentionally CRLF so Visual Studio does not report mixed line endings.
+    with path.open("w", encoding="utf-8", newline="") as f:
+        f.write(normalize_crlf(text))
+
+
 def raw_literal(text: str) -> str:
+    text = normalize_crlf(text)
     delim = "DLSSNR_SHADER"
     while f")" + delim + '"' in text:
         delim += "_X"
@@ -28,7 +42,7 @@ def main() -> None:
     )
 
     header = """#pragma once\n#include <cstddef>\n\nnamespace reshade_dlssnr {\nstruct EmbeddedShader { const char* name; const char* source; std::size_t size; };\nextern const EmbeddedShader kEmbeddedShaders[];\nextern const std::size_t kEmbeddedShaderCount;\nconst EmbeddedShader* FindEmbeddedShader(const char* name);\n}\n"""
-    (generated / "shader_sources.h").write_text(header, encoding="utf-8")
+    write_crlf(generated / "shader_sources.h", header)
 
     out = ['#include "shader_sources.h"', '#include <cstring>', 'namespace reshade_dlssnr {']
     entries = []
@@ -52,10 +66,10 @@ def main() -> None:
         "}",
         "}",
     ]
-    (generated / "shader_sources.cpp").write_text("\n".join(out) + "\n", encoding="utf-8")
+    write_crlf(generated / "shader_sources.cpp", "\n".join(out) + "\n")
 
     # Runtime-default stub. The opt-in precompile target replaces this file.
-    (generated / "shader_bytecode.h").write_text("""#pragma once\n#include <cstddef>\n\nnamespace reshade_dlssnr {\nstruct EmbeddedShaderBytecode { const char* name; const unsigned char* data; std::size_t size; };\nextern const EmbeddedShaderBytecode kEmbeddedShaderBytecodes[];\nextern const std::size_t kEmbeddedShaderBytecodeCount;\nconst EmbeddedShaderBytecode* FindEmbeddedShaderBytecode(const char* name);\n}\n""", encoding="utf-8")
+    write_crlf(generated / "shader_bytecode.h", """#pragma once\n#include <cstddef>\n\nnamespace reshade_dlssnr {\nstruct EmbeddedShaderBytecode { const char* name; const unsigned char* data; std::size_t size; };\nextern const EmbeddedShaderBytecode kEmbeddedShaderBytecodes[];\nextern const std::size_t kEmbeddedShaderBytecodeCount;\nconst EmbeddedShaderBytecode* FindEmbeddedShaderBytecode(const char* name);\n}\n""")
     bytecode_stub = """#include \"shader_bytecode.h\"
 
 namespace reshade_dlssnr {
@@ -67,7 +81,7 @@ const std::size_t kEmbeddedShaderBytecodeCount = 0;
 const EmbeddedShaderBytecode* FindEmbeddedShaderBytecode(const char*) { return nullptr; }
 }
 """
-    (generated / "shader_bytecode.cpp").write_text(bytecode_stub, encoding="utf-8")
+    write_crlf(generated / "shader_bytecode.cpp", bytecode_stub)
 
 
 if __name__ == "__main__":

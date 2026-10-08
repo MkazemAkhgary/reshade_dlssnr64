@@ -114,7 +114,18 @@ bool ComposeOutput(
   state.Transition(command_list, low_enhanced,
                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-  ID3D12Resource* srvs[kSrvCount] = {packed_source, low_input, low_enhanced};
+  ID3D12Resource* effective_exposure = packed_source;
+  if (hdr != nullptr && residual.hdr_compose_mode == HdrComposeMode::InverseToneMap &&
+      hdr->local_exposure_strength > 0.0f &&
+      resources.GetEffectiveExposureMap() != nullptr) {
+    effective_exposure = resources.GetEffectiveExposureMap();
+    state.Transition(command_list, effective_exposure,
+                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    constants.shader.Params1.w = 1.0f;
+  }
+
+  ID3D12Resource* srvs[kSrvCount] = {
+      packed_source, low_input, low_enhanced, effective_exposure};
   ID3D12Resource* uavs[kUavCount] = {resources.GetCompositeOutput()};
 
   return codec->Dispatch(pass_name, command_list, constants, srvs, uavs);

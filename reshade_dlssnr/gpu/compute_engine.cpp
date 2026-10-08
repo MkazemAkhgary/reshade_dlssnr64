@@ -524,7 +524,7 @@ bool ComputeEngine::Dispatch(
     }
     trace::Line("cmd", "Dispatch", this,
                 "dispatch pass=%s w=%u h=%u grid=%u,%u,%u "
-                "srv=[%d,%d,%d] uav=[%d] params=[%s]",
+                "srv=[%d,%d,%d,%d] uav=[%d] params=[%s]",
                 pass_name, constants.Width, constants.Height,
                 threads_x != 0 ? threads_x : (constants.Width + 7) / 8,
                 threads_y != 0 ? threads_y : (constants.Height + 7) / 8,
@@ -532,6 +532,7 @@ bool ComputeEngine::Dispatch(
                 trace::ResourceId(srvs[0]),
                 kSrvCount > 1 ? trace::ResourceId(srvs[1]) : -1,
                 kSrvCount > 2 ? trace::ResourceId(srvs[2]) : -1,
+                kSrvCount > 3 ? trace::ResourceId(srvs[3]) : -1,
                 trace::ResourceId(uavs[0]), params_text);
   }
 

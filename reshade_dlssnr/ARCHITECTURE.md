@@ -475,6 +475,8 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 **Keep shared cbuffer math-free.** `shaders/common/params.h` is a layout contract for two languages, not a utility header.
 
+**Share local-exposure math between split and compose support.** `shaders/common/hdr_local_exposure.hlsli` is the single implementation of the local-exposure field calculation used by both the HDR gain-map split and the full-resolution exposure map. This prevents the map from drifting away from the exposure field that produced the model input.
+
 **Include shared helpers before using their aliases.** `bindings.hlsli` assumes the `params.h` field names exist. `color.hlsli`, `grade.hlsli`, and other helper files should only assume the functions they explicitly include or receive through earlier root includes.
 
 ### HDR
@@ -488,7 +490,7 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 **An experimental exposure method separates global adaptation from local exposure.** `Auto Exposure + Local` meters the selected scene histogram between configurable low/high percentiles, adapts toward that target at separate brighten/darken speeds, and uses the same high percentile for its white point. A spatial local-exposure stage then adjusts the low-frequency luminance base while preserving local detail. Skin metering is intentionally not used by this method.
 **HDR uses two reference whites for different jobs.** `kScRgbReferenceWhiteNits` (80 nits) is only for interpreting scRGB values. `kSdrReferenceWhiteNits` (100 nits) is the normalized domain used by the histogram, exposure, gain map, and model. This keeps `midtone` in the same scale as the model input. For example, scRGB 0.18 becomes 0.144 in the 100-nit domain; exposure then scales it to the requested 0.18. There is no separate 80/100 correction later.
 
-**The experimental local stage is separate from global eye adaptation.** Global adaptation chooses the overall exposure from the histogram and changes it over time. Local exposure then adjusts nearby dark and bright regions independently using a luma-aware spatial base, so a bright sky does not have to force the landscape dark and the landscape does not have to force the sky to clip.
+**The experimental local stage is separate from global eye adaptation.** Global adaptation chooses the overall exposure from the histogram and changes it over time. Local exposure then adjusts nearby dark and bright regions independently using a luma-aware spatial base, so a bright sky does not have to force the landscape dark and the landscape does not have to force the sky to clip. For HDR inverse composition, the pipeline also builds a full-resolution exposure map after `PrepareModelInput`. Each value is the exact global × local exposure used for that source pixel. The inverse HDR path samples this same field instead of re-estimating local exposure from the downsampled model image.
 
 **The packed HDR carrier is lossless in format and precision.** `PassResources::packed_hdr_sdr` is an RGBA32F carrier where RGB is the linear SDR base and A is raw log2 gain. Quantizing this representation would break the intended round trip.
 
@@ -500,7 +502,7 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 ### Debug views
 
-**HDR round-trip diagnostic.** The debug menu also exposes `HDR Roundtrip Diagnostic`, `HDR Roundtrip Error`, and `HDR Local Exposure`. These are test-only views for the HDR compose path. With local exposure enabled, `HDR Roundtrip Diagnostic` shows Model Input, Model Output, the composed HDR converted back through the same HDR-to-SDR transform, and their error. For a clean math test, disable input/output grades and RCAS and use working scale 1.0.
+**HDR round-trip diagnostic.** The debug menu also exposes `HDR Roundtrip Diagnostic`, `HDR Roundtrip Error`, and `HDR Local Exposure`. These are test-only views for the HDR compose path. With local exposure enabled, the round-trip path uses the same full-resolution exposure map as inverse compose. The diagnostic shows Model Input, Model Output, the composed HDR converted back through the same HDR-to-SDR transform, and their error. For a clean math test, disable input/output grades and RCAS and use working scale 1.0.
 
 **Render debug images at pass time.** The resource state is trustworthy while the producing pass still owns the command list and has just produced the resource. `MaybeRenderDebug` renders into `FrameDebugContext::output`; the Release stage only copies that already-rendered output to the backbuffer.
 
@@ -533,7 +535,7 @@ The HDR path is gain-map based and exists only in Post-DLSS processing.
 3. `GainMapSplit` converts the full-resolution HDR source into an RGBA32F carrier: RGB is the linear SDR base and A is log2 gain. BT.2446-C parameters, gain-map offsets and scene-white control the split.
 4. `PrepareModelInput` performs exact Box Area downsampling. For the HDR carrier path it applies the reversible model highlight/gamut fit and sRGB encoding. The packed carrier is not modified.
 5. The model feature evaluates at the selected working scale while being built at full frame resolution.
-6. `ComposeModelOutputHdr` uses FSR EASU and optional RCAS to reconstruct the model's working-scale images at full resolution. The default `Ratio` mode uses the existing linear-SDR ratio transfer. `Inverse Tone Map` selects `ComposeModelOutputHdrInverse`, which inverts the same BT.2446 transfer used by the HDR split and recovers the combined global + local exposure from the packed carrier. It reconstructs the HDR image implied by the model output and transfers that target back to the original HDR, avoiding a second residual-normalization step.
+6. `ComposeModelOutputHdr` uses FSR EASU and optional RCAS to reconstruct the model's working-scale images at full resolution. The default `Ratio` mode uses the existing linear-SDR ratio transfer. `Inverse Tone Map` selects `ComposeModelOutputHdrInverse`, which inverts the same BT.2446 transfer used by the HDR split. When local exposure is enabled, it uses the full-resolution global × local exposure map; otherwise it falls back to the global/packed-carrier exposure recovery. It reconstructs the HDR image implied by the model output and transfers that target back to the original HDR, avoiding a second residual-normalization step.
 7. `EncodeHdr` writes the reconstructed result back into scRGB or HDR10 as required by the source format. The inverse compose path first reverses the model highlight/gamut fit so super-white model edits can reconstruct their HDR magnitude.
 
 The SDR compose uses the same FSR path but does not reconstruct an HDR carrier; it applies the residual in the source SDR space and uses the shared grade/compose helpers.

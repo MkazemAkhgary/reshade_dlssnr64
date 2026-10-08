@@ -289,6 +289,10 @@ void PassSession::SeedFrameState(ID3D12Resource* backbuffer) {
     command_.SetResourceState(resources_.GetPackedOutput(),
                               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   }
+  if (resources_.GetEffectiveExposureMap() != nullptr) {
+    command_.SetResourceState(resources_.GetEffectiveExposureMap(),
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
   if (resources_.GetGainStats() != nullptr) {
     command_.SetResourceState(resources_.GetGainStats(),
                               D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
@@ -307,6 +311,10 @@ void PassSession::CleanupFrameState(ID3D12GraphicsCommandList* command_list) {
                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   if (resources_.GetPackedOutput() != nullptr) {
     command_.Transition(command_list, resources_.GetPackedOutput(),
+                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
+  if (resources_.GetEffectiveExposureMap() != nullptr) {
+    command_.Transition(command_list, resources_.GetEffectiveExposureMap(),
                         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   }
   if (resources_.GetGainStats() != nullptr) {
@@ -871,7 +879,7 @@ PipelineStatus PassSession::StepResolveModelInput(PassRun& run) {
 // Model evaluation
 // ---------------------------------------------------------------------------
 
-// Build (or rebuild) the NGX feature at the full frame resolution. Working
+// Build the full-resolution combined local-exposure map used by HDR inverse compose. Working
 // scale only affects the per-frame evaluation size, which FillEvaluateParams
 // sets on every frame, so changing working scale never triggers a rebuild. A
 // rebuild happens only when the swapchain resolution itself changes.
@@ -955,7 +963,7 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
   constants.hdr.LocalExposure.z = run.hdr_uniforms.local_max_darken;
   constants.hdr.LocalExposure.w = run.hdr_uniforms.midtone;
 
-  ID3D12Resource* srvs[kSrvCount] = {source, source, source};
+  ID3D12Resource* srvs[kSrvCount] = {source, source, source, source};
   ID3D12Resource* uavs[kUavCount] = {packed};
   self->command_.Transition(run.list, source,
                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -974,7 +982,7 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
   // may legitimately contain super-white SDR values; those are reported as
   // carrier excursions while gain values outside the configured metadata
   // envelope are tracked separately. Neither diagnostic alters the carrier.
-  ID3D12Resource* stats_srvs[kSrvCount] = {packed, packed, packed};
+  ID3D12Resource* stats_srvs[kSrvCount] = {packed, packed, packed, packed};
   ID3D12Resource* stats_uavs[kUavCount] = {stats};
   self->command_.Transition(run.list, stats,
                             D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
@@ -1041,6 +1049,68 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
   run.model_output = model_output;
   run.eval_width = eval_width;
   run.eval_height = eval_height;
+  return PipelineStatus::Ok;
+}
+
+// Builds the exact full-resolution exposure field used by GainMapSplit:
+// global exposure × local exposure. HDR inverse composition samples this same
+// field instead of re-estimating exposure from the downsampled model image.
+PipelineStatus PassSession::StepBuildEffectiveLocalExposure(PassRun& run) {
+  PassSession* self = run.session;
+  if (self == nullptr || run.codec == nullptr || run.hdr == nullptr ||
+      !run.hdr_uniforms_ready || run.hdr->ResolvedFormat() == HdrFormat::Sdr ||
+      run.model_input == nullptr ||
+      run.hdr_uniforms.local_exposure_strength <= 0.0f) {
+    return PipelineStatus::Ok;
+  }
+
+  ID3D12Resource* source = run.model_input;
+  if (!self->resources_.EnsureEffectiveExposureMap(
+          run.device, run.width, run.height)) {
+    self->FailForStep("failed to create HDR effective exposure map");
+    return PipelineStatus::Fail;
+  }
+
+  ComputeConstants constants = {};
+  constants.Width = run.width;
+  constants.Height = run.height;
+  constants.hdr.Format = run.hdr_uniforms.format;
+  constants.hdr.Exposure = run.hdr_uniforms.exposure;
+  constants.hdr.Bt2446K1 = run.hdr_uniforms.bt2446_k1;
+  constants.hdr.Bt2446K2 = run.hdr_uniforms.bt2446_k2;
+  constants.hdr.Bt2446K4 = run.hdr_uniforms.bt2446_k4;
+  constants.hdr.Crosstalk = run.hdr_uniforms.bt2446_crosstalk;
+  constants.hdr.BaseOffset = run.hdr_uniforms.gain_base_offset;
+  constants.hdr.AlternateOffset = run.hdr_uniforms.gain_alternate_offset;
+  constants.hdr.GainMinLog2 = run.hdr_uniforms.gain_min_log2;
+  constants.hdr.GainMaxLog2 = run.hdr_uniforms.gain_max_log2;
+  constants.hdr.EffectiveSceneWhiteNits =
+      run.hdr_uniforms.effective_scene_white_nits;
+  constants.hdr.LocalExposure.x = run.hdr_uniforms.local_exposure_strength;
+  constants.hdr.LocalExposure.y = run.hdr_uniforms.local_max_brighten;
+  constants.hdr.LocalExposure.z = run.hdr_uniforms.local_max_darken;
+  constants.hdr.LocalExposure.w = run.hdr_uniforms.midtone;
+
+  ID3D12Resource* srvs[kSrvCount] = {source, source, source, source};
+  ID3D12Resource* uavs[kUavCount] = {
+      self->resources_.GetEffectiveExposureMap()};
+
+  ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
+  self->command_.Transition(list, source,
+                            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  self->command_.Transition(
+      list, self->resources_.GetEffectiveExposureMap(),
+      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+  if (!run.codec->Dispatch("BuildEffectiveLocalExposure", list, constants,
+                           srvs, uavs)) {
+    self->FailForStep("failed to build HDR effective local exposure map");
+    return PipelineStatus::Fail;
+  }
+  self->command_.UavBarrier(list, self->resources_.GetEffectiveExposureMap());
+  self->command_.Transition(
+      list, self->resources_.GetEffectiveExposureMap(),
+      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   return PipelineStatus::Ok;
 }
 
@@ -1390,6 +1460,8 @@ constexpr PipelineStepDef kSessionSteps[] = {
      &PassSession::StepSnapshotGuides, kNoDeps, StageInput::None, false},
     {PipelineNodeId::PrepareModelInput, "PrepareModelInput",
      &PassSession::StepPrepareModelInput, kNoDeps, StageInput::None, false},
+    {PipelineNodeId::BuildEffectiveLocalExposure, "BuildEffectiveLocalExposure",
+     &PassSession::StepBuildEffectiveLocalExposure, kNoDeps, StageInput::None, false},
     // Records through StageList(), which is the session's own list in Present
     // and the game's in PostDLSS, so like RenderDebugView it declares no
     // command list: run.list is not what it reads in Present.
@@ -1497,7 +1569,7 @@ static_assert(
 // backbuffer grade contributes one. Leaving the Release grade out sized the
 // ring for fifteen frames of work rather than sixteen, which is what
 // kMaxFramesInFlight promises.
-static_assert(kMaxDispatchesPerFrame >= kMaxPasses * 8 + 3,
+static_assert(kMaxDispatchesPerFrame >= kMaxPasses * 9 + 3,
               "kMaxDispatchesPerFrame no longer covers a frame at kMaxPasses - "
               "raise it, and kDescriptorRingSize with it");
 

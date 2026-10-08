@@ -55,6 +55,12 @@ class PassResources {
 
   Microsoft::WRL::ComPtr<ID3D12Resource> working_input;
   Microsoft::WRL::ComPtr<ID3D12Resource> working_output;
+  // Full-resolution combined exposure used by HDR inverse compose. R32_FLOAT
+  // stores global exposure × the exact local exposure factor applied by the
+  // gain-map split to that source pixel.
+  Microsoft::WRL::ComPtr<ID3D12Resource> effective_exposure_map;
+  unsigned int effective_exposure_width = 0;
+  unsigned int effective_exposure_height = 0;
   unsigned int working_width = 0;
   unsigned int working_height = 0;
   DXGI_FORMAT working_format = DXGI_FORMAT_UNKNOWN;
@@ -79,6 +85,8 @@ class PassResources {
       const D3D12_RESOURCE_DESC& desc,
       unsigned int work_width,
       unsigned int work_height);
+  bool EnsureEffectiveExposureMap(
+      ID3D12Device* device, unsigned int width, unsigned int height);
 
   // Ensures scratch slot `index` matches the given size and format.
   bool EnsureScratch(
@@ -96,6 +104,7 @@ class PassResources {
   ID3D12Resource* GetGainStats() const { return gain_stats.Get(); }
   ID3D12Resource* GetWorkingInput() const { return working_input.Get(); }
   ID3D12Resource* GetWorkingOutput() const { return working_output.Get(); }
+  ID3D12Resource* GetEffectiveExposureMap() const { return effective_exposure_map.Get(); }
   // True when slot `index` already holds a texture of the given shape. Lets a
   // caller pick between two slots instead of letting EnsureScratch dispose a
   // matching one in the other.

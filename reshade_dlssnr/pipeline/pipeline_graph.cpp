@@ -36,6 +36,7 @@ const char* const kNodeNames[] = {
     "BuildHdrUniforms",
     "GainMapSplit",
     "PrepareModelInput",
+    "BuildEffectiveLocalExposure",
     "GradeModelInput",
     "EnsureFeature",
     "SnapshotGuides",
@@ -255,6 +256,7 @@ constexpr PipelineNodeId kPostDlssSteps[] = {
     PipelineNodeId::BuildHdrUniforms,
     PipelineNodeId::GainMapSplit,
     PipelineNodeId::PrepareModelInput,
+    PipelineNodeId::BuildEffectiveLocalExposure,
     PipelineNodeId::GradeModelInput,
     PipelineNodeId::FillEvaluateParams,
     PipelineNodeId::EvaluateFeature,
@@ -271,10 +273,10 @@ constexpr PipelinePhaseDef kPostDlssPhases[] = {
                                 // HdrBeginFrame
     {"resources", 5, 4, nullptr},
     {"feature", 9, 3, nullptr},
-    {"prepare", 12, 4, nullptr},
-    {"evaluate", 16, 3, nullptr},
-    {"compose", 19, 2, nullptr},
-    {"output", 21, 2, nullptr},
+    {"prepare", 12, 5, nullptr},
+    {"evaluate", 17, 3, nullptr},
+    {"compose", 20, 2, nullptr},
+    {"output", 22, 2, nullptr},
 };
 
 // -- Release stage ----------------------------------------------------------

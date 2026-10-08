@@ -28,6 +28,14 @@ PipelineStatus PassSession::StepRenderDebugView(PassRun& run) {
   }
   debug.prepared_input = run.model_color;
   debug.prepared_input_width = run.eval_width;
+  if (run.hdr_uniforms_ready && run.hdr != nullptr &&
+      run.hdr->ResolvedFormat() != HdrFormat::Sdr) {
+    debug.effective_exposure_map = self->resources_.GetEffectiveExposureMap();
+    if (debug.effective_exposure_map != nullptr) {
+      debug.effective_exposure_width = run.width;
+      debug.effective_exposure_height = run.height;
+    }
+  }
   debug.prepared_input_height = run.eval_height;
   debug.model_output = run.model_output;
   debug.model_output_width = run.eval_width;

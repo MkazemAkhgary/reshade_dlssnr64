@@ -189,6 +189,7 @@ bool SkinDetect::Run(CommandContext& cmd,
   constants.Height = work_h;
   ID3D12Resource* prep_srvs[kSrvCount] = {guides.dlss_output_color,
                                           guides.dlss_output_color,
+                                          guides.dlss_output_color,
                                           guides.dlss_output_color};
   ID3D12Resource* prep_uavs[kUavCount] = {working_input_.Get()};
 

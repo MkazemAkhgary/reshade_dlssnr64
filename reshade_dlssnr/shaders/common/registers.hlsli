@@ -4,7 +4,7 @@
 // Root signature (ComputeEngine::CreateRootSignature):
 //
 //   root parameter 0: descriptor table with three ranges
-//     t0..t2   SRV, 3 descriptors, register space 0
+//     t0..t3   SRV, 4 descriptors, register space 0
 //     u0       UAV, 1 descriptor,  register space 0
 //     b0       CBV, 1 descriptor,  register space 0
 //

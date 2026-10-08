@@ -95,6 +95,7 @@ class PassSession {
   static PipelineStatus StepEnsureFeature(PassRun& run);
   static PipelineStatus StepSnapshotGuides(PassRun& run);
   static PipelineStatus StepPrepareModelInput(PassRun& run);
+  static PipelineStatus StepBuildEffectiveLocalExposure(PassRun& run);
   static PipelineStatus StepFillEvaluateParams(PassRun& run);
   static PipelineStatus StepEvaluateFeature(PassRun& run);
   static PipelineStatus StepModelOutputBarrier(PassRun& run);

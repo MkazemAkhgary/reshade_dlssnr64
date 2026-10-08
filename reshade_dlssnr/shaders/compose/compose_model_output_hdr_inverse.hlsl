@@ -11,8 +11,12 @@
 Texture2D<float4>   gOriginal    : register(t0);
 Texture2D<float4>   gLowInput    : register(t1);
 Texture2D<float4>   gLowEnhanced : register(t2);
+Texture2D<float>    gEffectiveExposure : register(t3);
 RWTexture2D<float4> gOutput      : register(u0);
 SamplerState        s0           : register(s0);
+
+#define kLocalExposureStrength hdr.LocalExposure.x
+#define kEffectiveExposureMapValid shader.Params1.w
 
 #include "common/fsr.hlsli"
 
@@ -82,7 +86,7 @@ float3 EncodeHdr(float3 lin)
 // target. The model exposure is recovered from the actual packed carrier, so it
 // includes the same global + local exposure that created the model input.
 float3 ComposeHdrInverse(float3 sdr_base, float gain,
-                         float3 low_out)
+                         float3 low_out, float model_exposure)
 {
     float3 low_out_lin = max(SrgbToLinearExt(low_out), 0.0);
     if (kGradeEnabled > 0.5)
@@ -100,8 +104,6 @@ float3 ComposeHdrInverse(float3 sdr_base, float gain,
     // the same HDR->SDR path reproduces the model output.
     const float effective_peak_nits = max(
         kSdrReferenceWhiteNits, max(kEffectiveSceneWhiteNits, 0.01));
-    const float model_exposure = CombinedExposureFromPacked(
-        sdr_base, hdr_src, effective_peak_nits);
     const float3 hdr_model_out = HdrFromSdrCarrier(
         low_out_lin, model_exposure, effective_peak_nits, true);
 
@@ -154,8 +156,17 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     }
 
     const float3 sdr_base = DecodePackedHdr(packed);
+    const float effective_peak_nits = max(
+        kSdrReferenceWhiteNits, max(kEffectiveSceneWhiteNits, 0.01));
+    const float fallback_exposure = CombinedExposureFromPacked(
+        sdr_base, ReconstructHdr(sdr_base, packed.a), effective_peak_nits);
+    const float map_exposure = gEffectiveExposure.Load(int3(id.xy, 0));
+    const float model_exposure =
+        kLocalExposureStrength > 0.0 && kEffectiveExposureMapValid > 0.5
+            ? max(map_exposure, 1e-6)
+            : fallback_exposure;
     const float3 final_lin = ComposeHdrInverse(
-        sdr_base, packed.a, low_out);
+        sdr_base, packed.a, low_out, model_exposure);
     const float3 final_out = EncodeHdr(final_lin);
 
     // Packed resources are linear gain-map data in the 100-nit normalized domain;

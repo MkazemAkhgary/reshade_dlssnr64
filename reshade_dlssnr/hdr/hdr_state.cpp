@@ -524,7 +524,7 @@ void HdrState::BeginFrame(CommandContext& cmd,
   // binding source there is safe.
   ID3D12Resource* depth_srv = depth != nullptr ? depth : source;
   ID3D12Resource* mask_srv = mask != nullptr ? mask : source;
-  ID3D12Resource* srvs[kSrvCount] = {source, depth_srv, mask_srv};
+  ID3D12Resource* srvs[kSrvCount] = {source, depth_srv, mask_srv, source};
   ID3D12Resource* uavs[kUavCount] = {histogram_.Get()};
 
   cmd.Transition(command_list, source,

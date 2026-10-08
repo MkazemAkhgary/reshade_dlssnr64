@@ -254,12 +254,20 @@ bool RenderDebugView(
       state.Transition(command_list, snapshot.model_output,
                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     }
+    if (snapshot.effective_exposure_map != nullptr) {
+      state.Transition(command_list, snapshot.effective_exposure_map,
+                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    }
     state.Transition(command_list, target,
                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
     ID3D12Resource* srvs[kSrvCount] = {
         snapshot.composed_output, snapshot.source,
-        snapshot.model_output != nullptr ? snapshot.model_output : snapshot.source};
+        snapshot.model_output != nullptr ? snapshot.model_output : snapshot.source,
+        snapshot.effective_exposure_map != nullptr
+            ? snapshot.effective_exposure_map : snapshot.source};
+    constants.shader.Params1.w =
+        snapshot.effective_exposure_map != nullptr ? 1.0f : 0.0f;
     ID3D12Resource* uavs[kUavCount] = {target};
     const uint32_t diag_mode =
         display_mode == DebugDisplayMode::HdrRoundtripDiagnostic ? 0u :
@@ -273,7 +281,7 @@ bool RenderDebugView(
   state.Transition(command_list, target,
                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-  ID3D12Resource* srvs[kSrvCount] = {source, source, source};
+  ID3D12Resource* srvs[kSrvCount] = {source, source, source, source};
   ID3D12Resource* uavs[kUavCount] = {target};
 
   return codec.Dispatch("DebugDisplay", command_list, constants, srvs, uavs);

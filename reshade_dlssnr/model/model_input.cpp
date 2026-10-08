@@ -31,7 +31,7 @@ bool PrepareInput(
   state.Transition(command_list, full_input,
                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-  ID3D12Resource* srvs[kSrvCount] = {full_input, full_input, full_input};
+  ID3D12Resource* srvs[kSrvCount] = {full_input, full_input, full_input, full_input};
   ID3D12Resource* uavs[kUavCount] = {resources.GetWorkingInput()};
 
   if (!codec->Dispatch(pass_name, command_list, constants, srvs, uavs)) {

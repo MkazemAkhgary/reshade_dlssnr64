@@ -93,42 +93,43 @@ enum class PipelineNodeId : uint32_t {
   BuildHdrUniforms = 16,
   GainMapSplit = 17,       // dispatches "GainMapSplit"
   PrepareModelInput = 18,  // dispatches "PrepareModelInput"
+  BuildEffectiveLocalExposure = 19, // full-resolution combined exposure for HDR inverse compose
   // Grades the image the model is about to read. Follows PrepareModelInput
   // because that is what fills the working input, and precedes the evaluate
   // because that is what consumes it.
-  GradeModelInput = 19,
+  GradeModelInput = 20,
 
   // -- model evaluation -----------------------------------------------------
-  EnsureFeature = 20,
+  EnsureFeature = 21,
   // Re-reads the guide state. Must follow EnsureFeature: creating the NGX
   // feature can make the game re-capture its DLSS guides, so a snapshot taken
   // before the feature exists can be stale — or entirely invalid on the first
   // frame. Both stages take the snapshot at exactly this point.
-  SnapshotGuides = 21,
-  FillEvaluateParams = 22,
-  EvaluateFeature = 23,
-  ModelOutputBarrier = 24, // UavBarrier on the model output
+  SnapshotGuides = 22,
+  FillEvaluateParams = 23,
+  EvaluateFeature = 24,
+  ModelOutputBarrier = 25, // UavBarrier on the model output
 
   // -- composition ----------------------------------------------------------
-  ComposeModelOutput = 25,    // dispatches "ComposeModelOutput"
-  ComposeModelOutputHdr = 26, // dispatches "ComposeModelOutputHdr"
+  ComposeModelOutput = 26,    // dispatches "ComposeModelOutput"
+  ComposeModelOutputHdr = 27, // dispatches "ComposeModelOutputHdr"
   // Grades the model's own output, before anything publishes it.
-  GradeModelOutput = 27,
+  GradeModelOutput = 28,
 
   // -- output ---------------------------------------------------------------
-  RenderDebugView = 28,      // dispatches "DebugDisplay"
-  WriteToBackbuffer = 29,
-  WriteToGameResource = 30,
-  SubmitAndWait = 31,        // Present stage only
+  RenderDebugView = 29,      // dispatches "DebugDisplay"
+  WriteToBackbuffer = 30,
+  WriteToGameResource = 31,
+  SubmitAndWait = 32,        // Present stage only
 
   // -- release stage --------------------------------------------------------
   // Grades the final backbuffer. Listed first in the Release stage on purpose:
   // the debug-present override replaces the backbuffer wholesale, so grading
   // before it keeps a debug view showing the pipeline's own output rather than
   // a graded version of it.
-  GradeBackbuffer = 32,
-  WriteDebugToBackbuffer = 33, // dispatches "DebugDisplay"
-  SignalHdrAtPresent = 34,
+  GradeBackbuffer = 33,
+  WriteDebugToBackbuffer = 34, // dispatches "DebugDisplay"
+  SignalHdrAtPresent = 35,
 
   Count
 };
@@ -652,6 +653,7 @@ inline constexpr PipelineNodeId kPostDlssStepNodes[] = {
     PipelineNodeId::BuildHdrUniforms,
     PipelineNodeId::GainMapSplit,
     PipelineNodeId::PrepareModelInput,
+    PipelineNodeId::BuildEffectiveLocalExposure,
     PipelineNodeId::GradeModelInput,
     PipelineNodeId::FillEvaluateParams,
     PipelineNodeId::EvaluateFeature,

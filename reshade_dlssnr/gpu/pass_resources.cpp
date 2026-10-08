@@ -176,6 +176,44 @@ bool PassResources::EnsureGainStats(ID3D12Device* device) {
   return true;
 }
 
+bool PassResources::EnsureEffectiveExposureMap(
+    ID3D12Device* device, unsigned int width, unsigned int height) {
+  if (device == nullptr || width == 0 || height == 0) return false;
+
+  if (effective_exposure_map != nullptr &&
+      effective_exposure_width == width &&
+      effective_exposure_height == height &&
+      effective_exposure_map->GetDesc().Format == DXGI_FORMAT_R32_FLOAT) {
+    return true;
+  }
+
+  Dispose(effective_exposure_map);
+
+  D3D12_RESOURCE_DESC map_desc = {};
+  map_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+  map_desc.Width = width;
+  map_desc.Height = height;
+  map_desc.DepthOrArraySize = 1;
+  map_desc.MipLevels = 1;
+  map_desc.Format = DXGI_FORMAT_R32_FLOAT;
+  map_desc.SampleDesc.Count = 1;
+  map_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+  map_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+  ID3D12Resource* raw = nullptr;
+  if (!CreateUavTexture(device, map_desc, &raw)) {
+    return false;
+  }
+  effective_exposure_map.Attach(raw);
+  effective_exposure_width = width;
+  effective_exposure_height = height;
+  trace::NameResource(effective_exposure_map.Get(), "effective_exposure_map");
+  TRACE_CMD(this, "create effective_exposure_map res=%d %ux%u",
+            trace::ResourceId(effective_exposure_map.Get()),
+            width, height);
+  return true;
+}
+
 bool PassResources::EnsureWorkingResources(
     ID3D12Device* device,
     const D3D12_RESOURCE_DESC& desc,
@@ -275,6 +313,7 @@ void PassResources::Shutdown() {
   gain_stats.Reset();
   working_input.Reset();
   working_output.Reset();
+  effective_exposure_map.Reset();
 
   for (uint32_t i = 0; i < kScratchCount; ++i) {
     scratch_[i].Reset();
@@ -291,6 +330,8 @@ void PassResources::Shutdown() {
   packed_width = 0;
   packed_height = 0;
   gain_stats_bytes = 0;
+  effective_exposure_width = 0;
+  effective_exposure_height = 0;
   working_width = 0;
   working_height = 0;
   working_format = DXGI_FORMAT_UNKNOWN;

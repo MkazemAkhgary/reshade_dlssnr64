@@ -46,7 +46,7 @@ bool ApplyGrade(CommandContext& state,
                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   state.Transition(command_list, target, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-  ID3D12Resource* srvs[kSrvCount] = {scratch, scratch, scratch};
+  ID3D12Resource* srvs[kSrvCount] = {scratch, scratch, scratch, scratch};
   ID3D12Resource* uavs[kUavCount] = {target};
 
   return codec->Dispatch("ApplyGrade", command_list, constants, srvs, uavs);
