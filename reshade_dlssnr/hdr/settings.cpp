@@ -24,7 +24,7 @@ void LoadHdrSettings(HdrSettings& hdr) {
   int exposure_method = static_cast<int>(hdr.exposure_method);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             "Hdr.ExposureMethod", exposure_method);
-  if (exposure_method < 0 || exposure_method > 1) exposure_method = 1;
+  if (exposure_method < 0 || exposure_method > 2) exposure_method = 1;
   hdr.exposure_method = static_cast<HdrExposureMethod>(exposure_method);
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Midtone",

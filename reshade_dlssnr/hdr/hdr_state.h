@@ -19,6 +19,7 @@ namespace reshade_dlssnr {
 enum class MeteringSource {
   FullFrame = 0,
   SkinMaskPriority = 1,
+  GameExposureBuffer = 2,
 };
 
 struct ExposureParams {
@@ -73,6 +74,14 @@ struct HdrSnapshot {
   float p_hi_luma = 0.0f;
   float target_exposure = 1.0f;
   uint32_t samples = 0;
+
+  // Most recently read value supplied by the game's NGX exposure texture.
+  bool game_exposure_available = false;
+  float game_exposure = 1.0f;
+  uint32_t game_exposure_width = 0;
+  uint32_t game_exposure_height = 0;
+  int game_exposure_format = static_cast<int>(DXGI_FORMAT_UNKNOWN);
+
   uint64_t measurement_generation = 0;
   int metering_source = 0;
 
@@ -98,6 +107,7 @@ class HdrState {
                   const Settings& settings,
                   ComputeEngine& codec,
                   ID3D12Resource* exposure_mask = nullptr,
+                  ID3D12Resource* game_exposure_texture = nullptr,
                   unsigned int exposure_mask_width = 0,
                   unsigned int exposure_mask_height = 0);
 
@@ -138,6 +148,16 @@ class HdrState {
   Microsoft::WRL::ComPtr<ID3D12Device> device_;
   Microsoft::WRL::ComPtr<ID3D12Resource> histogram_;
   Microsoft::WRL::ComPtr<ID3D12Fence> fence_;
+
+  Microsoft::WRL::ComPtr<ID3D12Resource> game_exposure_value_buffer_;
+  GpuReadback game_exposure_readback_;
+  uint64_t pending_game_exposure_fence_value_ = 0;
+  bool pending_game_exposure_ = false;
+  float game_exposure_value_ = 1.0f;
+  bool game_exposure_available_ = false;
+  uint32_t game_exposure_width_ = 0;
+  uint32_t game_exposure_height_ = 0;
+  DXGI_FORMAT game_exposure_format_ = DXGI_FORMAT_UNKNOWN;
   uint64_t fence_value_ = 0;
   uint64_t pending_fence_value_ = 0;
   bool pending_measurement_ = false;

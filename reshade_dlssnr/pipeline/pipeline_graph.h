@@ -186,6 +186,8 @@ struct PassRun {
   NgxRuntime* runtime = nullptr;
   HdrState* hdr = nullptr;                 // null in the Present stage
   SkinDetect* skin_detect = nullptr;       // null in the Present stage
+  // Game-owned NGX ExposureTexture captured from the current DLSS evaluate.
+  ID3D12Resource* game_exposure_texture = nullptr;
   // Scratch command context the HDR histogram records through. Owned by the
   // controller; null when the stage never touches HDR.
   CommandContext* hdr_cmd = nullptr;

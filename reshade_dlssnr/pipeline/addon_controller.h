@@ -37,7 +37,8 @@ class AddonController {
   // also captures its debug view.
   void OnPostDlssEvaluate(
       ID3D12GraphicsCommandList* command_list,
-      ID3D12Resource* output_resource);
+      ID3D12Resource* output_resource,
+      ID3D12Resource* exposure_texture);
 
   void Shutdown();
 
@@ -144,7 +145,8 @@ class AddonController {
       ID3D12Resource* output_resource,
       bool is_first_pass,
       ID3D12CommandQueue* command_queue,
-      IDXGISwapChain* swapchain);
+      IDXGISwapChain* swapchain,
+      ID3D12Resource* exposure_texture = nullptr);
 
   // Runs a stage once, outside the per-pass loop. Used for the Release stage,
   // whose steps act on the swapchain rather than on a game resource. It is

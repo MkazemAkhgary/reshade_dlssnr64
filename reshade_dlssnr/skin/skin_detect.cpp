@@ -138,12 +138,17 @@ DetectionExposureValues ResolveDetectionExposure(
 
   const HdrSnapshot snapshot = hdr->GetSnapshot();
   if (skin.exposure_mode == DetectionExposureMode::FollowMain) {
-    // "Follow Main" follows the unmasked/main scene exposure that is used to
-    // generate the detection mask. The mask-prioritized exposure is reserved
-    // for the actual model passes; feeding it back here creates a mask ->
-    // exposure -> mask feedback loop and causes visible pumping/flicker.
-    out.exposure = snapshot.detection_exposure;
-    out.scene_white = snapshot.detection_scene_white;
+    // Prefer the game value when available; otherwise keep detector metering
+    // independent from the mask-prioritized exposure.
+    if (snapshot.metering_source ==
+            static_cast<int>(MeteringSource::GameExposureBuffer) &&
+        snapshot.game_exposure_available) {
+      out.exposure = snapshot.game_exposure;
+      out.scene_white = 1.0f;
+    } else {
+      out.exposure = snapshot.detection_exposure;
+      out.scene_white = snapshot.detection_scene_white;
+    }
     out.midtone = settings.hdr.midtone;
     out.local_strength =
         settings.hdr.exposure_method == HdrExposureMethod::AutoLocal

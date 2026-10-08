@@ -17,6 +17,7 @@ enum class HdrFormat : int {
 enum class HdrExposureMethod : int {
   Median = 0,
   AutoLocal = 1,
+  GameExposureBuffer = 2,  // Read the game's NGX ExposureTexture.
 };
 
 // Encoding code the shaders read: 0 sRGB, 1 scRGB, 2 HDR10.

@@ -440,6 +440,7 @@ void PassSession::PrepareRun(PassRun& run,
                              HdrState* hdr,
                              CommandContext* hdr_cmd,
                              SkinDetect* skin_detect,
+                             ID3D12Resource* game_exposure_texture,
                              ID3D12CommandQueue* command_queue,
                              IDXGISwapChain* swapchain) {
   run.session = this;
@@ -451,6 +452,7 @@ void PassSession::PrepareRun(PassRun& run,
   run.hdr = hdr;
   run.hdr_cmd = hdr_cmd;
   run.skin_detect = skin_detect;
+  run.game_exposure_texture = game_exposure_texture;
   run.frame_debug = &frame_debug;
 
   run.settings = &settings;
@@ -478,6 +480,7 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
                                      HdrState* hdr,
                                      CommandContext* hdr_cmd,
                                      SkinDetect* skin_detect,
+                                     ID3D12Resource* game_exposure_texture,
                                      ID3D12CommandQueue* command_queue,
                                      IDXGISwapChain* swapchain) {
   // The pre-refactor entry points were serialized against each other with this
@@ -508,7 +511,7 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
   PassRun run;
   PrepareRun(run, settings, codec, runtime, command_list, output_resource,
              is_first_pass, frame_debug, hdr, hdr_cmd, skin_detect,
-             command_queue, swapchain);
+             game_exposure_texture, command_queue, swapchain);
 
   const PipelineStatus status = PipelineRunner::RunStage(stage, run);
 

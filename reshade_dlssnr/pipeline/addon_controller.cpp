@@ -58,14 +58,15 @@ PipelineStatus AddonController::RunPassStage(const PipelineStageDef& stage,
                                              ID3D12Resource* output_resource,
                                              bool is_first_pass,
                                              ID3D12CommandQueue* command_queue,
-                                             IDXGISwapChain* swapchain) {
+                                             IDXGISwapChain* swapchain,
+                                             ID3D12Resource* exposure_texture) {
   const Settings& settings = GetSettings();
   if (pass_index >= kMaxPasses) return PipelineStatus::SkipFrame;
 
   return passes_[pass_index].RunStage(
       stage, settings, codec_, runtime_, command_list, output_resource,
       is_first_pass, frame_debug_, &hdr_, &pass1_command_, &skin_detect_,
-      command_queue, swapchain);
+      exposure_texture, command_queue, swapchain);
 }
 
 PipelineStatus AddonController::RunSingleStage(
@@ -323,7 +324,8 @@ void AddonController::OnPresent(
 
 void AddonController::OnPostDlssEvaluate(
     ID3D12GraphicsCommandList* command_list,
-    ID3D12Resource* output_resource) {
+    ID3D12Resource* output_resource,
+    ID3D12Resource* exposure_texture) {
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
   const Settings& settings = GetSettings();
@@ -354,7 +356,7 @@ void AddonController::OnPostDlssEvaluate(
       TRACE_EVT(this, "controller_dispatch stage=PostDLSS pass=%u is_first=%d", i,
                 is_first ? 1 : 0);
       RunPassStage(*stage, i, command_list, output_resource, is_first, nullptr,
-                   nullptr);
+                   nullptr, exposure_texture);
       is_first = false;
     }
   }

@@ -51,6 +51,7 @@ class PassSession {
                           HdrState* hdr,
                           CommandContext* hdr_cmd,
                           SkinDetect* skin_detect,
+                          ID3D12Resource* game_exposure_texture,
                           ID3D12CommandQueue* command_queue,
                           IDXGISwapChain* swapchain);
 
@@ -144,6 +145,7 @@ class PassSession {
                   HdrState* hdr,
                   CommandContext* hdr_cmd,
                   SkinDetect* skin_detect,
+                  ID3D12Resource* game_exposure_texture,
                   ID3D12CommandQueue* command_queue,
                   IDXGISwapChain* swapchain);
 

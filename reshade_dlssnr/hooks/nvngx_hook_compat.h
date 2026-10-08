@@ -100,9 +100,14 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
     PFN_NVSDK_NGX_ProgressCallback callback) {
   D3D12Hooks::Get().SetTrackingEnabled(false);
 
-  // Streamline's own evaluate path is what called us, so hand it back exactly
-  // the command list it passed in. Everything we do ourselves goes through the
-  // native interface below.
+  // Pass the supplied command list back to NGX unchanged; addon work uses the
+  // native interface. Capture exposure before NGX can mutate the parameters.
+  ID3D12Resource* exposure_texture = nullptr;
+  if (parameters != nullptr &&
+      parameters->Get(NVSDK_NGX_Parameter_ExposureTexture, &exposure_texture) !=
+          NVSDK_NGX_Result_Success) {
+    exposure_texture = nullptr;
+  }
   NVSDK_NGX_Result result = real_NVSDK_NGX_D3D12_EvaluateFeature(
       command_list, feature_handle, parameters, callback);
 
@@ -184,7 +189,8 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
             if (parameters->Get(NVSDK_NGX_Parameter_Output, &output) ==
                     NVSDK_NGX_Result_Success &&
                 output != nullptr) {
-              AddonController::Get().OnPostDlssEvaluate(work_list, output);
+              AddonController::Get().OnPostDlssEvaluate(
+                  work_list, output, exposure_texture);
               recorded_pass = true;
             }
           }

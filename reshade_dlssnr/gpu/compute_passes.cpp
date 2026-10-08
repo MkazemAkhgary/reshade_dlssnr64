@@ -24,6 +24,7 @@ const ComputePassDef kComputePasses[] = {
     {"BuildEffectiveLocalExposure", "hdr/build_effective_local_exposure.hlsl", BytecodeData("hdr/build_effective_local_exposure.hlsl"), BytecodeSize("hdr/build_effective_local_exposure.hlsl")},
     {"ZeroGainMapStats",      "hdr/zero_gain_map_stats.hlsl",   BytecodeData("hdr/zero_gain_map_stats.hlsl"),   BytecodeSize("hdr/zero_gain_map_stats.hlsl")},
     {"BuildGainMapStats",     "hdr/build_gain_map_stats.hlsl",  BytecodeData("hdr/build_gain_map_stats.hlsl"),  BytecodeSize("hdr/build_gain_map_stats.hlsl")},
+    {"ReadGameExposure",      "hdr/read_game_exposure.hlsl",   BytecodeData("hdr/read_game_exposure.hlsl"),   BytecodeSize("hdr/read_game_exposure.hlsl")},
     {"PrepareModelInput",     "model/prepare_model_input.hlsl", BytecodeData("model/prepare_model_input.hlsl"), BytecodeSize("model/prepare_model_input.hlsl")},
     {"ComposeModelOutput",    "compose/compose_model_output.hlsl", BytecodeData("compose/compose_model_output.hlsl"), BytecodeSize("compose/compose_model_output.hlsl")},
     {"ComposeModelOutputHdr", "compose/compose_model_output_hdr.hlsl", BytecodeData("compose/compose_model_output_hdr.hlsl"), BytecodeSize("compose/compose_model_output_hdr.hlsl")},

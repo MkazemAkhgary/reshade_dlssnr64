@@ -235,8 +235,27 @@ bool HdrState::Ensure(ID3D12Device* device) {
     return false;
   }
 
+  D3D12_RESOURCE_DESC exposure_desc = {};
+  exposure_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+  exposure_desc.Width = sizeof(uint32_t);
+  exposure_desc.Height = 1;
+  exposure_desc.DepthOrArraySize = 1;
+  exposure_desc.MipLevels = 1;
+  exposure_desc.Format = DXGI_FORMAT_UNKNOWN;
+  exposure_desc.SampleDesc.Count = 1;
+  exposure_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+  exposure_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+  if (FAILED(device->CreateCommittedResource(
+          &heap, D3D12_HEAP_FLAG_NONE, &exposure_desc,
+          D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr,
+          IID_PPV_ARGS(game_exposure_value_buffer_.GetAddressOf())))) {
+    Shutdown();
+    return false;
+  }
+
   if (!readback_.Ensure(device, kCombinedHistogramBytes) ||
-      !gain_readback_.Ensure(device, kGainStatsBytes)) {
+      !gain_readback_.Ensure(device, kGainStatsBytes) ||
+      !game_exposure_readback_.Ensure(device, sizeof(uint32_t))) {
     Shutdown();
     return false;
   }
@@ -248,6 +267,8 @@ bool HdrState::Ensure(ID3D12Device* device) {
 void HdrState::Shutdown() {
   readback_.Shutdown();
   gain_readback_.Shutdown();
+  game_exposure_readback_.Shutdown();
+  game_exposure_value_buffer_.Reset();
   histogram_.Reset();
   fence_.Reset();
   fence_value_ = 0;
@@ -255,6 +276,13 @@ void HdrState::Shutdown() {
   pending_measurement_ = false;
   pending_gain_fence_value_ = 0;
   pending_gain_stats_ = false;
+  pending_game_exposure_fence_value_ = 0;
+  pending_game_exposure_ = false;
+  game_exposure_value_ = 1.0f;
+  game_exposure_available_ = false;
+  game_exposure_width_ = 0;
+  game_exposure_height_ = 0;
+  game_exposure_format_ = DXGI_FORMAT_UNKNOWN;
   device_.Reset();
 
   enabled_ = false;
@@ -307,6 +335,11 @@ HdrSnapshot HdrState::GetSnapshot() const {
   s.target_exposure = regular_.target_exposure;
   s.samples = last_samples_;
   s.measurement_generation = measurement_generation_;
+  s.game_exposure_available = game_exposure_available_;
+  s.game_exposure = game_exposure_value_;
+  s.game_exposure_width = game_exposure_width_;
+  s.game_exposure_height = game_exposure_height_;
+  s.game_exposure_format = static_cast<int>(game_exposure_format_);
   s.metering_source = static_cast<int>(regular_.metering_source);
   s.gain_map_ready = have_gain_stats_;
   s.gain_min_log2 = gain_min_log2_;
@@ -324,6 +357,7 @@ void HdrState::BeginFrame(CommandContext& cmd,
                           const Settings& settings,
                           ComputeEngine& codec,
                           ID3D12Resource* exposure_mask,
+                          ID3D12Resource* game_exposure_texture,
                           unsigned int exposure_mask_width,
                           unsigned int exposure_mask_height) {
   enabled_ = settings.hdr.enable;
@@ -345,6 +379,63 @@ void HdrState::BeginFrame(CommandContext& cmd,
                   static_cast<int>(raw_fmt), HdrFormatCode(resolved_format_));
     reshade::log::message(reshade::log::level::info, msg);
     have_logged_format_ = true;
+  }
+
+  if (settings.hdr.exposure_method == HdrExposureMethod::GameExposureBuffer) {
+    if (pending_game_exposure_) {
+      frame_counter_++;
+      return;
+    }
+
+    if (game_exposure_texture != nullptr && game_exposure_value_buffer_ != nullptr &&
+        codec.IsReady() && codec.IsPassCompiled("ReadGameExposure")) {
+      const D3D12_RESOURCE_DESC exposure_desc = game_exposure_texture->GetDesc();
+      game_exposure_width_ = static_cast<uint32_t>(exposure_desc.Width);
+      game_exposure_height_ = exposure_desc.Height;
+      game_exposure_format_ = exposure_desc.Format;
+
+      if (exposure_desc.Width == 1 && exposure_desc.Height == 1) {
+        ComputeConstants constants = {};
+        constants.Width = 1;
+        constants.Height = 1;
+        ID3D12Resource* srvs[kSrvCount] = {
+            game_exposure_texture, game_exposure_texture,
+            game_exposure_texture, game_exposure_texture};
+        ID3D12Resource* uavs[kUavCount] = {game_exposure_value_buffer_.Get()};
+
+        cmd.SetResourceState(game_exposure_texture,
+                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        cmd.SetResourceState(game_exposure_value_buffer_.Get(),
+                             D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        cmd.Transition(command_list, game_exposure_texture,
+                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        cmd.Transition(command_list, game_exposure_value_buffer_.Get(),
+                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+        if (codec.Dispatch("ReadGameExposure", command_list, constants, srvs, uavs,
+                           1, 1, 1)) {
+          cmd.UavBarrier(command_list, game_exposure_value_buffer_.Get());
+          cmd.Transition(command_list, game_exposure_value_buffer_.Get(),
+                         D3D12_RESOURCE_STATE_COPY_SOURCE);
+          const uint64_t next_value = fence_value_ + 1u;
+          if (game_exposure_readback_.EnqueueCopy(
+                  command_list, game_exposure_value_buffer_.Get(),
+                  sizeof(uint32_t), fence_.Get(), next_value)) {
+            pending_game_exposure_fence_value_ = next_value;
+            pending_game_exposure_ = true;
+          }
+          cmd.Transition(command_list, game_exposure_value_buffer_.Get(),
+                         D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+          cmd.SetResourceState(game_exposure_texture,
+                               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        }
+      }
+    }
+
+    if (pending_game_exposure_) {
+      frame_counter_++;
+      return;
+    }
   }
 
   if (pending_measurement_) {
@@ -469,13 +560,15 @@ bool HdrState::EnqueueGainMapStatsReadback(
 
 void HdrState::SignalAtPresent(ID3D12CommandQueue* queue) {
   if (queue == nullptr || fence_ == nullptr ||
-      (!pending_measurement_ && !pending_gain_stats_))
+      (!pending_measurement_ && !pending_gain_stats_ && !pending_game_exposure_))
     return;
   uint64_t signal_value = fence_value_;
   if (pending_measurement_)
     signal_value = std::max(signal_value, pending_fence_value_);
   if (pending_gain_stats_)
     signal_value = std::max(signal_value, pending_gain_fence_value_);
+  if (pending_game_exposure_)
+    signal_value = std::max(signal_value, pending_game_exposure_fence_value_);
   queue->Signal(fence_.Get(), signal_value);
   fence_value_ = signal_value;
 }
@@ -483,6 +576,30 @@ void HdrState::SignalAtPresent(ID3D12CommandQueue* queue) {
 void HdrState::PollReadback(ID3D12Fence* fence, const Settings& settings) {
   if (fence == nullptr) return;
   const uint64_t completed = fence->GetCompletedValue();
+
+  if (pending_game_exposure_ && completed >= pending_game_exposure_fence_value_) {
+    uint32_t bytes = 0;
+    const void* mapped = game_exposure_readback_.TryGet(fence, &bytes);
+    pending_game_exposure_ = false;
+    if (mapped != nullptr && bytes >= sizeof(uint32_t)) {
+      const uint32_t bits = *static_cast<const uint32_t*>(mapped);
+      const float exposure = std::bit_cast<float>(bits);
+      if (std::isfinite(exposure) && exposure > 1e-5f && exposure < 4096.0f) {
+        game_exposure_value_ = exposure;
+        game_exposure_available_ = true;
+        regular_.exposure = exposure;
+        regular_.target_exposure = exposure;
+        regular_.scene_white = 1.0f;
+        regular_.exposure_reference_luma =
+            settings.hdr.midtone / std::max(exposure, 1e-6f);
+        regular_.metering_source = MeteringSource::GameExposureBuffer;
+        regular_.have_measurement = true;
+        regular_.warmup_frames += 1.0f;
+      } else {
+        game_exposure_available_ = false;
+      }
+    }
+  }
 
   if (pending_measurement_ && completed >= pending_fence_value_) {
     uint32_t bytes = 0;
@@ -644,7 +761,8 @@ PipelineStatus RunHdrBeginFrame(PassRun& run) {
   run.hdr->BeginFrame(*run.hdr_cmd, run.list, run.guides.dlss_output_color,
                       run.guides.output_width, run.guides.output_height,
                       *run.settings, *run.codec, exposure_mask,
-                      exposure_mask_width, exposure_mask_height);
+                      run.game_exposure_texture, exposure_mask_width,
+                      exposure_mask_height);
   return PipelineStatus::Ok;
 }
 

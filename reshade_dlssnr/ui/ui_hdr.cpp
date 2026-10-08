@@ -62,15 +62,16 @@ void DrawControls(HdrSettings& hdr, bool& changed) {
       &hdr.measure_interval, 32, 1, 4);
 
   static const char* const kExposureMethodLabels[] = {
-      "Median (Legacy)", "Auto Exposure + Local"};
+      "Median (Legacy)", "Auto Exposure + Local", "Game Exposure Buffer"};
   static const char* const kExposureMethodTips[] = {
       "Legacy median exposure. When structure detection has a valid persistent mask, the masked population can bias metering.",
-      "Histogram eye adaptation with separate brighten/darken speeds, with optional structure-mask priority, followed by the base/detail local exposure stage."};
+      "Histogram eye adaptation with separate brighten/darken speeds, with optional structure-mask priority, followed by the base/detail local exposure stage.",
+      "Use the 1x1 ExposureTexture supplied by the game's DLSS/NGX call. Falls back to the selected histogram method when the game does not provide a usable buffer."};
   int exposure_method = static_cast<int>(hdr.exposure_method);
   changed |= DrawComboRow(
       "hdr_exposure_method", "Exposure Method",
       "Choose how the scene brightness target is measured.",
-      &exposure_method, kExposureMethodLabels, kExposureMethodTips, 2);
+      &exposure_method, kExposureMethodLabels, kExposureMethodTips, 3);
   hdr.exposure_method = static_cast<HdrExposureMethod>(exposure_method);
 
   changed |= DrawFloatRow(
@@ -188,36 +189,50 @@ void DrawDiagnostics(const HdrSnapshot& snap, const HdrSettings& hdr,
     return;
   }
 
-  if (!snap.has_histogram) {
-    ImGui::TextDisabled("Waiting for first histogram measurement...");
+  const bool game_mode = hdr.exposure_method == HdrExposureMethod::GameExposureBuffer;
+  const bool show_table = snap.has_histogram || game_mode;
+  if (!show_table) {
+    ImGui::TextDisabled("Waiting for first measurement...");
   }
 
-  if (snap.has_histogram && ImGui::BeginTable("hdr_diag", 2, ImGuiTableFlags_SizingStretchSame)) {
+  if (show_table && ImGui::BeginTable("hdr_diag", 2, ImGuiTableFlags_SizingStretchSame)) {
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
-    ImGui::Text("Samples: %u", snap.samples);
+    if (snap.has_histogram) {
+      ImGui::Text("Samples: %u", snap.samples);
+    } else {
+      ImGui::TextUnformatted("Samples: n/a (game buffer)");
+    }
     ImGui::TableNextColumn();
     ImGui::Text("Frames since: %u", snap.frames_since_measure);
 
     const char* exposure_method_name =
         hdr.exposure_method == HdrExposureMethod::AutoLocal
             ? "Auto Exposure + Local"
-            : "Median (Legacy)";
+            : (game_mode ? "Game Exposure Buffer"
+                         : "Median (Legacy)");
 
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
-    ImGui::Text("Exposure reference (100-nit domain): %.4f", snap.exposure_reference_luma);
+    ImGui::Text("Exposure reference (100-nit domain): %.4f",
+                snap.exposure_reference_luma);
     ImGui::TableNextColumn();
-    ImGui::Text("White source (same metering set): %.4f", snap.p_hi_luma);
+    if (snap.has_histogram) {
+      ImGui::Text("White source (same metering set): %.4f", snap.p_hi_luma);
+    } else {
+      ImGui::TextUnformatted("White source: fixed 1.0 (game buffer)");
+    }
 
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
     ImGui::Text("Exposure method: %s", exposure_method_name);
     ImGui::TableNextColumn();
     ImGui::TextUnformatted(
-        snap.metering_source == static_cast<int>(MeteringSource::SkinMaskPriority)
-            ? "Skin Mask Priority"
-            : "Full Frame");
+        snap.metering_source == static_cast<int>(MeteringSource::GameExposureBuffer)
+            ? "Game Exposure Buffer"
+            : (snap.metering_source == static_cast<int>(MeteringSource::SkinMaskPriority)
+                   ? "Skin Mask Priority"
+                   : "Full Frame"));
 
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
@@ -227,15 +242,37 @@ void DrawDiagnostics(const HdrSnapshot& snap, const HdrSettings& hdr,
 
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
-    ImGui::Text("White (post-headroom, 100-nit domain): %.3f", CalcEffectiveSceneWhite(snap.scene_white, hdr));
+    ImGui::Text("White (post-headroom, 100-nit domain): %.3f",
+                CalcEffectiveSceneWhite(snap.scene_white, hdr));
+    ImGui::TableNextColumn();
+    ImGui::Text("Metering: %s",
+                game_mode ? "Game ExposureTexture (histogram fallback)"
+                          : "Full frame histogram");
+
+    if (game_mode) {
+      ImGui::TableNextRow();
+      ImGui::TableNextColumn();
+      ImGui::Text("Game buffer: %s",
+                  snap.game_exposure_available ? "FOUND (last valid)" : "NOT FOUND");
+      ImGui::TableNextColumn();
+      if (snap.game_exposure_available) {
+        ImGui::Text("Exposure: %.5f (%ux%u, fmt %d)", snap.game_exposure,
+                    snap.game_exposure_width, snap.game_exposure_height,
+                    snap.game_exposure_format);
+      } else {
+        ImGui::TextUnformatted("Waiting for usable ExposureTexture");
+      }
+    }
 
     ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("Metering: Full frame histogram");
     ImGui::TableNextColumn();
     ImGui::Text("Local exposure: %s",
                 hdr.exposure_method == HdrExposureMethod::AutoLocal
                     ? "base/detail" : "off");
+    ImGui::TableNextColumn();
+    ImGui::TextUnformatted(game_mode
+                               ? "Source: NGX ExposureTexture"
+                               : "Source: histogram");
 
     ImGui::EndTable();
   }
