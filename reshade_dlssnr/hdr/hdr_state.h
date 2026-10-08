@@ -55,6 +55,16 @@ struct HdrSnapshot {
   HdrFormat resolved_format = HdrFormat::Sdr;
   float exposure = 1.0f;
   float scene_white = 1.0f;
+
+  // Unmasked/full-frame exposure used only to drive Structure Detection.
+  // This is deliberately independent of the mask-prioritized exposure above
+  // so the detector cannot feed its own mask back into the exposure that
+  // generates the next mask.
+  float detection_exposure = 1.0f;
+  float detection_scene_white = 1.0f;
+  uint32_t detection_samples = 0;
+  uint32_t detection_histogram[256] = {};
+
   uint32_t frames_since_measure = 0;
 
   bool has_histogram = false;
@@ -122,7 +132,8 @@ class HdrState {
 
  private:
   void PollReadback(ID3D12Fence* fence, const Settings& settings);
-  void UpdateExposure(const uint32_t* bins, const Settings& settings);
+  void UpdateExposure(const uint32_t* bins, const uint32_t* full_bins,
+                      uint32_t full_total, const Settings& settings);
 
   Microsoft::WRL::ComPtr<ID3D12Device> device_;
   Microsoft::WRL::ComPtr<ID3D12Resource> histogram_;
@@ -141,6 +152,7 @@ class HdrState {
   HdrFormat resolved_format_ = HdrFormat::Sdr;
 
   ExposureTracker regular_;
+  ExposureTracker detection_;
   uint32_t frame_counter_ = 0;
   uint32_t frames_until_measure_ = 0;
   uint32_t frames_since_measure_ = 0;
@@ -149,8 +161,10 @@ class HdrState {
 
   bool have_histogram_ = false;
   uint32_t last_histogram_[256] = {};
+  uint32_t last_detection_histogram_[256] = {};
   float p_hi_luma_ = 0.0f;
   uint32_t last_samples_ = 0;
+  uint32_t last_detection_samples_ = 0;
   std::chrono::steady_clock::time_point last_measurement_time_{};
   bool have_measurement_time_ = false;
 

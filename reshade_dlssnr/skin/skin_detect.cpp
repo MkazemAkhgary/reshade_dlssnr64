@@ -138,8 +138,12 @@ DetectionExposureValues ResolveDetectionExposure(
 
   const HdrSnapshot snapshot = hdr->GetSnapshot();
   if (skin.exposure_mode == DetectionExposureMode::FollowMain) {
-    out.exposure = snapshot.exposure;
-    out.scene_white = snapshot.scene_white;
+    // "Follow Main" follows the unmasked/main scene exposure that is used to
+    // generate the detection mask. The mask-prioritized exposure is reserved
+    // for the actual model passes; feeding it back here creates a mask ->
+    // exposure -> mask feedback loop and causes visible pumping/flicker.
+    out.exposure = snapshot.detection_exposure;
+    out.scene_white = snapshot.detection_scene_white;
     out.midtone = settings.hdr.midtone;
     out.local_strength =
         settings.hdr.exposure_method == HdrExposureMethod::AutoLocal
@@ -150,7 +154,7 @@ DetectionExposureValues ResolveDetectionExposure(
     return out;
   }
 
-  if (snapshot.has_histogram && snapshot.samples != 0 &&
+  if (snapshot.detection_samples != 0 &&
       snapshot.measurement_generation != 0 &&
       last_measurement_generation != snapshot.measurement_generation) {
     ExposureParams params;
@@ -174,16 +178,16 @@ DetectionExposureValues ResolveDetectionExposure(
         : 1.0f / 60.0f;
     last_exposure_time = now;
     have_exposure_time = true;
-    exposure_tracker.Update(snapshot.histogram, params, dt);
+    exposure_tracker.Update(snapshot.detection_histogram, params, dt);
     last_measurement_generation = snapshot.measurement_generation;
   }
 
   out.exposure = exposure_tracker.have_measurement
       ? exposure_tracker.exposure
-      : snapshot.exposure;
+      : snapshot.detection_exposure;
   out.scene_white = exposure_tracker.have_measurement
       ? exposure_tracker.scene_white
-      : snapshot.scene_white;
+      : snapshot.detection_scene_white;
   out.midtone = skin.exposure_midtone;
   if (skin.exposure_mode == DetectionExposureMode::AutoLocal) {
     out.local_strength = skin.exposure_local_strength;

@@ -259,16 +259,20 @@ void HdrState::Shutdown() {
 
   enabled_ = false;
   regular_.Reset();
+  detection_.Reset();
   frame_counter_ = 0;
   frames_until_measure_ = 0;
   frames_since_measure_ = 0;
   measurement_generation_ = 0;
   have_logged_format_ = false;
   have_histogram_ = false;
-  for (uint32_t i = 0; i < kHistogramBins; ++i)
+  for (uint32_t i = 0; i < kHistogramBins; ++i) {
     last_histogram_[i] = 0;
+    last_detection_histogram_[i] = 0;
+  }
   p_hi_luma_ = 0.0f;
   last_samples_ = 0;
+  last_detection_samples_ = 0;
   have_measurement_time_ = false;
   last_measurement_time_ = {};
   have_gain_stats_ = false;
@@ -285,6 +289,13 @@ HdrSnapshot HdrState::GetSnapshot() const {
   s.resolved_format = resolved_format_;
   s.exposure = regular_.exposure;
   s.scene_white = regular_.scene_white;
+  s.detection_exposure = detection_.exposure;
+  s.detection_scene_white = detection_.scene_white;
+  s.detection_samples = last_detection_samples_;
+  if (last_detection_samples_ != 0) {
+    for (uint32_t i = 0; i < kHistogramBins; ++i)
+      s.detection_histogram[i] = last_detection_histogram_[i];
+  }
   s.frames_since_measure = frames_since_measure_;
   s.has_histogram = have_histogram_;
   if (have_histogram_) {
@@ -531,7 +542,11 @@ void HdrState::PollReadback(ID3D12Fence* fence, const Settings& settings) {
       uint32_t total = 0;
       for (uint32_t i = 0; i < kHistogramBins; ++i) total += bins[i];
       if (total != 0) {
-        UpdateExposure(bins, settings);
+        for (uint32_t i = 0; i < kHistogramBins; ++i)
+          last_detection_histogram_[i] = full_bins[i];
+        last_detection_samples_ = full_total;
+
+        UpdateExposure(bins, full_bins, full_total, settings);
         for (uint32_t i = 0; i < kHistogramBins; ++i)
           last_histogram_[i] = bins[i];
         have_histogram_ = true;
@@ -568,7 +583,9 @@ void HdrState::PollReadback(ID3D12Fence* fence, const Settings& settings) {
   }
 }
 
-void HdrState::UpdateExposure(const uint32_t* bins, const Settings& settings) {
+void HdrState::UpdateExposure(const uint32_t* bins, const uint32_t* full_bins,
+                              uint32_t full_total,
+                              const Settings& settings) {
   const auto now = std::chrono::steady_clock::now();
   const float delta_seconds = have_measurement_time_
       ? std::chrono::duration<float>(now - last_measurement_time_).count()
@@ -588,6 +605,12 @@ void HdrState::UpdateExposure(const uint32_t* bins, const Settings& settings) {
   params.measure_interval = static_cast<uint32_t>(settings.hdr.measure_interval);
 
   regular_.Update(bins, params, delta_seconds);
+  if (full_bins != nullptr && full_total != 0) {
+    // Detection exposure is always based on the raw full-frame population.
+    // The structure mask is intentionally excluded here so the mask cannot
+    // perturb the exposure that is used to generate the next mask.
+    detection_.Update(full_bins, params, delta_seconds);
+  }
   p_hi_luma_ = regular_.scene_white;
 }
 
