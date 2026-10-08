@@ -88,9 +88,18 @@ float3 EncodeHdr(float3 lin)
 float3 ComposeHdrInverse(float3 sdr_base, float gain,
                          float3 low_in, float3 low_out, float local_sdr_scale)
 {
+    float3 low_in_lin = max(SrgbToLinearExt(low_in), 0.0);
     float3 low_out_lin = max(SrgbToLinearExt(low_out), 0.0);
     if (kGradeEnabled > 0.5)
+    {
+        // GradeModelInput changes the actual model input before NGX runs.
+        // Inverse Tone Map reconstructs the model residual from both endpoints,
+        // so both endpoints must first be mapped back to the same ungraded
+        // model domain. Undoing the grade on only the output makes an identity
+        // model look like a color edit whenever the input grade is non-neutral.
+        low_in_lin = max(GradeLinearInv(low_in_lin), 0.0);
         low_out_lin = max(GradeLinearInv(low_out_lin), 0.0);
+    }
 
     const float3 model_sdr_base = GamutFitModelInput(sdr_base);
     const float3 kL = HdrLumaWeights();
@@ -106,7 +115,7 @@ float3 ComposeHdrInverse(float3 sdr_base, float gain,
         kSdrReferenceWhiteNits, max(kEffectiveSceneWhiteNits, 0.01));
     const float local_scale = max(local_sdr_scale, 1e-6);
     const float3 low_in_linear =
-        GamutUnfitModelInput(max(SrgbToLinearExt(low_in), 0.0)) / local_scale;
+        GamutUnfitModelInput(max(low_in_lin, 0.0)) / local_scale;
     const float3 low_out_linear =
         GamutUnfitModelInput(max(low_out_lin, 0.0)) / local_scale;
     const float3 hdr_model_in = HdrFromLinearSdrCarrier(
