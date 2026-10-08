@@ -149,6 +149,8 @@ Snapshot BuildSnapshot(const Settings& settings,
   Append(snap, "hdr_format", HdrFormatText(settings.hdr.format));
   Append(snap, "hdr_measure_interval",
          std::to_string(settings.hdr.measure_interval));
+  Append(snap, "hdr_exposure_method",
+         std::to_string(static_cast<int>(settings.hdr.exposure_method)));
   Append(snap, "hdr_midtone", FloatText(settings.hdr.midtone));
   Append(snap, "hdr_white_percentile", FloatText(settings.hdr.white_percentile));
   Append(snap, "hdr_highlight_headroom",
@@ -166,6 +168,16 @@ Snapshot BuildSnapshot(const Settings& settings,
   Append(snap, "hdr_skin_fraction_threshold",
          FloatText(settings.hdr.skin_fraction_threshold));
   Append(snap, "hdr_skin_priority", FloatText(settings.hdr.skin_priority));
+  Append(snap, "hdr_auto_low_percent", FloatText(settings.hdr.auto_low_percent));
+  Append(snap, "hdr_auto_high_percent", FloatText(settings.hdr.auto_high_percent));
+  Append(snap, "hdr_speed_up", FloatText(settings.hdr.speed_up));
+  Append(snap, "hdr_speed_down", FloatText(settings.hdr.speed_down));
+  Append(snap, "hdr_local_exposure_strength",
+         FloatText(settings.hdr.local_exposure_strength));
+  Append(snap, "hdr_local_max_brighten",
+         FloatText(settings.hdr.local_max_brighten));
+  Append(snap, "hdr_local_max_darken",
+         FloatText(settings.hdr.local_max_darken));
   Append(snap, "hdr_depth_fallback_fraction",
          FloatText(settings.hdr.depth_fallback_fraction));
   Append(snap, "skin_detect_enable", BoolText(settings.skin.enable));

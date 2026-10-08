@@ -9,6 +9,7 @@
 #define kHasDepth          shader.Params1.x
 #define kDepthInverted     shader.Params1.y
 #define kHasMask           shader.Params1.z
+#define kSkinHistogramEnabled shader.Params1.w
 
 Texture2D<float4> gSource   : register(t0);
 Texture2D<float4> gDepth    : register(t1);
@@ -84,14 +85,16 @@ void CSMain(uint3 gid : SV_GroupID,
             InterlockedAdd(gSharedHist[kHistogramStride + bin], 1u);
         }
 
-        bool is_skin;
-        if (kHasMask > 0.5) {
-            is_skin = gSkinMask.SampleLevel(s0, uv, 0).r > 0.5;
-        } else {
-            is_skin = IsSkin(lin);
-        }
-        if (is_skin) {
-            InterlockedAdd(gSharedHist[2u * kHistogramStride + bin], 1u);
+        if (kSkinHistogramEnabled > 0.5) {
+            bool is_skin;
+            if (kHasMask > 0.5) {
+                is_skin = gSkinMask.SampleLevel(s0, uv, 0).r > 0.5;
+            } else {
+                is_skin = IsSkin(lin);
+            }
+            if (is_skin) {
+                InterlockedAdd(gSharedHist[2u * kHistogramStride + bin], 1u);
+            }
         }
     }
 

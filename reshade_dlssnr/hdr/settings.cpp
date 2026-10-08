@@ -21,6 +21,12 @@ void LoadHdrSettings(HdrSettings& hdr) {
   if (hdr.measure_interval < 1) hdr.measure_interval = 1;
   if (hdr.measure_interval > 32) hdr.measure_interval = 32;
 
+  int exposure_method = static_cast<int>(hdr.exposure_method);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.ExposureMethod", exposure_method);
+  if (exposure_method < 0 || exposure_method > 1) exposure_method = 0;
+  hdr.exposure_method = static_cast<HdrExposureMethod>(exposure_method);
+
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Midtone",
                             hdr.midtone);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.WhitePercentile",
@@ -30,6 +36,33 @@ void LoadHdrSettings(HdrSettings& hdr) {
   if (hdr.highlight_headroom > 16.0f || hdr.highlight_headroom < 0.25f) {
     hdr.highlight_headroom = 8.0f;
   }
+
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.AutoLowPercent", hdr.auto_low_percent);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.AutoHighPercent", hdr.auto_high_percent);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.SpeedUp", hdr.speed_up);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.SpeedDown", hdr.speed_down);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.LocalExposureStrength",
+                            hdr.local_exposure_strength);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.LocalMaxBrighten", hdr.local_max_brighten);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.LocalMaxDarken", hdr.local_max_darken);
+  hdr.auto_low_percent = std::clamp(hdr.auto_low_percent, 0.0f, 0.99f);
+  hdr.auto_high_percent = std::clamp(hdr.auto_high_percent, 0.01f, 0.999f);
+  if (hdr.auto_high_percent <= hdr.auto_low_percent) {
+    hdr.auto_low_percent = 0.70f;
+    hdr.auto_high_percent = 0.90f;
+  }
+  hdr.speed_up = std::clamp(hdr.speed_up, 0.0f, 20.0f);
+  hdr.speed_down = std::clamp(hdr.speed_down, 0.0f, 20.0f);
+  hdr.local_exposure_strength = std::clamp(hdr.local_exposure_strength, 0.0f, 1.0f);
+  hdr.local_max_brighten = std::clamp(hdr.local_max_brighten, 0.0f, 4.0f);
+  hdr.local_max_darken = std::clamp(hdr.local_max_darken, 0.0f, 4.0f);
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.BT2446.K1",
                             hdr.bt2446_k1);
@@ -96,12 +129,29 @@ void SaveHdrSettings(const HdrSettings& hdr) {
                             static_cast<int>(hdr.format));
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.MeasureInterval",
                             hdr.measure_interval);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.ExposureMethod",
+                            static_cast<int>(hdr.exposure_method));
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.Midtone",
                             hdr.midtone);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.WhitePercentile",
                             hdr.white_percentile);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.HighlightHeadroom",
                             hdr.highlight_headroom);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.AutoLowPercent", hdr.auto_low_percent);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.AutoHighPercent", hdr.auto_high_percent);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.SpeedUp", hdr.speed_up);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.SpeedDown", hdr.speed_down);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.LocalExposureStrength",
+                            hdr.local_exposure_strength);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.LocalMaxBrighten", hdr.local_max_brighten);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            "Hdr.LocalMaxDarken", hdr.local_max_darken);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.BT2446.K1",
                             hdr.bt2446_k1);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "Hdr.BT2446.K2",

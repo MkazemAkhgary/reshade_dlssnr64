@@ -31,11 +31,18 @@ struct HdrUniforms {
   float gain_alternate_offset = 1.0f / 64.0f;
   float gain_min_log2 = -4.0f;
   float gain_max_log2 = 6.0f;
-  // Absolute effective scene-white peak in nits. The histogram meters in the
-  // format-defined 80-nit scRGB domain; this uniform crosses into the gain-map
-  // working domain as absolute luminance once on the CPU.
+  // Absolute effective scene-white peak in nits. Histogram and exposure
+  // use the 100-nit SDR/gain-map working domain; scRGB uses 80 nits only
+  // when decoding the source format at the domain boundary.
   float effective_scene_white_nits =
       color_constants::kScRgbReferenceWhiteNits;
+
+  // Local-exposure parameters used by the HDR carrier split and inverse
+  // compose. Strength is zero for the fixed median method.
+  float local_exposure_strength = 0.0f;
+  float local_max_brighten = 2.0f;
+  float local_max_darken = 2.0f;
+  float midtone = 0.18f;
 };
 
 // The source is already in the model domain (gain-map split happens in its

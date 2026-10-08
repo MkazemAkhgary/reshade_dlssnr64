@@ -86,6 +86,10 @@ bool ComposeOutput(
     constants.hdr.EffectiveSceneWhiteNits = hdr->effective_scene_white_nits;
     constants.hdr.ComposeMode =
         static_cast<float>(static_cast<int>(residual.hdr_compose_mode));
+    constants.hdr.LocalExposure.x = hdr->local_exposure_strength;
+    constants.hdr.LocalExposure.y = hdr->local_max_brighten;
+    constants.hdr.LocalExposure.z = hdr->local_max_darken;
+    constants.hdr.LocalExposure.w = hdr->midtone;
 
     if (grade_input != nullptr) {
       constants.grade.Enabled = grade_input->enabled ? 1.0f : 0.0f;

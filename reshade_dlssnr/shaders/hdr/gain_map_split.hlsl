@@ -11,6 +11,67 @@ RWTexture2D<float4> gOutput : register(u0);
 SamplerState s0 : register(s0);
 
 
+#define kLocalExposureStrength hdr.LocalExposure.x
+#define kLocalMaxBrighten      hdr.LocalExposure.y
+#define kLocalMaxDarken        hdr.LocalExposure.z
+#define kLocalExposureMidtone  hdr.LocalExposure.w
+
+float SampleHdrLuma(float2 uv)
+{
+    float3 c = gSource.SampleLevel(s0, saturate(uv), 0).rgb;
+    float3 lin = DecodeToLinear(c, (int)(kFormat + 0.5), kSdrReferenceWhiteNits);
+    lin = HdrPreDesaturate(lin, saturate(kCrosstalk));
+    return max(dot(max(lin, 0.0), HdrLumaWeights()), 1e-8);
+}
+
+float LocalBaseLogLuma(float2 uv, float center_log2, float2 texel)
+{
+    // Approximate UE-style local exposure: estimate a low-frequency base
+    // luminance with a small bilateral neighborhood, then adjust only that
+    // base. The center/detail component is preserved.
+    const float min_dim = min((float)Width, (float)Height);
+    const float radius = max(1.0, min_dim * 0.01);
+    const float2 r = texel * radius;
+
+    float weighted = center_log2 * 4.0;
+    float weight = 4.0;
+
+    float l = log2(SampleHdrLuma(uv + float2(-r.x, 0.0)));
+    float w = 1.0 / (1.0 + 4.0 * abs(l - center_log2));
+    weighted += l * w; weight += w;
+    l = log2(SampleHdrLuma(uv + float2(r.x, 0.0)));
+    w = 1.0 / (1.0 + 4.0 * abs(l - center_log2));
+    weighted += l * w; weight += w;
+    l = log2(SampleHdrLuma(uv + float2(0.0, -r.y)));
+    w = 1.0 / (1.0 + 4.0 * abs(l - center_log2));
+    weighted += l * w; weight += w;
+    l = log2(SampleHdrLuma(uv + float2(0.0, r.y)));
+    w = 1.0 / (1.0 + 4.0 * abs(l - center_log2));
+    weighted += l * w; weight += w;
+
+    return weighted / max(weight, 1e-6);
+}
+
+float LocalExposureFactor(float2 uv, float raw_luma, float exposure)
+{
+    if (kLocalExposureStrength <= 0.0 || raw_luma <= 1e-8)
+        return 1.0;
+
+    const float2 texel = 1.0 / float2(max(Width, 1u), max(Height, 1u));
+    const float center_log2 = log2(raw_luma);
+    const float local_base_log2 = LocalBaseLogLuma(uv, center_log2, texel);
+    const float target_base_log2 =
+        log2(max(kLocalExposureMidtone, 1e-6)) - log2(max(exposure, 1e-6));
+    const float adjusted_base_log2 = lerp(
+        local_base_log2, target_base_log2,
+        saturate(kLocalExposureStrength));
+    const float stops = clamp(
+        adjusted_base_log2 - local_base_log2,
+        -kLocalMaxDarken, kLocalMaxBrighten);
+    return exp2(stops);
+}
+
+
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
@@ -35,7 +96,11 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     // to the SDR model, but never becomes part of the alternate HDR image or
     // its gain-map reconstruction.
     float exposure = max(kExposure, 1e-6);
-    float3 pre_exposed = pre_hdr * exposure;
+    float raw_luma = max(dot(max(pre_hdr, 0.0), luma), 0.0);
+    float local_exposure = LocalExposureFactor(
+        (float2(id.xy) + 0.5) / float2(max(Width, 1u), max(Height, 1u)),
+        raw_luma, exposure);
+    float3 pre_exposed = pre_hdr * exposure * local_exposure;
     float y_exposed = max(dot(pre_exposed, luma), 0.0);
 
     // The gain-map working domain is normalized to SDR white = 100 nits.

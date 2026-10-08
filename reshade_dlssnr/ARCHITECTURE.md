@@ -481,14 +481,20 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 **Format detection is explicit and overridable.** Auto detection treats `R16G16B16A16_FLOAT` and `R11G11B10_FLOAT` as scRGB, `R10G10B10A2_UNORM` as HDR10, and 8-bit RGBA/BGRA formats as SDR. `HdrSettings::format` can override auto detection.
 
-**Exposure is measurement state, not compose state.** Histogram-derived exposure changes what the model sees; the HDR compose reconstructs the source from its own gain map and applies the model residual directly in HDR rather than re-running the source through the exposure transform.
+**Exposure is measurement state, not compose state.** Histogram-derived exposure changes what the model sees; HDR compose reconstructs the source from its own gain map and applies the model residual directly in HDR.
+
+**Exposure and white-point measurement use the same scene population.** The default `Median + Skin` method targets the median of the depth-filtered histogram when enough pixels survive, otherwise the full frame; skin can pull that target. Its white percentile is taken from that same selected population, so excluded bright pixels do not change HDR headroom by themselves.
+
+**An experimental exposure method separates global adaptation from local exposure.** `Auto Exposure + Local` meters the selected scene histogram between configurable low/high percentiles, adapts toward that target at separate brighten/darken speeds, and uses the same high percentile for its white point. A spatial local-exposure stage then adjusts the low-frequency luminance base while preserving local detail. Skin metering is intentionally not used by this method.
 **HDR uses two reference whites for different jobs.** `kScRgbReferenceWhiteNits` (80 nits) is only for interpreting scRGB values. `kSdrReferenceWhiteNits` (100 nits) is the normalized domain used by the histogram, exposure, gain map, and model. This keeps `midtone` in the same scale as the model input. For example, scRGB 0.18 becomes 0.144 in the 100-nit domain; exposure then scales it to the requested 0.18. There is no separate 80/100 correction later.
+
+**The experimental local stage is separate from global eye adaptation.** Global adaptation chooses the overall exposure from the histogram and changes it over time. Local exposure then adjusts nearby dark and bright regions independently using a luma-aware spatial base, so a bright sky does not have to force the landscape dark and the landscape does not have to force the sky to clip.
 
 **The packed HDR carrier is lossless in format and precision.** `PassResources::packed_hdr_sdr` is an RGBA32F carrier where RGB is the linear SDR base and A is raw log2 gain. Quantizing this representation would break the intended round trip.
 
 **Gain is a luma-domain scalar.** HDR reconstruction applies the stored gain to luminance and rescales RGB to preserve chromaticity; applying the affine gain-map offsets independently to each RGB channel changes color.
 
-**The histogram has three 256-bin slices.** The slices are full-frame, depth-filtered, and skin. The histogram pass uses the appropriate fixed grid for clearing and 8x8 dispatch for accumulation.
+**The histogram has three 256-bin slices.** The slices are full-frame, depth-filtered, and skin. The skin slice is completely disabled when the Skin setting is off; when it is enabled but no mask is available, the histogram falls back to its color-based skin test.
 
 **HDR measurement is queued on the game's command list and signaled at Present.** `HdrState::BeginFrame` schedules the histogram/readback; `SignalAtPresent` signals the internal fence after the game's queue has advanced; the next frame polls the completed readback.
 
@@ -508,6 +514,8 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 **HDR composition is a per-pass UI setting.** The Residual Edit section exposes `HDR Composition` with `Ratio (Current)` and `Inverse Tone Map (Experimental)`. The choice is persisted as `PassN.Residual.HdrComposeMode` and only affects HDR composition; the default remains Ratio.
 
+**HDR exposure is a global UI setting.** The HDR section exposes `Exposure Method` with `Median + Skin` and `Auto Exposure + Local (Experimental)`. The choice is persisted as `Hdr.ExposureMethod`; the default remains Median.
+
 **Once the first Present pass exists, later passes are forced to Present.** This keeps the pass chain monotonic: Post-DLSS can feed later Post-DLSS work, while a Present pass cannot hand its output back into the earlier DLSS injection point.
 
 **The debug selection is not per-pass.** The active UI tab selects which pass renders the shared debug view.
@@ -518,7 +526,7 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 The HDR path is gain-map based and exists only in Post-DLSS processing.
 
-1. `HdrState` detects the source format and maintains exposure/scene-white state from the histogram. It can meter full frame, depth-filtered pixels, and a model-driven skin slice.
+1. `HdrState` detects the source format and maintains exposure/scene-white state from the histogram. The default maps the selected scene population median to the midtone target and can optionally use the skin slice. The experimental method uses a low/high percentile histogram band for global eye adaptation, uses its high percentile as the white point, and does not use skin.
 2. `SkinDetect`, when enabled and when the first Post-DLSS pass is HDR, prepares a working-scale image with the same model-domain preparation machinery, evaluates a model pass, and builds a temporal mask from the input/output difference. The mask is fed into the skin histogram slice.
 3. `GainMapSplit` converts the full-resolution HDR source into an RGBA32F carrier: RGB is the linear SDR base and A is log2 gain. BT.2446-C parameters, gain-map offsets and scene-white control the split.
 4. `PrepareModelInput` performs exact Box Area downsampling. For the HDR carrier path it preserves the carrier in the model's SDR domain with a hue-preserving gamut fit and sRGB encoding.

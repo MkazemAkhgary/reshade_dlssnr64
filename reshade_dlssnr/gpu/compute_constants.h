@@ -8,7 +8,7 @@
 static_assert(sizeof(ShaderBlock) == 32);
 static_assert(sizeof(GradeBlock) == 48);
 static_assert(sizeof(ResidualBlock) == 32);
-static_assert(sizeof(HdrBlock) == 48);
+static_assert(sizeof(HdrBlock) == 64);
 static_assert(sizeof(EasuBlock) == 48);
 static_assert(sizeof(RcasBlock) == 16);
 

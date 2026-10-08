@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <chrono>
 #include <cstdio>
 #include <bit>
 
@@ -94,17 +95,65 @@ float Lerp(float a, float b, float t) {
   return a + (b - a) * t;
 }
 
+// Log-average the central portion of a histogram. This deliberately ignores
+// the darkest and brightest tails and asks where the bulk of the selected
+// metering population lives. The result stays in the histogram's linear luma
+// domain.
+float HistogramBandLuma(const uint32_t* bins, uint32_t total,
+                        float low_fraction, float high_fraction) {
+  if (bins == nullptr || total == 0 || high_fraction <= low_fraction) {
+    return 0.0f;
+  }
+
+  const double low_target =
+      std::clamp(static_cast<double>(low_fraction), 0.0, 1.0) * total;
+  const double high_target =
+      std::clamp(static_cast<double>(high_fraction), 0.0, 1.0) * total;
+  if (high_target <= low_target) return 0.0f;
+
+  const double span = static_cast<double>(kLumaMaxLog2 - kLumaMinLog2);
+  const double denom = static_cast<double>(kHistogramBins - 1);
+  double weighted_log2 = 0.0;
+  double weight = 0.0;
+  double cumulative = 0.0;
+
+  for (uint32_t i = 0; i < kHistogramBins; ++i) {
+    const double count = static_cast<double>(bins[i]);
+    const double begin = cumulative;
+    const double end = cumulative + count;
+    cumulative = end;
+    if (count <= 0.0 || end <= low_target || begin >= high_target) {
+      continue;
+    }
+
+    const double used = std::min(end, high_target) -
+                        std::max(begin, low_target);
+    if (used <= 0.0) continue;
+
+    const double t = static_cast<double>(i) / denom;
+    const double log2_luma =
+        static_cast<double>(kLumaMinLog2) + t * span;
+    weighted_log2 += used * log2_luma;
+    weight += used;
+  }
+
+  return weight > 0.0
+             ? std::pow(2.0f, static_cast<float>(weighted_log2 / weight))
+             : 0.0f;
+}
+
 }  // namespace
 
 void ExposureTracker::Reset() { *this = ExposureTracker{}; }
 
 // Same EMA logic for both trackers; `params` and `use_skin` are the only
 // differences between them. Headroom and exposure are not applied here.
-// `scene_white` is the measured white percentile in the 100-nit
-// SDR/gain-map working domain; the split applies the exposure to the image and keeps headroom as a separate peak
-// control so exposure cannot cancel out of the tone-map normalization.
-void ExposureTracker::Update(const uint32_t* bins, const ExposureParams& params,
-                             bool use_skin) {
+// `scene_white` is the smoothed white percentile from the same metering
+// population used for exposure, in the 100-nit SDR/gain-map working domain.
+void ExposureTracker::Update(const uint32_t* bins,
+                             const ExposureParams& params,
+                             bool use_skin,
+                             float delta_seconds) {
   const uint32_t* full_bins = bins;
   const uint32_t* depth_bins = bins + kHistogramBins;
   const uint32_t* skin_bins = bins + 2u * kHistogramBins;
@@ -119,12 +168,8 @@ void ExposureTracker::Update(const uint32_t* bins, const ExposureParams& params,
   }
   if (total_full == 0) return;
 
-  // Priority: skin > depth-filtered > full frame. The full frame keeps the
-  // measurement alive when the other two are empty or too sparse.
   const float depth_survived =
       static_cast<float>(total_depth) / static_cast<float>(total_full);
-
-  // Scene source: depth-filtered if usable, else the full frame.
   const uint32_t* scene_bins = full_bins;
   uint32_t scene_total = total_full;
   MeteringSource source = MeteringSource::FullFrame;
@@ -138,19 +183,34 @@ void ExposureTracker::Update(const uint32_t* bins, const ExposureParams& params,
     source = MeteringSource::DepthFiltered;
   }
 
-  const float p_mid_scene_bin = PercentileBin(scene_bins, scene_total, 0.50f);
-  const float luma_mid_scene = BinToLinear(p_mid_scene_bin);
-  float log_target = (luma_mid_scene > 1e-6f)
-                         ? log2(params.midtone / luma_mid_scene)
+  const bool auto_local = params.exposure_method == HdrExposureMethod::AutoLocal;
+  float exposure_reference_luma = 0.0f;
+  if (auto_local) {
+    exposure_reference_luma = HistogramBandLuma(
+        scene_bins, scene_total, params.auto_low_percent,
+        params.auto_high_percent);
+  } else {
+    const float p_mid_scene_bin =
+        PercentileBin(scene_bins, scene_total, 0.50f);
+    exposure_reference_luma = BinToLinear(p_mid_scene_bin);
+  }
+
+  float log_target = (exposure_reference_luma > 1e-6f)
+                         ? log2(params.midtone / exposure_reference_luma)
                          : log2(std::max(exposure, 1e-6f));
 
-  // Skin is a pull, not a takeover: blend toward the skin target in log2
-  // space so the depth/full scene keeps a say. The gate above (fraction
-  // threshold) decides whether skin is considered at all.
-  const float skin_frac =
-      static_cast<float>(total_skin) / static_cast<float>(total_full);
+  const bool skin_was_enabled = skin_enabled_last;
+  skin_enabled_last = use_skin;
+  if (!use_skin && skin_was_enabled) {
+    // Leaving skin metering should converge quickly to the scene target rather
+    // than retaining the slower, skin-driven response from the previous state.
+    warmup_frames = 0;
+  }
+
+  float skin_frac = static_cast<float>(total_skin) /
+                    static_cast<float>(std::max(total_full, 1u));
   bool skin_blended = false;
-  if (use_skin && total_skin > 1000u &&
+  if (!auto_local && use_skin && total_skin > 1000u &&
       skin_frac > params.skin_fraction_threshold) {
     const float p_mid_skin_bin = PercentileBin(skin_bins, total_skin, 0.50f);
     const float luma_mid_skin = BinToLinear(p_mid_skin_bin);
@@ -158,59 +218,80 @@ void ExposureTracker::Update(const uint32_t* bins, const ExposureParams& params,
       const float log_skin = log2(params.midtone / luma_mid_skin);
       const float t = std::clamp(params.skin_priority, 0.0f, 1.0f);
       log_target = Lerp(log_target, log_skin, t);
-      skin_blended = (t > 0.0f);
+      skin_blended = t > 0.0f;
       if (skin_blended) source = MeteringSource::Skin;
     }
   }
 
-  const float p_hi_bin =
-      PercentileBin(full_bins, total_full,
-                    std::clamp(params.white_percentile, 0.90f, 0.999f));
-
+  const float white_fraction = auto_local
+      ? std::clamp(params.auto_high_percent, 0.01f, 0.999f)
+      : std::clamp(params.white_percentile, 0.90f, 0.999f);
+  const float p_hi_bin = PercentileBin(scene_bins, scene_total, white_fraction);
   const float luma_hi = BinToLinear(p_hi_bin);
-  const float luma_mid = params.midtone / exp2(log_target);
 
-  // 4096 = 2^12, matching the histogram's own log2 range. Very dark scenes
-  // need well above 2^7 to reach the default 0.18 midtone.
   const float raw_target =
       std::clamp(exp2(log_target), 0.01f, 4096.0f);
 
-  // Rate cap in log2 space. Skin and warmup bypass it so they can lock
-  // quickly; 0 disables it outright.
-  const bool skin_drives = skin_blended;
-  const float log_max_delta =
-      warmup_frames < 30 ? 0.5f : params.rate_cap;
+  const bool was_ready = have_measurement;
+  const float dt = std::clamp(delta_seconds, 1.0f / 240.0f, 0.5f);
   float capped_target = raw_target;
-  if (!skin_drives && log_max_delta > 0.0f) {
-    const float log_current = log2(std::max(exposure, 1e-6f));
-    float log_delta = log2(raw_target) - log_current;
-    log_delta = std::clamp(log_delta, -log_max_delta, log_max_delta);
-    capped_target = exp2(log_current + log_delta);
+
+  if (auto_local) {
+    if (!was_ready) {
+      // The first valid measurement establishes the starting point; speed
+      // controls govern subsequent eye adaptation.
+      capped_target = raw_target;
+    } else {
+      const float log_current = log2(std::max(exposure, 1e-6f));
+      float log_delta = log2(raw_target) - log_current;
+      if (log_delta >= 0.0f) {
+        log_delta = std::min(log_delta, std::max(params.speed_up, 0.0f) * dt);
+      } else {
+        log_delta = std::max(log_delta, -std::max(params.speed_down, 0.0f) * dt);
+      }
+      capped_target = exp2(log_current + log_delta);
+    }
+  } else {
+    const bool skin_drives = skin_blended;
+    const float log_max_delta =
+        warmup_frames < 30 ? 0.5f : params.rate_cap;
+    if (!skin_drives && log_max_delta > 0.0f) {
+      const float log_current = log2(std::max(exposure, 1e-6f));
+      float log_delta = log2(raw_target) - log_current;
+      log_delta = std::clamp(log_delta, -log_max_delta, log_max_delta);
+      capped_target = exp2(log_current + log_delta);
+    }
   }
 
-  p50_luma = luma_mid;
+  this->exposure_reference_luma = exposure_reference_luma;
   target_exposure = capped_target;
   skin_fraction = skin_frac;
   target_is_skin = (source == MeteringSource::Skin);
   depth_filter_survived = depth_survived;
   metering_source = source;
 
-  // Warm-up and skin converge fast; otherwise the blend rate scales with
-  // the measurement interval, so a longer interval smooths more.
-  const uint32_t interval =
-      static_cast<uint32_t>(std::clamp(params.measure_interval, 1u, 32u));
-  const float resp = (32.0f - static_cast<float>(interval)) / 31.0f;
-  const float alpha = (skin_drives || warmup_frames < 30)
-                          ? 0.5f
-                          : (0.02f + resp * 0.38f);
+  float alpha = 1.0f;
+  if (!auto_local) {
+    const bool skin_drives = skin_blended;
+    const uint32_t interval =
+        static_cast<uint32_t>(std::clamp(params.measure_interval, 1u, 32u));
+    const float resp = (32.0f - static_cast<float>(interval)) / 31.0f;
+    alpha = (skin_drives || warmup_frames < 30)
+                ? 0.5f
+                : (0.02f + resp * 0.38f);
+  }
 
   exposure = Lerp(exposure, capped_target, alpha);
-  // Keep the measured white point in the 100-nit normalized domain.
-  // Exposure is applied to the
-  // sampled HDR pixel by GainMapSplit; folding exposure into this white point
-  // would cancel the very control that is meant to lift dark scenes.
+
   const float W_target = std::max(luma_hi, 1e-6f);
-  scene_white = Lerp(scene_white, W_target, alpha);
+  if (!was_ready) {
+    scene_white = W_target;
+  } else if (auto_local) {
+    const float white_alpha = 1.0f - std::exp(-6.0f * dt);
+    scene_white = Lerp(scene_white, W_target, white_alpha);
+  } else {
+    scene_white = Lerp(scene_white, W_target, alpha);
+  }
 
   have_measurement = true;
   warmup_frames++;
@@ -270,6 +351,8 @@ void HdrState::Shutdown() {
   fence_.Reset();
   fence_value_ = 0;
   pending_fence_value_ = 0;
+  have_measurement_time_ = false;
+  last_measurement_time_ = {};
   pending_measurement_ = false;
   pending_gain_fence_value_ = 0;
   pending_gain_stats_ = false;
@@ -316,7 +399,7 @@ HdrSnapshot HdrState::GetSnapshot() const {
       s.histogram_skin[i] = last_histogram_skin_[i];
     }
   }
-  s.p50_luma = regular_.p50_luma;
+  s.exposure_reference_luma = regular_.exposure_reference_luma;
   s.p_hi_luma = p_hi_luma_;
   s.target_exposure = regular_.target_exposure;
   s.samples = last_samples_;
@@ -412,6 +495,7 @@ void HdrState::BeginFrame(CommandContext& cmd,
   constants.shader.Params1.x = depth != nullptr ? 1.0f : 0.0f;
   constants.shader.Params1.y = depth_inverted ? 1.0f : 0.0f;
   constants.shader.Params1.z = mask != nullptr ? 1.0f : 0.0f;
+  constants.shader.Params1.w = settings.skin.enable ? 1.0f : 0.0f;
 
   // Seed the state tracker with the actual current states. Without this,
   // inference would guess from the resource descriptor, which is wrong for
@@ -577,13 +661,22 @@ void HdrState::PollReadback(ID3D12Fence* fence, const Settings& settings) {
 }
 
 void HdrState::UpdateExposure(const uint32_t* bins, const Settings& settings) {
-  // Same histogram, two independent EMAs with independent parameters. The
-  // regular tracker may use the skin slice (which the mask gates); the
-  // fallback tracker never does, so the skin-detect pass's exposure cannot
-  // be driven by the mask it produced.
+  const auto now = std::chrono::steady_clock::now();
+  const float delta_seconds =
+      have_measurement_time_
+          ? std::chrono::duration<float>(now - last_measurement_time_).count()
+          : (1.0f / 60.0f);
+  last_measurement_time_ = now;
+  have_measurement_time_ = true;
+
   ExposureParams regular_params;
   regular_params.midtone = settings.hdr.midtone;
   regular_params.white_percentile = settings.hdr.white_percentile;
+  regular_params.exposure_method = settings.hdr.exposure_method;
+  regular_params.auto_low_percent = settings.hdr.auto_low_percent;
+  regular_params.auto_high_percent = settings.hdr.auto_high_percent;
+  regular_params.speed_up = settings.hdr.speed_up;
+  regular_params.speed_down = settings.hdr.speed_down;
   regular_params.rate_cap = settings.hdr.rate_cap;
   regular_params.skin_fraction_threshold =
       settings.hdr.skin_fraction_threshold;
@@ -593,9 +686,6 @@ void HdrState::UpdateExposure(const uint32_t* bins, const Settings& settings) {
   regular_params.measure_interval =
       static_cast<uint32_t>(settings.hdr.measure_interval);
 
-  // The skin-detect tracker keeps the scene's white point (that describes
-  // the scene, not the pass) but has its own target, response, and depth
-  // fallback.
   ExposureParams fallback_params = regular_params;
   fallback_params.midtone = settings.skin.hdr_midtone;
   fallback_params.rate_cap = settings.skin.hdr_rate_cap;
@@ -603,19 +693,14 @@ void HdrState::UpdateExposure(const uint32_t* bins, const Settings& settings) {
       settings.skin.hdr_depth_fallback_fraction;
   fallback_params.measure_interval =
       static_cast<uint32_t>(settings.skin.hdr_measure_interval);
+  fallback_params.exposure_method = HdrExposureMethod::Median;
 
-  regular_.Update(bins, regular_params, /*use_skin=*/true);
-  fallback_.Update(bins, fallback_params, /*use_skin=*/false);
+  const bool use_skin = settings.skin.enable &&
+                        settings.hdr.exposure_method == HdrExposureMethod::Median;
+  regular_.Update(bins, regular_params, use_skin, delta_seconds);
+  fallback_.Update(bins, fallback_params, /*use_skin=*/false, delta_seconds);
 
-  // Shared: the P99 of the full-frame histogram, for diagnostics. Both
-  // trackers compute it internally; this copy is only for the UI.
-  uint32_t total_full = 0;
-  for (uint32_t i = 0; i < kHistogramBins; ++i) total_full += bins[i];
-  if (total_full == 0) return;
-  const float p_hi_bin =
-      PercentileBin(bins, total_full,
-                    std::clamp(settings.hdr.white_percentile, 0.90f, 0.999f));
-  p_hi_luma_ = BinToLinear(p_hi_bin);
+  p_hi_luma_ = regular_.scene_white;
 }
 
 // ---------------------------------------------------------------------------
@@ -654,9 +739,10 @@ PipelineStatus RunHdrBeginFrame(PassRun& run) {
   // exposure flicker from camera movement. The guide is only valid together
   // with motion, so a valid guide implies a non-null depth clone.
   ID3D12Resource* depth = run.guides.valid ? run.guides.depth : nullptr;
-  ID3D12Resource* mask = (run.skin_detect != nullptr)
-                             ? run.skin_detect->GetOutput().mask
-                             : nullptr;
+  ID3D12Resource* mask =
+      (run.skin_detect != nullptr && run.settings->skin.enable)
+          ? run.skin_detect->GetOutput().mask
+          : nullptr;
   run.hdr->BeginFrame(*run.hdr_cmd, run.list, run.guides.dlss_output_color,
                       run.guides.output_width, run.guides.output_height,
                       depth, run.guides.depth_inverted, mask,

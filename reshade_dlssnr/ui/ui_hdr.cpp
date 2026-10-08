@@ -61,21 +61,71 @@ void DrawControls(HdrSettings& hdr, bool& changed) {
       "How often the scene's brightness is measured, in frames.",
       &hdr.measure_interval, 32, 1, 4);
 
-  changed |= DrawFloatRow(
-      0, "hdr_midtone", "Midtone Target",
-      "Where the scene's median brightness is mapped before the model "
-      "sees it. Higher values brighten the input.",
-      &hdr.midtone, nullptr, 0.0f, 0.01f, 0.50f, 0.18f);
+  static const char* const kExposureMethodLabels[] = {
+      "Median + Skin", "Auto Exposure + Local (Experimental)"};
+  static const char* const kExposureMethodTips[] = {
+      "Maps the selected scene population's median to the midtone target and optionally pulls it toward skin.",
+      "Uses UE-style histogram eye adaptation plus a local exposure stage to lift dark regions and protect bright regions. Skin is not used for this method."};
+  int exposure_method = static_cast<int>(hdr.exposure_method);
+  changed |= DrawComboRow(
+      "hdr_exposure_method", "Exposure Method",
+      "Choose how the scene brightness target is measured.",
+      &exposure_method, kExposureMethodLabels, kExposureMethodTips, 2);
+  hdr.exposure_method = static_cast<HdrExposureMethod>(exposure_method);
 
   changed |= DrawFloatRow(
-      0, "hdr_white_percentile", "White Percentile",
-      "Which percentile defines the white point.",
-      &hdr.white_percentile, nullptr, 0.0f, 0.90f, 0.999f, 0.99f);
+      0, "hdr_midtone", "Midtone Target",
+      "The luminance target used by the selected exposure method. Higher values brighten the model input.",
+      &hdr.midtone, nullptr, 0.0f, 0.01f, 0.50f, 0.18f);
+
+  if (hdr.exposure_method == HdrExposureMethod::Median) {
+    changed |= DrawFloatRow(
+        0, "hdr_white_percentile", "White Percentile",
+        "Which percentile defines the white point for the fixed exposure method.",
+        &hdr.white_percentile, nullptr, 0.0f, 0.90f, 0.999f, 0.99f);
+  }
 
   changed |= DrawFloatRow(
       0, "hdr_highlight_headroom", "Highlight Headroom",
       "Scales the effective HDR peak used by BT.2446C. Higher values preserve more SDR headroom so the model can add highlights without consuming the gain map.",
       &hdr.highlight_headroom, nullptr, 0.0f, 0.25f, 16.0f, 8.0f);
+
+  if (hdr.exposure_method == HdrExposureMethod::AutoLocal) {
+    changed |= DrawFloatRow(
+        0, "hdr_auto_low_percent", "Low Percent",
+        "Lower percentile of the histogram band used for global eye adaptation.",
+        &hdr.auto_low_percent, nullptr, 0.0f, 0.0f, 0.99f, 0.70f);
+
+    changed |= DrawFloatRow(
+        0, "hdr_auto_high_percent", "High Percent",
+        "Upper percentile of the histogram band used for global eye adaptation.",
+        &hdr.auto_high_percent, nullptr, 0.0f, 0.01f, 0.999f, 0.90f);
+
+    changed |= DrawFloatRow(
+        0, "hdr_speed_up", "Speed Up",
+        "Maximum exposure increase in stops per second when adapting brighter.",
+        &hdr.speed_up, nullptr, 0.0f, 0.0f, 20.0f, 3.0f);
+
+    changed |= DrawFloatRow(
+        0, "hdr_speed_down", "Speed Down",
+        "Maximum exposure decrease in stops per second when adapting darker.",
+        &hdr.speed_down, nullptr, 0.0f, 0.0f, 20.0f, 1.0f);
+
+    changed |= DrawFloatRow(
+        0, "hdr_local_exposure_strength", "Local Exposure",
+        "How strongly local luminance adjusts the model-facing exposure. 0 disables the local stage.",
+        &hdr.local_exposure_strength, nullptr, 0.0f, 0.0f, 1.0f, 0.50f);
+
+    changed |= DrawFloatRow(
+        0, "hdr_local_max_brighten", "Local Max Brighten",
+        "Maximum local brightening in stops for dark regions.",
+        &hdr.local_max_brighten, nullptr, 0.0f, 0.0f, 4.0f, 2.0f);
+
+    changed |= DrawFloatRow(
+        0, "hdr_local_max_darken", "Local Max Darken",
+        "Maximum local darkening in stops for bright regions.",
+        &hdr.local_max_darken, nullptr, 0.0f, 0.0f, 4.0f, 2.0f);
+  }
 
   changed |= DrawFloatRow(
       0, "hdr_bt2446_k1", "BT.2446C k1",
@@ -123,6 +173,7 @@ void DrawControls(HdrSettings& hdr, bool& changed) {
       "Configured ISO 21496-1 log2 gain metadata maximum. Raw f32 gain remains unquantized.",
       &hdr.gain_max_log2, nullptr, 0.0f, 0.0f, 32.0f, 6.0f);
 
+  if (hdr.exposure_method == HdrExposureMethod::Median) {
   changed |= DrawFloatRow(
       0, "hdr_rate_cap", "Response Cap",
       "Maximum log2 change in exposure per measurement. 0 disables the "
@@ -140,6 +191,8 @@ void DrawControls(HdrSettings& hdr, bool& changed) {
       "How much the skin median influences the target once the gate "
       "above has passed. 0 = scene alone, 1 = skin alone.",
       &hdr.skin_priority, nullptr, 0.7f, 0.0f, 1.0f, 0.7f);
+
+  }
 
   changed |= DrawFloatRow(
       0, "hdr_depth_fallback_fraction", "Depth Fallback",
@@ -166,12 +219,22 @@ void DrawDiagnostics(const HdrSnapshot& snap, const HdrSettings& hdr,
     ImGui::TableNextColumn();
     ImGui::Text("Frames since: %u", snap.frames_since_measure);
 
+    const char* exposure_method_name =
+        hdr.exposure_method == HdrExposureMethod::AutoLocal
+            ? "Auto Exposure + Local"
+            : "Median + Skin";
+
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
-    ImGui::Text("Median (P50, 100-nit domain): %.4f", snap.p50_luma);
+    ImGui::Text("Exposure reference (100-nit domain): %.4f", snap.exposure_reference_luma);
     ImGui::TableNextColumn();
-    ImGui::Text("White source (P%.1f, 100-nit domain): %.4f",
-                hdr.white_percentile * 100.0f, snap.p_hi_luma);
+    ImGui::Text("White source (same metering set): %.4f", snap.p_hi_luma);
+
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::Text("Exposure method: %s", exposure_method_name);
+    ImGui::TableNextColumn();
+    ImGui::TextUnformatted("");
 
     ImGui::TableNextRow();
     ImGui::TableNextColumn();

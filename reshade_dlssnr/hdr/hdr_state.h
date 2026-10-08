@@ -10,13 +10,14 @@
 //   3. On the next BeginFrame, we poll the fence and, if the copy is
 //      ready, update the exposure EMA.
 //
-// See HDR_DESIGN.md for the pipeline this feeds into.
+// See ARCHITECTURE.md for the pipeline this feeds into.
 #pragma once
 
 #include <d3d12.h>
 #include <wrl/client.h>
 
 #include <cstdint>
+#include <chrono>
 
 #include "command_context.h"
 #include "compute_engine.h"
@@ -25,7 +26,7 @@
 
 namespace reshade_dlssnr {
 
-// Which histogram the exposure median was drawn from.
+// Which histogram the exposure reference was drawn from.
 enum class MeteringSource {
   FullFrame = 0,
   DepthFiltered = 1,
@@ -38,6 +39,11 @@ enum class MeteringSource {
 struct ExposureParams {
   float midtone = 0.18f;
   float white_percentile = 0.99f;
+  HdrExposureMethod exposure_method = HdrExposureMethod::Median;
+  float auto_low_percent = 0.70f;
+  float auto_high_percent = 0.90f;
+  float speed_up = 3.0f;
+  float speed_down = 1.0f;
   float rate_cap = 0.1f;
   float skin_fraction_threshold = 0.01f;
   float depth_fallback_fraction = 0.20f;
@@ -55,20 +61,22 @@ struct ExposureParams {
 // exposure, which changes the tonemap that produced the mask.
 struct ExposureTracker {
   float exposure = 1.0f;
-  // Measured white percentile in the 100-nit SDR/gain-map working
-  // domain, before headroom.
+  // Measured white percentile from the selected scene population in the
+  // 100-nit SDR/gain-map working domain, before headroom.
   float scene_white = 1.0f;
   float target_exposure = 1.0f;
-  float p50_luma = 0.0f;
+  float exposure_reference_luma = 0.0f;
   float skin_fraction = 0.0f;
   float depth_filter_survived = 0.0f;
   uint32_t warmup_frames = 0;
   bool have_measurement = false;
   bool target_is_skin = false;
   MeteringSource metering_source = MeteringSource::FullFrame;
+  bool skin_enabled_last = false;
 
   void Reset();
-  void Update(const uint32_t* bins, const ExposureParams& params, bool use_skin);
+  void Update(const uint32_t* bins, const ExposureParams& params,
+              bool use_skin, float delta_seconds);
 };
 
 // Read-only snapshot of the current HDR measurement state, safe to copy to
@@ -86,13 +94,13 @@ struct HdrSnapshot {
   bool has_histogram = false;
   uint32_t histogram[256] = {};       // full frame
   uint32_t histogram_skin[256] = {};  // skin, depth-filtered
-  float p50_luma = 0.0f;         // scene median, before exposure
-  float p_hi_luma = 0.0f;        // white-point percentile, before exposure
+  float exposure_reference_luma = 0.0f;  // luma used for the exposure target, before exposure
+  float p_hi_luma = 0.0f;                 // white-point percentile from the same metering population
   float target_exposure = 1.0f;  // value the EMA is chasing
   uint32_t samples = 0;          // total pixels sampled in the last histogram
 
-  // Which histogram the exposure median was taken from, and how much of the
-  // frame was skin. Diagnostics only.
+  // Which histogram the exposure reference was taken from, and how much
+  // of the frame was skin. Diagnostics only.
   float skin_fraction = 0.0f;
   bool target_is_skin = false;
   // Fraction of the frame the depth filter kept. Zero when there is no
@@ -204,13 +212,14 @@ class HdrState {
   uint32_t frames_since_measure_ = 0;
   bool have_logged_format_ = false;
 
-  // Diagnostics: last measured histogram and the shared white-point
-  // percentile (identical for both trackers).
+  // Diagnostics: last measured histogram and the regular tracker white point.
   bool have_histogram_ = false;
   uint32_t last_histogram_[256] = {};
   uint32_t last_histogram_skin_[256] = {};
   float p_hi_luma_ = 0.0f;
   uint32_t last_samples_ = 0;
+  std::chrono::steady_clock::time_point last_measurement_time_{};
+  bool have_measurement_time_ = false;
 
   bool have_gain_stats_ = false;
   float gain_min_log2_ = 0.0f;

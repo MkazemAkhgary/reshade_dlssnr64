@@ -27,6 +27,13 @@ PipelineStatus PassSession::StepBuildHdrUniforms(PassRun& run) {
   run.hdr_uniforms.gain_max_log2 = hs.gain_max_log2;
   run.hdr_uniforms.effective_scene_white_nits =
       run.hdr->EffectiveSceneWhiteNits(hs);
+  run.hdr_uniforms.local_exposure_strength =
+      hs.exposure_method == HdrExposureMethod::AutoLocal
+          ? hs.local_exposure_strength
+          : 0.0f;
+  run.hdr_uniforms.local_max_brighten = hs.local_max_brighten;
+  run.hdr_uniforms.local_max_darken = hs.local_max_darken;
+  run.hdr_uniforms.midtone = hs.midtone;
   run.hdr_uniforms_ready = true;
   return PipelineStatus::Ok;
 }

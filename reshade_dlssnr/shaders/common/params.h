@@ -71,6 +71,9 @@ DLSSNR_BLOCK(HdrBlock)
     float EffectiveSceneWhiteNits;
     // 0 = current ratio compose, 1 = inverse-tone-map HDR compose.
     float ComposeMode;
+    // x = local exposure strength, y = max brighten stops, z = max darken
+    // stops, w = model midtone target. Zero strength disables local exposure.
+    float4 LocalExposure;
 };
 
 DLSSNR_BLOCK(EasuBlock)

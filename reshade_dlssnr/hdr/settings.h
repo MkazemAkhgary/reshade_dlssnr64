@@ -14,6 +14,11 @@ enum class HdrFormat : int {
   Hdr10 = 3,
 };
 
+enum class HdrExposureMethod : int {
+  Median = 0,
+  AutoLocal = 1,
+};
+
 // Encoding code the shaders read: 0 sRGB, 1 scRGB, 2 HDR10.
 inline int HdrFormatCode(HdrFormat format) {
   switch (format) {
@@ -30,9 +35,23 @@ struct HdrSettings {
   HdrFormat format = HdrFormat::Auto;
 
   int measure_interval = 4;
+  HdrExposureMethod exposure_method = HdrExposureMethod::Median;
   float midtone = 0.18f;
   float white_percentile = 0.99f;
   float highlight_headroom = 8.0f;
+
+  // AutoLocal follows the same high-level split used by UE5: global eye
+  // adaptation drives a stable target, then a local luminance stage preserves
+  // shadow detail without forcing the whole frame to match that target.
+  float auto_low_percent = 0.70f;
+  float auto_high_percent = 0.90f;
+  float speed_up = 3.0f;
+  float speed_down = 1.0f;
+  float local_exposure_strength = 0.50f;
+  float local_max_brighten = 2.0f;
+  float local_max_darken = 2.0f;
+
+  // Median-method response cap in log2 stops per measurement.
   float rate_cap = 0.1f;
 
   // BT.2446-C tuning. These defaults match the reference implementation
