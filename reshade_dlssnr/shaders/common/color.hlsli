@@ -77,13 +77,65 @@ float3 DecodeToLinear(float3 c, int format_code, float reference_nits)
     return result;
 }
 
-float3 GamutFitPreserveChroma(float3 c)
+float ModelGamutCompressMax(float max_channel)
+{
+    if (max_channel <= kModelGamutCompressionStart)
+        return max_channel;
+
+    const float headroom = 1.0 - kModelGamutCompressionStart;
+    const float distance = max_channel - kModelGamutCompressionStart;
+    return 1.0 - headroom /
+        (1.0 + kModelGamutCompressionStrength * distance);
+}
+
+float3 GamutFitModelInput(float3 c)
 {
     c = max(c, 0.0);
-    float max_channel = max(c.r, max(c.g, c.b));
-    if (max_channel > 1.0)
-        c /= max_channel;
-    return c;
+    const float max_channel = max(c.r, max(c.g, c.b));
+    if (max_channel <= kModelGamutCompressionStart)
+        return c;
+
+    // Compress the highlight magnitude into [0, 1] and progressively pull
+    // very bright colors toward white. This preserves normal SDR colors while
+    // retaining emissive/fire highlight structure instead of normalizing every
+    // super-white to the same RGB direction. The transform is analytically
+    // invertible for HDR compose.
+    const float desat = saturate(
+        kModelHighlightDesaturation *
+        (max_channel - kModelGamutCompressionStart) /
+        max(max_channel + 1.0, 1e-6));
+    const float3 white_pulled = lerp(
+        c, max_channel.xxx, desat);
+    const float compressed_max = ModelGamutCompressMax(max_channel);
+    return white_pulled * (compressed_max / max(max_channel, 1e-6));
+}
+
+float3 GamutUnfitModelInput(float3 c)
+{
+    c = max(c, 0.0);
+    const float mapped_max = min(max(c.r, max(c.g, c.b)), 1.0 - 1e-6);
+    if (mapped_max <= kModelGamutCompressionStart)
+        return c;
+
+    const float headroom = 1.0 - kModelGamutCompressionStart;
+    const float distance =
+        (headroom / max(1.0 - mapped_max, 1e-6) - 1.0) /
+        max(kModelGamutCompressionStrength, 1e-6);
+    const float original_max = min(
+        kModelGamutCompressionStart + max(distance, 0.0),
+        kModelGamutMaxLinear);
+    const float compressed_max = ModelGamutCompressMax(original_max);
+    const float scale = compressed_max / max(original_max, 1e-6);
+
+    const float desat = saturate(
+        kModelHighlightDesaturation *
+        (original_max - kModelGamutCompressionStart) /
+        max(original_max + 1.0, 1e-6));
+    const float3 white_pulled = c / max(scale, 1e-6);
+    const float3 original =
+        (white_pulled - desat * original_max.xxx) /
+        max(1.0 - desat, 1e-6);
+    return max(original, 0.0);
 }
 
 #endif

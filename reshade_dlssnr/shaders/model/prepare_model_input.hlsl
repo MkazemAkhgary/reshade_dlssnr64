@@ -27,11 +27,12 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     if (shader.Params0.w != 0.0)
     {
         // HDR gain-map sources are a lossless linear SDR carrier and may contain
-        // super-whites. Fit that carrier into the SDR model gamut without changing
-        // RGB ratios, then apply the model's sRGB transfer function. The packed
-        // carrier remains untouched and is what HDR compose reconstructs from.
+        // super-whites. Compress only the bright tail into the model gamut while
+        // retaining highlight color/intensity information; HDR compose inverts the
+        // same transform before reconstructing the model-output HDR target. The
+        // packed carrier remains untouched and is what HDR compose reconstructs from.
         float3 linearColor = color.rgb;
-        linearColor = GamutFitPreserveChroma(linearColor);
+        linearColor = GamutFitModelInput(linearColor);
         result = LinearToSrgb(linearColor);
     }
     else

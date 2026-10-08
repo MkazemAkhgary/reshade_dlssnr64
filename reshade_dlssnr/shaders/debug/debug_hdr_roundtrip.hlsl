@@ -105,7 +105,7 @@ float3 ForwardHdrToModelSdr(float3 hdr_encoded, float2 uv)
     float chroma_scale = y_exposed > 1e-8 ? y_sdr / y_exposed : 0.0;
     float3 pre_sdr = pre_exposed * chroma_scale;
     float3 sdr = HdrInversePreDesaturate(pre_sdr, saturate(kCrosstalk));
-    return LinearToSrgb(GamutFitPreserveChroma(sdr));
+    return LinearToSrgb(GamutFitModelInput(sdr));
 }
 
 // The diagnostic intentionally disables RCAS/grade effects by comparing the

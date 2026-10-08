@@ -88,7 +88,7 @@ float3 ComposeHdrInverse(float3 sdr_base, float gain,
     if (kGradeEnabled > 0.5)
         low_out_lin = max(GradeLinearInv(low_out_lin), 0.0);
 
-    const float3 model_sdr_base = GamutFitPreserveChroma(sdr_base);
+    const float3 model_sdr_base = GamutFitModelInput(sdr_base);
     const float3 kL = HdrLumaWeights();
     const float base_luma = dot(max(model_sdr_base, 0.0), kL);
     const float3 hdr_src = ReconstructHdr(sdr_base, gain);

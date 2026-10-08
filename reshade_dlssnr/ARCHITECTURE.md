@@ -367,7 +367,7 @@ The layout intentionally avoids `float2`, `float3`, `packoffset`, platform heade
 
 The model input downsample is `BoxAreaAverage` from `shaders/common/box_filter.hlsli`. It uses the exact source footprint covered by each destination pixel, including fractional edge coverage, and fetches with `Texture2D.Load`. It does not rely on the global linear sampler.
 
-The non-HDR `PrepareModelInput` path therefore treats the source as already in the model's target sRGB space and passes the averaged RGB through unchanged. The HDR carrier path averages the linear carrier, performs the hue-preserving gamut fit, and applies `LinearToSrgb` before the model sees it.
+The non-HDR `PrepareModelInput` path therefore treats the source as already in the model's target sRGB space and passes the averaged RGB through unchanged. The HDR carrier path averages the linear carrier, applies the reversible model highlight/gamut fit, and applies `LinearToSrgb` before the model sees it. Normal colors are unchanged; super-whites are smoothly compressed toward white so emissive highlights keep a white/yellow core.
 
 Both SDR and HDR compose paths use the same FSR 1.0 EASU and optional RCAS implementation from `shaders/common/fsr.hlsli` to reconstruct full resolution from the working-scale model images. The EASU constants and RCAS controls come from the shared cbuffer.
 
@@ -531,10 +531,10 @@ The HDR path is gain-map based and exists only in Post-DLSS processing.
 1. `HdrState` detects the source format and maintains exposure/scene-white state from the histogram. The default maps the selected scene population median to the midtone target and can optionally use the skin slice. The experimental method uses a low/high percentile histogram band for global eye adaptation, uses its high percentile as the white point, and does not use skin.
 2. `SkinDetect`, when enabled and when the first Post-DLSS pass is HDR, prepares a working-scale image with the same model-domain preparation machinery, evaluates a model pass, and builds a temporal mask from the input/output difference. The mask is fed into the skin histogram slice.
 3. `GainMapSplit` converts the full-resolution HDR source into an RGBA32F carrier: RGB is the linear SDR base and A is log2 gain. BT.2446-C parameters, gain-map offsets and scene-white control the split.
-4. `PrepareModelInput` performs exact Box Area downsampling. For the HDR carrier path it preserves the carrier in the model's SDR domain with a hue-preserving gamut fit and sRGB encoding.
+4. `PrepareModelInput` performs exact Box Area downsampling. For the HDR carrier path it applies the reversible model highlight/gamut fit and sRGB encoding. The packed carrier is not modified.
 5. The model feature evaluates at the selected working scale while being built at full frame resolution.
 6. `ComposeModelOutputHdr` uses FSR EASU and optional RCAS to reconstruct the model's working-scale images at full resolution. The default `Ratio` mode uses the existing linear-SDR ratio transfer. `Inverse Tone Map` selects `ComposeModelOutputHdrInverse`, which inverts the same BT.2446 transfer used by the HDR split and recovers the combined global + local exposure from the packed carrier. It reconstructs the HDR image implied by the model output and transfers that target back to the original HDR, avoiding a second residual-normalization step.
-7. `EncodeHdr` writes the reconstructed result back into scRGB or HDR10 as required by the source format.
+7. `EncodeHdr` writes the reconstructed result back into scRGB or HDR10 as required by the source format. The inverse compose path first reverses the model highlight/gamut fit so super-white model edits can reconstruct their HDR magnitude.
 
 The SDR compose uses the same FSR path but does not reconstruct an HDR carrier; it applies the residual in the source SDR space and uses the shared grade/compose helpers.
 

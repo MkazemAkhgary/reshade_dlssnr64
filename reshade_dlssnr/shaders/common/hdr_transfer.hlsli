@@ -50,7 +50,11 @@ float3 HdrFromSdrCarrier(float3 sdr, float exposure,
                          float effective_peak_nits, bool undo_exposure)
 {
     const float3 luma = HdrLumaWeights();
-    float3 pre_sdr = HdrPreDesaturate(max(sdr, 0.0), saturate(kCrosstalk));
+    // PrepareModelInput applies the reversible model-gamut transform after the
+    // HDR transfer. Undo it before reversing crosstalk and BT.2446 so super-white
+    // highlights retain their original HDR magnitude and chroma.
+    float3 model_linear = GamutUnfitModelInput(max(sdr, 0.0));
+    float3 pre_sdr = HdrPreDesaturate(model_linear, saturate(kCrosstalk));
     float y_sdr = max(dot(pre_sdr, luma), 0.0);
     if (y_sdr <= 1e-8)
         return float3(0.0, 0.0, 0.0);
