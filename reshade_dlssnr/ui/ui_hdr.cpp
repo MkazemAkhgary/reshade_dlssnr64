@@ -62,10 +62,10 @@ void DrawControls(HdrSettings& hdr, bool& changed) {
       &hdr.measure_interval, 32, 1, 4);
 
   static const char* const kExposureMethodLabels[] = {
-      "Median + Skin", "Auto Exposure + Local (Experimental)"};
+      "Median (Legacy)", "Auto Exposure + Local"};
   static const char* const kExposureMethodTips[] = {
-      "Maps the selected scene population's median to the midtone target and optionally pulls it toward skin.",
-      "Uses UE-style histogram eye adaptation plus a local exposure stage to lift dark regions and protect bright regions. Skin is not used for this method."};
+      "Legacy full-frame median exposure. Kept for comparison; it does not use depth or skin.",
+      "Full-frame histogram eye adaptation with separate brighten/darken speeds, followed by a base/detail local exposure stage."};
   int exposure_method = static_cast<int>(hdr.exposure_method);
   changed |= DrawComboRow(
       "hdr_exposure_method", "Exposure Method",
@@ -75,7 +75,7 @@ void DrawControls(HdrSettings& hdr, bool& changed) {
 
   changed |= DrawFloatRow(
       0, "hdr_midtone", "Midtone Target",
-      "The luminance target used by the selected exposure method. Higher values brighten the model input.",
+      "Neutral model luminance target. 0.18 is the normal reference; changing it is an explicit artistic bias, not a required per-scene adjustment.",
       &hdr.midtone, nullptr, 0.0f, 0.01f, 0.50f, 0.18f);
 
   if (hdr.exposure_method == HdrExposureMethod::Median) {
@@ -119,12 +119,12 @@ void DrawControls(HdrSettings& hdr, bool& changed) {
     changed |= DrawFloatRow(
         0, "hdr_local_max_brighten", "Local Max Brighten",
         "Maximum local brightening in stops for dark regions.",
-        &hdr.local_max_brighten, nullptr, 0.0f, 0.0f, 4.0f, 2.0f);
+        &hdr.local_max_brighten, nullptr, 0.0f, 0.0f, 4.0f, 1.75f);
 
     changed |= DrawFloatRow(
         0, "hdr_local_max_darken", "Local Max Darken",
         "Maximum local darkening in stops for bright regions.",
-        &hdr.local_max_darken, nullptr, 0.0f, 0.0f, 4.0f, 2.0f);
+        &hdr.local_max_darken, nullptr, 0.0f, 0.0f, 4.0f, 1.75f);
   }
 
   changed |= DrawFloatRow(
@@ -174,31 +174,11 @@ void DrawControls(HdrSettings& hdr, bool& changed) {
       &hdr.gain_max_log2, nullptr, 0.0f, 0.0f, 32.0f, 6.0f);
 
   if (hdr.exposure_method == HdrExposureMethod::Median) {
-  changed |= DrawFloatRow(
-      0, "hdr_rate_cap", "Response Cap",
-      "Maximum log2 change in exposure per measurement. 0 disables the "
-      "cap. Warmup is exempt either way.",
-      &hdr.rate_cap, nullptr, 0.0f, 0.0f, 2.0f, 0.1f);
-
-  changed |= DrawFloatRow(
-      0, "hdr_skin_fraction_threshold", "Skin Fraction",
-      "Fraction of the frame that must be skin before the skin "
-      "histogram is considered.",
-      &hdr.skin_fraction_threshold, nullptr, 0.0f, 0.0f, 0.5f, 0.01f);
-
-  changed |= DrawFloatRow(
-      0, "hdr_skin_priority", "Skin Priority",
-      "How much the skin median influences the target once the gate "
-      "above has passed. 0 = scene alone, 1 = skin alone.",
-      &hdr.skin_priority, nullptr, 0.7f, 0.0f, 1.0f, 0.7f);
-
+    changed |= DrawFloatRow(
+        0, "hdr_rate_cap", "Response Cap",
+        "Maximum log2 change in exposure per measurement for the legacy median method.",
+        &hdr.rate_cap, nullptr, 0.0f, 0.0f, 2.0f, 0.1f);
   }
-
-  changed |= DrawFloatRow(
-      0, "hdr_depth_fallback_fraction", "Depth Fallback",
-      "If the depth filter keeps less than this, the exposure falls "
-      "back to the full frame. 1.0 disables the depth filter entirely.",
-      &hdr.depth_fallback_fraction, nullptr, 0.0f, 0.0f, 1.0f, 0.20f);
 }
 
 void DrawDiagnostics(const HdrSnapshot& snap, const HdrSettings& hdr,
@@ -222,7 +202,7 @@ void DrawDiagnostics(const HdrSnapshot& snap, const HdrSettings& hdr,
     const char* exposure_method_name =
         hdr.exposure_method == HdrExposureMethod::AutoLocal
             ? "Auto Exposure + Local"
-            : "Median + Skin";
+            : "Median (Legacy)";
 
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
@@ -246,22 +226,13 @@ void DrawDiagnostics(const HdrSnapshot& snap, const HdrSettings& hdr,
     ImGui::TableNextColumn();
     ImGui::Text("White (post-headroom, 100-nit domain): %.3f", CalcEffectiveSceneWhite(snap.scene_white, hdr));
 
-    const char* source_name = "Full frame";
-    if (snap.metering_source == 1) source_name = "Depth-filtered";
-    else if (snap.metering_source == 2) source_name = "Skin";
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
-    ImGui::Text("Metering: %s", source_name);
+    ImGui::Text("Metering: Full frame histogram");
     ImGui::TableNextColumn();
-    ImGui::Text("Skin: %.2f%%  Depth kept: %.1f%%",
-                snap.skin_fraction * 100.0f,
-                snap.depth_filter_survived * 100.0f);
-
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("Fallback exposure: %.3f", snap.fallback_exposure);
-    ImGui::TableNextColumn();
-    ImGui::Text("Fallback white: %.3f", snap.fallback_scene_white);
+    ImGui::Text("Local exposure: %s",
+                hdr.exposure_method == HdrExposureMethod::AutoLocal
+                    ? "base/detail" : "off");
 
     ImGui::EndTable();
   }

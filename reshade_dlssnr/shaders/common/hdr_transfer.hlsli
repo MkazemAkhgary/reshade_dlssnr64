@@ -42,35 +42,32 @@ float HdrBt2446Inverse(float sdr_pct)
     return y_ip * exp((y - kBt2446K4) / max(kBt2446K2, 1e-6));
 }
 
-// Inverse of the SDR-side transform used by GainMapSplit, without the gain
-// map itself. This reconstructs the HDR signal implied by a model-domain SDR
-// carrier. It is deliberately separate from ReconstructHdr(), which uses the
-// packed gain to recover the exact original HDR source.
-float3 HdrFromSdrCarrier(float3 sdr, float exposure,
-                         float effective_peak_nits, bool undo_exposure)
+float3 HdrFromLinearSdrCarrier(float3 sdr_linear, float exposure,
+                               float effective_peak_nits)
 {
     const float3 luma = HdrLumaWeights();
-    // PrepareModelInput applies the reversible model-gamut transform after the
-    // HDR transfer. Undo it before reversing crosstalk and BT.2446 so super-white
-    // highlights retain their original HDR magnitude and chroma.
-    float3 model_linear = GamutUnfitModelInput(max(sdr, 0.0));
-    float3 pre_sdr = HdrPreDesaturate(model_linear, saturate(kCrosstalk));
+    float3 pre_sdr = HdrPreDesaturate(max(sdr_linear, 0.0), saturate(kCrosstalk));
     float y_sdr = max(dot(pre_sdr, luma), 0.0);
     if (y_sdr <= 1e-8)
         return float3(0.0, 0.0, 0.0);
 
-    float y_curve = HdrBt2446Inverse(y_sdr * 100.0);
-    float y_exposed = y_curve *
-                      max(effective_peak_nits, kSdrReferenceWhiteNits) /
-                      kPqPeakNits;
-    float scale = y_exposed / y_sdr;
-    float3 pre_exposed = pre_sdr * scale;
-
-    // Scene-referred reconstruction removes the temporary model exposure.
-    float3 pre_hdr = undo_exposure
-        ? pre_exposed / max(exposure, 1e-6)
-        : pre_exposed;
+    const float y_curve = HdrBt2446Inverse(y_sdr * 100.0);
+    const float y_exposed = y_curve *
+                            max(effective_peak_nits, kSdrReferenceWhiteNits) /
+                            kPqPeakNits;
+    const float scale = y_exposed / y_sdr;
+    const float3 pre_exposed = pre_sdr * scale;
+    const float3 pre_hdr = pre_exposed / max(exposure, 1e-6);
     return max(HdrInversePreDesaturate(pre_hdr, saturate(kCrosstalk)), 0.0);
+}
+
+// Inverse of the model-facing SDR transform used by GainMapSplit. The input
+// includes the reversible model-gamut transform but not the local SDR scale.
+float3 HdrFromSdrCarrier(float3 sdr, float exposure,
+                         float effective_peak_nits)
+{
+    const float3 model_linear = GamutUnfitModelInput(max(sdr, 0.0));
+    return HdrFromLinearSdrCarrier(model_linear, exposure, effective_peak_nits);
 }
 
 #endif

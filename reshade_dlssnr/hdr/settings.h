@@ -1,4 +1,4 @@
-// HDR settings: format detection, exposure metering, and skin priority.
+// HDR settings: format detection, histogram exposure, and local exposure.
 #pragma once
 
 #include <algorithm>
@@ -35,7 +35,7 @@ struct HdrSettings {
   HdrFormat format = HdrFormat::Auto;
 
   int measure_interval = 4;
-  HdrExposureMethod exposure_method = HdrExposureMethod::Median;
+  HdrExposureMethod exposure_method = HdrExposureMethod::AutoLocal;
   float midtone = 0.18f;
   float white_percentile = 0.99f;
   float highlight_headroom = 8.0f;
@@ -48,8 +48,8 @@ struct HdrSettings {
   float speed_up = 3.0f;
   float speed_down = 1.0f;
   float local_exposure_strength = 0.50f;
-  float local_max_brighten = 2.0f;
-  float local_max_darken = 2.0f;
+  float local_max_brighten = 1.75f;
+  float local_max_darken = 1.75f;
 
   // Median-method response cap in log2 stops per measurement.
   float rate_cap = 0.1f;
@@ -71,6 +71,7 @@ struct HdrSettings {
   float gain_min_log2 = -4.0f;
   float gain_max_log2 = 6.0f;
 
+  // Deprecated exposure heuristics retained only for config-file compatibility.
   float skin_fraction_threshold = 0.01f;
   float skin_priority = 0.7f;
   float depth_fallback_fraction = 0.20f;

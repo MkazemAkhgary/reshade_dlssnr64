@@ -244,8 +244,8 @@ constexpr PipelineNodeId kPostDlssSteps[] = {
     // and silently skip HDR measurement every frame.
     PipelineNodeId::EnsureHdr,
     PipelineNodeId::EnsureComputeEngine,  // codec.Init + IsReady
-    PipelineNodeId::SkinDetect,
     PipelineNodeId::HdrBeginFrame,
+    PipelineNodeId::SkinDetect,
     PipelineNodeId::ResolveWorkingScale,
     PipelineNodeId::EnsureFrameResources, // includes SetRetireCallback
     PipelineNodeId::SeedResourceStates,   // ClearState + SeedFrameState + output
@@ -269,8 +269,8 @@ constexpr PipelineNodeId kPostDlssSteps[] = {
 
 constexpr PipelinePhaseDef kPostDlssPhases[] = {
     {"setup", 0, 5, nullptr},   // ResolveDevice, EnsureHdr,
-                                // EnsureComputeEngine, SkinDetect,
-                                // HdrBeginFrame
+                                // EnsureComputeEngine, HdrBeginFrame,
+                                // SkinDetect
     {"resources", 5, 4, nullptr},
     {"feature", 9, 3, nullptr},
     {"prepare", 12, 5, nullptr},

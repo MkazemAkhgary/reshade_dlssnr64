@@ -1,16 +1,6 @@
-// HDR measurement state. Owns the histogram buffer, the readback ring,
-// and the exposure / white point EMA. Only the Post-DLSS path uses this.
-//
-// Lifecycle within a frame (Post-DLSS injection):
-//   1. AddonController calls BeginFrame before the pass loop. This may
-//      enqueue a histogram measurement onto the game's command list.
-//   2. AddonController calls SignalAtPresent with the game's queue.
-//      This signals our internal fence so we know when the measurement
-//      has completed.
-//   3. On the next BeginFrame, we poll the fence and, if the copy is
-//      ready, update the exposure EMA.
-//
-// See ARCHITECTURE.md for the pipeline this feeds into.
+// HDR measurement state. Owns the histogram buffer, readback ring,
+// and global exposure / white-point adaptation. HDR exposure uses the full
+// scene histogram; depth and skin masks are deliberately not part of metering.
 #pragma once
 
 #include <d3d12.h>
@@ -26,107 +16,61 @@
 
 namespace reshade_dlssnr {
 
-// Which histogram the exposure reference was drawn from.
 enum class MeteringSource {
   FullFrame = 0,
-  DepthFiltered = 1,
-  Skin = 2,
 };
 
-// Per-tracker EMA parameters. Two instances live on HdrState, one built from
-// the regular HDR settings and one from the skin-detect HDR settings, so each
-// responds at its own rate and to its own target.
 struct ExposureParams {
   float midtone = 0.18f;
-  float white_percentile = 0.99f;
-  HdrExposureMethod exposure_method = HdrExposureMethod::Median;
+  float white_percentile = 0.99f;  // Legacy Median method only.
+  HdrExposureMethod exposure_method = HdrExposureMethod::AutoLocal;
   float auto_low_percent = 0.70f;
   float auto_high_percent = 0.90f;
   float speed_up = 3.0f;
   float speed_down = 1.0f;
-  float rate_cap = 0.1f;
-  float skin_fraction_threshold = 0.01f;
-  float depth_fallback_fraction = 0.20f;
+  float rate_cap = 0.1f;           // Legacy Median method only.
   uint32_t measure_interval = 4;
-  // Blend weight toward the skin target once the skin gate passes. 0 = scene
-  // alone, 1 = skin alone. Ignored when the tracker is called with
-  // use_skin=false.
-  float skin_priority = 0.7f;
 };
 
-// One exposure/white-point EMA driven from a histogram. HdrState holds two:
-// one for regular passes (skin-driven when a mask is available) and one for
-// the skin-detect pass (full-frame only by default; no skin). Splitting them
-// breaks the loop where the mask drives the skin histogram, which drives the
-// exposure, which changes the tonemap that produced the mask.
 struct ExposureTracker {
   float exposure = 1.0f;
-  // Measured white percentile from the selected scene population in the
-  // 100-nit SDR/gain-map working domain, before headroom.
+  // Smoothed white percentile from the same full-frame metering histogram,
+  // in the 100-nit SDR/gain-map working domain.
   float scene_white = 1.0f;
   float target_exposure = 1.0f;
   float exposure_reference_luma = 0.0f;
-  float skin_fraction = 0.0f;
-  float depth_filter_survived = 0.0f;
-  uint32_t warmup_frames = 0;
+  float warmup_frames = 0.0f;
   bool have_measurement = false;
-  bool target_is_skin = false;
   MeteringSource metering_source = MeteringSource::FullFrame;
-  bool skin_enabled_last = false;
 
   void Reset();
   void Update(const uint32_t* bins, const ExposureParams& params,
-              bool use_skin, float delta_seconds);
+              float delta_seconds);
 };
 
-// Read-only snapshot of the current HDR measurement state, safe to copy to
-// the UI thread.
 struct HdrSnapshot {
   bool enabled = false;
-  bool ready = false;             // has a valid measurement to report
+  bool ready = false;
   HdrFormat resolved_format = HdrFormat::Sdr;
   float exposure = 1.0f;
   float scene_white = 1.0f;
-  uint32_t frames_since_measure = 0;  // frames since last histogram arrived
+  uint32_t frames_since_measure = 0;
 
-  // Raw measurement, for the diagnostics UI. Populated whenever a fresh
-  // histogram has been consumed. `has_histogram` is false until then.
   bool has_histogram = false;
-  uint32_t histogram[256] = {};       // full frame
-  uint32_t histogram_skin[256] = {};  // skin, depth-filtered
-  float exposure_reference_luma = 0.0f;  // luma used for the exposure target, before exposure
-  float p_hi_luma = 0.0f;                 // white-point percentile from the same metering population
-  float target_exposure = 1.0f;  // value the EMA is chasing
-  uint32_t samples = 0;          // total pixels sampled in the last histogram
+  uint32_t histogram[256] = {};
+  float exposure_reference_luma = 0.0f;
+  float p_hi_luma = 0.0f;
+  float target_exposure = 1.0f;
+  uint32_t samples = 0;
+  int metering_source = 0;
 
-  // Which histogram the exposure reference was taken from, and how much
-  // of the frame was skin. Diagnostics only.
-  float skin_fraction = 0.0f;
-  bool target_is_skin = false;
-  // Fraction of the frame the depth filter kept. Zero when there is no
-  // depth guide; the histogram is the full frame in that case.
-  float depth_filter_survived = 0.0f;
-  int metering_source = 0;  // MeteringSource, as an int for the UI
-
-  // Gain-map diagnostics. The range is the raw f32 log2 gain stored in the
-  // packed texture. SDR carrier excursions are counted separately from gain
-  // values outside the configured metadata envelope. Neither count modifies
-  // the raw carrier.
   bool gain_map_ready = false;
   float gain_min_log2 = 0.0f;
   float gain_max_log2 = 0.0f;
   uint32_t gain_sdr_clipped_pixels = 0;
   uint32_t gain_out_of_range_pixels = 0;
-
-  // Fallback EMA, used by the skin-detect pass. Depth -> full only, no skin
-  // slice, so it does not depend on the mask.
-  float fallback_exposure = 1.0f;
-  float fallback_scene_white = 1.0f;
-  int fallback_metering_source = 0;
 };
 
-// Maps a DXGI format to the HdrFormat the shaders should treat it as. The
-// single definition; every format detection in the addon routes through it.
 HdrFormat DetectFormatFromDxgi(DXGI_FORMAT format);
 
 class HdrState {
@@ -134,59 +78,45 @@ class HdrState {
   bool Ensure(ID3D12Device* device);
   void Shutdown();
 
-  // Called by AddonController before the Post-DLSS pass loop. `source`
-  // is the image to measure (typically the captured DLSS output clone).
-  // `codec` is any ComputeEngine; the histogram passes are dispatched on
-  // `command_list`, which is the game's list.
-  // `depth` may be null when the game does not provide a depth guide; the
-  // histogram then falls back to the full frame. `depth_inverted` is only
-  // meaningful when `depth` is non-null.
-  //
-  // `mask` may be null; when non-null it is an R8 skin mask at detect scale
-  // and replaces the shader's hue classifier for the skin histogram.
   void BeginFrame(CommandContext& cmd,
                   ID3D12GraphicsCommandList* command_list,
                   ID3D12Resource* source,
                   unsigned int width,
                   unsigned int height,
-                  ID3D12Resource* depth,
-                  bool depth_inverted,
-                  ID3D12Resource* mask,
                   const Settings& settings,
                   ComputeEngine& codec);
 
-  // Queue the 16-byte gain-map diagnostic buffer for readback. It shares the
-  // same fence as the histogram, but has its own GpuReadback ring.
   bool EnqueueGainMapStatsReadback(ID3D12GraphicsCommandList* command_list,
                                    ID3D12Resource* stats);
 
-  // Called by AddonController at Present, with the game's queue. Signals the
-  // internal fence so pending copies can be consumed on the next frame.
   void SignalAtPresent(ID3D12CommandQueue* queue);
 
-  // Accessors used by the pass session.
   bool Enabled() const { return enabled_; }
   HdrFormat ResolvedFormat() const { return resolved_format_; }
-  // Regular passes: skin-driven when a mask is available.
   float Exposure() const { return regular_.exposure; }
   float SceneWhite() const { return regular_.scene_white; }
-  float EffectiveSceneWhite(const HdrSettings& hdr) const { return CalcEffectiveSceneWhite(SceneWhite(), hdr); }
+  float EffectiveSceneWhite(const HdrSettings& hdr) const {
+    return CalcEffectiveSceneWhite(SceneWhite(), hdr);
+  }
   float EffectiveSceneWhiteNits(const HdrSettings& hdr) const {
     return CalcEffectiveSceneWhiteNits(SceneWhite(), hdr);
   }
-  // Skin-detect pass: depth -> full only, no skin slice.
-  float FallbackExposure() const { return fallback_.exposure; }
-  float FallbackSceneWhite() const { return fallback_.scene_white; }
-  float FallbackEffectiveSceneWhite(const HdrSettings& hdr) const { return CalcEffectiveSceneWhite(FallbackSceneWhite(), hdr); }
+
+  // Kept for the skin-detect feature. Skin detection does not participate in
+  // HDR exposure metering; it only consumes the current scene state.
+  float FallbackExposure() const { return regular_.exposure; }
+  float FallbackSceneWhite() const { return regular_.scene_white; }
+  float FallbackEffectiveSceneWhite(const HdrSettings& hdr) const {
+    return CalcEffectiveSceneWhite(SceneWhite(), hdr);
+  }
   float FallbackEffectiveSceneWhiteNits(const HdrSettings& hdr) const {
-    return CalcEffectiveSceneWhiteNits(FallbackSceneWhite(), hdr);
+    return CalcEffectiveSceneWhiteNits(SceneWhite(), hdr);
   }
 
   HdrSnapshot GetSnapshot() const;
 
  private:
   void PollReadback(ID3D12Fence* fence, const Settings& settings);
-  // `bins` is the packed 768-entry buffer: full, depth-filtered, skin.
   void UpdateExposure(const uint32_t* bins, const Settings& settings);
 
   Microsoft::WRL::ComPtr<ID3D12Device> device_;
@@ -206,16 +136,13 @@ class HdrState {
   HdrFormat resolved_format_ = HdrFormat::Sdr;
 
   ExposureTracker regular_;
-  ExposureTracker fallback_;
   uint32_t frame_counter_ = 0;
   uint32_t frames_until_measure_ = 0;
   uint32_t frames_since_measure_ = 0;
   bool have_logged_format_ = false;
 
-  // Diagnostics: last measured histogram and the regular tracker white point.
   bool have_histogram_ = false;
   uint32_t last_histogram_[256] = {};
-  uint32_t last_histogram_skin_[256] = {};
   float p_hi_luma_ = 0.0f;
   uint32_t last_samples_ = 0;
   std::chrono::steady_clock::time_point last_measurement_time_{};

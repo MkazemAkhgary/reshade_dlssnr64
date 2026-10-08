@@ -342,7 +342,8 @@ PipelineStatus RunSkinDetect(PassRun& run) {
 }
 
 constexpr PipelineNodeId kSkinDetectRequires[] = {
-    PipelineNodeId::EnsureComputeEngine, PipelineNodeId::Count};
+    PipelineNodeId::EnsureComputeEngine, PipelineNodeId::HdrBeginFrame,
+    PipelineNodeId::Count};
 
 constexpr PipelineStepDef kSkinDetectSteps[] = {
     {PipelineNodeId::SkinDetect, "SkinDetect", &RunSkinDetect,

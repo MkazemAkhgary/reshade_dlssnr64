@@ -1052,9 +1052,9 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
   return PipelineStatus::Ok;
 }
 
-// Builds the exact full-resolution exposure field used by GainMapSplit:
-// global exposure × local exposure. HDR inverse composition samples this same
-// field instead of re-estimating exposure from the downsampled model image.
+// Builds the exact full-resolution local SDR exposure scale used by GainMapSplit.
+// HDR inverse composition samples this same field instead of re-estimating local
+// exposure from the downsampled model image.
 PipelineStatus PassSession::StepBuildEffectiveLocalExposure(PassRun& run) {
   PassSession* self = run.session;
   if (self == nullptr || run.codec == nullptr || run.hdr == nullptr ||

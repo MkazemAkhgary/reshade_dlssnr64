@@ -39,7 +39,7 @@ struct DebugSnapshot {
 
   ID3D12Resource* prepared_input = nullptr;
   unsigned int prepared_input_width = 0;
-  // Full-resolution combined exposure used by HDR inverse compose.
+  // Full-resolution local SDR exposure scale used by HDR inverse compose.
   ID3D12Resource* effective_exposure_map = nullptr;
   unsigned int effective_exposure_width = 0;
   unsigned int effective_exposure_height = 0;

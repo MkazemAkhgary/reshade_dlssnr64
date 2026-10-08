@@ -80,8 +80,8 @@ enum class PipelineNodeId : uint32_t {
   // once per process, not once per frame, and must succeed before BeginFrame
   // can touch the histogram buffer.
   EnsureHdr = 9,
-  // Model-driven skin detection. Runs before HdrBeginFrame so the histogram
-  // can sample the mask on the frame it was written.
+  // Model-driven skin detection. Independent of HDR exposure metering.
+  // It runs after HdrBeginFrame so it sees the current exposure state.
   SkinDetect = 10,
   HdrBeginFrame = 11,
   HistogramZero = 12,      // dispatches "ZeroHistogram"
@@ -93,7 +93,7 @@ enum class PipelineNodeId : uint32_t {
   BuildHdrUniforms = 16,
   GainMapSplit = 17,       // dispatches "GainMapSplit"
   PrepareModelInput = 18,  // dispatches "PrepareModelInput"
-  BuildEffectiveLocalExposure = 19, // full-resolution combined exposure for HDR inverse compose
+  BuildEffectiveLocalExposure = 19, // full-resolution local SDR exposure scale for HDR inverse compose
   // Grades the image the model is about to read. Follows PrepareModelInput
   // because that is what fills the working input, and precedes the evaluate
   // because that is what consumes it.
@@ -641,8 +641,8 @@ inline constexpr PipelineNodeId kPostDlssStepNodes[] = {
     PipelineNodeId::ResolveDevice,
     PipelineNodeId::EnsureHdr,
     PipelineNodeId::EnsureComputeEngine,
-    PipelineNodeId::SkinDetect,
     PipelineNodeId::HdrBeginFrame,
+    PipelineNodeId::SkinDetect,
     PipelineNodeId::ResolveWorkingScale,
     PipelineNodeId::EnsureFrameResources,
     PipelineNodeId::SeedResourceStates,

@@ -28,23 +28,24 @@ float3 ForwardHdrToModelSdr(float3 hdr_encoded, uint2 pixel)
         hdr_encoded, (int)(kFormat + 0.5), kSdrReferenceWhiteNits);
     float3 pre_hdr = HdrPreDesaturate(hdr_linear, saturate(kCrosstalk));
 
-    float exposure = kExposure;
-    if (kLocalExposureStrength > 0.0 && kEffectiveExposureMapValid > 0.5) {
-        exposure = max(gEffectiveExposure.Load(int3(pixel.xy, 0)), 1e-6);
-    }
-
-    float3 pre_exposed = pre_hdr * exposure;
+    float3 pre_exposed = pre_hdr * max(kExposure, 1e-6);
     float y_exposed = max(dot(pre_exposed, HdrLumaWeights()), 0.0);
 
     float effective_peak_nits = max(
         kSdrReferenceWhiteNits, max(kEffectiveSceneWhiteNits, 0.01));
     float y_curve = y_exposed * kPqPeakNits / effective_peak_nits;
-    float y_sdr_pct = HdrBt2446Forward(y_curve);
-    float y_sdr = max(y_sdr_pct / 100.0, 0.0);
+    float y_sdr = max(HdrBt2446Forward(y_curve) / 100.0, 0.0);
     float chroma_scale = y_exposed > 1e-8 ? y_sdr / y_exposed : 0.0;
     float3 pre_sdr = pre_exposed * chroma_scale;
-    float3 sdr = HdrInversePreDesaturate(pre_sdr, saturate(kCrosstalk));
-    return LinearToSrgb(GamutFitModelInput(sdr));
+    float3 sdr_global = HdrInversePreDesaturate(
+        pre_sdr, saturate(kCrosstalk));
+
+    float local_scale = 1.0;
+    if (kLocalExposureStrength > 0.0 && kEffectiveExposureMapValid > 0.5)
+        local_scale = max(gEffectiveExposure.Load(int3(pixel.xy, 0)), 1e-6);
+
+    return LinearToSrgb(
+        GamutFitModelInput(max(sdr_global * local_scale, 0.0)));
 }
 
 float3 EncodeDiagnosticSdr(float3 sdr)
@@ -59,7 +60,7 @@ float3 EncodeDiagnosticSdr(float3 sdr)
 }
 
 // The diagnostic intentionally compares the actual composed HDR against the
-// model output using the same full-resolution combined exposure map that the
+// model output using the same full-resolution local SDR exposure map that the
 // inverse compose path uses. Use grade input, grade output, and RCAS disabled
 // when collecting a clean math test.
 [numthreads(8, 8, 1)]
@@ -96,11 +97,11 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         float3 diff = roundtrip - model_out;
         display = saturate(0.5 + diff * 4.0);
     } else if (mode == 2) {
-        float exposure = kLocalExposureStrength > 0.0 &&
+        float local_scale = kLocalExposureStrength > 0.0 &&
                 kEffectiveExposureMapValid > 0.5
             ? max(gEffectiveExposure.Load(int3(id.xy, 0)), 1e-6)
-            : max(kExposure, 1e-6);
-        float stops = log2(exposure / max(kExposure, 1e-6));
+            : 1.0;
+        float stops = log2(local_scale);
         display = saturate(0.5 + stops / 4.0).xxx;
     }
 

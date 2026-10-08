@@ -84,9 +84,9 @@ float3 EncodeHdr(float3 lin)
 
 // Inverse-tone-map shader reconstructs the model output as a scene-referred HDR
 // target. The model exposure is recovered from the actual packed carrier, so it
-// includes the same global + local exposure that created the model input.
+// uses the same local SDR exposure scale that created the model input.
 float3 ComposeHdrInverse(float3 sdr_base, float gain,
-                         float3 low_in, float3 low_out, float model_exposure)
+                         float3 low_in, float3 low_out, float local_sdr_scale)
 {
     float3 low_out_lin = max(SrgbToLinearExt(low_out), 0.0);
     if (kGradeEnabled > 0.5)
@@ -104,11 +104,15 @@ float3 ComposeHdrInverse(float3 sdr_base, float gain,
     // is below 1.0 while still transferring the model's scene-referred edit.
     const float effective_peak_nits = max(
         kSdrReferenceWhiteNits, max(kEffectiveSceneWhiteNits, 0.01));
-    const float3 low_in_linear = max(SrgbToLinearExt(low_in), 0.0);
-    const float3 hdr_model_in = HdrFromSdrCarrier(
-        low_in_linear, model_exposure, effective_peak_nits, true);
-    const float3 hdr_model_out = HdrFromSdrCarrier(
-        low_out_lin, model_exposure, effective_peak_nits, true);
+    const float local_scale = max(local_sdr_scale, 1e-6);
+    const float3 low_in_linear =
+        GamutUnfitModelInput(max(SrgbToLinearExt(low_in), 0.0)) / local_scale;
+    const float3 low_out_linear =
+        GamutUnfitModelInput(max(low_out_lin, 0.0)) / local_scale;
+    const float3 hdr_model_in = HdrFromLinearSdrCarrier(
+        low_in_linear, kExposure, effective_peak_nits);
+    const float3 hdr_model_out = HdrFromLinearSdrCarrier(
+        low_out_linear, kExposure, effective_peak_nits);
 
     // Normalize the scene-referred model edit by the model-input HDR signal.
     // Exposure has already been removed from both endpoints, so the edit does
@@ -159,17 +163,12 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     }
 
     const float3 sdr_base = DecodePackedHdr(packed);
-    const float effective_peak_nits = max(
-        kSdrReferenceWhiteNits, max(kEffectiveSceneWhiteNits, 0.01));
-    const float fallback_exposure = CombinedExposureFromPacked(
-        sdr_base, ReconstructHdr(sdr_base, packed.a), effective_peak_nits);
-    const float map_exposure = gEffectiveExposure.Load(int3(id.xy, 0));
-    const float model_exposure =
+    const float local_sdr_scale =
         kLocalExposureStrength > 0.0 && kEffectiveExposureMapValid > 0.5
-            ? max(map_exposure, 1e-6)
-            : fallback_exposure;
+            ? max(gEffectiveExposure.Load(int3(id.xy, 0)), 1e-6)
+            : 1.0;
     const float3 final_lin = ComposeHdrInverse(
-        sdr_base, packed.a, low_in, low_out, model_exposure);
+        sdr_base, packed.a, low_in, low_out, local_sdr_scale);
     const float3 final_out = EncodeHdr(final_lin);
 
     // Packed resources are linear gain-map data in the 100-nit normalized domain;

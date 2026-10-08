@@ -11,31 +11,21 @@
 #include "gpu/d3d12_utils.h"
 #include "pipeline/pipeline_graph.h"
 #include "pipeline/pipeline_trace.h"
-#include "skin/skin_detect.h"
 
 namespace reshade_dlssnr {
 
 HdrFormat DetectFormatFromDxgi(DXGI_FORMAT format) {
   switch (format) {
-    // Linear float formats — unambiguously HDR.
     case DXGI_FORMAT_R16G16B16A16_FLOAT:
     case DXGI_FORMAT_R11G11B10_FLOAT:
       return HdrFormat::ScRgb;
-
-    // 10-bit UNORM. Historically treated as ambiguous (HDR10 vs 10-bit
-    // SDR), but true 10-bit SDR is essentially unused in games. When this
-    // format appears as a DLSS output, it is HDR10 in practice. Users
-    // with a genuine 10-bit SDR setup can override to SDR.
     case DXGI_FORMAT_R10G10B10A2_UNORM:
       return HdrFormat::Hdr10;
-
-    // 8-bit formats are SDR.
     case DXGI_FORMAT_R8G8B8A8_UNORM:
     case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
     case DXGI_FORMAT_B8G8R8A8_UNORM:
     case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
       return HdrFormat::Sdr;
-
     default:
       return HdrFormat::Sdr;
   }
@@ -44,11 +34,7 @@ HdrFormat DetectFormatFromDxgi(DXGI_FORMAT format) {
 namespace {
 
 constexpr uint32_t kHistogramBins = 256;
-// Three histograms packed into one buffer: [0, 256) full frame, [256, 512)
-// depth-filtered, [512, 768) skin. The shader splits it at the same offsets.
-constexpr uint32_t kHistogramSlices = 3;
-constexpr uint32_t kHistogramTotalBins = kHistogramSlices * kHistogramBins;
-constexpr uint32_t kHistogramBytes = kHistogramTotalBins * sizeof(uint32_t);
+constexpr uint32_t kHistogramBytes = kHistogramBins * sizeof(uint32_t);
 constexpr float kLumaMinLog2 = -12.0f;
 constexpr float kLumaMaxLog2 = 12.0f;
 
@@ -65,45 +51,36 @@ float FormatToShaderValue(HdrFormat format) {
     case HdrFormat::Hdr10: return 2.0f;
     case HdrFormat::Sdr:
     case HdrFormat::Auto:
-    default:               return 0.0f;
+    default: return 0.0f;
   }
 }
 
-// Returns the bin index below which `fraction` of samples lie.
-// `bins` is a 256-entry histogram; `total` is the sum of all bins.
 float PercentileBin(const uint32_t* bins, uint32_t total, float fraction) {
-  if (total == 0) return 0.0f;
-  const uint32_t target =
-      static_cast<uint32_t>(fraction * static_cast<float>(total));
-  uint32_t cum = 0;
+  if (bins == nullptr || total == 0) return 0.0f;
+  const float f = std::clamp(fraction, 0.0f, 1.0f);
+  const uint32_t target = static_cast<uint32_t>(f * total);
+  uint32_t cumulative = 0;
   for (uint32_t i = 0; i < kHistogramBins; ++i) {
-    cum += bins[i];
-    if (cum >= target) return static_cast<float>(i);
+    cumulative += bins[i];
+    if (cumulative >= target) return static_cast<float>(i);
   }
   return static_cast<float>(kHistogramBins - 1);
 }
 
-// Maps a bin index to a linear luminance value (the value at the low edge
-// of the bin).
 float BinToLinear(float bin) {
   const float t = bin / 255.0f;
   const float l2 = kLumaMinLog2 + t * (kLumaMaxLog2 - kLumaMinLog2);
   return std::pow(2.0f, l2);
 }
 
-float Lerp(float a, float b, float t) {
-  return a + (b - a) * t;
-}
-
-// Log-average the central portion of a histogram. This deliberately ignores
-// the darkest and brightest tails and asks where the bulk of the selected
-// metering population lives. The result stays in the histogram's linear luma
-// domain.
+// Log-average the histogram over the configured percentile interval. This is
+// the histogram analogue of average-log-luminance: bright outliers above the
+// selected interval do not dictate the global eye-adaptation target, while
+// the full frame remains the population being measured.
 float HistogramBandLuma(const uint32_t* bins, uint32_t total,
                         float low_fraction, float high_fraction) {
-  if (bins == nullptr || total == 0 || high_fraction <= low_fraction) {
+  if (bins == nullptr || total == 0 || high_fraction <= low_fraction)
     return 0.0f;
-  }
 
   const double low_target =
       std::clamp(static_cast<double>(low_fraction), 0.0, 1.0) * total;
@@ -111,8 +88,8 @@ float HistogramBandLuma(const uint32_t* bins, uint32_t total,
       std::clamp(static_cast<double>(high_fraction), 0.0, 1.0) * total;
   if (high_target <= low_target) return 0.0f;
 
-  const double span = static_cast<double>(kLumaMaxLog2 - kLumaMinLog2);
-  const double denom = static_cast<double>(kHistogramBins - 1);
+  const double span = kLumaMaxLog2 - kLumaMinLog2;
+  const double denom = kHistogramBins - 1.0;
   double weighted_log2 = 0.0;
   double weight = 0.0;
   double cumulative = 0.0;
@@ -122,17 +99,15 @@ float HistogramBandLuma(const uint32_t* bins, uint32_t total,
     const double begin = cumulative;
     const double end = cumulative + count;
     cumulative = end;
-    if (count <= 0.0 || end <= low_target || begin >= high_target) {
+    if (count <= 0.0 || end <= low_target || begin >= high_target)
       continue;
-    }
 
     const double used = std::min(end, high_target) -
                         std::max(begin, low_target);
     if (used <= 0.0) continue;
 
     const double t = static_cast<double>(i) / denom;
-    const double log2_luma =
-        static_cast<double>(kLumaMinLog2) + t * span;
+    const double log2_luma = kLumaMinLog2 + t * span;
     weighted_log2 += used * log2_luma;
     weight += used;
   }
@@ -146,166 +121,89 @@ float HistogramBandLuma(const uint32_t* bins, uint32_t total,
 
 void ExposureTracker::Reset() { *this = ExposureTracker{}; }
 
-// Same EMA logic for both trackers; `params` and `use_skin` are the only
-// differences between them. Headroom and exposure are not applied here.
-// `scene_white` is the smoothed white percentile from the same metering
-// population used for exposure, in the 100-nit SDR/gain-map working domain.
 void ExposureTracker::Update(const uint32_t* bins,
                              const ExposureParams& params,
-                             bool use_skin,
                              float delta_seconds) {
-  const uint32_t* full_bins = bins;
-  const uint32_t* depth_bins = bins + kHistogramBins;
-  const uint32_t* skin_bins = bins + 2u * kHistogramBins;
-
-  uint32_t total_full = 0;
-  uint32_t total_depth = 0;
-  uint32_t total_skin = 0;
-  for (uint32_t i = 0; i < kHistogramBins; ++i) {
-    total_full += full_bins[i];
-    total_depth += depth_bins[i];
-    total_skin += skin_bins[i];
-  }
-  if (total_full == 0) return;
-
-  const float depth_survived =
-      static_cast<float>(total_depth) / static_cast<float>(total_full);
-  const uint32_t* scene_bins = full_bins;
-  uint32_t scene_total = total_full;
-  MeteringSource source = MeteringSource::FullFrame;
-
-  const bool depth_usable =
-      total_depth > 0u &&
-      depth_survived >= params.depth_fallback_fraction;
-  if (depth_usable) {
-    scene_bins = depth_bins;
-    scene_total = total_depth;
-    source = MeteringSource::DepthFiltered;
-  }
+  uint32_t total = 0;
+  for (uint32_t i = 0; i < kHistogramBins; ++i) total += bins[i];
+  if (total == 0) return;
 
   const bool auto_local = params.exposure_method == HdrExposureMethod::AutoLocal;
-  float exposure_reference_luma = 0.0f;
+  float exposure_reference_luma = auto_local
+      ? HistogramBandLuma(bins, total, params.auto_low_percent,
+                          params.auto_high_percent)
+      : BinToLinear(PercentileBin(bins, total, 0.50f));
+
+  const float safe_reference = std::max(exposure_reference_luma, 1e-6f);
+  const float raw_target = std::clamp(
+      params.midtone / safe_reference, 0.01f, 4096.0f);
+
+  const bool was_ready = have_measurement;
+  const float dt = std::clamp(delta_seconds, 1.0f / 240.0f, 0.5f);
+  float target = raw_target;
+
   if (auto_local) {
-    exposure_reference_luma = HistogramBandLuma(
-        scene_bins, scene_total, params.auto_low_percent,
-        params.auto_high_percent);
-  } else {
-    const float p_mid_scene_bin =
-        PercentileBin(scene_bins, scene_total, 0.50f);
-    exposure_reference_luma = BinToLinear(p_mid_scene_bin);
-  }
-
-  float log_target = (exposure_reference_luma > 1e-6f)
-                         ? log2(params.midtone / exposure_reference_luma)
-                         : log2(std::max(exposure, 1e-6f));
-
-  const bool skin_was_enabled = skin_enabled_last;
-  skin_enabled_last = use_skin;
-  if (!use_skin && skin_was_enabled) {
-    // Leaving skin metering should converge quickly to the scene target rather
-    // than retaining the slower, skin-driven response from the previous state.
-    warmup_frames = 0;
-  }
-
-  float skin_frac = static_cast<float>(total_skin) /
-                    static_cast<float>(std::max(total_full, 1u));
-  bool skin_blended = false;
-  if (!auto_local && use_skin && total_skin > 1000u &&
-      skin_frac > params.skin_fraction_threshold) {
-    const float p_mid_skin_bin = PercentileBin(skin_bins, total_skin, 0.50f);
-    const float luma_mid_skin = BinToLinear(p_mid_skin_bin);
-    if (luma_mid_skin > 1e-6f) {
-      const float log_skin = log2(params.midtone / luma_mid_skin);
-      const float t = std::clamp(params.skin_priority, 0.0f, 1.0f);
-      log_target = Lerp(log_target, log_skin, t);
-      skin_blended = t > 0.0f;
-      if (skin_blended) source = MeteringSource::Skin;
+    if (was_ready) {
+      const float log_current = std::log2(std::max(exposure, 1e-6f));
+      float delta = std::log2(raw_target) - log_current;
+      if (delta >= 0.0f) {
+        delta = std::min(delta, std::max(params.speed_up, 0.0f) * dt);
+      } else {
+        delta = std::max(delta, -std::max(params.speed_down, 0.0f) * dt);
+      }
+      target = std::exp2(log_current + delta);
     }
+  } else {
+    const float max_delta = warmup_frames < 30 ? 0.5f : params.rate_cap;
+    if (max_delta > 0.0f) {
+      const float log_current = std::log2(std::max(exposure, 1e-6f));
+      float delta = std::log2(raw_target) - log_current;
+      delta = std::clamp(delta, -max_delta, max_delta);
+      target = std::exp2(log_current + delta);
+    }
+  }
+
+  exposure_reference_luma = std::max(exposure_reference_luma, 1e-6f);
+  target_exposure = target;
+  metering_source = MeteringSource::FullFrame;
+
+  if (!was_ready) {
+    exposure = target;
+  } else if (auto_local) {
+    exposure = target;
+  } else {
+    const uint32_t interval =
+        std::clamp(params.measure_interval, 1u, 32u);
+    const float resp =
+        (32.0f - static_cast<float>(interval)) / 31.0f;
+    const float alpha = 0.02f + resp * 0.38f;
+    exposure = exposure + (target - exposure) * alpha;
   }
 
   const float white_fraction = auto_local
       ? std::clamp(params.auto_high_percent, 0.01f, 0.999f)
       : std::clamp(params.white_percentile, 0.90f, 0.999f);
-  const float p_hi_bin = PercentileBin(scene_bins, scene_total, white_fraction);
-  const float luma_hi = BinToLinear(p_hi_bin);
+  const float white_luma =
+      BinToLinear(PercentileBin(bins, total, white_fraction));
 
-  const float raw_target =
-      std::clamp(exp2(log_target), 0.01f, 4096.0f);
-
-  const bool was_ready = have_measurement;
-  const float dt = std::clamp(delta_seconds, 1.0f / 240.0f, 0.5f);
-  float capped_target = raw_target;
-
-  if (auto_local) {
-    if (!was_ready) {
-      // The first valid measurement establishes the starting point; speed
-      // controls govern subsequent eye adaptation.
-      capped_target = raw_target;
-    } else {
-      const float log_current = log2(std::max(exposure, 1e-6f));
-      float log_delta = log2(raw_target) - log_current;
-      if (log_delta >= 0.0f) {
-        log_delta = std::min(log_delta, std::max(params.speed_up, 0.0f) * dt);
-      } else {
-        log_delta = std::max(log_delta, -std::max(params.speed_down, 0.0f) * dt);
-      }
-      capped_target = exp2(log_current + log_delta);
-    }
-  } else {
-    const bool skin_drives = skin_blended;
-    const float log_max_delta =
-        warmup_frames < 30 ? 0.5f : params.rate_cap;
-    if (!skin_drives && log_max_delta > 0.0f) {
-      const float log_current = log2(std::max(exposure, 1e-6f));
-      float log_delta = log2(raw_target) - log_current;
-      log_delta = std::clamp(log_delta, -log_max_delta, log_max_delta);
-      capped_target = exp2(log_current + log_delta);
-    }
-  }
+  const float white_alpha = auto_local
+      ? (was_ready ? 1.0f - std::exp(-6.0f * dt) : 1.0f)
+      : (was_ready ? 0.08f : 1.0f);
+  scene_white = scene_white +
+                (std::max(white_luma, 1e-6f) - scene_white) * white_alpha;
 
   this->exposure_reference_luma = exposure_reference_luma;
-  target_exposure = capped_target;
-  skin_fraction = skin_frac;
-  target_is_skin = (source == MeteringSource::Skin);
-  depth_filter_survived = depth_survived;
-  metering_source = source;
-
-  float alpha = 1.0f;
-  if (!auto_local) {
-    const bool skin_drives = skin_blended;
-    const uint32_t interval =
-        static_cast<uint32_t>(std::clamp(params.measure_interval, 1u, 32u));
-    const float resp = (32.0f - static_cast<float>(interval)) / 31.0f;
-    alpha = (skin_drives || warmup_frames < 30)
-                ? 0.5f
-                : (0.02f + resp * 0.38f);
-  }
-
-  exposure = Lerp(exposure, capped_target, alpha);
-
-  const float W_target = std::max(luma_hi, 1e-6f);
-  if (!was_ready) {
-    scene_white = W_target;
-  } else if (auto_local) {
-    const float white_alpha = 1.0f - std::exp(-6.0f * dt);
-    scene_white = Lerp(scene_white, W_target, white_alpha);
-  } else {
-    scene_white = Lerp(scene_white, W_target, alpha);
-  }
-
   have_measurement = true;
-  warmup_frames++;
+  warmup_frames += 1.0f;
 }
 
 bool HdrState::Ensure(ID3D12Device* device) {
   if (device == nullptr) return false;
-  if (device_.Get() == device && histogram_ != nullptr && fence_ != nullptr) {
+  if (device_.Get() == device && histogram_ != nullptr && fence_ != nullptr)
     return true;
-  }
 
   Shutdown();
 
-  // Histogram buffer: 256 R32_UINT, UAV + COPY_SOURCE.
   D3D12_HEAP_PROPERTIES heap = {};
   heap.Type = D3D12_HEAP_TYPE_DEFAULT;
 
@@ -351,8 +249,6 @@ void HdrState::Shutdown() {
   fence_.Reset();
   fence_value_ = 0;
   pending_fence_value_ = 0;
-  have_measurement_time_ = false;
-  last_measurement_time_ = {};
   pending_measurement_ = false;
   pending_gain_fence_value_ = 0;
   pending_gain_stats_ = false;
@@ -360,19 +256,17 @@ void HdrState::Shutdown() {
 
   enabled_ = false;
   regular_.Reset();
-  fallback_.Reset();
   frame_counter_ = 0;
   frames_until_measure_ = 0;
   frames_since_measure_ = 0;
   have_logged_format_ = false;
-
   have_histogram_ = false;
-  for (uint32_t i = 0; i < kHistogramBins; ++i) {
+  for (uint32_t i = 0; i < kHistogramBins; ++i)
     last_histogram_[i] = 0;
-    last_histogram_skin_[i] = 0;
-  }
   p_hi_luma_ = 0.0f;
   last_samples_ = 0;
+  have_measurement_time_ = false;
+  last_measurement_time_ = {};
   have_gain_stats_ = false;
   gain_min_log2_ = 0.0f;
   gain_max_log2_ = 0.0f;
@@ -387,25 +281,16 @@ HdrSnapshot HdrState::GetSnapshot() const {
   s.resolved_format = resolved_format_;
   s.exposure = regular_.exposure;
   s.scene_white = regular_.scene_white;
-  s.fallback_exposure = fallback_.exposure;
-  s.fallback_scene_white = fallback_.scene_white;
-  s.fallback_metering_source = static_cast<int>(fallback_.metering_source);
   s.frames_since_measure = frames_since_measure_;
-
   s.has_histogram = have_histogram_;
   if (have_histogram_) {
-    for (uint32_t i = 0; i < kHistogramBins; ++i) {
+    for (uint32_t i = 0; i < kHistogramBins; ++i)
       s.histogram[i] = last_histogram_[i];
-      s.histogram_skin[i] = last_histogram_skin_[i];
-    }
   }
   s.exposure_reference_luma = regular_.exposure_reference_luma;
   s.p_hi_luma = p_hi_luma_;
   s.target_exposure = regular_.target_exposure;
   s.samples = last_samples_;
-  s.skin_fraction = regular_.skin_fraction;
-  s.target_is_skin = regular_.target_is_skin;
-  s.depth_filter_survived = regular_.depth_filter_survived;
   s.metering_source = static_cast<int>(regular_.metering_source);
   s.gain_map_ready = have_gain_stats_;
   s.gain_min_log2 = gain_min_log2_;
@@ -420,55 +305,36 @@ void HdrState::BeginFrame(CommandContext& cmd,
                           ID3D12Resource* source,
                           unsigned int width,
                           unsigned int height,
-                          ID3D12Resource* depth,
-                          bool depth_inverted,
-                          ID3D12Resource* mask,
                           const Settings& settings,
                           ComputeEngine& codec) {
   enabled_ = settings.hdr.enable;
-  if (!enabled_) {
-    // Keep existing EMA values around so toggling back on doesn't reset.
-    return;
-  }
+  if (!enabled_) return;
 
-  if (command_list == nullptr || source == nullptr || width == 0 ||
-      height == 0) {
+  if (command_list == nullptr || source == nullptr || width == 0 || height == 0)
     return;
-  }
 
   frames_since_measure_++;
-
-  // Poll any completed readback first, so this frame's exposure reflects
-  // the latest available data.
   PollReadback(fence_.Get(), settings);
 
-  // Resolve format for this frame.
   const HdrFormat prev_format = resolved_format_;
   resolved_format_ = DetectFormatFromResource(source, settings.hdr.format);
-
-  // Log the raw DXGI format the first time we see it (or whenever it
-  // changes). Makes format-detection issues easy to diagnose.
   if (resolved_format_ != prev_format || !have_logged_format_) {
     const DXGI_FORMAT raw_fmt = source->GetDesc().Format;
     char msg[160];
-    std::snprintf(
-        msg, sizeof(msg),
-        "HDR: DLSS output format=%d detected=%d (0=SDR,1=scRGB,2=HDR10)",
-        static_cast<int>(raw_fmt), HdrFormatCode(resolved_format_));
+    std::snprintf(msg, sizeof(msg),
+                  "HDR: DLSS output format=%d detected=%d (0=SDR,1=scRGB,2=HDR10)",
+                  static_cast<int>(raw_fmt), HdrFormatCode(resolved_format_));
     reshade::log::message(reshade::log::level::info, msg);
     have_logged_format_ = true;
   }
 
-  // If a measurement is already in flight, don't enqueue another.
   if (pending_measurement_) {
     frame_counter_++;
     return;
   }
 
-  // Determine how often to measure. 1 = every frame.
   const uint32_t capped_every =
       static_cast<uint32_t>(std::clamp(settings.hdr.measure_interval, 1, 32));
-
   if (frames_until_measure_ > 0) {
     frames_until_measure_--;
     frame_counter_++;
@@ -476,71 +342,31 @@ void HdrState::BeginFrame(CommandContext& cmd,
   }
   frames_until_measure_ = capped_every - 1;
 
-  // The histogram shaders are compiled on the worker like everything
-  // else. Skipping here is safe: pending_measurement_ stays false, so
-  // the next frame retries, and the readback ring is untouched.
   if (!codec.IsReady()) {
     frame_counter_++;
     return;
   }
 
-  // Dispatch histogram on the game's command list.
   ComputeConstants constants = {};
   constants.Width = width;
   constants.Height = height;
   constants.shader.Params0.x = FormatToShaderValue(resolved_format_);
   constants.shader.Params0.y = kLumaMinLog2;
   constants.shader.Params0.z = kLumaMaxLog2;
-  // shader.Params1 in the shader: depth availability, orientation, mask bound.
-  constants.shader.Params1.x = depth != nullptr ? 1.0f : 0.0f;
-  constants.shader.Params1.y = depth_inverted ? 1.0f : 0.0f;
-  constants.shader.Params1.z = mask != nullptr ? 1.0f : 0.0f;
-  constants.shader.Params1.w = settings.skin.enable ? 1.0f : 0.0f;
+  constants.shader.Params1 = {};
 
-  // Seed the state tracker with the actual current states. Without this,
-  // inference would guess from the resource descriptor, which is wrong for
-  // these two (the buffer would be read as GENERIC_READ, the source as
-  // COMMON), and the first transition would issue an invalid barrier.
-  //
-  // Both resources are owned by us, and their states across frames are
-  // deterministic:
-  //   - `source` is the DLSS output clone, left in SRV by DlssGuides.
-  //   - `histogram_` is left in UAV at the end of every BeginFrame.
+  ID3D12Resource* srvs[kSrvCount] = {source, source, source, source};
+  ID3D12Resource* uavs[kUavCount] = {histogram_.Get()};
+
   cmd.SetResourceState(source,
                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   cmd.SetResourceState(histogram_.Get(),
                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  if (depth != nullptr) {
-    cmd.SetResourceState(depth,
-                         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  }
-  // The mask was left UAV by the skin-detect pass.
-  if (mask != nullptr) {
-    cmd.SetResourceState(mask, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  }
-
-  // The shader reads depth from t1 and the skin mask from t2 when each is
-  // available; otherwise the kHasDepth / kHasMask flags skip the sample, so
-  // binding source there is safe.
-  ID3D12Resource* depth_srv = depth != nullptr ? depth : source;
-  ID3D12Resource* mask_srv = mask != nullptr ? mask : source;
-  ID3D12Resource* srvs[kSrvCount] = {source, depth_srv, mask_srv, source};
-  ID3D12Resource* uavs[kUavCount] = {histogram_.Get()};
-
   cmd.Transition(command_list, source,
                  D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   cmd.Transition(command_list, histogram_.Get(),
                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  if (depth != nullptr) {
-    cmd.Transition(command_list, depth,
-                   D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  }
-  if (mask != nullptr) {
-    cmd.Transition(command_list, mask,
-                   D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  }
 
-  // Clear then build.
   if (!codec.Dispatch("ZeroHistogram", command_list, constants, srvs, uavs,
                       /*threads_x=*/1, /*threads_y=*/1, /*threads_z=*/1)) {
     frame_counter_++;
@@ -552,42 +378,30 @@ void HdrState::BeginFrame(CommandContext& cmd,
     return;
   }
 
-  // Copy into the readback ring. The fence value is signaled later at
-  // Present, once the game's queue has advanced past this command list.
   const uint64_t next_value = fence_value_ + 1;
   cmd.Transition(command_list, histogram_.Get(),
                  D3D12_RESOURCE_STATE_COPY_SOURCE);
-
-  if (readback_.EnqueueCopy(command_list, histogram_.Get(),
-                            kHistogramBytes, fence_.Get(), next_value)) {
+  if (readback_.EnqueueCopy(command_list, histogram_.Get(), kHistogramBytes,
+                            fence_.Get(), next_value)) {
     pending_fence_value_ = next_value;
     pending_measurement_ = true;
   }
-
-  // Leave the histogram in UAV so SeedFrameState / inference matches.
   cmd.Transition(command_list, histogram_.Get(),
                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-
   frame_counter_++;
 }
 
 bool HdrState::EnqueueGainMapStatsReadback(
     ID3D12GraphicsCommandList* command_list, ID3D12Resource* stats) {
   if (command_list == nullptr || stats == nullptr || fence_ == nullptr ||
-      !device_ || pending_gain_stats_) {
+      (!device_) || pending_gain_stats_)
     return false;
-  }
 
-  // If the histogram copy from BeginFrame is still pending, reuse its fence
-  // value so both readback rings are guaranteed complete at the same queue
-  // signal. Otherwise allocate the next value.
   const uint64_t next_value =
       pending_measurement_ ? pending_fence_value_ : (fence_value_ + 1u);
   if (!gain_readback_.EnqueueCopy(command_list, stats, kGainStatsBytes,
-                                  fence_.Get(), next_value)) {
+                                  fence_.Get(), next_value))
     return false;
-  }
-
   pending_gain_fence_value_ = next_value;
   pending_gain_stats_ = true;
   return true;
@@ -595,38 +409,33 @@ bool HdrState::EnqueueGainMapStatsReadback(
 
 void HdrState::SignalAtPresent(ID3D12CommandQueue* queue) {
   if (queue == nullptr || fence_ == nullptr ||
-      (!pending_measurement_ && !pending_gain_stats_)) {
+      (!pending_measurement_ && !pending_gain_stats_))
     return;
-  }
-
   uint64_t signal_value = fence_value_;
-  if (pending_measurement_) signal_value = std::max(signal_value, pending_fence_value_);
-  if (pending_gain_stats_) signal_value = std::max(signal_value, pending_gain_fence_value_);
-
+  if (pending_measurement_)
+    signal_value = std::max(signal_value, pending_fence_value_);
+  if (pending_gain_stats_)
+    signal_value = std::max(signal_value, pending_gain_fence_value_);
   queue->Signal(fence_.Get(), signal_value);
   fence_value_ = signal_value;
 }
 
 void HdrState::PollReadback(ID3D12Fence* fence, const Settings& settings) {
   if (fence == nullptr) return;
-
   const uint64_t completed = fence->GetCompletedValue();
 
   if (pending_measurement_ && completed >= pending_fence_value_) {
     uint32_t bytes = 0;
     const void* mapped = readback_.TryGet(fence, &bytes);
     pending_measurement_ = false;
-
     if (mapped != nullptr && bytes >= kHistogramBytes) {
       const uint32_t* bins = static_cast<const uint32_t*>(mapped);
       uint32_t total = 0;
-      for (uint32_t i = 0; i < kHistogramTotalBins; ++i) total += bins[i];
+      for (uint32_t i = 0; i < kHistogramBins; ++i) total += bins[i];
       if (total != 0) {
         UpdateExposure(bins, settings);
-        for (uint32_t i = 0; i < kHistogramBins; ++i) {
+        for (uint32_t i = 0; i < kHistogramBins; ++i)
           last_histogram_[i] = bins[i];
-          last_histogram_skin_[i] = bins[2u * kHistogramBins + i];
-        }
         have_histogram_ = true;
         last_samples_ = total;
         frames_since_measure_ = 0;
@@ -638,7 +447,6 @@ void HdrState::PollReadback(ID3D12Fence* fence, const Settings& settings) {
     uint32_t bytes = 0;
     const void* mapped = gain_readback_.TryGet(fence, &bytes);
     pending_gain_stats_ = false;
-
     if (mapped != nullptr && bytes >= kGainStatsBytes) {
       const uint32_t* stats = static_cast<const uint32_t*>(mapped);
       const uint32_t min_sortable = stats[0];
@@ -648,80 +456,42 @@ void HdrState::PollReadback(ID3D12Fence* fence, const Settings& settings) {
             ? (sortable ^ 0x80000000u)
             : ~sortable;
       };
-
       gain_min_log2_ = std::bit_cast<float>(unsort(min_sortable));
       gain_max_log2_ = std::bit_cast<float>(unsort(max_sortable));
       gain_sdr_clipped_pixels_ = stats[2];
       gain_out_of_range_pixels_ = stats[3];
-      if (std::isfinite(gain_min_log2_) && std::isfinite(gain_max_log2_)) {
+      if (std::isfinite(gain_min_log2_) && std::isfinite(gain_max_log2_))
         have_gain_stats_ = true;
-      }
     }
   }
 }
 
 void HdrState::UpdateExposure(const uint32_t* bins, const Settings& settings) {
   const auto now = std::chrono::steady_clock::now();
-  const float delta_seconds =
-      have_measurement_time_
-          ? std::chrono::duration<float>(now - last_measurement_time_).count()
-          : (1.0f / 60.0f);
+  const float delta_seconds = have_measurement_time_
+      ? std::chrono::duration<float>(now - last_measurement_time_).count()
+      : (1.0f / 60.0f);
   last_measurement_time_ = now;
   have_measurement_time_ = true;
 
-  ExposureParams regular_params;
-  regular_params.midtone = settings.hdr.midtone;
-  regular_params.white_percentile = settings.hdr.white_percentile;
-  regular_params.exposure_method = settings.hdr.exposure_method;
-  regular_params.auto_low_percent = settings.hdr.auto_low_percent;
-  regular_params.auto_high_percent = settings.hdr.auto_high_percent;
-  regular_params.speed_up = settings.hdr.speed_up;
-  regular_params.speed_down = settings.hdr.speed_down;
-  regular_params.rate_cap = settings.hdr.rate_cap;
-  regular_params.skin_fraction_threshold =
-      settings.hdr.skin_fraction_threshold;
-  regular_params.skin_priority = settings.hdr.skin_priority;
-  regular_params.depth_fallback_fraction =
-      settings.hdr.depth_fallback_fraction;
-  regular_params.measure_interval =
-      static_cast<uint32_t>(settings.hdr.measure_interval);
+  ExposureParams params;
+  params.midtone = settings.hdr.midtone;
+  params.white_percentile = settings.hdr.white_percentile;
+  params.exposure_method = settings.hdr.exposure_method;
+  params.auto_low_percent = settings.hdr.auto_low_percent;
+  params.auto_high_percent = settings.hdr.auto_high_percent;
+  params.speed_up = settings.hdr.speed_up;
+  params.speed_down = settings.hdr.speed_down;
+  params.rate_cap = settings.hdr.rate_cap;
+  params.measure_interval = static_cast<uint32_t>(settings.hdr.measure_interval);
 
-  ExposureParams fallback_params = regular_params;
-  fallback_params.midtone = settings.skin.hdr_midtone;
-  fallback_params.rate_cap = settings.skin.hdr_rate_cap;
-  fallback_params.depth_fallback_fraction =
-      settings.skin.hdr_depth_fallback_fraction;
-  fallback_params.measure_interval =
-      static_cast<uint32_t>(settings.skin.hdr_measure_interval);
-  fallback_params.exposure_method = HdrExposureMethod::Median;
-
-  const bool use_skin = settings.skin.enable &&
-                        settings.hdr.exposure_method == HdrExposureMethod::Median;
-  regular_.Update(bins, regular_params, use_skin, delta_seconds);
-  fallback_.Update(bins, fallback_params, /*use_skin=*/false, delta_seconds);
-
+  regular_.Update(bins, params, delta_seconds);
   p_hi_luma_ = regular_.scene_white;
 }
 
-// ---------------------------------------------------------------------------
-// Pipeline step registration
-// ---------------------------------------------------------------------------
-//
-// The HDR histogram is a single stage-local unit: HdrState::BeginFrame emits
-// the zero, the build, and the readback enqueue in one contiguous block, and
-// splitting them would mean threading the histogram resource and constants
-// through PassRun for no benefit. So HdrBeginFrame is the real step, and the
-// three histogram nodes are declared in the graph as documentation of what it
-// does. Splitting them later is a matter of moving code from BeginFrame into
-// the three step bodies below and listing them in kPostDlssSteps; the graph's
-// shape does not have to change.
 namespace {
 
 PipelineStatus RunHdrBeginFrame(PassRun& run) {
-  // The controller called BeginFrame exactly once per frame, before the pass
-  // loop. As a step it is listed once in the PostDLSS stage, which runs that
-  // step per pass — so the gate moves here. Only the first pass in the chain
-  // measures.
   if (!run.is_first_pass) return PipelineStatus::Ok;
   if (run.hdr == nullptr || run.hdr_cmd == nullptr) return PipelineStatus::Ok;
   if (run.guides.dlss_output_color == nullptr || run.guides.output_width == 0 ||
@@ -732,72 +502,38 @@ PipelineStatus RunHdrBeginFrame(PassRun& run) {
 
   TRACE_EVT(run.session, "hdr_begin_frame %ux%u", run.guides.output_width,
             run.guides.output_height);
-
-  // hdr_cmd is the controller-owned scratch context the histogram records
-  // through. Carried on the run so the graph has no controller coupling.
-  // Depth filtering removes the sky, which is the largest single source of
-  // exposure flicker from camera movement. The guide is only valid together
-  // with motion, so a valid guide implies a non-null depth clone.
-  ID3D12Resource* depth = run.guides.valid ? run.guides.depth : nullptr;
-  ID3D12Resource* mask =
-      (run.skin_detect != nullptr && run.settings->skin.enable)
-          ? run.skin_detect->GetOutput().mask
-          : nullptr;
   run.hdr->BeginFrame(*run.hdr_cmd, run.list, run.guides.dlss_output_color,
-                      run.guides.output_width, run.guides.output_height, depth,
-                      run.guides.depth_inverted, mask, *run.settings, *run.codec);
+                      run.guides.output_width, run.guides.output_height,
+                      *run.settings, *run.codec);
   return PipelineStatus::Ok;
 }
 
-// Placeholder steps: the work is inside RunHdrBeginFrame above. They exist so
-// the graph names the histogram sub-steps explicitly.
 PipelineStatus RunHistogramPlaceholder(PassRun&) { return PipelineStatus::Ok; }
 
-// `constexpr`, not `const`: a static_assert can only read an array whose
-// initializer is a constant expression. `const` would compile fine for the
-// runtime lookup in HdrStepFor below and still fail the assertion at the end
-// of this namespace with C2131.
-constexpr PipelineNodeId kHdrBeginRequires[] = {PipelineNodeId::EnsureComputeEngine,
-                                                PipelineNodeId::SkinDetect,
-                                                PipelineNodeId::Count};
-constexpr PipelineNodeId kHistogramRequires[] = {PipelineNodeId::HdrBeginFrame,
-                                                 PipelineNodeId::Count};
+constexpr PipelineNodeId kHdrBeginRequires[] = {
+    PipelineNodeId::EnsureComputeEngine,
+    PipelineNodeId::Count};
+constexpr PipelineNodeId kHistogramRequires[] = {
+    PipelineNodeId::HdrBeginFrame,
+    PipelineNodeId::Count};
 
 constexpr PipelineStepDef kHdrSteps[] = {
-    // Passes run.list into HdrState::BeginFrame, so it needs the stage to
-    // supply a command list. PostDLSS does; this step is listed there only.
     {PipelineNodeId::HdrBeginFrame, "HdrBeginFrame", &RunHdrBeginFrame,
-     kHdrBeginRequires, /*required_inputs=*/StageInput::CommandList,
-     /*requires_hdr_aware=*/true},
+     kHdrBeginRequires, StageInput::CommandList, true},
     {PipelineNodeId::HistogramZero, "HistogramZero", &RunHistogramPlaceholder,
-     kHistogramRequires, /*required_inputs=*/StageInput::None,
-     /*requires_hdr_aware=*/true},
+     kHistogramRequires, StageInput::None, true},
     {PipelineNodeId::HistogramBuild, "HistogramBuild", &RunHistogramPlaceholder,
-     kHistogramRequires, /*required_inputs=*/StageInput::None,
-     /*requires_hdr_aware=*/true},
+     kHistogramRequires, StageInput::None, true},
     {PipelineNodeId::HistogramReadback, "HistogramReadback",
-     &RunHistogramPlaceholder, kHistogramRequires, /*required_inputs=*/StageInput::None,
-     /*requires_hdr_aware=*/true},
+     &RunHistogramPlaceholder, kHistogramRequires, StageInput::None, true},
 };
 
-// HdrBeginFrame declares EnsureComputeEngine as a prerequisite, and this is the
-// assertion that keeps it satisfiable. kPostDlssStepNodes is the stage's
-// ordered node list, published in pipeline_graph.h; if HdrBeginFrame is listed
-// before the engine it depends on, the runner would log "unmet prerequisite"
-// and skip the step every frame, silently disabling HDR measurement. Now the
-// build fails instead.
-//
-// This exact mistake shipped once. See the ordering comment on kPostDlssSteps
-// in pipeline_graph.cpp.
-static_assert(PrerequisitesPrecedeSteps(kPostDlssStepNodes,
-                                        ArrayCount(kPostDlssStepNodes),
-                                        kHdrSteps, ArrayCount(kHdrSteps)),
+static_assert(PrerequisitesPrecedeSteps(
+                  kPostDlssStepNodes, ArrayCount(kPostDlssStepNodes), kHdrSteps,
+                  ArrayCount(kHdrSteps)),
               "an HDR step declares a prerequisite that the PostDLSS stage "
               "lists after it - reorder kPostDlssStepNodes, not this");
 
-// The HDR steps are listed in PostDLSS alone, whose call site supplies the
-// game's command list. HdrBeginFrame reads run.list, so this proves it is
-// never reachable from a stage that passes none.
 static_assert(
     StageInputsCoverSteps(kPostDlssStepNodes, ArrayCount(kPostDlssStepNodes),
                           kHdrSteps, ArrayCount(kHdrSteps),

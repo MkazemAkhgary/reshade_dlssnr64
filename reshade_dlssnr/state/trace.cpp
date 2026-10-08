@@ -165,9 +165,6 @@ Snapshot BuildSnapshot(const Settings& settings,
   Append(snap, "hdr_gain_min_log2", FloatText(settings.hdr.gain_min_log2));
   Append(snap, "hdr_gain_max_log2", FloatText(settings.hdr.gain_max_log2));
   Append(snap, "hdr_rate_cap", FloatText(settings.hdr.rate_cap));
-  Append(snap, "hdr_skin_fraction_threshold",
-         FloatText(settings.hdr.skin_fraction_threshold));
-  Append(snap, "hdr_skin_priority", FloatText(settings.hdr.skin_priority));
   Append(snap, "hdr_auto_low_percent", FloatText(settings.hdr.auto_low_percent));
   Append(snap, "hdr_auto_high_percent", FloatText(settings.hdr.auto_high_percent));
   Append(snap, "hdr_speed_up", FloatText(settings.hdr.speed_up));
@@ -178,8 +175,6 @@ Snapshot BuildSnapshot(const Settings& settings,
          FloatText(settings.hdr.local_max_brighten));
   Append(snap, "hdr_local_max_darken",
          FloatText(settings.hdr.local_max_darken));
-  Append(snap, "hdr_depth_fallback_fraction",
-         FloatText(settings.hdr.depth_fallback_fraction));
   Append(snap, "skin_detect_enable", BoolText(settings.skin.enable));
   Append(snap, "skin_detect_scale", FloatText(settings.skin.scale));
   Append(snap, "skin_detect_luma_threshold",

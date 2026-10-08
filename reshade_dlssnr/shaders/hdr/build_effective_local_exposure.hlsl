@@ -22,22 +22,26 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     if (id.x >= Width || id.y >= Height)
         return;
 
-    // This map is full resolution. It stores the exact combined exposure that
-    // GainMapSplit applies to each source pixel: global exposure × local factor.
-    // Keeping the original full-resolution field avoids inventing a new local
-    // exposure after the model has downsampled its input.
-    const float4 src = gSource.Load(int3(id.xy, 0));
+    if (kLocalExposureStrength <= 0.0) {
+        gOutput[id.xy] = 1.0;
+        return;
+    }
 
+    const float4 src = gSource.Load(int3(id.xy, 0));
     const float3 hdr_linear = DecodeToLinear(
         src.rgb, (int)(kFormat + 0.5), kSdrReferenceWhiteNits);
     const float3 pre_hdr = HdrPreDesaturate(
         hdr_linear, saturate(kCrosstalk));
-    const float raw_luma = max(
+    const float hdr_luma = max(
         dot(max(pre_hdr, 0.0), HdrLumaWeights()), 0.0);
     const float exposure = max(kExposure, 1e-6);
-    const float local_exposure = LocalExposureFactor(
-        (float2(id.xy) + 0.5) / float2(max(Width, 1u), max(Height, 1u)),
-        raw_luma, exposure);
+    const float y_exposed = hdr_luma * exposure;
+    const float effective_peak_nits = max(
+        kSdrReferenceWhiteNits, max(kEffectiveSceneWhiteNits, 0.01));
+    const float y_curve = y_exposed * kPqPeakNits / effective_peak_nits;
+    const float y_sdr = max(HdrBt2446Forward(y_curve) / 100.0, 0.0);
 
-    gOutput[id.xy] = exposure * local_exposure;
+    gOutput[id.xy] = LocalExposureScale(
+        (float2(id.xy) + 0.5) / float2(max(Width, 1u), max(Height, 1u)),
+        y_sdr);
 }
