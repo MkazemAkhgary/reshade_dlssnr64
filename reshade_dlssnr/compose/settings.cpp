@@ -47,6 +47,13 @@ void LoadResidual(const std::string& prefix, ResidualSettings& residual) {
   if (residual.ratio_darken > 1.0f) residual.ratio_darken = 1.0f;
   if (residual.ratio_darken < 1.0f / 256.0f)
     residual.ratio_darken = 1.0f / 256.0f;
+
+  int hdr_compose_mode = static_cast<int>(residual.hdr_compose_mode);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "HdrComposeMode").c_str(),
+                            hdr_compose_mode);
+  if (hdr_compose_mode < 0 || hdr_compose_mode > 1) hdr_compose_mode = 0;
+  residual.hdr_compose_mode = static_cast<HdrComposeMode>(hdr_compose_mode);
 }
 
 void SaveResidual(const std::string& prefix, const ResidualSettings& residual) {
@@ -74,6 +81,9 @@ void SaveResidual(const std::string& prefix, const ResidualSettings& residual) {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             (prefix + "RatioDarken").c_str(),
                             residual.ratio_darken);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "HdrComposeMode").c_str(),
+                            static_cast<int>(residual.hdr_compose_mode));
 }
 
 }  // namespace reshade_dlssnr

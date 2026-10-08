@@ -70,7 +70,9 @@ bool ComposeOutput(
   constants.rcas.Strength = rcas_strength;
 
   if (hdr != nullptr) {
-    pass_name = "ComposeModelOutputHdr";
+    pass_name = residual.hdr_compose_mode == HdrComposeMode::InverseToneMap
+                    ? "ComposeModelOutputHdrInverse"
+                    : "ComposeModelOutputHdr";
     constants.hdr.Format = hdr->format;
     constants.hdr.Exposure = hdr->exposure;
     constants.hdr.Bt2446K1 = hdr->bt2446_k1;
@@ -82,7 +84,8 @@ bool ComposeOutput(
     constants.hdr.GainMinLog2 = hdr->gain_min_log2;
     constants.hdr.GainMaxLog2 = hdr->gain_max_log2;
     constants.hdr.EffectiveSceneWhiteNits = hdr->effective_scene_white_nits;
-    constants.hdr.pad0 = 0.0f;
+    constants.hdr.ComposeMode =
+        static_cast<float>(static_cast<int>(residual.hdr_compose_mode));
 
     if (grade_input != nullptr) {
       constants.grade.Enabled = grade_input->enabled ? 1.0f : 0.0f;

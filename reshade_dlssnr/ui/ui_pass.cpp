@@ -275,6 +275,21 @@ void DrawResidualSection(uint32_t pass_index, Settings& settings,
     return;
   }
 
+  {
+    static const char* const kHdrComposeLabels[] = {
+        "Ratio (Current)", "Inverse Tone Map (Experimental)"};
+    static const char* const kHdrComposeTooltips[] = {
+        "Current HDR compose: transfers the model edit as a per-channel ratio.",
+        "Experimental HDR compose: reconstructs HDR from the model input/output using the same BT.2446 curve, then transfers the HDR edit."};
+    int mode = static_cast<int>(pass.residual.hdr_compose_mode);
+    if (DrawComboRow("hdr_compose_mode", "HDR Composition",
+                     "Select how the model edit is carried back into HDR. The second method is experimental and leaves the current method available for comparison.",
+                     &mode, kHdrComposeLabels, kHdrComposeTooltips, 2)) {
+      pass.residual.hdr_compose_mode = static_cast<HdrComposeMode>(mode);
+      changed = true;
+    }
+  }
+
   changed |= DrawFloatRow(
       pass_index, "edit_strength", "Edit Strength",
       "Scales the model's edit before it is carried onto the source.",
@@ -302,17 +317,17 @@ void DrawResidualSection(uint32_t pass_index, Settings& settings,
 
   changed |= DrawFloatRow(
       pass_index, "residual_ratio_eps", "Ratio Eps",
-      "Denominator floor for the per-channel ratio.",
+      "Denominator floor for the per-channel ratio. Ignored by HDR Inverse Tone Map mode.",
       &pass.residual.ratio_eps, nullptr, 1e-2f, 1e-6f, 0.5f, 1e-2f);
 
   changed |= DrawFloatRow(
       pass_index, "residual_ratio_brighten", "Ratio Brighten",
-      "Upper bound on brightening. Soft-clipped.",
+      "Upper bound on ratio brightening. Soft-clipped; ignored by HDR Inverse Tone Map mode.",
       &pass.residual.ratio_brighten, nullptr, 64.0f, 1.0f, 256.0f, 64.0f);
 
   changed |= DrawFloatRow(
       pass_index, "residual_ratio_darken", "Ratio Darken",
-      "Lower bound on darkening. Soft-clipped.",
+      "Lower bound on ratio darkening. Soft-clipped; ignored by HDR Inverse Tone Map mode.",
       &pass.residual.ratio_darken, nullptr, 1.0f / 16.0f,
       1.0f / 256.0f, 1.0f, 1.0f / 16.0f);
 }

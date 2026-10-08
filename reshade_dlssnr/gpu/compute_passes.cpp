@@ -26,6 +26,7 @@ const ComputePassDef kComputePasses[] = {
     {"PrepareModelInput",     "model/prepare_model_input.hlsl", BytecodeData("model/prepare_model_input.hlsl"), BytecodeSize("model/prepare_model_input.hlsl")},
     {"ComposeModelOutput",    "compose/compose_model_output.hlsl", BytecodeData("compose/compose_model_output.hlsl"), BytecodeSize("compose/compose_model_output.hlsl")},
     {"ComposeModelOutputHdr", "compose/compose_model_output_hdr.hlsl", BytecodeData("compose/compose_model_output_hdr.hlsl"), BytecodeSize("compose/compose_model_output_hdr.hlsl")},
+    {"ComposeModelOutputHdrInverse", "compose/compose_model_output_hdr_inverse.hlsl", BytecodeData("compose/compose_model_output_hdr_inverse.hlsl"), BytecodeSize("compose/compose_model_output_hdr_inverse.hlsl")},
     {"SkinMaskDiff",          "skin/skin_mask_diff.hlsl",      BytecodeData("skin/skin_mask_diff.hlsl"),      BytecodeSize("skin/skin_mask_diff.hlsl")},
     {"DebugDisplay",          "debug/debug_display.hlsl",      BytecodeData("debug/debug_display.hlsl"),      BytecodeSize("debug/debug_display.hlsl")},
     {"ApplyGrade",            "grade/apply_grade.hlsl",        BytecodeData("grade/apply_grade.hlsl"),        BytecodeSize("grade/apply_grade.hlsl")},

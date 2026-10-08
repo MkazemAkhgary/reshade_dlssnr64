@@ -506,6 +506,8 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 **Only explicitly inheritable fields are resolved.** Working scale, intensity, local tone, local structure, skin structure and dynamic shader parameters can inherit. Grade settings, residual settings and RCAS controls are intentionally per-pass.
 
+**HDR composition is a per-pass UI setting.** The Residual Edit section exposes `HDR Composition` with `Ratio (Current)` and `Inverse Tone Map (Experimental)`. The choice is persisted as `PassN.Residual.HdrComposeMode` and only affects HDR composition; the default remains Ratio.
+
 **Once the first Present pass exists, later passes are forced to Present.** This keeps the pass chain monotonic: Post-DLSS can feed later Post-DLSS work, while a Present pass cannot hand its output back into the earlier DLSS injection point.
 
 **The debug selection is not per-pass.** The active UI tab selects which pass renders the shared debug view.
@@ -521,7 +523,7 @@ The HDR path is gain-map based and exists only in Post-DLSS processing.
 3. `GainMapSplit` converts the full-resolution HDR source into an RGBA32F carrier: RGB is the linear SDR base and A is log2 gain. BT.2446-C parameters, gain-map offsets and scene-white control the split.
 4. `PrepareModelInput` performs exact Box Area downsampling. For the HDR carrier path it preserves the carrier in the model's SDR domain with a hue-preserving gamut fit and sRGB encoding.
 5. The model feature evaluates at the selected working scale while being built at full frame resolution.
-6. `ComposeModelOutputHdr` uses FSR EASU and optional RCAS to reconstruct the model's working-scale images at full resolution, computes the model residual as a ratio in linear SDR space, reconstructs the original HDR source from the packed carrier and gain, applies the residual directly in HDR, and blends luma/chroma in normalized chroma space.
+6. `ComposeModelOutputHdr` uses FSR EASU and optional RCAS to reconstruct the model's working-scale images at full resolution. The default `Ratio` mode uses the existing linear-SDR ratio transfer. `Inverse Tone Map` selects a separate `ComposeModelOutputHdrInverse` shader that inverts the same BT.2446 transfer for the model input and output, transfers their HDR difference to the original HDR source, and then blends luma/chroma.
 7. `EncodeHdr` writes the reconstructed result back into scRGB or HDR10 as required by the source format.
 
 The SDR compose uses the same FSR path but does not reconstruct an HDR carrier; it applies the residual in the source SDR space and uses the shared grade/compose helpers.

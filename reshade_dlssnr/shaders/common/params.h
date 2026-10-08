@@ -69,7 +69,8 @@ DLSSNR_BLOCK(HdrBlock)
     float GainMaxLog2;
     // Absolute effective scene-white peak in nits.
     float EffectiveSceneWhiteNits;
-    float pad0;
+    // 0 = current ratio compose, 1 = inverse-tone-map HDR compose.
+    float ComposeMode;
 };
 
 DLSSNR_BLOCK(EasuBlock)

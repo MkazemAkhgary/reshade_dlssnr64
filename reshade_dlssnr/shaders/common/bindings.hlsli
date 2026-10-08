@@ -36,6 +36,7 @@
 #define kGainMinLog2         hdr.GainMinLog2
 #define kGainMaxLog2         hdr.GainMaxLog2
 #define kEffectiveSceneWhiteNits hdr.EffectiveSceneWhiteNits
+#define kHdrComposeMode          hdr.ComposeMode
 
 // FSR
 #define kEasuCon0     easu.Con0

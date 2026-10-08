@@ -5,6 +5,11 @@
 
 namespace reshade_dlssnr {
 
+enum class HdrComposeMode : int {
+  Ratio = 0,
+  InverseToneMap = 1,
+};
+
 struct ResidualSettings {
   float edit_strength = 1.0f;
   float chroma_strength = 1.0f;
@@ -15,6 +20,11 @@ struct ResidualSettings {
   float ratio_eps = 1e-2f;
   float ratio_brighten = 64.0f;
   float ratio_darken = 1.0f / 16.0f;
+
+  // HDR-only compose method. Ratio preserves the existing behavior;
+  // InverseToneMap reconstructs the model edit in HDR from the same BT.2446
+  // transfer used by the gain-map split.
+  HdrComposeMode hdr_compose_mode = HdrComposeMode::Ratio;
 };
 
 void LoadResidual(const std::string& prefix, ResidualSettings& residual);

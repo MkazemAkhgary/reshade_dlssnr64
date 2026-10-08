@@ -207,8 +207,7 @@ bool SkinDetect::Run(CommandContext& cmd,
     constants.hdr.GainMaxLog2 = settings.hdr.gain_max_log2;
     constants.hdr.EffectiveSceneWhiteNits =
         hdr->FallbackEffectiveSceneWhiteNits(settings.hdr);
-    constants.hdr.pad0 = 0.0f;
-    if (!codec.Dispatch("GainMapSplit", command_list, constants,
+      if (!codec.Dispatch("GainMapSplit", command_list, constants,
                         prep_srvs, prep_uavs)) {
       return false;
     }

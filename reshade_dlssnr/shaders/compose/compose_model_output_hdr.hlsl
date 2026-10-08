@@ -6,6 +6,7 @@
 #include "common/math.hlsli"
 #include "common/grade.hlsli"
 #include "common/compose_common.hlsli"
+#include "common/hdr_transfer.hlsli"
 
 Texture2D<float4>   gOriginal    : register(t0);
 Texture2D<float4>   gLowInput    : register(t1);
@@ -54,39 +55,53 @@ float3 EncodeHdr(float3 lin)
 // `kExposure` is retained in the uniform contract because the exposure EMA
 // feeds the effective scene white on the CPU. The split and compose never
 // multiply the image by it a second time.
+float3 ShapeHdrTargetDelta(float3 delta, float luma)
+{
+    if (kSoftCompression != 0) {
+        delta.r = SoftCompress(delta.r, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
+        delta.g = SoftCompress(delta.g, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
+        delta.b = SoftCompress(delta.b, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
+    }
+
+    if (kEditGamma != 1.0 && kEditGamma > 0.0) {
+        delta = sign(delta) * pow(abs(delta), kEditGamma);
+    }
+
+    if (kResidualChroma < 1.0) {
+        const float3 kL = float3(0.2126, 0.7152, 0.0722);
+        float d_luma = dot(delta, kL);
+        delta = lerp(float3(d_luma, d_luma, d_luma), delta, kResidualChroma);
+    }
+
+    float protect = 1.0;
+    if (kHighlightProtect > 0.0) {
+        float h = saturate((luma - 0.7) / 0.3);
+        protect *= 1.0 - kHighlightProtect * h;
+    }
+    if (kShadowProtect > 0.0) {
+        float s = saturate((0.3 - luma) / 0.3);
+        protect *= 1.0 - kShadowProtect * s;
+    }
+
+    return delta * protect * kEditStrength;
+}
+
 float3 ComposeHdr(float3 sdr_base, float gain,
                   float3 low_in, float3 low_out)
 {
-    // The model interface is sRGB-encoded SDR. Decode after the model's
-    // working-scale resample/sharpening, then undo the optional input grade so
-    // the residual is measured in the same linear SDR domain as the gain map.
     float3 low_in_lin = max(SrgbToLinearExt(low_in), 0.0);
     float3 low_out_lin = max(SrgbToLinearExt(low_out), 0.0);
-    if (kGradeEnabled > 0.5) {
+    if (kGradeEnabled > 0.5)
         low_in_lin = max(GradeLinearInv(low_in_lin), 0.0);
-    }
 
-    // The model sees a hue-preserving gamut fit of the carrier, not the carrier
-    // itself. Those two are colinear per pixel, so a multiplicative model
-    // residual measured in the model domain transfers directly back to the
-    // lossless carrier. The carrier itself remains unclipped.
     const float3 model_sdr_base = GamutFitPreserveChroma(sdr_base);
     const float3 kL = HdrLumaWeights();
     const float base_luma = dot(max(model_sdr_base, 0.0), kL);
-    const float3 delta = ShapeResidual(
-        ComposeRatioDelta(low_in_lin, low_out_lin), base_luma);
-
-    // Decode once with the ISO offsets to get the true HDR source.
     const float3 hdr_src = ReconstructHdr(sdr_base, gain);
 
-    // Apply the model's multiplicative edit directly to HDR. Do NOT feed
-    // sdr_base * (1 + delta) back through ReconstructHdr: the affine
-    // -kAlternateOffset term adds a*(delta) of absolute error and drives
-    // highlights to black. The ratio delta is dimensionless and applies
-    // identically in the SDR model domain and the HDR reconstruction
-    // domain, because both are derived from the same carrier pixel.
+    const float3 delta = ShapeResidual(
+        ComposeRatioDelta(low_in_lin, low_out_lin), base_luma);
     const float3 hdr_edited = max(hdr_src * (1.0 + delta), 0.0);
-
     return BlendYCbCr(hdr_src, hdr_edited, kLumaStrength, kChromaStrength);
 }
 
