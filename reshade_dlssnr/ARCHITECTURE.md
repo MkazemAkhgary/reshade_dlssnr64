@@ -230,7 +230,7 @@ RenderDebugView
 WriteToGameResource
 ```
 
-`HdrBeginFrame` and `SkinDetect` are effectively first-pass operations even though they are present in the stage table for every Post-DLSS pass. The controller marks only the first enabled Post-DLSS pass as `is_first_pass`; subsequent passes reuse the HDR measurement state and do not rerun structure detection.
+`HdrBeginFrame` and `SkinDetect` are effectively first-pass operations even though they are present in the stage table for every Post-DLSS pass. The controller marks only the first enabled Post-DLSS pass as `is_first_pass`; subsequent passes reuse the HDR measurement state and the persistent structure mask. On a frame after a valid structure mask exists, the HDR histogram blends the full-frame population with a normalized mask population according to the persisted skin-priority controls.
 
 ### Present injection
 
@@ -493,13 +493,13 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 **Exposure is measurement state, not compose state.** Histogram-derived exposure changes what the model sees; HDR compose reconstructs the source from its own gain map and applies the model residual directly in HDR.
 
-**HDR exposure uses the full-frame histogram only.** Depth and skin masks do not participate in exposure metering. The automatic method measures one full-frame luminance histogram, computes the exposure target from its configured percentile band, adapts with separate brighten/darken speeds, and takes the white point from the same histogram population.
+**HDR exposure uses the full-frame histogram with optional structure-mask priority.** The first frame has only the full-frame population. Once a persistent structure mask exists, the measurement also builds a mask-conditioned histogram and blends the normalized masked population with the full-frame population using `Hdr.SkinPriority`, provided the masked fraction reaches `Hdr.SkinFractionThreshold`. The automatic method then adapts with separate brighten/darken speeds and takes the white point from that same effective metering population. The mask is intentionally one-frame-latched because it is produced after `HdrBeginFrame`; it therefore conditions the next HDR measurement and all following Post-DLSS passes rather than changing exposure halfway through the current pass chain.
 
 **Auto Exposure + Local is the primary HDR method.** Global eye adaptation maps the histogram band to the model midtone target. A separate local stage then operates on a bilateral low-frequency luminance base while preserving the local high-frequency detail. This lets bright sky and darker geometry coexist without using depth or skin to decide which pixels count.
 
 **The local exposure map is part of the HDR round-trip contract.** GainMapSplit applies the local base/detail adjustment after the global BT.2446 Method C mapping. BuildEffectiveLocalExposure records the exact per-pixel local scale used by that transform. Inverse Tone Map reuses that same field instead of re-estimating local exposure from the edited image.
 
-**Median (Legacy) is full-frame only.** It remains available for comparison, but it no longer uses skin or depth. The automatic method is the recommended configuration.
+**Median (Legacy) keeps the same effective metering population.** It remains available for comparison; when structure detection has a valid persistent mask, it uses the same mask-priority population as Auto Exposure + Local.
 
 **HDR round-trip diagnostic.** The debug menu also exposes `HDR Roundtrip Diagnostic`, `HDR Roundtrip Error`, and `HDR Local Exposure`. These are test-only views for the HDR compose path. With local exposure enabled, the round-trip path uses the same full-resolution exposure map as inverse compose. The diagnostic shows Model Input, Model Output, the composed HDR converted back through the same HDR-to-SDR transform, and their error. For a clean math test, disable input/output grades and RCAS and use working scale 1.0.
 

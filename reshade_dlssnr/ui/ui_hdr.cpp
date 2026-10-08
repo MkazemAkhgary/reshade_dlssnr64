@@ -64,8 +64,8 @@ void DrawControls(HdrSettings& hdr, bool& changed) {
   static const char* const kExposureMethodLabels[] = {
       "Median (Legacy)", "Auto Exposure + Local"};
   static const char* const kExposureMethodTips[] = {
-      "Legacy full-frame median exposure. Kept for comparison; it does not use depth or skin.",
-      "Full-frame histogram eye adaptation with separate brighten/darken speeds, followed by a base/detail local exposure stage."};
+      "Legacy median exposure. When structure detection has a valid persistent mask, the masked population can bias metering.",
+      "Histogram eye adaptation with separate brighten/darken speeds, with optional structure-mask priority, followed by the base/detail local exposure stage."};
   int exposure_method = static_cast<int>(hdr.exposure_method);
   changed |= DrawComboRow(
       "hdr_exposure_method", "Exposure Method",
@@ -214,7 +214,10 @@ void DrawDiagnostics(const HdrSnapshot& snap, const HdrSettings& hdr,
     ImGui::TableNextColumn();
     ImGui::Text("Exposure method: %s", exposure_method_name);
     ImGui::TableNextColumn();
-    ImGui::TextUnformatted("");
+    ImGui::TextUnformatted(
+        snap.metering_source == static_cast<int>(MeteringSource::SkinMaskPriority)
+            ? "Skin Mask Priority"
+            : "Full Frame");
 
     ImGui::TableNextRow();
     ImGui::TableNextColumn();

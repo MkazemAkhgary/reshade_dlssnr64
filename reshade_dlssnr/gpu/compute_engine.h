@@ -38,10 +38,11 @@ struct ComputePassDef;
 // still going to read.
 constexpr uint32_t kMaxFramesInFlight = 16;  // DXGI's maximum swapchain buffers
 // Worst case for one frame at kMaxPasses == 3: nine Post-DLSS dispatches per
-// pass, three HDR/Release dispatches, and three optional structure-detection
-// dispatches. The ring must cover all of them while the GPU may be up to
+// pass, four HDR/Release dispatches, and three optional structure-detection
+// dispatches. HDR uses an additional histogram build when a previous-frame
+// structure mask is available. The ring must cover all of them while the GPU may be up to
 // kMaxFramesInFlight frames behind the recording thread.
-constexpr uint32_t kMaxDispatchesPerFrame = kMaxPasses * 9 + 3 + 3;
+constexpr uint32_t kMaxDispatchesPerFrame = kMaxPasses * 9 + 4 + 3;
 constexpr uint32_t kDescriptorRingSize =
     kMaxFramesInFlight * kMaxDispatchesPerFrame;
 

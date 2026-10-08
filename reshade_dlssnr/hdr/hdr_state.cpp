@@ -10,6 +10,7 @@
 
 #include "gpu/d3d12_utils.h"
 #include "pipeline/pipeline_graph.h"
+#include "skin/skin_detect.h"
 #include "pipeline/pipeline_trace.h"
 
 namespace reshade_dlssnr {
@@ -34,7 +35,9 @@ HdrFormat DetectFormatFromDxgi(DXGI_FORMAT format) {
 namespace {
 
 constexpr uint32_t kHistogramBins = 256;
+constexpr uint32_t kMaskWeightScale = 16;
 constexpr uint32_t kHistogramBytes = kHistogramBins * sizeof(uint32_t);
+constexpr uint32_t kCombinedHistogramBytes = 2 * kHistogramBytes;
 constexpr float kLumaMinLog2 = -12.0f;
 constexpr float kLumaMaxLog2 = 12.0f;
 
@@ -209,7 +212,7 @@ bool HdrState::Ensure(ID3D12Device* device) {
 
   D3D12_RESOURCE_DESC desc = {};
   desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-  desc.Width = kHistogramBytes;
+  desc.Width = kCombinedHistogramBytes;
   desc.Height = 1;
   desc.DepthOrArraySize = 1;
   desc.MipLevels = 1;
@@ -232,7 +235,7 @@ bool HdrState::Ensure(ID3D12Device* device) {
     return false;
   }
 
-  if (!readback_.Ensure(device, kHistogramBytes) ||
+  if (!readback_.Ensure(device, kCombinedHistogramBytes) ||
       !gain_readback_.Ensure(device, kGainStatsBytes)) {
     Shutdown();
     return false;
@@ -308,7 +311,10 @@ void HdrState::BeginFrame(CommandContext& cmd,
                           unsigned int width,
                           unsigned int height,
                           const Settings& settings,
-                          ComputeEngine& codec) {
+                          ComputeEngine& codec,
+                          ID3D12Resource* exposure_mask,
+                          unsigned int exposure_mask_width,
+                          unsigned int exposure_mask_height) {
   enabled_ = settings.hdr.enable;
   if (!enabled_) return;
 
@@ -349,6 +355,10 @@ void HdrState::BeginFrame(CommandContext& cmd,
     return;
   }
 
+  const bool use_mask =
+      exposure_mask != nullptr && exposure_mask_width != 0 &&
+      exposure_mask_height != 0;
+
   ComputeConstants constants = {};
   constants.Width = width;
   constants.Height = height;
@@ -356,8 +366,12 @@ void HdrState::BeginFrame(CommandContext& cmd,
   constants.shader.Params0.y = kLumaMinLog2;
   constants.shader.Params0.z = kLumaMaxLog2;
   constants.shader.Params1 = {};
+  constants.shader.Params1.x = static_cast<float>(exposure_mask_width);
+  constants.shader.Params1.y = static_cast<float>(exposure_mask_height);
+  constants.shader.Params1.z = use_mask ? 1.0f : 0.0f;
 
-  ID3D12Resource* srvs[kSrvCount] = {source, source, source, source};
+  ID3D12Resource* srvs[kSrvCount] = {
+      source, exposure_mask != nullptr ? exposure_mask : source, source, source};
   ID3D12Resource* uavs[kUavCount] = {histogram_.Get()};
 
   cmd.SetResourceState(source,
@@ -368,23 +382,56 @@ void HdrState::BeginFrame(CommandContext& cmd,
                  D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   cmd.Transition(command_list, histogram_.Get(),
                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  if (use_mask) {
+    cmd.SetResourceState(exposure_mask,
+                         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    cmd.Transition(command_list, exposure_mask,
+                   D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
 
+  // Clear the full-frame half. The mask-conditioned half is cleared only when
+  // a valid previous-frame detection mask is available.
+  constants.shader.Params1.w = 0.0f;
   if (!codec.Dispatch("ZeroHistogram", command_list, constants, srvs, uavs,
                       /*threads_x=*/1, /*threads_y=*/1, /*threads_z=*/1)) {
     frame_counter_++;
     return;
   }
+  if (use_mask) {
+    constants.shader.Params1.w = static_cast<float>(kHistogramBins);
+    if (!codec.Dispatch("ZeroHistogram", command_list, constants, srvs, uavs,
+                        /*threads_x=*/1, /*threads_y=*/1, /*threads_z=*/1)) {
+      frame_counter_++;
+      return;
+    }
+  }
+
   cmd.UavBarrier(command_list, histogram_.Get());
+  constants.shader.Params1.z = 0.0f;
+  constants.shader.Params1.w = 0.0f;
   if (!codec.Dispatch("BuildHistogram", command_list, constants, srvs, uavs)) {
     frame_counter_++;
     return;
   }
 
+  if (use_mask) {
+    cmd.UavBarrier(command_list, histogram_.Get());
+    constants.shader.Params1.z = 1.0f;
+    constants.shader.Params1.w = static_cast<float>(kHistogramBins);
+    if (!codec.Dispatch("BuildHistogram", command_list, constants, srvs, uavs)) {
+      frame_counter_++;
+      return;
+    }
+  }
+
   const uint64_t next_value = fence_value_ + 1;
+  cmd.UavBarrier(command_list, histogram_.Get());
   cmd.Transition(command_list, histogram_.Get(),
                  D3D12_RESOURCE_STATE_COPY_SOURCE);
-  if (readback_.EnqueueCopy(command_list, histogram_.Get(), kHistogramBytes,
-                            fence_.Get(), next_value)) {
+  if (readback_.EnqueueCopy(command_list, histogram_.Get(),
+                             use_mask ? kCombinedHistogramBytes
+                                      : kHistogramBytes,
+                             fence_.Get(), next_value)) {
     pending_fence_value_ = next_value;
     pending_measurement_ = true;
   }
@@ -431,7 +478,56 @@ void HdrState::PollReadback(ID3D12Fence* fence, const Settings& settings) {
     const void* mapped = readback_.TryGet(fence, &bytes);
     pending_measurement_ = false;
     if (mapped != nullptr && bytes >= kHistogramBytes) {
-      const uint32_t* bins = static_cast<const uint32_t*>(mapped);
+      const uint32_t* all_bins = static_cast<const uint32_t*>(mapped);
+      const uint32_t* full_bins = all_bins;
+      const uint32_t* mask_bins =
+          bytes >= kCombinedHistogramBytes ? all_bins + kHistogramBins : nullptr;
+
+      uint32_t full_total = 0;
+      uint32_t mask_total = 0;
+      for (uint32_t i = 0; i < kHistogramBins; ++i) {
+        full_total += full_bins[i];
+        if (mask_bins != nullptr) mask_total += mask_bins[i];
+      }
+
+      uint32_t effective_bins[kHistogramBins] = {};
+      const uint32_t* bins = full_bins;
+      bool used_mask = false;
+
+      if (mask_bins != nullptr && full_total != 0 && mask_total != 0) {
+        const float mask_fraction =
+            std::clamp(static_cast<float>(mask_total) /
+                           (static_cast<float>(full_total) *
+                            static_cast<float>(kMaskWeightScale)),
+                       0.0f, 1.0f);
+        const float priority =
+            std::clamp(settings.hdr.skin_priority, 0.0f, 1.0f);
+        const float min_fraction =
+            std::clamp(settings.hdr.skin_fraction_threshold, 0.0f, 0.5f);
+
+        if (priority > 0.0f && mask_fraction >= min_fraction) {
+          // Give the masked population a configurable share of the effective
+          // metering histogram, independent of how large that mask happens
+          // to be. The unmasked full-frame population supplies the rest.
+          const float inverse_fraction =
+              1.0f / std::max(mask_fraction, 1e-6f);
+          const float unmasked_weight = 1.0f - priority;
+          for (uint32_t i = 0; i < kHistogramBins; ++i) {
+            const float masked_normalized =
+                static_cast<float>(mask_bins[i]) *
+                (inverse_fraction / static_cast<float>(kMaskWeightScale));
+            const float blended =
+                unmasked_weight * static_cast<float>(full_bins[i]) +
+                priority * masked_normalized;
+            effective_bins[i] =
+                static_cast<uint32_t>(std::clamp(blended, 0.0f,
+                                                 4294967295.0f));
+          }
+          bins = effective_bins;
+          used_mask = true;
+        }
+      }
+
       uint32_t total = 0;
       for (uint32_t i = 0; i < kHistogramBins; ++i) total += bins[i];
       if (total != 0) {
@@ -440,6 +536,9 @@ void HdrState::PollReadback(ID3D12Fence* fence, const Settings& settings) {
           last_histogram_[i] = bins[i];
         have_histogram_ = true;
         last_samples_ = total;
+        regular_.metering_source = used_mask
+            ? MeteringSource::SkinMaskPriority
+            : MeteringSource::FullFrame;
         measurement_generation_ += 1;
         frames_since_measure_ = 0;
       }
@@ -503,11 +602,26 @@ PipelineStatus RunHdrBeginFrame(PassRun& run) {
     return PipelineStatus::Ok;
   }
 
-  TRACE_EVT(run.session, "hdr_begin_frame %ux%u", run.guides.output_width,
-            run.guides.output_height);
+  ID3D12Resource* exposure_mask = nullptr;
+  unsigned int exposure_mask_width = 0;
+  unsigned int exposure_mask_height = 0;
+  if (run.settings->skin.enable && run.skin_detect != nullptr) {
+    const SkinDetect::Output& detection = run.skin_detect->GetOutput();
+    if (detection.valid && detection.mask != nullptr && detection.width != 0 &&
+        detection.height != 0) {
+      exposure_mask = detection.mask;
+      exposure_mask_width = detection.width;
+      exposure_mask_height = detection.height;
+    }
+  }
+
+  TRACE_EVT(run.session, "hdr_begin_frame %ux%u mask=%d",
+            run.guides.output_width, run.guides.output_height,
+            exposure_mask != nullptr ? 1 : 0);
   run.hdr->BeginFrame(*run.hdr_cmd, run.list, run.guides.dlss_output_color,
                       run.guides.output_width, run.guides.output_height,
-                      *run.settings, *run.codec);
+                      *run.settings, *run.codec, exposure_mask,
+                      exposure_mask_width, exposure_mask_height);
   return PipelineStatus::Ok;
 }
 

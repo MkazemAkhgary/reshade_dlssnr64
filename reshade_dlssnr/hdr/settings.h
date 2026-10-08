@@ -71,10 +71,12 @@ struct HdrSettings {
   float gain_min_log2 = -4.0f;
   float gain_max_log2 = 6.0f;
 
-  // Deprecated exposure heuristics retained only for config-file compatibility.
+  // Structure-mask exposure weighting. The mask becomes an additional normalized
+  // metering population for later frames; these values control when it is
+  // eligible and how much of the effective histogram it contributes.
   float skin_fraction_threshold = 0.01f;
   float skin_priority = 0.7f;
-  float depth_fallback_fraction = 0.20f;
+  float depth_fallback_fraction = 0.20f; // Reserved for depth-gated metering.
 };
 
 void LoadHdrSettings(HdrSettings& hdr);

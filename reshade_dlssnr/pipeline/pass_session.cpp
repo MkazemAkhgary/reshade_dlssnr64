@@ -1569,7 +1569,7 @@ static_assert(
 // backbuffer grade contributes one. Leaving the Release grade out sized the
 // ring for fifteen frames of work rather than sixteen, which is what
 // kMaxFramesInFlight promises.
-static_assert(kMaxDispatchesPerFrame >= kMaxPasses * 9 + 3 + 3,
+static_assert(kMaxDispatchesPerFrame >= kMaxPasses * 9 + 4 + 3,
               "kMaxDispatchesPerFrame no longer covers a frame at kMaxPasses "
               "with structure detection - raise it, and kDescriptorRingSize with it");
 

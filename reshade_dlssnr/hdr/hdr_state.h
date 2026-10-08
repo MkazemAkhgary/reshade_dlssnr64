@@ -1,6 +1,6 @@
-// HDR measurement state. Owns the histogram buffer, readback ring,
-// and global exposure / white-point adaptation. HDR exposure uses the full
-// scene histogram; depth and skin masks are deliberately not part of metering.
+// HDR measurement state. Owns the histogram buffer, readback ring, and
+// global exposure / white-point adaptation. When structure detection is
+// enabled, the persistent detection mask can bias metering for later passes.
 #pragma once
 
 #include <d3d12.h>
@@ -18,6 +18,7 @@ namespace reshade_dlssnr {
 
 enum class MeteringSource {
   FullFrame = 0,
+  SkinMaskPriority = 1,
 };
 
 struct ExposureParams {
@@ -85,7 +86,10 @@ class HdrState {
                   unsigned int width,
                   unsigned int height,
                   const Settings& settings,
-                  ComputeEngine& codec);
+                  ComputeEngine& codec,
+                  ID3D12Resource* exposure_mask = nullptr,
+                  unsigned int exposure_mask_width = 0,
+                  unsigned int exposure_mask_height = 0);
 
   bool EnqueueGainMapStatsReadback(ID3D12GraphicsCommandList* command_list,
                                    ID3D12Resource* stats);
