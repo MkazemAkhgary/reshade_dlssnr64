@@ -421,9 +421,11 @@ bool SkinDetect::Run(CommandContext& cmd,
   mask_constants.shader.Params1.w =
       static_cast<float>(static_cast<int>(settings.skin.target_mode));
 
-  ID3D12Resource* mask_srvs[kSrvCount] = {working_input_.Get(),
-                                          working_output_.Get(),
-                                          mask_[prev].Get()};
+  // ComputeEngine requires every SRV slot to contain a valid resource.
+  // SkinMaskDiff only consumes t0..t2, so repeat t2 in the unused t3 slot.
+  ID3D12Resource* mask_srvs[kSrvCount] = {
+      working_input_.Get(), working_output_.Get(), mask_[prev].Get(),
+      mask_[prev].Get()};
   ID3D12Resource* mask_uavs[kUavCount] = {mask_[cur].Get()};
   if (!codec.Dispatch("SkinMaskDiff", command_list, mask_constants, mask_srvs,
                       mask_uavs)) {
