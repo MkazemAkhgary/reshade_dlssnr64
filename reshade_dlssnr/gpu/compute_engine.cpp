@@ -462,6 +462,17 @@ bool ComputeEngine::Dispatch(
     return false;
   }
 
+  // Every descriptor slot is consumed unconditionally below. Reject a null
+  // resource before CreateShaderResourceView/CreateUnorderedAccessView can
+  // dereference it. Callers should repeat an otherwise-unused valid resource
+  // to satisfy the fixed descriptor-table contract.
+  for (uint32_t i = 0; i < kSrvCount; ++i) {
+    if (srvs[i] == nullptr) return false;
+  }
+  for (uint32_t i = 0; i < kUavCount; ++i) {
+    if (uavs[i] == nullptr) return false;
+  }
+
   ID3D12PipelineState* pso = nullptr;
 
   {
