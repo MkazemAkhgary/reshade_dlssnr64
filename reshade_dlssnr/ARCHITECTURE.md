@@ -35,6 +35,9 @@ reshade_dlssnr/
     bindings.hlsli                  Named aliases for cbuffer fields
     registers.hlsli                 Root-signature and register documentation
     color.hlsli                     Transfer functions, PQ, common decoding, gamut fitting
+    color_constants.h               Shared C++/HLSL colorimetry constants (reference whites, PQ peak, model gamut fit)
+    hdr_transfer.hlsli              BT.2446 forward/inverse, crosstalk, HDR/SDR carrier reconstruction
+    hdr_local_exposure.hlsli        Shared local-exposure base/detail operator for split and exposure map
     luma.hlsli                      BT.709/BT.2020 luma weights
     math.hlsli                      Shared scalar/vector math helpers
     grade.hlsli                     Linear and SDR grade transforms
@@ -45,14 +48,19 @@ reshade_dlssnr/
   shaders/compose/
     compose_model_output.hlsl       SDR compose with FSR upsampling
     compose_model_output_hdr.hlsl   HDR compose with FSR upsampling and gain-map reconstruction
+    compose_model_output_hdr_inverse.hlsl
+                                    HDR inverse-tone-map compose with FSR upsampling and effective-exposure reconstruction
   shaders/debug/
     debug_display.hlsl              Debug-view renderer
+    debug_hdr_roundtrip.hlsl        HDR round-trip, error, and local-exposure diagnostic renderer
   shaders/grade/
     apply_grade.hlsl                In-place color grade compute pass
   shaders/hdr/
     zero_histogram.hlsl             Clears the three-slice histogram buffer
     build_histogram.hlsl            Builds full/depth/skin log2-luma histograms
     gain_map_split.hlsl             Builds the full-resolution SDR carrier + log2 gain map
+    build_effective_local_exposure.hlsl
+                                    Builds the full-resolution local SDR exposure scale for HDR inverse compose
     zero_gain_map_stats.hlsl        Clears gain-map diagnostic counters
     build_gain_map_stats.hlsl       Builds gain-map diagnostic statistics
   shaders/model/
