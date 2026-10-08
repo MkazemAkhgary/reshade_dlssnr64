@@ -12,6 +12,7 @@
 #define kMaskAlpha     shader.Params1.z
 #define kTargetMode     shader.Params1.w
 
+// t0 is the exact input image submitted to the model; t1 is its model output.
 Texture2D<float4> gInput    : register(t0);
 Texture2D<float4> gOutput   : register(t1);
 Texture2D<float>  gPrevMask : register(t2);

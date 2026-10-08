@@ -423,8 +423,11 @@ bool SkinDetect::Run(CommandContext& cmd,
 
   // ComputeEngine requires every SRV slot to contain a valid resource.
   // SkinMaskDiff only consumes t0..t2, so repeat t2 in the unused t3 slot.
+  // Compare the exact model input with the model output. `working_input_` is
+  // only the HDR carrier intermediate (and is unused in the SDR path), so it
+  // is not a valid baseline for detecting model edits.
   ID3D12Resource* mask_srvs[kSrvCount] = {
-      working_input_.Get(), working_output_.Get(), mask_[prev].Get(),
+      prepared_input_.Get(), working_output_.Get(), mask_[prev].Get(),
       mask_[prev].Get()};
   ID3D12Resource* mask_uavs[kUavCount] = {mask_[cur].Get()};
   if (!codec.Dispatch("SkinMaskDiff", command_list, mask_constants, mask_srvs,
