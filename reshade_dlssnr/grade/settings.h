@@ -22,8 +22,7 @@ enum class GradeLumaMode : int {
 
 enum class GradeChromaMode : int {
   Saturation = 0,  // blend toward luma; uniform
-  Vibrance = 1,    // muted colors move more
-  ChromaGain = 2,  // scale chroma only; luma fixed
+  Vibrance = 1,    // smart saturation; muted colors move more
 };
 
 struct GradeSettings {

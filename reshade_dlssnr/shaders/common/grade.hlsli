@@ -237,122 +237,59 @@ float3 GradeChromaSaturationInv(float3 c, float a)
     return y + (c - y) / g;
 }
 
-// Vibrance.
+// Vibrance / smart saturation.
 //
-// Forward gain is:
-//
-//   g = 1 + a * (1 - 0.5*s)
-//
-// where s is the input RGB spread.
-//
-// The original inverse was wrong because it recomputed g from the already
-// modified spread. Since outputSpread = g * inputSpread, we can recover the
-// original gain exactly.
-//
-// For inputSpread < 1:
-//   g^2 - (1+a)g + 0.5*a*outputSpread = 0
-//
-// For inputSpread >= 1:
-//   g = 1 + 0.5*a
-//
+// Chroma gain is based on chroma magnitude relative to luminance, then
+// progressively falls to zero as the colour is already saturated.  This makes
+// Vibrance materially different from uniform Saturation while keeping the
+// transform invertible for the inverse-tone-map path.
 
-float GradeVibranceGain(float spread, float a)
+float GradeVibranceSaturation(float3 c)
 {
-    return 1.0 + a * (1.0 - 0.5 * saturate(spread));
+    float y = dot(c, kL709);
+    float chroma = length(c - y.xxx);
+    return chroma / max(abs(y), kGradeEps);
+}
+
+float GradeVibranceGain(float saturation, float a)
+{
+    float muted = 1.0 - saturate(saturation);
+    return 1.0 + a * muted * muted;
 }
 
 float3 GradeChromaVibranceFwd(float3 c, float a)
 {
     float y = dot(c, kL709);
-
-    float spread =
-        max(max(c.r, c.g), c.b) -
-        min(min(c.r, c.g), c.b);
-
-    float g = GradeVibranceGain(spread, a);
-
+    float saturation = GradeVibranceSaturation(c);
+    float g = GradeVibranceGain(saturation, a);
     return y + (c - y) * g;
 }
 
 float3 GradeChromaVibranceInv(float3 c, float a)
 {
     float y = dot(c, kL709);
+    float output_saturation = GradeVibranceSaturation(c);
 
-    float outputSpread =
-        max(max(c.r, c.g), c.b) -
-        min(min(c.r, c.g), c.b);
+    // Once the input is at or above the smart-saturation knee, the forward
+    // gain is exactly 1, so no solve is required.
+    if (output_saturation >= 1.0)
+        return c;
 
-    float flatGain = 1.0 + 0.5 * a;
-
-    float g;
-
-    if (outputSpread >= flatGain)
+    // Solve s_out = s * (1 + a * (1 - s)^2) for the original saturation s.
+    float s = saturate(output_saturation);
+    [unroll]
+    for (int i = 0; i < 6; ++i)
     {
-        // Corresponds to input spread >= 1.
-        g = flatGain;
-    }
-    else
-    {
-        float disc =
-            (1.0 + a) * (1.0 + a) -
-            2.0 * a * outputSpread;
-
-        disc = max(disc, 0.0);
-
-        // The positive/larger root is the forward branch.
-        g = 0.5 * ((1.0 + a) + sqrt(disc));
+        float muted = 1.0 - s;
+        float gain = 1.0 + a * muted * muted;
+        float f = s * gain - output_saturation;
+        float df = 1.0 + a * (1.0 - 4.0 * s + 3.0 * s * s);
+        s -= f / max(abs(df), kGradeEps) * sign(df);
+        s = saturate(s);
     }
 
-    g = max(g, kGradeEps);
-
+    float g = max(GradeVibranceGain(s, a), kGradeEps);
     return y + (c - y) / g;
-}
-
-// Chroma Gain.
-//
-// This uses a YCbCr-style decomposition whose coefficients are derived from
-// the same kLuma709 weights used everywhere else. Therefore changing chroma
-// cannot change luma except for normal floating-point rounding.
-//
-// Mathematically this is equivalent to uniformly scaling the chroma plane,
-// which is the same operation as Saturation. Keeping the explicit YCbCr form
-// here makes that property obvious and avoids the previous rounded-coefficient
-// luma drift.
-
-float3 GradeChromaGainFwd(float3 c, float a)
-{
-    float y = dot(c, kL709);
-    float g = 1.0 + a;
-
-    float cb = (c.b - y) / kCbScale;
-    float cr = (c.r - y) / kCrScale;
-
-    cb *= g;
-    cr *= g;
-
-    return float3(
-        y + kCrScale * cr,
-        y - kGCb * cb - kGCr * cr,
-        y + kCbScale * cb
-    );
-}
-
-float3 GradeChromaGainInv(float3 c, float a)
-{
-    float y = dot(c, kL709);
-    float g = max(1.0 + a, kGradeEps);
-
-    float cb = (c.b - y) / kCbScale;
-    float cr = (c.r - y) / kCrScale;
-
-    cb /= g;
-    cr /= g;
-
-    return float3(
-        y + kCrScale * cr,
-        y - kGCb * cb - kGCr * cr,
-        y + kCbScale * cb
-    );
 }
 
 float3 GradeChromaFwd(float3 c, float a, int mode)
@@ -362,10 +299,8 @@ float3 GradeChromaFwd(float3 c, float a, int mode)
     {
         if (mode == 0)
             result = GradeChromaSaturationFwd(c, a);
-        else if (mode == 1)
-            result = GradeChromaVibranceFwd(c, a);
         else
-            result = GradeChromaGainFwd(c, a);
+            result = GradeChromaVibranceFwd(c, a);
     }
     return result;
 }
@@ -377,10 +312,8 @@ float3 GradeChromaInv(float3 c, float a, int mode)
     {
         if (mode == 0)
             result = GradeChromaSaturationInv(c, a);
-        else if (mode == 1)
-            result = GradeChromaVibranceInv(c, a);
         else
-            result = GradeChromaGainInv(c, a);
+            result = GradeChromaVibranceInv(c, a);
     }
     return result;
 }

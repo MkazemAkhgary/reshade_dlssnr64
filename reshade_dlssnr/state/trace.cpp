@@ -67,8 +67,7 @@ const char* ChromaModeText(GradeChromaMode mode) {
   switch (mode) {
     case GradeChromaMode::Saturation: return "Saturation";
     case GradeChromaMode::Vibrance: return "Vibrance";
-    case GradeChromaMode::ChromaGain:
-    default: return "ChromaGain";
+    default: return "Saturation";
   }
 }
 

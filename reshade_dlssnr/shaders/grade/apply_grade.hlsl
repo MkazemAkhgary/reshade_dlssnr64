@@ -30,7 +30,14 @@ float3 DecodeSource(float3 c)
 float3 EncodeSource(float3 lin)
 {
     int fmt = (int)(kGradeFormat + 0.5);
-    float3 result = saturate(LinearToSrgbExt(max(lin, 0.0)));
+    float3 safe = max(lin, 0.0);
+    const float peak = max(safe.r, max(safe.g, safe.b));
+    // Model-input SDR is gamut limited, but clipping each channel independently
+    // changes hue/chroma. Scale the complete RGB vector when it exceeds the
+    // boundary so its chromaticity remains unchanged.
+    if (peak > 1.0)
+        safe *= 1.0 / peak;
+    float3 result = LinearToSrgbExt(safe);
 
     if (fmt == 1)
         result = max(lin, 0.0) *

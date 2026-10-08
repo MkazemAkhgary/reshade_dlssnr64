@@ -19,15 +19,12 @@ const char* const kLumaModeTips[] = {
     "negative down by the room below it.",
     "A parabolic lift, zero at both ends and strongest at mid grey."};
 
-const char* const kChromaModeItems[] = {"Saturation", "Vibrance",
-                                        "Chroma Gain"};
-constexpr int kChromaModeCount = 3;
+const char* const kChromaModeItems[] = {"Saturation", "Vibrance"};
+constexpr int kChromaModeCount = 2;
 const char* const kChromaModeTips[] = {
     "Blend toward luma, so every pixel moves by the same factor.",
-    "Weight the change by how muted a pixel already is: colours near grey "
-    "move at full strength, vivid ones at half.",
-    "Scale the chroma channels only, leaving luminance exactly where it "
-    "was."};
+    "Smart saturation: strongly boost muted colours while progressively "
+    "reducing the effect on colours that are already saturated."};
 
 }  // namespace
 
