@@ -744,9 +744,8 @@ PipelineStatus RunHdrBeginFrame(PassRun& run) {
           ? run.skin_detect->GetOutput().mask
           : nullptr;
   run.hdr->BeginFrame(*run.hdr_cmd, run.list, run.guides.dlss_output_color,
-                      run.guides.output_width, run.guides.output_height,
-                      depth, run.guides.depth_inverted, mask,
-                      *run.settings, *run.codec);
+                      run.guides.output_width, run.guides.output_height, depth,
+                      run.guides.depth_inverted, mask, *run.settings, *run.codec);
   return PipelineStatus::Ok;
 }
 

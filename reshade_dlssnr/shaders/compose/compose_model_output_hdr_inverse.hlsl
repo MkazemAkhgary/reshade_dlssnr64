@@ -86,7 +86,7 @@ float3 EncodeHdr(float3 lin)
 // target. The model exposure is recovered from the actual packed carrier, so it
 // includes the same global + local exposure that created the model input.
 float3 ComposeHdrInverse(float3 sdr_base, float gain,
-                         float3 low_out, float model_exposure)
+                         float3 low_in, float3 low_out, float model_exposure)
 {
     float3 low_out_lin = max(SrgbToLinearExt(low_out), 0.0);
     if (kGradeEnabled > 0.5)
@@ -97,23 +97,26 @@ float3 ComposeHdrInverse(float3 sdr_base, float gain,
     const float base_luma = dot(max(model_sdr_base, 0.0), kL);
     const float3 hdr_src = ReconstructHdr(sdr_base, gain);
 
-    // Reconstruct the actual HDR image that would produce the model output
-    // under the same global + local exposure and BT.2446 transform used by
-    // GainMapSplit. This is the key invariant of the inverse mode: at the
-    // default settings, composing this target and converting it back through
-    // the same HDR->SDR path reproduces the model output.
+    // Reconstruct both model-domain endpoints in scene-referred HDR using the
+    // exact exposure that created the model input. The edit is the model
+    // output minus model input, not model output minus the original HDR. That
+    // distinction preserves high-frequency source detail when Working Scale
+    // is below 1.0 while still transferring the model's scene-referred edit.
     const float effective_peak_nits = max(
         kSdrReferenceWhiteNits, max(kEffectiveSceneWhiteNits, 0.01));
+    const float3 low_in_linear = max(SrgbToLinearExt(low_in), 0.0);
+    const float3 hdr_model_in = HdrFromSdrCarrier(
+        low_in_linear, model_exposure, effective_peak_nits, true);
     const float3 hdr_model_out = HdrFromSdrCarrier(
         low_out_lin, model_exposure, effective_peak_nits, true);
 
-    // Shape the target difference rather than the difference between model
-    // output and model input. With the default edit settings (strength 1,
-    // gamma 1, protections off, chroma 1), this reconstructs hdr_model_out
-    // exactly instead of shrinking the model edit back toward the source HDR.
-    const float3 hdr_delta = hdr_model_out - hdr_src;
-    const float3 delta_scale = max(
-        max(abs(hdr_model_out), abs(hdr_src)), 0.001.xxx);
+    // Normalize the scene-referred model edit by the model-input HDR signal.
+    // Exposure has already been removed from both endpoints, so the edit does
+    // not shrink merely because the model had to be strongly exposed. The
+    // delta is then applied to the original full-resolution HDR, retaining its
+    // detail that the lower-resolution model could not represent.
+    const float3 hdr_delta = hdr_model_out - hdr_model_in;
+    const float3 delta_scale = max(abs(hdr_model_in), 0.001.xxx);
     const float3 normalized_delta = hdr_delta / delta_scale;
     const float3 shaped = ShapeResidual(normalized_delta, base_luma);
     const float3 hdr_edited = max(hdr_src + shaped * delta_scale, 0.0);
@@ -166,7 +169,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
             ? max(map_exposure, 1e-6)
             : fallback_exposure;
     const float3 final_lin = ComposeHdrInverse(
-        sdr_base, packed.a, low_out, model_exposure);
+        sdr_base, packed.a, low_in, low_out, model_exposure);
     const float3 final_out = EncodeHdr(final_lin);
 
     // Packed resources are linear gain-map data in the 100-nit normalized domain;
