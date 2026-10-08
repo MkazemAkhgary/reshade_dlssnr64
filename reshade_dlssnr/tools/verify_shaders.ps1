@@ -26,8 +26,7 @@ if ([string]::IsNullOrWhiteSpace($FxcPath) -or -not (Test-Path $FxcPath)) {
 $roots = Get-ChildItem -Path (Join-Path $ProjectDir "shaders") -Filter *.hlsl -Recurse -File | Sort-Object FullName
 $verifyTemp = Join-Path ([System.IO.Path]::GetTempPath()) ("reshade_dlssnr_fxc_" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path $verifyTemp | Out-Null
-$failedShader = $null
-$failedExitCode = 0
+$failedShaders = @()
 try {
   $index = 0
   foreach ($shader in $roots) {
@@ -53,24 +52,27 @@ try {
     }
 
     if ($exitCode -ne 0) {
-      $failedShader = $shader.FullName
-      $failedExitCode = $exitCode
-      break
+      $failedShaders += [pscustomobject]@{
+        Path = $shader.FullName
+        ExitCode = $exitCode
+      }
+      Write-Host ("FAILED   [{0}/{1}] {2} (FXC exit code: {3})" -f $index, $roots.Count, $shader.FullName, $exitCode)
+    } else {
+      Write-Host ("VERIFIED [{0}/{1}] {2}" -f $index, $roots.Count, $shader.FullName)
     }
-
-    Write-Host ("VERIFIED [{0}/{1}] {2}" -f $index, $roots.Count, $shader.FullName)
-  }
-  if ($null -eq $failedShader) {
-    Write-Host "============================================================"
-    Write-Host ("All {0} shaders verified successfully." -f $roots.Count)
   }
 } finally {
   Remove-Item -Recurse -Force -LiteralPath $verifyTemp -ErrorAction SilentlyContinue
 }
 
-if ($null -ne $failedShader) {
-  Write-Host "============================================================"
-  Write-Host ("SHADER VERIFICATION FAILED: {0}" -f $failedShader)
-  Write-Host ("FXC EXIT CODE: {0}" -f $failedExitCode)
-  exit 1
+Write-Host "============================================================"
+if ($failedShaders.Count -eq 0) {
+  Write-Host ("All {0} shaders verified successfully." -f $roots.Count)
+  exit 0
 }
+
+Write-Host ("SHADER VERIFICATION FAILED: {0} of {1} shaders failed." -f $failedShaders.Count, $roots.Count)
+foreach ($failure in $failedShaders) {
+  Write-Host ("  FXC exit code {0}: {1}" -f $failure.ExitCode, $failure.Path)
+}
+exit 1
