@@ -129,8 +129,10 @@ struct DetectionExposureValues {
 };
 
 DetectionExposureValues ResolveDetectionExposure(
-    SkinDetect* self, HdrState* hdr, const SkinSettings& skin,
-    const Settings& settings) {
+    HdrState* hdr, const SkinSettings& skin, const Settings& settings,
+    ExposureTracker& exposure_tracker, uint64_t& last_measurement_generation,
+    std::chrono::steady_clock::time_point& last_exposure_time,
+    bool& have_exposure_time) {
   DetectionExposureValues out;
   if (hdr == nullptr) return out;
 
@@ -150,7 +152,7 @@ DetectionExposureValues ResolveDetectionExposure(
 
   if (snapshot.has_histogram && snapshot.samples != 0 &&
       snapshot.measurement_generation != 0 &&
-      self->last_measurement_generation_ != snapshot.measurement_generation) {
+      last_measurement_generation != snapshot.measurement_generation) {
     ExposureParams params;
     params.midtone = skin.exposure_midtone;
     params.white_percentile = skin.exposure_auto_high_percent;
@@ -167,20 +169,20 @@ DetectionExposureValues ResolveDetectionExposure(
         static_cast<uint32_t>(std::max(skin.exposure_measure_interval, 1));
 
     const auto now = std::chrono::steady_clock::now();
-    const float dt = self->have_exposure_time_
-        ? std::chrono::duration<float>(now - self->last_exposure_time_).count()
+    const float dt = have_exposure_time
+        ? std::chrono::duration<float>(now - last_exposure_time).count()
         : 1.0f / 60.0f;
-    self->last_exposure_time_ = now;
-    self->have_exposure_time_ = true;
-    self->exposure_tracker_.Update(snapshot.histogram, params, dt);
-    self->last_measurement_generation_ = snapshot.measurement_generation;
+    last_exposure_time = now;
+    have_exposure_time = true;
+    exposure_tracker.Update(snapshot.histogram, params, dt);
+    last_measurement_generation = snapshot.measurement_generation;
   }
 
-  out.exposure = self->exposure_tracker_.have_measurement
-      ? self->exposure_tracker_.exposure
+  out.exposure = exposure_tracker.have_measurement
+      ? exposure_tracker.exposure
       : snapshot.exposure;
-  out.scene_white = self->exposure_tracker_.have_measurement
-      ? self->exposure_tracker_.scene_white
+  out.scene_white = exposure_tracker.have_measurement
+      ? exposure_tracker.scene_white
       : snapshot.scene_white;
   out.midtone = skin.exposure_midtone;
   if (skin.exposure_mode == DetectionExposureMode::AutoLocal) {
@@ -266,8 +268,10 @@ bool SkinDetect::Run(CommandContext& cmd,
   // 1. Build the model-facing input at the detection working scale.
   const bool hdr_active = hdr != nullptr && hdr->Enabled() &&
                           hdr->ResolvedFormat() != HdrFormat::Sdr;
-  const DetectionExposureValues exposure =
-      ResolveDetectionExposure(this, hdr, settings.skin, settings);
+  const DetectionExposureValues exposure = ResolveDetectionExposure(
+      hdr, settings.skin, settings, exposure_tracker_,
+      last_measurement_generation_, last_exposure_time_,
+      have_exposure_time_);
 
   ComputeConstants constants = {};
   constants.Width = work_w;

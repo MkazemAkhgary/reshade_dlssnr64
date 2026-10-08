@@ -15,6 +15,7 @@
 #include <unordered_set>
 
 #include "compute_constants.h"
+#include "project_constants.h"
 
 namespace reshade_dlssnr {
 

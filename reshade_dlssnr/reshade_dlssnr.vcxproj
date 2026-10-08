@@ -123,6 +123,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="project_constants.h" />
     <ClCompile Include="addon.cpp" />
     <ClCompile Include="generated\shader_sources.cpp" />
     <ClCompile Include="generated\shader_bytecode.cpp" />

@@ -9,10 +9,9 @@
 #include "grade/settings.h"
 #include "hdr/settings.h"
 #include "skin/settings.h"
+#include "project_constants.h"
 
 namespace reshade_dlssnr {
-
-constexpr uint32_t kMaxPasses = 3;
 
 // Storage capacity for PassSettings::params and ::inherit_params. Kept
 // larger than the current table on purpose; settings.cpp static_asserts
