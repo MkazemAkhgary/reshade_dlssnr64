@@ -7,6 +7,8 @@
 #define kContentH      shader.Params0.z
 #define kResourceW     shader.Params0.w
 #define kResourceH     shader.Params1.x
+#define kGameExposure  shader.Params1.y
+#define kGameExposureAvailable shader.Params1.z
 
 Texture2D<float4> gSource : register(t0);
 RWTexture2D<float4> gOutput : register(u0);
@@ -37,6 +39,15 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         // Diagnostic-only mapping: raw log2 gain [-4, +6] -> [0, 1].
         float g = saturate((c.a + 4.0) / 10.0);
         rgb = g.xxx;
+    } else if (mode == 9) {
+        // Exposure is shown in stops; magenta marks unavailable data.
+        if (kGameExposureAvailable < 0.5) {
+            rgb = float3(1.0, 0.0, 1.0);
+        } else {
+            float stops = log2(max(kGameExposure, 1.0e-6));
+            float t = saturate((stops + 4.0) / 8.0);
+            rgb = t.xxx;
+        }
     } else {
         rgb = c.rgb;
     }

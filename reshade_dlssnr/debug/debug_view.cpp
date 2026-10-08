@@ -143,6 +143,10 @@ const DebugViewDef kDebugViews[] = {
      "Local exposure factor in stops, mapped so 0 stops is mid-gray, -2 stops "
      "is black, and +2 stops is white.",
      DebugDisplayMode::HdrLocalExposure, SelectSource},
+    {"Game Exposure",
+     "Game NGX exposure in stops: 1.0x (0 stops) is mid-gray; brighter/darker "
+     "values move toward white/black. Magenta means no valid value was read.",
+     DebugDisplayMode::GameExposure, SelectSource},
     {nullptr, nullptr, DebugDisplayMode::Color, nullptr},
 };
 
@@ -207,6 +211,8 @@ bool RenderDebugView(
       static_cast<unsigned int>(source_desc.Width));
   constants.shader.Params1.x = static_cast<float>(
       static_cast<unsigned int>(source_desc.Height));
+  constants.shader.Params1.y = snapshot.game_exposure;
+  constants.shader.Params1.z = snapshot.game_exposure_available ? 1.0f : 0.0f;
 
   if (hdr_diag) {
     constants.hdr.Format = hdr->format;

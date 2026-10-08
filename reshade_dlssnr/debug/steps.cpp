@@ -19,6 +19,11 @@ PipelineStatus PassSession::StepRenderDebugView(PassRun& run) {
                      : run.backbuffer;
   debug.source_width = run.width;
   debug.source_height = run.height;
+  if (run.hdr != nullptr) {
+    const HdrSnapshot hdr_snapshot = run.hdr->GetSnapshot();
+    debug.game_exposure_available = hdr_snapshot.game_exposure_available;
+    debug.game_exposure = hdr_snapshot.game_exposure;
+  }
   if (run.hdr_uniforms_ready && run.hdr != nullptr &&
       run.hdr->ResolvedFormat() != HdrFormat::Sdr) {
     debug.packed_hdr_sdr = self->resources_.GetPackedOutput();

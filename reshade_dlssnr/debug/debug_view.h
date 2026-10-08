@@ -28,6 +28,10 @@ struct DebugSnapshot {
   unsigned int source_width = 0;
   unsigned int source_height = 0;
 
+  // Latest asynchronously read game exposure value.
+  bool game_exposure_available = false;
+  float game_exposure = 1.0f;
+
   // Model input after HDR normalization and optional resize — what the
   // model actually sees.
   // Full-resolution HDR gain-map split. Both selectors point at the packed
@@ -85,6 +89,7 @@ enum class DebugDisplayMode : uint32_t {
   HdrRoundtripDiagnostic = 6,
   HdrRoundtripError = 7,
   HdrLocalExposure = 8,
+  GameExposure = 9,
 };
 
 struct DebugViewDef {
