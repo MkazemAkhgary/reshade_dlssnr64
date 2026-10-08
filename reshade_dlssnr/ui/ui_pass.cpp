@@ -277,13 +277,14 @@ void DrawResidualSection(uint32_t pass_index, Settings& settings,
 
   {
     static const char* const kHdrComposeLabels[] = {
-        "Ratio (Current)", "Inverse Tone Map (Experimental)"};
+        "Ratio (Current)",
+        "Inverse Tone Map (Scene-Referred)"};
     static const char* const kHdrComposeTooltips[] = {
         "Current HDR compose: transfers the model edit as a per-channel ratio.",
-        "Experimental HDR compose: reconstructs HDR from the model input/output using the same BT.2446 curve, then transfers the HDR edit."};
+        "Reconstructs the model output in scene-referred HDR and blends that target onto the original HDR."};
     int mode = static_cast<int>(pass.residual.hdr_compose_mode);
     if (DrawComboRow("hdr_compose_mode", "HDR Composition",
-                     "Select how the model edit is carried back into HDR. The second method is experimental and leaves the current method available for comparison.",
+                     "Select how the model edit is carried back into HDR. Inverse Tone Map reconstructs the model output in the same scene-referred HDR domain used by the input transform.",
                      &mode, kHdrComposeLabels, kHdrComposeTooltips, 2)) {
       pass.residual.hdr_compose_mode = static_cast<HdrComposeMode>(mode);
       changed = true;

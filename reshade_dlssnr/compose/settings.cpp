@@ -52,6 +52,7 @@ void LoadResidual(const std::string& prefix, ResidualSettings& residual) {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             (prefix + "HdrComposeMode").c_str(),
                             hdr_compose_mode);
+  if (hdr_compose_mode == 2) hdr_compose_mode = 1;
   if (hdr_compose_mode < 0 || hdr_compose_mode > 1) hdr_compose_mode = 0;
   residual.hdr_compose_mode = static_cast<HdrComposeMode>(hdr_compose_mode);
 }

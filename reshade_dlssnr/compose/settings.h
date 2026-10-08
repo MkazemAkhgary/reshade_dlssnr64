@@ -22,8 +22,9 @@ struct ResidualSettings {
   float ratio_darken = 1.0f / 16.0f;
 
   // HDR-only compose method. Ratio preserves the existing behavior;
-  // InverseToneMap reconstructs the model edit in HDR from the same BT.2446
-  // transfer used by the gain-map split.
+  // InverseToneMap reconstructs the model output in scene-referred HDR from
+  // the same BT.2446 transfer used by the gain-map split and blends that
+  // target back onto the original HDR.
   HdrComposeMode hdr_compose_mode = HdrComposeMode::Ratio;
 };
 

@@ -14,11 +14,6 @@ Texture2D<float4>   gLowEnhanced : register(t2);
 RWTexture2D<float4> gOutput      : register(u0);
 SamplerState        s0           : register(s0);
 
-#define kLocalExposureStrength hdr.LocalExposure.x
-#define kLocalMaxBrighten      hdr.LocalExposure.y
-#define kLocalMaxDarken        hdr.LocalExposure.z
-#define kLocalExposureMidtone  hdr.LocalExposure.w
-
 #include "common/fsr.hlsli"
 
 float3 DecodePackedHdr(float4 packed)
@@ -42,58 +37,30 @@ float3 ReconstructHdr(float3 sdr_base, float gain)
     return max(sdr_base, 0.0) * scale;
 }
 
-float SamplePackedHdrLuma(float2 uv)
+float CombinedExposureFromPacked(float3 sdr_base, float3 hdr_src,
+                                   float effective_peak_nits)
 {
-    float4 packed = gOriginal.SampleLevel(s0, saturate(uv), 0);
-    float3 hdr = ReconstructHdr(packed.rgb, packed.a);
-    return max(dot(max(hdr, 0.0), HdrLumaWeights()), 1e-8);
-}
+    // GainMapSplit applies the global and local exposure before BT.2446 and
+    // stores the resulting SDR carrier. Recover that exact combined factor
+    // from the carrier itself rather than re-running the local-exposure
+    // estimator at compose time.
+    const float3 pre_sdr = HdrPreDesaturate(max(sdr_base, 0.0), saturate(kCrosstalk));
+    const float y_sdr = max(dot(pre_sdr, HdrLumaWeights()), 0.0);
+    if (y_sdr <= 1e-8)
+        return max(kExposure, 1e-6);
 
-float LocalBaseLogLumaFromPacked(float2 uv, float center_log2)
-{
-    uint w = 0;
-    uint h = 0;
-    gOriginal.GetDimensions(w, h);
-    const float min_dim = min((float)w, (float)h);
-    const float radius = max(1.0, min_dim * 0.01);
-    const float2 texel = 1.0 / float2(max(w, 1u), max(h, 1u));
-    const float2 r = texel * radius;
+    const float y_curve = HdrBt2446Inverse(y_sdr * 100.0);
+    const float y_exposed =
+        y_curve * max(effective_peak_nits, kSdrReferenceWhiteNits) /
+        kPqPeakNits;
 
-    float weighted = center_log2 * 4.0;
-    float weight = 4.0;
+    const float3 pre_hdr =
+        HdrPreDesaturate(max(hdr_src, 0.0), saturate(kCrosstalk));
+    const float y_hdr = max(dot(pre_hdr, HdrLumaWeights()), 0.0);
+    if (y_hdr <= 1e-8)
+        return max(kExposure, 1e-6);
 
-    float l = log2(SamplePackedHdrLuma(uv + float2(-r.x, 0.0)));
-    float wgt = 1.0 / (1.0 + 4.0 * abs(l - center_log2));
-    weighted += l * wgt; weight += wgt;
-    l = log2(SamplePackedHdrLuma(uv + float2(r.x, 0.0)));
-    wgt = 1.0 / (1.0 + 4.0 * abs(l - center_log2));
-    weighted += l * wgt; weight += wgt;
-    l = log2(SamplePackedHdrLuma(uv + float2(0.0, -r.y)));
-    wgt = 1.0 / (1.0 + 4.0 * abs(l - center_log2));
-    weighted += l * wgt; weight += wgt;
-    l = log2(SamplePackedHdrLuma(uv + float2(0.0, r.y)));
-    wgt = 1.0 / (1.0 + 4.0 * abs(l - center_log2));
-    weighted += l * wgt; weight += wgt;
-
-    return weighted / max(weight, 1e-6);
-}
-
-float LocalExposureFactorFromPacked(float2 uv, float raw_luma)
-{
-    if (kLocalExposureStrength <= 0.0 || raw_luma <= 1e-8)
-        return 1.0;
-
-    const float center_log2 = log2(raw_luma);
-    const float local_base_log2 = LocalBaseLogLumaFromPacked(uv, center_log2);
-    const float target_base_log2 =
-        log2(max(kLocalExposureMidtone, 1e-6)) - log2(max(kExposure, 1e-6));
-    const float adjusted_base_log2 = lerp(
-        local_base_log2, target_base_log2,
-        saturate(kLocalExposureStrength));
-    const float stops = clamp(
-        adjusted_base_log2 - local_base_log2,
-        -kLocalMaxDarken, kLocalMaxBrighten);
-    return exp2(stops);
+    return max(y_exposed / y_hdr, 1e-6);
 }
 
 float3 EncodeHdr(float3 lin)
@@ -111,36 +78,40 @@ float3 EncodeHdr(float3 lin)
     return result;
 }
 
-// `kExposure` is retained in the uniform contract because the exposure EMA
-// feeds the effective scene white on the CPU. The split and compose never
-// multiply the image by it a second time.
+// Inverse-tone-map shader reconstructs the model output as a scene-referred HDR
+// target. The model exposure is recovered from the actual packed carrier, so it
+// includes the same global + local exposure that created the model input.
 float3 ComposeHdrInverse(float3 sdr_base, float gain,
-                         float3 low_in, float3 low_out,
-                         float local_exposure)
+                         float3 low_out)
 {
-    float3 low_in_lin = max(SrgbToLinearExt(low_in), 0.0);
     float3 low_out_lin = max(SrgbToLinearExt(low_out), 0.0);
-    if (kGradeEnabled > 0.5) {
-        low_in_lin = max(GradeLinearInv(low_in_lin), 0.0);
+    if (kGradeEnabled > 0.5)
         low_out_lin = max(GradeLinearInv(low_out_lin), 0.0);
-    }
 
     const float3 model_sdr_base = GamutFitPreserveChroma(sdr_base);
     const float3 kL = HdrLumaWeights();
     const float base_luma = dot(max(model_sdr_base, 0.0), kL);
     const float3 hdr_src = ReconstructHdr(sdr_base, gain);
 
+    // Reconstruct the actual HDR image that would produce the model output
+    // under the same global + local exposure and BT.2446 transform used by
+    // GainMapSplit. This is the key invariant of the inverse mode: at the
+    // default settings, composing this target and converting it back through
+    // the same HDR->SDR path reproduces the model output.
     const float effective_peak_nits = max(
         kSdrReferenceWhiteNits, max(kEffectiveSceneWhiteNits, 0.01));
-    const float model_exposure = max(kExposure * local_exposure, 1e-6);
-    const float3 hdr_model_in = HdrFromSdrCarrier(
-        low_in_lin, model_exposure, effective_peak_nits);
+    const float model_exposure = CombinedExposureFromPacked(
+        sdr_base, hdr_src, effective_peak_nits);
     const float3 hdr_model_out = HdrFromSdrCarrier(
-        low_out_lin, model_exposure, effective_peak_nits);
-    const float3 hdr_delta = hdr_model_out - hdr_model_in;
+        low_out_lin, model_exposure, effective_peak_nits, true);
 
+    // Shape the target difference rather than the difference between model
+    // output and model input. With the default edit settings (strength 1,
+    // gamma 1, protections off, chroma 1), this reconstructs hdr_model_out
+    // exactly instead of shrinking the model edit back toward the source HDR.
+    const float3 hdr_delta = hdr_model_out - hdr_src;
     const float3 delta_scale = max(
-        max(abs(hdr_model_in), abs(hdr_src)), 0.001.xxx);
+        max(abs(hdr_model_out), abs(hdr_src)), 0.001.xxx);
     const float3 normalized_delta = hdr_delta / delta_scale;
     const float3 shaped = ShapeResidual(normalized_delta, base_luma);
     const float3 hdr_edited = max(hdr_src + shaped * delta_scale, 0.0);
@@ -183,12 +154,8 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     }
 
     const float3 sdr_base = DecodePackedHdr(packed);
-    const float3 hdr_src = ReconstructHdr(sdr_base, packed.a);
-    const float hdr_src_luma = dot(max(hdr_src, 0.0), HdrLumaWeights());
-    const float local_exposure =
-        LocalExposureFactorFromPacked(uv, max(hdr_src_luma, 0.0));
     const float3 final_lin = ComposeHdrInverse(
-        sdr_base, packed.a, low_in, low_out, local_exposure);
+        sdr_base, packed.a, low_out);
     const float3 final_out = EncodeHdr(final_lin);
 
     // Packed resources are linear gain-map data in the 100-nit normalized domain;

@@ -16,6 +16,7 @@
 #include "gpu/command_context.h"
 #include "gpu/compute_engine.h"
 #include "gpu/pass_resources.h"
+#include "model/model_input.h"
 
 namespace reshade_dlssnr {
 
@@ -77,6 +78,9 @@ enum class DebugDisplayMode : uint32_t {
   Mask = 3,    // replicate the red channel (skin mask)
   PackedSdr = 4, // RGB from packed gain-map texture
   GainMap = 5,   // alpha mapped from [-4,6] for display
+  HdrRoundtripDiagnostic = 6,
+  HdrRoundtripError = 7,
+  HdrLocalExposure = 8,
 };
 
 struct DebugViewDef {
@@ -105,6 +109,7 @@ bool RenderDebugView(
     ComputeEngine& codec,
     ID3D12GraphicsCommandList* command_list,
     const DebugSnapshot& snapshot,
+    const model_pipeline::HdrUniforms* hdr,
     int debug_view,
     ID3D12Resource* target,
     unsigned int target_width,

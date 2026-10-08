@@ -330,6 +330,7 @@ bool PassSession::MaybeRenderDebug(
     ID3D12GraphicsCommandList* command_list,
     FrameDebugContext& frame_debug,
     const DebugSnapshot& snapshot,
+    const model_pipeline::HdrUniforms* hdr,
     unsigned int width,
     unsigned int height,
     DXGI_FORMAT format) {
@@ -392,6 +393,7 @@ bool PassSession::MaybeRenderDebug(
                             D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
   if (!RenderDebugView(command_, codec, command_list, snapshot,
+                       hdr,
                        settings.debug_view, frame_debug.output.Get(),
                        width, height)) {
     return false;

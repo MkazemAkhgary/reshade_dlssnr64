@@ -85,7 +85,7 @@ bool ComposeOutput(
     constants.hdr.GainMaxLog2 = hdr->gain_max_log2;
     constants.hdr.EffectiveSceneWhiteNits = hdr->effective_scene_white_nits;
     constants.hdr.ComposeMode =
-        static_cast<float>(static_cast<int>(residual.hdr_compose_mode));
+        residual.hdr_compose_mode == HdrComposeMode::InverseToneMap ? 1.0f : 0.0f;
     constants.hdr.LocalExposure.x = hdr->local_exposure_strength;
     constants.hdr.LocalExposure.y = hdr->local_max_brighten;
     constants.hdr.LocalExposure.z = hdr->local_max_darken;

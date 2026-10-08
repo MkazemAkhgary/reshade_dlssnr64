@@ -500,6 +500,8 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 ### Debug views
 
+**HDR round-trip diagnostic.** The debug menu also exposes `HDR Roundtrip Diagnostic`, `HDR Roundtrip Error`, and `HDR Local Exposure`. These are test-only views for the HDR compose path. With local exposure enabled, `HDR Roundtrip Diagnostic` shows Model Input, Model Output, the composed HDR converted back through the same HDR-to-SDR transform, and their error. For a clean math test, disable input/output grades and RCAS and use working scale 1.0.
+
 **Render debug images at pass time.** The resource state is trustworthy while the producing pass still owns the command list and has just produced the resource. `MaybeRenderDebug` renders into `FrameDebugContext::output`; the Release stage only copies that already-rendered output to the backbuffer.
 
 **The debug target uses the swapchain's format.** Post-DLSS sources can be HDR, but the final debug copy targets the actual backbuffer format.
@@ -512,7 +514,7 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 **Only explicitly inheritable fields are resolved.** Working scale, intensity, local tone, local structure, skin structure and dynamic shader parameters can inherit. Grade settings, residual settings and RCAS controls are intentionally per-pass.
 
-**HDR composition is a per-pass UI setting.** The Residual Edit section exposes `HDR Composition` with `Ratio (Current)` and `Inverse Tone Map (Experimental)`. The choice is persisted as `PassN.Residual.HdrComposeMode` and only affects HDR composition; the default remains Ratio.
+**HDR composition is a per-pass UI setting.** The Residual Edit section exposes `HDR Composition` with `Ratio (Current)` and `Inverse Tone Map (Scene-Referred)`. The choice is persisted as `PassN.Residual.HdrComposeMode` and only affects HDR composition; the default remains Ratio. Legacy value `2` is migrated to Inverse Tone Map.
 
 **HDR exposure is a global UI setting.** The HDR section exposes `Exposure Method` with `Median + Skin` and `Auto Exposure + Local (Experimental)`. The choice is persisted as `Hdr.ExposureMethod`; the default remains Median.
 
@@ -531,7 +533,7 @@ The HDR path is gain-map based and exists only in Post-DLSS processing.
 3. `GainMapSplit` converts the full-resolution HDR source into an RGBA32F carrier: RGB is the linear SDR base and A is log2 gain. BT.2446-C parameters, gain-map offsets and scene-white control the split.
 4. `PrepareModelInput` performs exact Box Area downsampling. For the HDR carrier path it preserves the carrier in the model's SDR domain with a hue-preserving gamut fit and sRGB encoding.
 5. The model feature evaluates at the selected working scale while being built at full frame resolution.
-6. `ComposeModelOutputHdr` uses FSR EASU and optional RCAS to reconstruct the model's working-scale images at full resolution. The default `Ratio` mode uses the existing linear-SDR ratio transfer. `Inverse Tone Map` selects a separate `ComposeModelOutputHdrInverse` shader that inverts the same BT.2446 transfer for the model input and output, transfers their HDR difference to the original HDR source, and then blends luma/chroma.
+6. `ComposeModelOutputHdr` uses FSR EASU and optional RCAS to reconstruct the model's working-scale images at full resolution. The default `Ratio` mode uses the existing linear-SDR ratio transfer. `Inverse Tone Map` selects `ComposeModelOutputHdrInverse`, which inverts the same BT.2446 transfer used by the HDR split and recovers the combined global + local exposure from the packed carrier. It reconstructs the HDR image implied by the model output and transfers that target back to the original HDR, avoiding a second residual-normalization step.
 7. `EncodeHdr` writes the reconstructed result back into scRGB or HDR10 as required by the source format.
 
 The SDR compose uses the same FSR path but does not reconstruct an HDR carrier; it applies the residual in the source SDR space and uses the shared grade/compose helpers.

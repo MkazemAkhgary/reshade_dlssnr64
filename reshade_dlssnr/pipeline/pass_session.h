@@ -201,6 +201,7 @@ class PassSession {
       ID3D12GraphicsCommandList* command_list,
       FrameDebugContext& frame_debug,
       const DebugSnapshot& snapshot,
+      const model_pipeline::HdrUniforms* hdr,
       unsigned int width,
       unsigned int height,
       DXGI_FORMAT format);

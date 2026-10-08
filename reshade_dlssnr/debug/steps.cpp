@@ -56,8 +56,9 @@ PipelineStatus PassSession::StepRenderDebugView(PassRun& run) {
 
   self->MaybeRenderDebug(*run.settings, *run.codec,
                          self->StageList(run, self->command_),
-                         *run.frame_debug, debug, run.width, run.height,
-                         run.desc.Format);
+                         *run.frame_debug, debug,
+                         (run.hdr_uniforms_ready ? &run.hdr_uniforms : nullptr),
+                         run.width, run.height, run.desc.Format);
   return PipelineStatus::Ok;
 }
 

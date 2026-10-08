@@ -1,5 +1,7 @@
 #include "debug/debug_view.h"
 
+#include <algorithm>
+
 #include <wrl/client.h>
 
 #include "pipeline/pipeline_graph.h"
@@ -130,6 +132,18 @@ const DebugViewDef kDebugViews[] = {
     {"Gain Map",
      "Raw f32 log2 gain from the gain-map split. Displayed with -4 as black and +6 as white.",
      DebugDisplayMode::GainMap, SelectGainMap},
+    {"HDR Roundtrip Diagnostic",
+     "2x2 math test: Model Input | Model Output / HDR->SDR Roundtrip | Error. "
+     "Use Auto Exposure + Local with grade input/output and RCAS disabled.",
+     DebugDisplayMode::HdrRoundtripDiagnostic, SelectComposedOutput},
+    {"HDR Roundtrip Error",
+     "False-color difference between the model output and the final HDR result "
+     "converted back through the same HDR->SDR transform.",
+     DebugDisplayMode::HdrRoundtripError, SelectComposedOutput},
+    {"HDR Local Exposure",
+     "Local exposure factor in stops, mapped so 0 stops is mid-gray, -2 stops "
+     "is black, and +2 stops is white.",
+     DebugDisplayMode::HdrLocalExposure, SelectSource},
     {nullptr, nullptr, DebugDisplayMode::Color, nullptr},
 };
 
@@ -144,6 +158,7 @@ bool RenderDebugView(
     ComputeEngine& codec,
     ID3D12GraphicsCommandList* command_list,
     const DebugSnapshot& snapshot,
+    const model_pipeline::HdrUniforms* hdr,
     int debug_view,
     ID3D12Resource* target,
     unsigned int target_width,
@@ -169,6 +184,19 @@ bool RenderDebugView(
 
   const D3D12_RESOURCE_DESC source_desc = source->GetDesc();
 
+  const DebugDisplayMode display_mode = kDebugViews[index].display_mode;
+  const bool hdr_diag = display_mode == DebugDisplayMode::HdrRoundtripDiagnostic ||
+                        display_mode == DebugDisplayMode::HdrRoundtripError ||
+                        display_mode == DebugDisplayMode::HdrLocalExposure;
+  const bool hdr_needs_model = display_mode == DebugDisplayMode::HdrRoundtripDiagnostic ||
+                               display_mode == DebugDisplayMode::HdrRoundtripError;
+  if (hdr_diag &&
+      (hdr == nullptr || snapshot.composed_output == nullptr ||
+       snapshot.source == nullptr ||
+       (hdr_needs_model && snapshot.model_output == nullptr))) {
+    return false;
+  }
+
   ComputeConstants constants = {};
   constants.Width = target_width;
   constants.Height = target_height;
@@ -180,6 +208,65 @@ bool RenderDebugView(
       static_cast<unsigned int>(source_desc.Width));
   constants.shader.Params1.x = static_cast<float>(
       static_cast<unsigned int>(source_desc.Height));
+
+  if (hdr_diag) {
+    constants.hdr.Format = hdr->format;
+    constants.hdr.Exposure = hdr->exposure;
+    constants.hdr.Bt2446K1 = hdr->bt2446_k1;
+    constants.hdr.Bt2446K2 = hdr->bt2446_k2;
+    constants.hdr.Bt2446K4 = hdr->bt2446_k4;
+    constants.hdr.Crosstalk = hdr->bt2446_crosstalk;
+    constants.hdr.BaseOffset = hdr->gain_base_offset;
+    constants.hdr.AlternateOffset = hdr->gain_alternate_offset;
+    constants.hdr.GainMinLog2 = hdr->gain_min_log2;
+    constants.hdr.GainMaxLog2 = hdr->gain_max_log2;
+    constants.hdr.EffectiveSceneWhiteNits = hdr->effective_scene_white_nits;
+    constants.hdr.LocalExposure.x = hdr->local_exposure_strength;
+    constants.hdr.LocalExposure.y = hdr->local_max_brighten;
+    constants.hdr.LocalExposure.z = hdr->local_max_darken;
+    constants.hdr.LocalExposure.w = hdr->midtone;
+
+    const D3D12_RESOURCE_DESC model_desc = snapshot.model_output != nullptr
+                                               ? snapshot.model_output->GetDesc()
+                                               : source_desc;
+    const float in_w = static_cast<float>(std::max<UINT>(1u, static_cast<UINT>(model_desc.Width)));
+    const float in_h = static_cast<float>(std::max<UINT>(1u, model_desc.Height));
+    const float out_w = static_cast<float>(std::max(1u, target_width));
+    const float out_h = static_cast<float>(std::max(1u, target_height));
+    constants.easu.Con0.x = in_w / out_w;
+    constants.easu.Con0.y = in_h / out_h;
+    constants.easu.Con0.z = 0.5f * in_w / out_w - 0.5f;
+    constants.easu.Con0.w = 0.5f * in_h / out_h - 0.5f;
+    constants.easu.Con1.x = 1.0f / in_w;
+    constants.easu.Con1.y = 1.0f / in_h;
+    constants.easu.Con1.z = 1.0f / in_w;
+    constants.easu.Con1.w = -1.0f / in_h;
+    constants.easu.Con2.x = -1.0f / in_w;
+    constants.easu.Con2.y = 2.0f / in_h;
+    constants.easu.Con2.z = 1.0f / in_w;
+    constants.easu.Con2.w = 2.0f / in_h;
+
+    state.Transition(command_list, snapshot.composed_output,
+                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    state.Transition(command_list, snapshot.source,
+                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    if (snapshot.model_output != nullptr) {
+      state.Transition(command_list, snapshot.model_output,
+                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    }
+    state.Transition(command_list, target,
+                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+    ID3D12Resource* srvs[kSrvCount] = {
+        snapshot.composed_output, snapshot.source,
+        snapshot.model_output != nullptr ? snapshot.model_output : snapshot.source};
+    ID3D12Resource* uavs[kUavCount] = {target};
+    const uint32_t diag_mode =
+        display_mode == DebugDisplayMode::HdrRoundtripDiagnostic ? 0u :
+        display_mode == DebugDisplayMode::HdrRoundtripError ? 1u : 2u;
+    constants.shader.Params0.x = static_cast<float>(diag_mode);
+    return codec.Dispatch("DebugHdrRoundtrip", command_list, constants, srvs, uavs);
+  }
 
   state.Transition(command_list, source,
                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);

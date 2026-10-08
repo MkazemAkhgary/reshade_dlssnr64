@@ -47,7 +47,7 @@ float HdrBt2446Inverse(float sdr_pct)
 // carrier. It is deliberately separate from ReconstructHdr(), which uses the
 // packed gain to recover the exact original HDR source.
 float3 HdrFromSdrCarrier(float3 sdr, float exposure,
-                         float effective_peak_nits)
+                         float effective_peak_nits, bool undo_exposure)
 {
     const float3 luma = HdrLumaWeights();
     float3 pre_sdr = HdrPreDesaturate(max(sdr, 0.0), saturate(kCrosstalk));
@@ -61,7 +61,11 @@ float3 HdrFromSdrCarrier(float3 sdr, float exposure,
                       kPqPeakNits;
     float scale = y_exposed / y_sdr;
     float3 pre_exposed = pre_sdr * scale;
-    float3 pre_hdr = pre_exposed / max(exposure, 1e-6);
+
+    // Scene-referred reconstruction removes the temporary model exposure.
+    float3 pre_hdr = undo_exposure
+        ? pre_exposed / max(exposure, 1e-6)
+        : pre_exposed;
     return max(HdrInversePreDesaturate(pre_hdr, saturate(kCrosstalk)), 0.0);
 }
 
