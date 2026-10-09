@@ -3,6 +3,7 @@
 #include "common/registers.hlsli"
 #include "common/color.hlsli"
 #include "common/luma.hlsli"
+#include "common/grade.hlsli"
 #include "common/hdr_transfer.hlsli"
 
 Texture2D<float4> gComposed : register(t0);
@@ -123,7 +124,15 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         else if (bottom && !right)
             display = roundtrip;
         else {
-            float3 diff = roundtrip - model_out;
+            // Composition applies the inverse of the input grade before deriving
+            // the residual. Compare against the model output in that same ungraded
+            // linear domain; the input/output panels still show the actual model
+            // domain values.
+            float3 roundtrip_linear = max(SrgbToLinearExt(roundtrip), 0.0);
+            float3 model_out_linear = max(SrgbToLinearExt(model_out), 0.0);
+            if (kGradeEnabled > 0.5)
+                model_out_linear = max(GradeLinearInv(model_out_linear), 0.0);
+            float3 diff = roundtrip_linear - model_out_linear;
             display = saturate(0.5 + diff * 4.0);
         }
     } else if (mode == 2) {

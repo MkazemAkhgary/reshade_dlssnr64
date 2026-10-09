@@ -35,14 +35,6 @@ const char* StageText(InjectionStage stage) {
   return stage == InjectionStage::Present ? "Present" : "PostDLSS";
 }
 
-const char* HdrComposeModeText(HdrComposeMode mode) {
-  switch (mode) {
-    case HdrComposeMode::InverseToneMap: return "GainMapResidual";
-    case HdrComposeMode::Ratio:
-    default: return "Ratio";
-  }
-}
-
 const char* HdrFormatText(HdrFormat format) {
   switch (format) {
     case HdrFormat::Sdr: return "Sdr";
@@ -127,8 +119,6 @@ void AppendPass(Snapshot& snap, const std::string& prefix,
          FloatText(pass.residual.ratio_brighten));
   Append(snap, prefix + ".residual.ratio_darken",
          FloatText(pass.residual.ratio_darken));
-  Append(snap, prefix + ".residual.hdr_compose_mode",
-         HdrComposeModeText(pass.residual.hdr_compose_mode));
   AppendGrade(snap, prefix + ".grade_input", pass.grade_input);
   AppendGrade(snap, prefix + ".grade_output", pass.grade_output);
   Append(snap, prefix + ".inherit.working_scale",

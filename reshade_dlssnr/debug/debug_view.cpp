@@ -132,15 +132,17 @@ const DebugViewDef kDebugViews[] = {
      "Raw f32 carrier-to-HDR reconstruction multiplier, displayed in log2 stops from -4 (black) to +6 (white).",
      DebugDisplayMode::GainMap, SelectGainMap},
     {"HDR Roundtrip Diagnostic",
-     "2x2 model/compose comparison: upscaled Model Input | Model Output / "
-     "composed HDR mapped back to model SDR | model comparison error. This view "
-     "includes working-scale reconstruction and RCAS; use HDR Roundtrip Error "
-     "to inspect the full-resolution gain-map transfer itself.",
+     "2x2 comparison: actual prepared Model Input | Model Output / composed HDR "
+     "mapped back to the ungraded model domain | composition difference against "
+     "the ungraded Model Output. Nonzero edges can be expected because full-resolution "
+     "source detail is preserved; working scale and RCAS affect this comparison. "
+     "Use HDR Roundtrip Error for the isolated carrier reconstruction check.",
      DebugDisplayMode::HdrRoundtripDiagnostic, SelectComposedOutput},
     {"HDR Roundtrip Error",
      "False-color relative error between the original decoded HDR source and the "
      "direct float32 reconstruction from the RGBA32F carrier and carrier-to-HDR multiplier. "
-     "Independent of Working Scale, RCAS, and output-format encoding.",
+     "This validates the carrier transfer only, not the model edit or final composition; "
+     "independent of Working Scale, RCAS, and input grade.",
      DebugDisplayMode::HdrRoundtripError, SelectPackedSdr},
     {"HDR Local Exposure",
      "Local exposure factor in stops, mapped so 0 stops is mid-gray, -2 stops "
@@ -203,7 +205,8 @@ bool RenderDebugView(
   if (hdr_diag &&
       (hdr == nullptr || snapshot.source == nullptr ||
        (hdr_needs_composed && snapshot.composed_output == nullptr) ||
-       (hdr_needs_model && snapshot.model_output == nullptr) ||
+       (hdr_needs_model && (snapshot.prepared_input == nullptr ||
+                            snapshot.model_output == nullptr)) ||
        (hdr_needs_carrier && snapshot.packed_hdr_sdr == nullptr))) {
     return false;
   }
@@ -237,9 +240,24 @@ bool RenderDebugView(
     constants.hdr.LocalExposure.z = hdr->local_max_darken;
     constants.hdr.LocalExposure.w = hdr->midtone;
 
-    const D3D12_RESOURCE_DESC model_desc = snapshot.model_output != nullptr
-                                               ? snapshot.model_output->GetDesc()
-                                               : source_desc;
+    const GradeSettings& grade = snapshot.input_grade;
+    constants.grade.Enabled = grade.enabled ? 1.0f : 0.0f;
+    constants.grade.Luma = grade.luma;
+    constants.grade.Chroma = grade.chroma;
+    constants.grade.LumaMode = static_cast<float>(static_cast<int>(grade.luma_mode));
+    constants.grade.ChromaMode = static_cast<float>(static_cast<int>(grade.chroma_mode));
+    constants.grade.BlackLevel = grade.black_level;
+    constants.grade.WhiteLevel = grade.white_level;
+    constants.grade.Contrast = grade.contrast;
+    constants.grade.Shadows = grade.shadows;
+    constants.grade.Highlights = grade.highlights;
+
+    const D3D12_RESOURCE_DESC model_desc =
+        hdr_needs_model && snapshot.prepared_input != nullptr
+            ? snapshot.prepared_input->GetDesc()
+            : (snapshot.model_output != nullptr
+                   ? snapshot.model_output->GetDesc()
+                   : source_desc);
     const float in_w = static_cast<float>(std::max<UINT>(1u, static_cast<UINT>(model_desc.Width)));
     const float in_h = static_cast<float>(std::max<UINT>(1u, model_desc.Height));
     const float out_w = static_cast<float>(std::max(1u, target_width));
@@ -264,7 +282,9 @@ bool RenderDebugView(
       state.Transition(command_list, snapshot.composed_output,
                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     }
-    state.Transition(command_list, snapshot.source,
+    ID3D12Resource* model_input_resource = hdr_needs_model
+        ? snapshot.prepared_input : snapshot.source;
+    state.Transition(command_list, model_input_resource,
                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     ID3D12Resource* auxiliary_resource = hdr_needs_carrier
         ? snapshot.packed_hdr_sdr : snapshot.model_output;
@@ -281,7 +301,7 @@ bool RenderDebugView(
 
     ID3D12Resource* srvs[kSrvCount] = {
         snapshot.composed_output != nullptr ? snapshot.composed_output : snapshot.source,
-        snapshot.source,
+        model_input_resource,
         auxiliary_resource != nullptr ? auxiliary_resource : snapshot.source,
         snapshot.effective_exposure_map != nullptr
             ? snapshot.effective_exposure_map : snapshot.source};

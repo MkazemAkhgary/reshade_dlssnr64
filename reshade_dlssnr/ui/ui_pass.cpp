@@ -275,22 +275,6 @@ void DrawResidualSection(uint32_t pass_index, Settings& settings,
     return;
   }
 
-  {
-    static const char* const kHdrComposeLabels[] = {
-        "Ratio (Current)",
-        "Gain-Map Residual (Scene-Referred)"};
-    static const char* const kHdrComposeTooltips[] = {
-        "Transfers a bounded per-channel relative edit in the linear model domain onto the original HDR source.",
-        "Transfers the model-domain relative edit through the stored per-pixel reciprocal multiplier, preserving the original HDR highlight range."};
-    int mode = static_cast<int>(pass.residual.hdr_compose_mode);
-    if (DrawComboRow("hdr_compose_mode", "HDR Composition",
-                     "Select how the model edit is carried back into HDR. Both modes preserve the original scene-referred source; Gain-Map Residual uses the per-pixel reciprocal multiplier and avoids inverting the nonlinear highlight fit at composition time.",
-                     &mode, kHdrComposeLabels, kHdrComposeTooltips, 2)) {
-      pass.residual.hdr_compose_mode = static_cast<HdrComposeMode>(mode);
-      changed = true;
-    }
-  }
-
   changed |= DrawFloatRow(
       pass_index, "edit_strength", "Edit Strength",
       "Scales the model's edit before it is carried onto the source.",

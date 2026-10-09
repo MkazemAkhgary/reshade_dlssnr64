@@ -70,8 +70,8 @@ DLSSNR_BLOCK(HdrBlock)
     float GainMaxLog2;
     // Absolute effective scene-white peak in nits.
     float EffectiveSceneWhiteNits;
-    // 0 = ratio compose, 1 = inverse-tone-map compose.
-    float ComposeMode;
+    // Reserved to preserve the shared cbuffer layout.
+    float ReservedCompose0;
     // x = local exposure strength, y = max brighten stops, z = max darken
     // stops, w = model midtone target. Zero strength disables local exposure.
     float4 LocalExposure;

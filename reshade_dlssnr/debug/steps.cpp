@@ -48,6 +48,7 @@ PipelineStatus PassSession::StepRenderDebugView(PassRun& run) {
   if (run.pass != nullptr) {
     debug.rcas_enabled = run.pass->rcas_enabled;
     debug.rcas_strength = run.pass->rcas_strength;
+    debug.input_grade = run.pass->grade_input;
   }
   debug.composed_output = self->resources_.GetCompositeOutput();
   debug.composed_output_width = run.width;

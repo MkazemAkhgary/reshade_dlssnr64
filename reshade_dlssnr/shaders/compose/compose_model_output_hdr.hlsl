@@ -15,6 +15,8 @@ Texture2D<float4>   gHdrSource   : register(t3);
 RWTexture2D<float4> gOutput      : register(u0);
 SamplerState        s0           : register(s0);
 
+#define kLocalExposureStrength hdr.LocalExposure.x
+
 #include "common/fsr.hlsli"
 
 float3 DecodePackedHdr(float4 packed)
@@ -28,62 +30,41 @@ float3 EncodeHdr(float3 lin)
     return HdrEncodeTarget(lin, (int)(kFormat + 0.5), kSdrReferenceWhiteNits);
 }
 
-// `kExposure` is retained in the uniform contract because the exposure EMA
-// feeds the effective scene white on the CPU. The split and compose never
-// multiply the image by it a second time.
-float3 ShapeHdrTargetDelta(float3 delta, float luma)
-{
-    if (kSoftCompression != 0) {
-        delta.r = SoftCompress(delta.r, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
-        delta.g = SoftCompress(delta.g, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
-        delta.b = SoftCompress(delta.b, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
-    }
-
-    if (kEditGamma != 1.0 && kEditGamma > 0.0) {
-        delta = sign(delta) * pow(abs(delta), kEditGamma);
-    }
-
-    if (kResidualChroma < 1.0) {
-        const float3 kL = float3(0.2126, 0.7152, 0.0722);
-        float d_luma = dot(delta, kL);
-        delta = lerp(float3(d_luma, d_luma, d_luma), delta, kResidualChroma);
-    }
-
-    float protect = 1.0;
-    if (kHighlightProtect > 0.0) {
-        float h = saturate((luma - 0.7) / 0.3);
-        protect *= 1.0 - kHighlightProtect * h;
-    }
-    if (kShadowProtect > 0.0) {
-        float s = saturate((0.3 - luma) / 0.3);
-        protect *= 1.0 - kShadowProtect * s;
-    }
-
-    return delta * protect * kEditStrength;
-}
-
-float3 ComposeHdr(float3 sdr_base, float3 hdr_src,
-                  float3 low_in, float3 low_out)
+// Gain-Map Residual measures the model edit as a relative change in the
+// actual linear model domain. Do not invert the nonlinear gamut fit on both
+// endpoints: near white, tiny model changes would become enormous HDR deltas.
+// The stored reciprocal multiplier transfers the relative edit back onto the
+// original HDR source without altering its exposure or highlight range.
+float3 ComposeHdrInverse(float3 sdr_base, float3 hdr_src,
+                         float3 low_in, float3 low_out,
+                         float carrier_to_hdr_scale)
 {
     float3 low_in_lin = max(SrgbToLinearExt(low_in), 0.0);
     float3 low_out_lin = max(SrgbToLinearExt(low_out), 0.0);
-    if (kGradeEnabled > 0.5) {
+    if (kGradeEnabled > 0.5)
+    {
         low_in_lin = max(GradeLinearInv(low_in_lin), 0.0);
         low_out_lin = max(GradeLinearInv(low_out_lin), 0.0);
     }
 
-    // Measure the relative edit in the model's actual linear domain. Inverting
-    // the nonlinear super-white fit before taking the ratio amplifies tiny
-    // near-white differences and can suppress or crush the final HDR highlights.
-
-    const float3 model_sdr_base = GamutFitModelInput(sdr_base);
-    const float3 kL = HdrLumaWeights();
-    const float base_luma = dot(max(model_sdr_base, 0.0), kL);
-    const float3 delta = ShapeResidual(
-        ComposeRatioDelta(low_in_lin, low_out_lin), base_luma);
-    if (all(delta == 0.0))
+    const float3 model_delta = low_out_lin - low_in_lin;
+    if (all(model_delta == 0.0))
         return hdr_src;
-    const float3 hdr_edited = max(hdr_src * (1.0 + delta), 0.0);
+
+    const float3 model_denominator = max(abs(low_in_lin), 0.001.xxx);
+    const float3 relative_delta = model_delta / model_denominator;
+    const float3 model_sdr_base = GamutFitModelInput(max(sdr_base, 0.0));
+    const float3 kL = HdrLumaWeights();
+    const float base_luma = dot(model_sdr_base, kL);
+    const float3 shaped = ShapeResidual(relative_delta, base_luma);
+
+    // packed.rgb * packed.a reconstructs this pixel's scene-referred source
+    // scale. Applying the relative edit in this domain preserves super-whites;
+    // no inverse gamut curve, hard highlight ceiling, or tone-curve re-evaluation
+    // is needed during composition.
+    const float3 carrier_delta = max(sdr_base, 0.0) * shaped;
+    const float3 hdr_edited = max(
+        hdr_src + carrier_delta * max(carrier_to_hdr_scale, 0.0), 0.0);
     return BlendYCbCr(hdr_src, hdr_edited, kLumaStrength, kChromaStrength);
 }
 
@@ -96,6 +77,9 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float2 uv = (float2(id.xy) + 0.5) / float2(Width, Height);
 
     float4 packed = gOriginal.Load(int3(id.xy, 0));
+    const float3 source_encoded = gHdrSource.Load(int3(id.xy, 0)).rgb;
+    const float3 hdr_src = DecodeToLinear(
+        source_encoded, (int)(kFormat + 0.5), kSdrReferenceWhiteNits);
 
     // EASU upsample from the actual model working resolution back to full HDR
     // resolution. Both textures are in the same sRGB-encoded model domain.
@@ -122,13 +106,12 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     }
 
     const float3 sdr_base = DecodePackedHdr(packed);
-    const float3 source_encoded = gHdrSource.Load(int3(id.xy, 0)).rgb;
-    const float3 hdr_src = DecodeToLinear(
-        source_encoded, (int)(kFormat + 0.5), kSdrReferenceWhiteNits);
-    const float3 final_lin = ComposeHdr(sdr_base, hdr_src, low_in, low_out);
+    const float carrier_to_hdr_scale = max(packed.a, 0.0);
+    const float3 final_lin = ComposeHdrInverse(
+        sdr_base, hdr_src, low_in, low_out, carrier_to_hdr_scale);
     const float3 encoded_result = EncodeHdr(final_lin);
-    // Preserve the exact native-format code for unchanged channels. This avoids
-    // decode/encode round-off moving an untouched FP16/PQ channel by one code.
+    // Preserve native-format codes in untouched channels rather than running
+    // their source values through a lossy decode/encode pair.
     const float3 final_out = float3(
         final_lin.r == hdr_src.r ? source_encoded.r : encoded_result.r,
         final_lin.g == hdr_src.g ? source_encoded.g : encoded_result.g,

@@ -16,6 +16,7 @@
 #include "gpu/command_context.h"
 #include "gpu/compute_engine.h"
 #include "gpu/pass_resources.h"
+#include "grade/settings.h"
 #include "model/model_input.h"
 
 namespace reshade_dlssnr {
@@ -55,6 +56,7 @@ struct DebugSnapshot {
   unsigned int model_output_height = 0;
   bool rcas_enabled = false;
   float rcas_strength = 0.0f;
+  GradeSettings input_grade = {};
 
   // Model output after composition (residual, strength, HDR remap).
   ID3D12Resource* composed_output = nullptr;
