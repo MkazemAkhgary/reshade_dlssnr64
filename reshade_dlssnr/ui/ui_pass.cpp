@@ -278,13 +278,13 @@ void DrawResidualSection(uint32_t pass_index, Settings& settings,
   {
     static const char* const kHdrComposeLabels[] = {
         "Ratio (Current)",
-        "Inverse Tone Map (Scene-Referred)"};
+        "Gain-Map Residual (Scene-Referred)"};
     static const char* const kHdrComposeTooltips[] = {
-        "Current HDR compose: transfers the model edit as a per-channel ratio.",
-        "Reconstructs the model output in scene-referred HDR and blends that target onto the original HDR."};
+        "Transfers a bounded per-channel relative edit in the linear model domain onto the original HDR source.",
+        "Transfers the model-domain relative edit through the stored per-pixel reciprocal multiplier, preserving the original HDR highlight range."};
     int mode = static_cast<int>(pass.residual.hdr_compose_mode);
     if (DrawComboRow("hdr_compose_mode", "HDR Composition",
-                     "Select how the model edit is carried back into HDR. Inverse Tone Map reconstructs the model output in the same scene-referred HDR domain used by the input transform.",
+                     "Select how the model edit is carried back into HDR. Both modes preserve the original scene-referred source; Gain-Map Residual uses the per-pixel reciprocal multiplier and avoids inverting the nonlinear highlight fit at composition time.",
                      &mode, kHdrComposeLabels, kHdrComposeTooltips, 2)) {
       pass.residual.hdr_compose_mode = static_cast<HdrComposeMode>(mode);
       changed = true;
@@ -318,17 +318,17 @@ void DrawResidualSection(uint32_t pass_index, Settings& settings,
 
   changed |= DrawFloatRow(
       pass_index, "residual_ratio_eps", "Ratio Eps",
-      "Denominator floor for the per-channel ratio. Ignored by HDR Inverse Tone Map mode.",
+      "Denominator floor for the per-channel ratio. Ignored by Gain-Map Residual mode.",
       &pass.residual.ratio_eps, nullptr, 1e-2f, 1e-6f, 0.5f, 1e-2f);
 
   changed |= DrawFloatRow(
       pass_index, "residual_ratio_brighten", "Ratio Brighten",
-      "Upper bound on ratio brightening. Soft-clipped; ignored by HDR Inverse Tone Map mode.",
+      "Upper bound on ratio brightening. Soft-clipped; ignored by Gain-Map Residual mode.",
       &pass.residual.ratio_brighten, nullptr, 64.0f, 1.0f, 256.0f, 64.0f);
 
   changed |= DrawFloatRow(
       pass_index, "residual_ratio_darken", "Ratio Darken",
-      "Lower bound on ratio darkening. Soft-clipped; ignored by HDR Inverse Tone Map mode.",
+      "Lower bound on ratio darkening. Soft-clipped; ignored by Gain-Map Residual mode.",
       &pass.residual.ratio_darken, nullptr, 1.0f / 16.0f,
       1.0f / 256.0f, 1.0f, 1.0f / 16.0f);
 }

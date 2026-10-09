@@ -37,7 +37,7 @@ const char* StageText(InjectionStage stage) {
 
 const char* HdrComposeModeText(HdrComposeMode mode) {
   switch (mode) {
-    case HdrComposeMode::InverseToneMap: return "InverseToneMap";
+    case HdrComposeMode::InverseToneMap: return "GainMapResidual";
     case HdrComposeMode::Ratio:
     default: return "Ratio";
   }

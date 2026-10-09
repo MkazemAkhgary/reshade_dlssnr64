@@ -67,8 +67,14 @@ float3 ComposeHdr(float3 sdr_base, float3 hdr_src,
 {
     float3 low_in_lin = max(SrgbToLinearExt(low_in), 0.0);
     float3 low_out_lin = max(SrgbToLinearExt(low_out), 0.0);
-    if (kGradeEnabled > 0.5)
+    if (kGradeEnabled > 0.5) {
         low_in_lin = max(GradeLinearInv(low_in_lin), 0.0);
+        low_out_lin = max(GradeLinearInv(low_out_lin), 0.0);
+    }
+
+    // Measure the relative edit in the model's actual linear domain. Inverting
+    // the nonlinear super-white fit before taking the ratio amplifies tiny
+    // near-white differences and can suppress or crush the final HDR highlights.
 
     const float3 model_sdr_base = GamutFitModelInput(sdr_base);
     const float3 kL = HdrLumaWeights();
@@ -89,7 +95,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     float2 uv = (float2(id.xy) + 0.5) / float2(Width, Height);
 
-    float4 packed = gOriginal.SampleLevel(s0, uv, 0);
+    float4 packed = gOriginal.Load(int3(id.xy, 0));
 
     // EASU upsample from the actual model working resolution back to full HDR
     // resolution. Both textures are in the same sRGB-encoded model domain.

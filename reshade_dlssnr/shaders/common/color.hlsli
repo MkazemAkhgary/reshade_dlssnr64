@@ -91,12 +91,25 @@ float ModelGamutCompressMax(float max_channel)
                     kModelGamutCompressionWhite, saturate(t));
     }
 
-    // The mapped white is a reference point, not a ceiling. The logarithmic
-    // curve is extrapolated and inverted symmetrically for arbitrary super-whites.
-    const float superwhite_span = log2(kModelGamutReferenceLinear);
-    const float t = log2(max_channel) / max(superwhite_span, 1e-6);
-    return lerp(kModelGamutCompressionWhite,
-                kModelGamutReferenceMappedWhite, t);
+    // Super-whites stay inside the model's valid input gamut. The logarithmic
+    // map is invertible, while packed.a retains the full scene-referred scale.
+    const float value_log = log2(max_channel);
+    const float reference_log = log2(kModelGamutReferenceLinear);
+    if (max_channel <= kModelGamutReferenceLinear)
+    {
+        const float t = value_log / max(reference_log, 1e-6);
+        return lerp(kModelGamutCompressionWhite,
+                    kModelGamutReferenceMappedWhite, saturate(t));
+    }
+
+    // The extended linear range covers the native FP16/scRGB headroom. Continue
+    // the log curve beyond it rather than clamping the input or HDR output.
+    const float extended_log = log2(kModelGamutExtendedLinear);
+    const float tail_slope =
+        (kModelGamutExtendedMappedWhite - kModelGamutReferenceMappedWhite) /
+        max(extended_log - reference_log, 1e-6);
+    return kModelGamutReferenceMappedWhite +
+           (value_log - reference_log) * tail_slope;
 }
 
 float3 GamutFitModelInput(float3 c)
@@ -106,8 +119,8 @@ float3 GamutFitModelInput(float3 c)
     if (max_channel <= kModelGamutCompressionStart)
         return c;
 
-    // Monotonic, unbounded mapping: preserve values above reference white rather
-    // than saturating them to a fixed maximum.
+    // Map super-whites into the model's valid sub-white domain. The HDR source
+    // magnitude remains losslessly represented by the independent gain scale.
     const float desat = saturate(
         kModelHighlightDesaturation *
         (max_channel - kModelGamutHighlightDesaturationStart) /
@@ -124,10 +137,7 @@ float3 GamutUnfitModelInput(float3 c)
     if (actual_mapped_max <= kModelGamutCompressionStart)
         return c;
 
-    const float mapped_white = ModelGamutCompressMax(1.0);
-    // EASU/RCAS and the model can produce super-white values. Extend the inverse
-    // curve for them rather than clipping to the reference mapped white.
-
+    const float mapped_white = kModelGamutCompressionWhite;
     float original_max;
     if (actual_mapped_max <= mapped_white)
     {
@@ -135,12 +145,37 @@ float3 GamutUnfitModelInput(float3 c)
                         max(mapped_white - kModelGamutCompressionStart, 1e-6);
         original_max = lerp(kModelGamutCompressionStart, 1.0, saturate(t));
     }
+    else if (actual_mapped_max <= kModelGamutReferenceMappedWhite)
+    {
+        const float t = (actual_mapped_max - mapped_white) /
+                        max(kModelGamutReferenceMappedWhite - mapped_white, 1e-6);
+        original_max = exp2(saturate(t) * log2(kModelGamutReferenceLinear));
+    }
+    else if (actual_mapped_max <= kModelGamutExtendedMappedWhite)
+    {
+        const float reference_log = log2(kModelGamutReferenceLinear);
+        const float extended_log = log2(kModelGamutExtendedLinear);
+        const float tail_slope =
+            (kModelGamutExtendedMappedWhite - kModelGamutReferenceMappedWhite) /
+            max(extended_log - reference_log, 1e-6);
+        const float original_log = reference_log +
+            (actual_mapped_max - kModelGamutReferenceMappedWhite) /
+                max(tail_slope, 1e-8);
+        original_max = exp2(original_log);
+    }
     else
     {
-        const float t =
-            (actual_mapped_max - mapped_white) /
-            max(kModelGamutReferenceMappedWhite - mapped_white, 1e-6);
-        original_max = exp2(t * log2(kModelGamutReferenceLinear));
+        // Model edits or sharpening may leave the mapped input domain. Extend
+        // the inverse continuously in log space; the final HDR resource, not
+        // this model-gamut transform, defines the representable output range.
+        const float reference_log = log2(kModelGamutReferenceLinear);
+        const float mapped_span =
+            kModelGamutReferenceMappedWhite - kModelGamutCompressionWhite;
+        const float output_slope = mapped_span / max(reference_log, 1e-6);
+        const float original_log = log2(kModelGamutExtendedLinear) +
+            (actual_mapped_max - kModelGamutExtendedMappedWhite) /
+                max(output_slope, 1e-6);
+        original_max = exp2(min(original_log, 120.0));
     }
 
     const float scale = actual_mapped_max / max(original_max, 1e-6);

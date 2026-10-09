@@ -30,59 +30,41 @@ float3 EncodeHdr(float3 lin)
     return HdrEncodeTarget(lin, (int)(kFormat + 0.5), kSdrReferenceWhiteNits);
 }
 
-// Inverse-tone-map shader reconstructs the model output as a scene-referred HDR
-// target. It recovers the exact local multiplier from the original HDR source and
-// the carrier generated from that source, without consulting a second estimator.
+// Gain-Map Residual measures the model edit as a relative change in the
+// actual linear model domain. Do not invert the nonlinear gamut fit on both
+// endpoints: near white, tiny model changes would become enormous HDR deltas.
+// The stored reciprocal multiplier transfers the relative edit back onto the
+// original HDR source without altering its exposure or highlight range.
 float3 ComposeHdrInverse(float3 sdr_base, float3 hdr_src,
-                         float3 low_in, float3 low_out, float local_sdr_scale)
+                         float3 low_in, float3 low_out,
+                         float carrier_to_hdr_scale)
 {
     float3 low_in_lin = max(SrgbToLinearExt(low_in), 0.0);
     float3 low_out_lin = max(SrgbToLinearExt(low_out), 0.0);
     if (kGradeEnabled > 0.5)
     {
-        // GradeModelInput changes the actual model input before NGX runs.
-        // Inverse Tone Map reconstructs the model residual from both endpoints,
-        // so both endpoints must first be mapped back to the same ungraded
-        // model domain. Undoing the grade on only the output makes an identity
-        // model look like a color edit whenever the input grade is non-neutral.
         low_in_lin = max(GradeLinearInv(low_in_lin), 0.0);
         low_out_lin = max(GradeLinearInv(low_out_lin), 0.0);
     }
-    if (all(low_in_lin == low_out_lin))
+
+    const float3 model_delta = low_out_lin - low_in_lin;
+    if (all(model_delta == 0.0))
         return hdr_src;
 
-    const float3 model_sdr_base = GamutFitModelInput(sdr_base);
+    const float3 model_denominator = max(abs(low_in_lin), 0.001.xxx);
+    const float3 relative_delta = model_delta / model_denominator;
+    const float3 model_sdr_base = GamutFitModelInput(max(sdr_base, 0.0));
     const float3 kL = HdrLumaWeights();
-    const float base_luma = dot(max(model_sdr_base, 0.0), kL);
-    // Reconstruct both model-domain endpoints in scene-referred HDR using the
-    // exact exposure that created the model input. The edit is the model
-    // output minus model input, not model output minus the original HDR. That
-    // distinction preserves high-frequency source detail when Working Scale
-    // is below 1.0 while still transferring the model's scene-referred edit.
-    const float effective_peak_nits = max(
-        kSdrReferenceWhiteNits, max(kEffectiveSceneWhiteNits, 0.01));
-    const float local_scale = max(local_sdr_scale, 1e-6);
-    const float3 low_in_linear =
-        GamutUnfitModelInput(max(low_in_lin, 0.0)) / local_scale;
-    const float3 low_out_linear =
-        GamutUnfitModelInput(max(low_out_lin, 0.0)) / local_scale;
-    const float3 hdr_model_in = HdrFromLinearSdrCarrier(
-        low_in_linear, kExposure, effective_peak_nits);
-    const float3 hdr_model_out = HdrFromLinearSdrCarrier(
-        low_out_linear, kExposure, effective_peak_nits);
+    const float base_luma = dot(model_sdr_base, kL);
+    const float3 shaped = ShapeResidual(relative_delta, base_luma);
 
-    // Express the scene-referred model edit as a relative gain. Applying an
-    // absolute endpoint difference (hdr_model_out - hdr_model_in) to the source
-    // makes highlight growth depend on the inverse transform's reconstructed
-    // endpoint range; once that estimate stops growing, composed highlights
-    // appear capped. The relative gain transfers the model's edit onto the
-    // untouched source, preserving its full HDR headroom and fine detail.
-    // FP32 NGX working textures reduce quantization noise before this inverse.
-    const float3 delta_scale = max(abs(hdr_model_in), 0.001.xxx);
-    const float3 normalized_delta = (hdr_model_out - hdr_model_in) / delta_scale;
-    const float3 shaped = ShapeResidual(normalized_delta, base_luma);
-    const float3 hdr_edited = max(hdr_src * max(1.0.xxx + shaped, 0.0.xxx), 0.0);
-
+    // packed.rgb * packed.a reconstructs this pixel's scene-referred source
+    // scale. Applying the relative edit in this domain preserves super-whites;
+    // no inverse gamut curve, hard highlight ceiling, or tone-curve re-evaluation
+    // is needed during composition.
+    const float3 carrier_delta = max(sdr_base, 0.0) * shaped;
+    const float3 hdr_edited = max(
+        hdr_src + carrier_delta * max(carrier_to_hdr_scale, 0.0), 0.0);
     return BlendYCbCr(hdr_src, hdr_edited, kLumaStrength, kChromaStrength);
 }
 
@@ -94,7 +76,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     float2 uv = (float2(id.xy) + 0.5) / float2(Width, Height);
 
-    float4 packed = gOriginal.SampleLevel(s0, uv, 0);
+    float4 packed = gOriginal.Load(int3(id.xy, 0));
     const float3 source_encoded = gHdrSource.Load(int3(id.xy, 0)).rgb;
     const float3 hdr_src = DecodeToLinear(
         source_encoded, (int)(kFormat + 0.5), kSdrReferenceWhiteNits);
@@ -124,19 +106,9 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     }
 
     const float3 sdr_base = DecodePackedHdr(packed);
-    float local_sdr_scale = 1.0;
-    if (kLocalExposureStrength > 0.0) {
-        const float effective_peak_nits = max(
-            kSdrReferenceWhiteNits, max(kEffectiveSceneWhiteNits, 0.01));
-        const float3 global_sdr = HdrToGlobalLinearSdrCarrier(
-            hdr_src, kExposure, effective_peak_nits);
-        const float global_luma = max(dot(global_sdr, HdrLumaWeights()), 0.0);
-        const float carrier_luma = max(dot(sdr_base, HdrLumaWeights()), 0.0);
-        if (global_luma > 0.0)
-            local_sdr_scale = carrier_luma / global_luma;
-    }
+    const float carrier_to_hdr_scale = max(packed.a, 0.0);
     const float3 final_lin = ComposeHdrInverse(
-        sdr_base, hdr_src, low_in, low_out, max(local_sdr_scale, 1e-20));
+        sdr_base, hdr_src, low_in, low_out, carrier_to_hdr_scale);
     const float3 encoded_result = EncodeHdr(final_lin);
     // Preserve native-format codes in untouched channels rather than running
     // their source values through a lossy decode/encode pair.
