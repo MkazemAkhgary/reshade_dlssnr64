@@ -155,7 +155,7 @@ void LoadHdrSettings(HdrSettings& hdr) {
   hdr.local_exposure.max_brighten = std::clamp(hdr.local_exposure.max_brighten, 0.0f, 4.0f);
   hdr.local_exposure.max_darken = std::clamp(hdr.local_exposure.max_darken, 0.0f, 4.0f);
   hdr.local_exposure.midtone = std::clamp(hdr.local_exposure.midtone, 0.01f, 0.5f);
-  hdr.local_exposure.block_size_px = std::clamp(hdr.local_exposure.block_size_px, 4.0f, 128.0f);
+  hdr.local_exposure.block_size_px = std::clamp(hdr.local_exposure.block_size_px, 4.0f, 512.0f);
   hdr.local_exposure.depth_edge_threshold = std::clamp(hdr.local_exposure.depth_edge_threshold, 0.001f, 0.1f);
 
   LoadFloat("Hdr.BT2446.K1", hdr.bt2446_k1);
