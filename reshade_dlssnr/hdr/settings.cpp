@@ -135,6 +135,9 @@ void LoadHdrSettings(HdrSettings& hdr) {
   LoadFloat("Hdr.Layer.Local.MaxBrighten", hdr.local_exposure.max_brighten);
   LoadFloat("Hdr.Layer.Local.MaxDarken", hdr.local_exposure.max_darken);
   LoadFloat("Hdr.Layer.Local.Midtone", hdr.local_exposure.midtone);
+  LoadFloat("Hdr.Layer.Local.BlockSizePx", hdr.local_exposure.block_size_px);
+  LoadBool("Hdr.Layer.Local.DepthContinuity", hdr.local_exposure.depth_continuity);
+  LoadFloat("Hdr.Layer.Local.DepthEdgeThreshold", hdr.local_exposure.depth_edge_threshold);
   LoadFilter("Hdr.Layer.Local.Filter", hdr.local_exposure.filters);
 
   hdr.game_exposure.bias_stops = std::clamp(hdr.game_exposure.bias_stops, -4.0f, 4.0f);
@@ -152,6 +155,8 @@ void LoadHdrSettings(HdrSettings& hdr) {
   hdr.local_exposure.max_brighten = std::clamp(hdr.local_exposure.max_brighten, 0.0f, 4.0f);
   hdr.local_exposure.max_darken = std::clamp(hdr.local_exposure.max_darken, 0.0f, 4.0f);
   hdr.local_exposure.midtone = std::clamp(hdr.local_exposure.midtone, 0.01f, 0.5f);
+  hdr.local_exposure.block_size_px = std::clamp(hdr.local_exposure.block_size_px, 4.0f, 128.0f);
+  hdr.local_exposure.depth_edge_threshold = std::clamp(hdr.local_exposure.depth_edge_threshold, 0.001f, 0.1f);
 
   LoadFloat("Hdr.BT2446.K1", hdr.bt2446_k1);
   LoadFloat("Hdr.BT2446.K2", hdr.bt2446_k2);
@@ -178,7 +183,7 @@ void SaveHdrSettings(const HdrSettings& hdr) {
   SaveBool("Hdr.Enable", hdr.enable);
   SaveInt("Hdr.Format", static_cast<int>(hdr.format));
   SaveInt("Hdr.MeasureInterval", hdr.measure_interval);
-  SaveInt("Hdr.LayersVersion", 1);
+  SaveInt("Hdr.LayersVersion", 2);
 
   SaveBool("Hdr.Layer.Game.Enabled", hdr.game_exposure.enabled);
   SaveFloat("Hdr.Layer.Game.BiasStops", hdr.game_exposure.bias_stops);
@@ -203,6 +208,9 @@ void SaveHdrSettings(const HdrSettings& hdr) {
   SaveFloat("Hdr.Layer.Local.MaxBrighten", hdr.local_exposure.max_brighten);
   SaveFloat("Hdr.Layer.Local.MaxDarken", hdr.local_exposure.max_darken);
   SaveFloat("Hdr.Layer.Local.Midtone", hdr.local_exposure.midtone);
+  SaveFloat("Hdr.Layer.Local.BlockSizePx", hdr.local_exposure.block_size_px);
+  SaveBool("Hdr.Layer.Local.DepthContinuity", hdr.local_exposure.depth_continuity);
+  SaveFloat("Hdr.Layer.Local.DepthEdgeThreshold", hdr.local_exposure.depth_edge_threshold);
   SaveFilter("Hdr.Layer.Local.Filter", hdr.local_exposure.filters);
 
   SaveFloat("Hdr.HighlightHeadroom", hdr.highlight_headroom);

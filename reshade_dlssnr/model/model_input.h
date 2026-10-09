@@ -47,6 +47,8 @@ struct HdrUniforms {
   float local_depth_inverted = 0.0f;
   float local_luma_min = 0.0f;
   float local_luma_max = 1.0e8f;
+  float local_block_size_px = 24.0f;
+  float local_depth_edge_threshold = 0.01f;
 };
 
 // The source is already in the model domain (gain-map split happens in its

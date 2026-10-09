@@ -61,10 +61,10 @@ void BindLocalExposureFilters(PassRun& run, ComputeConstants& constants,
     flags &= ~1u;
   }
 
-  if ((flags & 2u) != 0u && run.guides.depth != nullptr) {
+  if ((flags & (2u | 8u)) != 0u && run.guides.depth != nullptr) {
     depth = run.guides.depth;
   } else {
-    flags &= ~2u;
+    flags &= ~(2u | 8u);
   }
 
   constants.shader.Params0.x = static_cast<float>(flags);
@@ -73,8 +73,8 @@ void BindLocalExposureFilters(PassRun& run, ComputeConstants& constants,
   constants.shader.Params0.w = run.hdr_uniforms.local_depth_inverted;
   constants.shader.Params1.x = run.hdr_uniforms.local_luma_min;
   constants.shader.Params1.y = run.hdr_uniforms.local_luma_max;
-  constants.shader.Params1.z = 0.0f;
-  constants.shader.Params1.w = 0.0f;
+  constants.shader.Params1.z = run.hdr_uniforms.local_block_size_px;
+  constants.shader.Params1.w = run.hdr_uniforms.local_depth_edge_threshold;
 
   srvs[0] = source;
   srvs[1] = mask;

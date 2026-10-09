@@ -18,6 +18,8 @@
 #define kLocalDepthInverted shader.Params0.w
 #define kLocalLumaMin shader.Params1.x
 #define kLocalLumaMax shader.Params1.y
+#define kLocalBlockSizePx shader.Params1.z
+#define kLocalDepthEdgeThreshold shader.Params1.w
 
 float GlobalHdrLumaToSdr(float hdr_luma, float exposure)
 {
@@ -38,28 +40,63 @@ float SampleGlobalSdrLuma(float2 uv)
     return max(GlobalHdrLumaToSdr(hdr_luma, kExposure), 1e-8);
 }
 
-float LocalBaseLogLuma(float2 uv, float center_log2, float2 texel)
+float SampleLocalDepth(float2 uv)
 {
-    const float min_dim = min((float)Width, (float)Height);
-    const float radius = max(1.0, min_dim * 0.01);
-    const float2 r = texel * radius;
-    float weighted = center_log2 * 8.0;
-    float weight = 8.0;
-    const float2 offsets[8] = {
+    uint depth_width, depth_height;
+    gDepth.GetDimensions(depth_width, depth_height);
+    const uint2 depth_size = max(uint2(depth_width, depth_height), uint2(1u, 1u));
+    const uint2 depth_xy = min(
+        uint2(saturate(uv) * float2(depth_size)), depth_size - 1u);
+    float depth = saturate(gDepth.Load(int3(depth_xy, 0)));
+    if (kLocalDepthInverted > 0.5) depth = 1.0 - depth;
+    return depth;
+}
+
+float LocalBaseLogLuma(float2 uv, float center_log2)
+{
+    uint source_width, source_height;
+    gSource.GetDimensions(source_width, source_height);
+    const float2 source_size = float2(max(source_width, 1u), max(source_height, 1u));
+    const float min_dim = min(source_size.x, source_size.y);
+    const float radius_px = clamp(kLocalBlockSizePx * 0.5, 1.0,
+                                  max(min_dim * 0.25, 1.0));
+    const float2 radius_uv = radius_px / source_size;
+    const bool use_depth_continuity = (kLocalFilterFlags & 8u) != 0u;
+    const float center_depth = use_depth_continuity ? SampleLocalDepth(uv) : 0.0;
+    const float depth_threshold = max(kLocalDepthEdgeThreshold, 1e-5);
+
+    const float2 offsets[12] = {
+        float2(-0.5, 0.0), float2(0.5, 0.0),
+        float2(0.0, -0.5), float2(0.0, 0.5),
         float2(-1.0, 0.0), float2(1.0, 0.0),
         float2(0.0, -1.0), float2(0.0, 1.0),
         float2(-1.0, -1.0), float2(1.0, -1.0),
         float2(-1.0, 1.0), float2(1.0, 1.0)};
-    const float spatial_weights[8] = {
-        1.0, 1.0, 1.0, 1.0, 0.75, 0.75, 0.75, 0.75};
+    const float spatial_weights[12] = {
+        1.25, 1.25, 1.25, 1.25,
+        1.0, 1.0, 1.0, 1.0,
+        0.75, 0.75, 0.75, 0.75};
 
+    // Inner and outer taps estimate a block-scale base; the detail component
+    // is restored below so the correction does not blur the source itself.
+    float weighted = center_log2 * 3.0;
+    float weight = 3.0;
     [unroll]
-    for (uint i = 0; i < 8u; ++i) {
-        const float local_luma = log2(SampleGlobalSdrLuma(uv + offsets[i] * r));
-        const float edge = 1.0 / (1.0 + 4.0 * abs(local_luma - center_log2));
-        const float w = spatial_weights[i] * edge;
-        weighted += local_luma * w;
-        weight += w;
+    for (uint i = 0; i < 12u; ++i) {
+        const float2 sample_uv = saturate(uv + offsets[i] * radius_uv);
+        const float local_luma = log2(SampleGlobalSdrLuma(sample_uv));
+        const float luminance_edge = 1.0 /
+            (1.0 + 4.0 * abs(local_luma - center_log2));
+        float depth_weight = 1.0;
+        if (use_depth_continuity) {
+            const float sample_depth = SampleLocalDepth(sample_uv);
+            const float depth_delta = abs(sample_depth - center_depth);
+            depth_weight = 1.0 - smoothstep(
+                depth_threshold * 0.5, depth_threshold, depth_delta);
+        }
+        const float sample_weight = spatial_weights[i] * luminance_edge * depth_weight;
+        weighted += local_luma * sample_weight;
+        weight += sample_weight;
     }
     return weighted / max(weight, 1e-6);
 }
@@ -70,19 +107,13 @@ float LocalFilterWeight(float2 uv, float source_hdr_luma)
     if ((kLocalFilterFlags & 1u) != 0u) {
         uint mask_width, mask_height;
         gMask.GetDimensions(mask_width, mask_height);
+        const uint2 mask_size = max(uint2(mask_width, mask_height), uint2(1u, 1u));
         const uint2 mask_xy = min(
-            uint2(saturate(uv) * float2(mask_width, mask_height)),
-            uint2(mask_width - 1u, mask_height - 1u));
+            uint2(saturate(uv) * float2(mask_size)), mask_size - 1u);
         weight *= saturate(gMask.Load(int3(mask_xy, 0)));
     }
     if ((kLocalFilterFlags & 2u) != 0u) {
-        uint depth_width, depth_height;
-        gDepth.GetDimensions(depth_width, depth_height);
-        const uint2 depth_xy = min(
-            uint2(saturate(uv) * float2(depth_width, depth_height)),
-            uint2(depth_width - 1u, depth_height - 1u));
-        float depth = saturate(gDepth.Load(int3(depth_xy, 0)));
-        if (kLocalDepthInverted > 0.5) depth = 1.0 - depth;
+        const float depth = SampleLocalDepth(uv);
         if (depth < kLocalDepthNear || depth > kLocalDepthFar)
             weight = 0.0;
     }
@@ -108,9 +139,8 @@ float LocalExposureScale(float2 uv, float global_sdr_luma,
     if (kLocalExposureStrength <= 0.0 || global_sdr_luma <= 1e-8)
         return 1.0;
 
-    const float2 texel = 1.0 / float2(max(Width, 1u), max(Height, 1u));
     const float center_log2 = log2(max(global_sdr_luma, 1e-8));
-    const float base_log2 = LocalBaseLogLuma(uv, center_log2, texel);
+    const float base_log2 = LocalBaseLogLuma(uv, center_log2);
     const float detail_log2 = center_log2 - base_log2;
     const float mid_log2 = log2(max(kLocalExposureMidtone, 1e-6));
     const float distance_from_mid = base_log2 - mid_log2;

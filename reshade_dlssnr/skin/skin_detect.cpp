@@ -236,20 +236,25 @@ bool SkinDetect::Run(CommandContext& cmd,
     constants.hdr.LocalExposure.z = local.max_darken;
     constants.hdr.LocalExposure.w = local.midtone;
 
-    uint32_t filter_flags =
-        (local.filters.structure_mask ? 1u : 0u) |
-        (local.filters.depth ? 2u : 0u) |
-        (local.filters.percentile_range ? 4u : 0u);
+    const bool local_active = local.enabled && local.strength > 0.0f;
+    uint32_t filter_flags = local_active
+        ? ((local.filters.structure_mask ? 1u : 0u) |
+           (local.filters.depth ? 2u : 0u) |
+           (local.filters.percentile_range ? 4u : 0u) |
+           (local.depth_continuity ? 8u : 0u))
+        : 0u;
     ID3D12Resource* mask_resource = mask_valid_ ? mask_[prev].Get() : nullptr;
     if (mask_resource == nullptr) filter_flags &= ~1u;
     ID3D12Resource* depth_resource = guides.depth;
-    if (depth_resource == nullptr) filter_flags &= ~2u;
+    if (depth_resource == nullptr) filter_flags &= ~(2u | 8u);
     constants.shader.Params0.x = static_cast<float>(filter_flags);
     constants.shader.Params0.y = local.filters.depth_near;
     constants.shader.Params0.z = local.filters.depth_far;
     constants.shader.Params0.w = guides.depth_inverted ? 1.0f : 0.0f;
     constants.shader.Params1.x = exposure_snapshot.local_luma_min;
     constants.shader.Params1.y = exposure_snapshot.local_luma_max;
+    constants.shader.Params1.z = local.block_size_px;
+    constants.shader.Params1.w = local.depth_edge_threshold;
 
     if (mask_resource != nullptr) {
       cmd.Transition(command_list, mask_resource,

@@ -29,15 +29,20 @@ PipelineStatus PassSession::StepBuildHdrUniforms(PassRun& run) {
   run.hdr_uniforms.local_max_brighten = local.max_brighten;
   run.hdr_uniforms.local_max_darken = local.max_darken;
   run.hdr_uniforms.midtone = local.midtone;
-  run.hdr_uniforms.local_filter_flags =
-      (local.filters.structure_mask ? 1u : 0u) |
-      (local.filters.depth ? 2u : 0u) |
-      (local.filters.percentile_range ? 4u : 0u);
+  const bool local_active = local.enabled && local.strength > 0.0f;
+  run.hdr_uniforms.local_filter_flags = local_active
+      ? ((local.filters.structure_mask ? 1u : 0u) |
+         (local.filters.depth ? 2u : 0u) |
+         (local.filters.percentile_range ? 4u : 0u) |
+         (local.depth_continuity ? 8u : 0u))
+      : 0u;
   run.hdr_uniforms.local_depth_near = local.filters.depth_near;
   run.hdr_uniforms.local_depth_far = local.filters.depth_far;
   run.hdr_uniforms.local_depth_inverted = run.guides.depth_inverted ? 1.0f : 0.0f;
   run.hdr_uniforms.local_luma_min = snapshot.local_luma_min;
   run.hdr_uniforms.local_luma_max = snapshot.local_luma_max;
+  run.hdr_uniforms.local_block_size_px = local.block_size_px;
+  run.hdr_uniforms.local_depth_edge_threshold = local.depth_edge_threshold;
   run.hdr_uniforms_ready = true;
   return PipelineStatus::Ok;
 }

@@ -54,6 +54,9 @@ struct LocalExposureLayerSettings {
   float max_brighten = 1.75f;
   float max_darken = 1.75f;
   float midtone = 0.18f;
+  float block_size_px = 24.0f;
+  bool depth_continuity = true;
+  float depth_edge_threshold = 0.01f;
   ExposureFilterSettings filters = {};
 };
 
