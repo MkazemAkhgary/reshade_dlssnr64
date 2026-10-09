@@ -71,16 +71,17 @@ float3 ComposeHdrInverse(float3 sdr_base, float3 hdr_src,
     const float3 hdr_model_out = HdrFromLinearSdrCarrier(
         low_out_linear, kExposure, effective_peak_nits);
 
-    // Normalize the scene-referred model edit by the model-input HDR signal.
-    // Exposure has already been removed from both endpoints, so the edit does
-    // not shrink merely because the model had to be strongly exposed. The
-    // delta is then applied to the original full-resolution HDR, retaining its
-    // detail that the lower-resolution model could not represent.
-    const float3 hdr_delta = hdr_model_out - hdr_model_in;
+    // Express the scene-referred model edit as a relative gain. Applying an
+    // absolute endpoint difference (hdr_model_out - hdr_model_in) to the source
+    // makes highlight growth depend on the inverse transform's reconstructed
+    // endpoint range; once that estimate stops growing, composed highlights
+    // appear capped. The relative gain transfers the model's edit onto the
+    // untouched source, preserving its full HDR headroom and fine detail.
+    // FP32 NGX working textures reduce quantization noise before this inverse.
     const float3 delta_scale = max(abs(hdr_model_in), 0.001.xxx);
-    const float3 normalized_delta = hdr_delta / delta_scale;
+    const float3 normalized_delta = (hdr_model_out - hdr_model_in) / delta_scale;
     const float3 shaped = ShapeResidual(normalized_delta, base_luma);
-    const float3 hdr_edited = max(hdr_src + shaped * delta_scale, 0.0);
+    const float3 hdr_edited = max(hdr_src * max(1.0.xxx + shaped, 0.0.xxx), 0.0);
 
     return BlendYCbCr(hdr_src, hdr_edited, kLumaStrength, kChromaStrength);
 }

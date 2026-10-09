@@ -226,16 +226,18 @@ bool PassSession::EnsureFrameResources(
     return false;
   }
 
-  // NGX-facing model textures use the typed FP16 format expected by the current
-  // DLSSNR path. The full-resolution SDR carrier and carrier-to-HDR reconstruction multiplier
-  // are stored separately in RGBA32F, while HDR composition reads the untouched
-  // source resource directly. The published composite uses the game's format.
+  // HDR model-domain values may legitimately exceed 1.0. Keep the NGX-facing
+  // input/output and EASU/RCAS working textures in FP32 so super-white values
+  // retain enough precision for the inverse model-domain transfer. The packed
+  // carrier is also RGBA32F; the final published composite uses the game's
+  // native format and therefore retains the format's inherent representable
+  // range and quantization.
   D3D12_RESOURCE_DESC model_desc = desc;
   const HdrFormat frame_format = DetectFormatFromDxgi(desc.Format);
   const bool hdr_frame = frame_format == HdrFormat::ScRgb ||
                          frame_format == HdrFormat::Hdr10;
   if (hdr_frame) {
-    model_desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+    model_desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
   }
 
   if (!resources_.EnsureOutput(device, model_desc) ||
