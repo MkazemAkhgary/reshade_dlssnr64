@@ -1,5 +1,16 @@
+#pragma once
 #ifndef DLSSNR_HDR_LOCAL_EXPOSURE_HLSLI
 #define DLSSNR_HDR_LOCAL_EXPOSURE_HLSLI
+
+#include "bindings.hlsli"
+#include "color.hlsli"
+#include "luma.hlsli"
+#include "hdr_transfer.hlsli"
+
+#define kLocalExposureStrength hdr.LocalExposure.x
+#define kLocalMaxBrighten      hdr.LocalExposure.y
+#define kLocalMaxDarken        hdr.LocalExposure.z
+#define kLocalExposureMidtone  hdr.LocalExposure.w
 
 #define kLocalFilterFlags ((uint)(shader.Params0.x + 0.5))
 #define kLocalDepthNear shader.Params0.y

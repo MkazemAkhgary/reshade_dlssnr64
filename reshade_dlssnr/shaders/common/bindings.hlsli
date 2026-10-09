@@ -1,5 +1,9 @@
+#pragma once
 #ifndef DLSSNR_BINDINGS_HLSI
 #define DLSSNR_BINDINGS_HLSI
+
+#include "cbuffer.hlsli"
+
 
 // Grade
 #define kGradeEnabled    grade.Enabled

@@ -1,5 +1,9 @@
+#pragma once
 #ifndef DLSSNR_GRADE_HLSLI
 #define DLSSNR_GRADE_HLSLI
+
+#include "bindings.hlsli"
+
 
 static const float kGradeEps = 1e-6;
 

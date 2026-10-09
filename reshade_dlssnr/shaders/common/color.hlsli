@@ -1,7 +1,8 @@
+#pragma once
 #ifndef DLSSNR_COLOR_HLSLI
 #define DLSSNR_COLOR_HLSLI
 
-#include "common/color_constants.h"
+#include "color_constants.h"
 
 float3 SrgbToLinear(float3 v)
 {

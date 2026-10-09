@@ -1,5 +1,11 @@
+#pragma once
 #ifndef DLSSNR_COMPOSE_COMMON_HLSLI
 #define DLSSNR_COMPOSE_COMMON_HLSLI
+
+#include "bindings.hlsli"
+#include "luma.hlsli"
+#include "math.hlsli"
+
 
 float3 BlendYCbCr(float3 original, float3 edited,
                   float luma_strength, float chroma_strength)

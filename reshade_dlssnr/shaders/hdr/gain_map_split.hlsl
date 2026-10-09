@@ -12,11 +12,6 @@ Texture2D<float> gDepth : register(t2);
 RWTexture2D<float4> gOutput : register(u0);
 SamplerState s0 : register(s0);
 
-#define kLocalExposureStrength hdr.LocalExposure.x
-#define kLocalMaxBrighten      hdr.LocalExposure.y
-#define kLocalMaxDarken        hdr.LocalExposure.z
-#define kLocalExposureMidtone  hdr.LocalExposure.w
-
 #include "common/hdr_local_exposure.hlsli"
 
 [numthreads(8, 8, 1)]

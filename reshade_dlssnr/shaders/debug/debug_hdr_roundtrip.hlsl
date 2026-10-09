@@ -81,16 +81,16 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     {
         const float2 texel = float2(kEasuCon1.x, kEasuCon1.y);
 
-        float3 b_in = gLowInput.SampleLevel(s0, uv + float2(0.0, -texel.y), 0).rgb;
-        float3 d_in = gLowInput.SampleLevel(s0, uv + float2(-texel.x, 0.0), 0).rgb;
-        float3 f_in = gLowInput.SampleLevel(s0, uv + float2(texel.x, 0.0), 0).rgb;
-        float3 h_in = gLowInput.SampleLevel(s0, uv + float2(0.0, texel.y), 0).rgb;
+        float3 b_in = gSource.SampleLevel(s0, uv + float2(0.0, -texel.y), 0).rgb;
+        float3 d_in = gSource.SampleLevel(s0, uv + float2(-texel.x, 0.0), 0).rgb;
+        float3 f_in = gSource.SampleLevel(s0, uv + float2(texel.x, 0.0), 0).rgb;
+        float3 h_in = gSource.SampleLevel(s0, uv + float2(0.0, texel.y), 0).rgb;
         model_in = FsrRcasF(b_in, d_in, model_in, f_in, h_in, kRcasStrength);
 
-        float3 b_out = gLowEnhanced.SampleLevel(s0, uv + float2(0.0, -texel.y), 0).rgb;
-        float3 d_out = gLowEnhanced.SampleLevel(s0, uv + float2(-texel.x, 0.0), 0).rgb;
-        float3 f_out = gLowEnhanced.SampleLevel(s0, uv + float2(texel.x, 0.0), 0).rgb;
-        float3 h_out = gLowEnhanced.SampleLevel(s0, uv + float2(0.0, texel.y), 0).rgb;
+        float3 b_out = gModelOut.SampleLevel(s0, uv + float2(0.0, -texel.y), 0).rgb;
+        float3 d_out = gModelOut.SampleLevel(s0, uv + float2(-texel.x, 0.0), 0).rgb;
+        float3 f_out = gModelOut.SampleLevel(s0, uv + float2(texel.x, 0.0), 0).rgb;
+        float3 h_out = gModelOut.SampleLevel(s0, uv + float2(0.0, texel.y), 0).rgb;
         model_out = FsrRcasF(b_out, d_out, model_out, f_out, h_out, kRcasStrength);
     }
 

@@ -1,5 +1,9 @@
+#pragma once
 #ifndef DLSSNR_MATH_HLSLI
 #define DLSSNR_MATH_HLSLI
+
+#include "bindings.hlsli"
+
 
 float SoftCompress(float x, float max_pos, float max_neg, float knee)
 {

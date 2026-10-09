@@ -297,7 +297,9 @@ Includes are written relative to `shaders/`, for example:
 #include "common/color.hlsli"
 ```
 
-The same root-relative name is used by the runtime include handler. `tools/generate_shaders.ps1` embeds every `.hlsl`, `.hlsli`, and `.h` file into `generated/shader_sources.cpp`. The generated table is keyed by the literal path used by `#include`. Generated files should never be hand-edited.
+Root `.hlsl` files use shader-root-relative includes such as `common/color.hlsli`. Includes inside a shared `.hlsli` or `.h` may use sibling-relative paths such as `"color.hlsli"` or `"params.h"`; nested includes are resolved relative to the including file first, then relative to `shaders/`. Shared headers include the other headers they depend on, and the order of each include directive is preserved.
+
+`tools/generate_shaders.ps1` and `tools/generate_shaders.py` embed every `.hlsl`, `.hlsli`, and `.h` file into `generated/shader_sources.cpp`. For each runtime `.hlsl` root, generation recursively expands local includes at the point where they occur, honors `#pragma once`, detects missing includes and unguarded include cycles, and adds `#line` markers so diagnostics can identify the original source file. Authored `.hlsli` and `.h` entries remain embedded in their original form for include-handler fallback. FXC verification and optional bytecode precompilation still compile the on-disk roots and use the same nested include layout. Generated files should never be hand-edited.
 
 `shadertoolsconfig.json` supplies `shaders` and `shaders/common` as HLSL editor include directories.
 
@@ -318,7 +320,7 @@ struct ComputePassDef {
 
 - source = embedded root source
 - source name = the root path, so compiler diagnostics identify the shader file
-- include handler = `EmbeddedInclude`
+- include handler = `EmbeddedInclude`, which resolves both sibling-relative and shader-root-relative paths when a compile-time include is needed
 - entry point = `CSMain`
 - target = `cs_5_1`
 - optimization = `D3DCOMPILE_OPTIMIZATION_LEVEL3`

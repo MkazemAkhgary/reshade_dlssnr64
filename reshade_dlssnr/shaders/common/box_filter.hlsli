@@ -1,3 +1,4 @@
+#pragma once
 #ifndef DLSSNR_BOX_FILTER_HLSLI
 #define DLSSNR_BOX_FILTER_HLSLI
 

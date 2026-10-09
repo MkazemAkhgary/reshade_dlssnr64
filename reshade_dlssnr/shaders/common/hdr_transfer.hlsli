@@ -1,5 +1,11 @@
+#pragma once
 #ifndef DLSSNR_HDR_TRANSFER_HLSLI
 #define DLSSNR_HDR_TRANSFER_HLSLI
+
+#include "bindings.hlsli"
+#include "color.hlsli"
+#include "luma.hlsli"
+
 
 float3 HdrPreDesaturate(float3 c, float a)
 {

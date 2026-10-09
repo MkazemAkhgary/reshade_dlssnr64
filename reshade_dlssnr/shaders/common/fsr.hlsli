@@ -1,3 +1,4 @@
+#pragma once
 #ifndef DLSSNR_FSR_HLSLI
 #define DLSSNR_FSR_HLSLI
 

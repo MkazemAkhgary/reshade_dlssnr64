@@ -1,3 +1,4 @@
+#pragma once
 #ifndef DLSSNR_REGISTERS_HLSI
 #define DLSSNR_REGISTERS_HLSI
 

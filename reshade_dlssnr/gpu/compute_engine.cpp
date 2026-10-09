@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include <reshade.hpp>
 
@@ -37,17 +38,85 @@ std::string TrimShaderDiagnostic(const void* data, size_t size) {
   return text;
 }
 
+std::string NormalizeShaderIncludePath(const std::string &path) {
+  if (path.empty() || path.front() == '/' || path.find(':') != std::string::npos)
+    return {};
+
+  std::string value = path;
+  for (char &ch : value) {
+    if (ch == '\\') ch = '/';
+  }
+
+  std::vector<std::string> parts;
+  size_t start = 0;
+  while (start <= value.size()) {
+    const size_t end = value.find('/', start);
+    const size_t length = end == std::string::npos ? value.size() - start
+                                                    : end - start;
+    const std::string part = value.substr(start, length);
+    if (part.empty() || part == ".") {
+      // Ignore redundant separators and current-directory segments.
+    } else if (part == "..") {
+      if (parts.empty()) return {};
+      parts.pop_back();
+    } else {
+      parts.push_back(part);
+    }
+    if (end == std::string::npos) break;
+    start = end + 1;
+  }
+
+  std::string result;
+  for (const std::string &part : parts) {
+    if (!result.empty()) result += '/';
+    result += part;
+  }
+  return result;
+}
+
+const EmbeddedShader *FindEmbeddedInclude(const char *file_name,
+                                          LPCVOID parent_data) {
+  if (file_name == nullptr) return nullptr;
+
+  const EmbeddedShader *parent = nullptr;
+  if (parent_data != nullptr) {
+    for (size_t i = 0; i < kEmbeddedShaderCount; ++i) {
+      if (kEmbeddedShaders[i].source == parent_data) {
+        parent = &kEmbeddedShaders[i];
+        break;
+      }
+    }
+  }
+
+  const std::string include_name = file_name;
+  if (parent != nullptr) {
+    const std::string parent_name = parent->name != nullptr ? parent->name : "";
+    const size_t slash = parent_name.find_last_of('/');
+    if (slash != std::string::npos) {
+      const std::string relative = NormalizeShaderIncludePath(
+          parent_name.substr(0, slash + 1) + include_name);
+      if (!relative.empty()) {
+        if (const EmbeddedShader *shader = FindEmbeddedShader(relative.c_str()))
+          return shader;
+      }
+    }
+  }
+
+  const std::string normalized = NormalizeShaderIncludePath(include_name);
+  return normalized.empty() ? nullptr : FindEmbeddedShader(normalized.c_str());
+}
+
 class EmbeddedInclude final : public ID3DInclude {
  public:
   HRESULT STDMETHODCALLTYPE Open(
       D3D_INCLUDE_TYPE,
       LPCSTR file_name,
-      LPCVOID,
+      LPCVOID parent_data,
       LPCVOID* data,
       UINT* bytes) override {
     if (data == nullptr || bytes == nullptr || file_name == nullptr)
       return E_INVALIDARG;
-    const EmbeddedShader* shader = FindEmbeddedShader(file_name);
+    const EmbeddedShader* shader = FindEmbeddedInclude(file_name, parent_data);
     if (shader == nullptr)
       return E_FAIL;
     *data = shader->source;
