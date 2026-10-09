@@ -1,10 +1,31 @@
 #include "skin/settings.h"
 
 #include <algorithm>
+#include <cmath>
+#include <mutex>
 
 #include <reshade.hpp>
 
 namespace reshade_dlssnr {
+
+namespace {
+std::mutex g_detection_scale_mutex;
+}
+
+float NormalizeDetectionScale(float scale) {
+  if (!std::isfinite(scale)) scale = 0.25f;
+  return std::clamp(scale, 0.10f, 1.0f);
+}
+
+float GetDetectionScale(const SkinSettings& skin) {
+  std::lock_guard<std::mutex> lock(g_detection_scale_mutex);
+  return NormalizeDetectionScale(skin.scale);
+}
+
+void SetDetectionScale(SkinSettings& skin, float scale) {
+  std::lock_guard<std::mutex> lock(g_detection_scale_mutex);
+  skin.scale = NormalizeDetectionScale(scale);
+}
 
 void LoadSkinSettings(SkinSettings& skin) {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.Enable", skin.enable);
@@ -14,7 +35,7 @@ void LoadSkinSettings(SkinSettings& skin) {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "StructureDetect.Target", target);
   if (target < 0 || target > 1) target = 0;
   skin.target_mode = static_cast<DetectionTargetMode>(target);
-  skin.scale = std::clamp(skin.scale, 0.10f, 1.0f);
+  skin.scale = NormalizeDetectionScale(skin.scale);
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.LumaThreshold", skin.luma_threshold);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.ChromaThreshold", skin.chroma_threshold);
@@ -41,8 +62,9 @@ void LoadSkinSettings(SkinSettings& skin) {
 }
 
 void SaveSkinSettings(const SkinSettings& skin) {
+  const float detection_scale = GetDetectionScale(skin);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.Enable", skin.enable);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.Scale", skin.scale);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.Scale", detection_scale);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "StructureDetect.Target", static_cast<int>(skin.target_mode));
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.LumaThreshold", skin.luma_threshold);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "SkinDetect.ChromaThreshold", skin.chroma_threshold);

@@ -421,7 +421,7 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 ### D3D12 / GPU
 
-**Own every replaced resource until the GPU is finished with it.** `PassResources` transfers replaced resources into the retire callback rather than releasing them immediately; the callback is drained after the appropriate queue synchronization. Direct `ComPtr::Reset()` on an in-flight resource is unsafe.
+**Own every replaced resource until the GPU is finished with it.** `PassResources` transfers replaced resources into the retire callback rather than releasing them immediately; Structure Detection transfers retired texture references into the same deferred-release queues. Those queues are drained only after the frame-end queue synchronization. Direct `ComPtr::Reset()` on an in-flight resource is unsafe.
 
 **Seed states for resources the addon owns.** `InferResourceState` is only a fallback for resources whose exact state is not otherwise known. Pass-owned resources are seeded at frame boundaries and cleaned back to their expected states before submission.
 
@@ -429,11 +429,13 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 **Post-DLSS work must stay on the game's command list and must not submit it.** The addon records inline and lets the game's queue submit that work.
 
-**Present/Release command contexts own their own fence.** `CommandContext::WaitGpu` is the synchronization point for addon-owned lists and for deferred resource release that depends on them. When either retired-resource queue is non-empty, `OnPresent` must open and submit the Release command list even if backbuffer grading and debug output are disabled; otherwise the old Structure Detection working textures can be released while the game's earlier command list is still in flight.
+**Present/Release command contexts own their own fence.** `CommandContext::WaitGpu` is the synchronization point for addon-owned lists and for deferred resource release that depends on them. When either retired-resource queue is non-empty, `OnPresent` must open and submit the Release command list even if backbuffer grading and debug output are disabled. This puts the wait behind the work already submitted to that command queue before retired textures are released.
 
 **Abandoned Present recordings must be closed before allocator reuse.** `CommandContext::Abort` closes a recording that exited before the normal `SubmitAndWait` tail; `Reset` must never reset an allocator while its command list is still recording.
 
 **The descriptor/constant ring cannot be reused ahead of the GPU.** Descriptor views and the 256-byte constant slot are written by the CPU while commands are recorded but consumed later by the GPU. The ring depth therefore has to cover the maximum CPU lead and worst-case dispatch count.
+
+**Structure Detection resource generations are replaced atomically.** The three working textures and two mask textures for a new scale are all allocated before any active resource is detached. If any allocation fails, the prior generation and its cached dimensions remain consistent. The scale value is read and written through a synchronized accessor because the overlay can change it while NGX evaluation is running on another thread; non-finite persisted values fall back to the default scale.
 
 **Always return the swapchain image to `PRESENT`.** `GradeBackbuffer` keeps that transition even when grading fails, because leaving the backbuffer in an intermediate state turns a grade error into a later present failure.
 

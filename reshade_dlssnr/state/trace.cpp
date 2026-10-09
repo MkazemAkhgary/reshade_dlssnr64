@@ -196,7 +196,7 @@ Snapshot BuildSnapshot(const Settings& settings,
   Append(snap, "hdr_gain_min_log2", FloatText(settings.hdr.gain_min_log2));
   Append(snap, "hdr_gain_max_log2", FloatText(settings.hdr.gain_max_log2));
   Append(snap, "structure_detect_enable", BoolText(settings.skin.enable));
-  Append(snap, "structure_detect_scale", FloatText(settings.skin.scale));
+  Append(snap, "structure_detect_scale", FloatText(GetDetectionScale(settings.skin)));
   Append(snap, "structure_detect_luma_threshold", FloatText(settings.skin.luma_threshold));
   Append(snap, "structure_detect_luma_relative", FloatText(settings.skin.luma_relative));
   Append(snap, "structure_detect_chroma_threshold", FloatText(settings.skin.chroma_threshold));

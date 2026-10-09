@@ -111,9 +111,13 @@ void DrawStructureDetectSection(Settings& settings, bool& changed) {
 
   WithDisabled(!detection.enable, [&] {
     DrawTargetGroup(detection, changed);
-    changed |= DrawFloatRow(0, "structure_detect_scale", "Detection Scale",
-                            nullptr, &detection.scale, nullptr, 0.25f, 0.10f, 1.0f,
-                            0.25f);
+    float detection_scale = GetDetectionScale(detection);
+    if (DrawFloatRow(0, "structure_detect_scale", "Detection Scale",
+                     nullptr, &detection_scale, nullptr, 0.25f, 0.10f, 1.0f,
+                     0.25f)) {
+      SetDetectionScale(detection, detection_scale);
+      changed = true;
+    }
     DrawModelGroup(detection, settings.ui_skin_detect_model_open, changed);
     DrawMaskGroup(detection, settings.ui_skin_detect_mask_open, changed);
     ImGui::TextDisabled("Structure Detection uses the Game, Adaptive, and Local Exposure layers and their filter settings from the HDR section.");

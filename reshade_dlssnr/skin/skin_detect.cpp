@@ -1,6 +1,7 @@
 #include "skin/skin_detect.h"
 
 #include <algorithm>
+#include <utility>
 
 #include <reshade.hpp>
 
@@ -36,26 +37,24 @@ void RetireToGuides(ID3D12Resource* resource) {
   resource->Release();
 }
 
-bool RetireAndCreate(ID3D12Device* device,
-                     Microsoft::WRL::ComPtr<ID3D12Resource>& slot,
-                     const D3D12_RESOURCE_DESC& desc) {
-  if (slot != nullptr) {
-    ID3D12Resource* old = slot.Detach();
-    RetireToGuides(old);
-  }
+bool CreateDetectionResource(ID3D12Device* device,
+                             const D3D12_RESOURCE_DESC& desc,
+                             Microsoft::WRL::ComPtr<ID3D12Resource>& created) {
   D3D12_HEAP_PROPERTIES heap = {};
   heap.Type = D3D12_HEAP_TYPE_DEFAULT;
   D3D12_RESOURCE_DESC d = desc;
   d.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-  Microsoft::WRL::ComPtr<ID3D12Resource> created;
-  if (FAILED(device->CreateCommittedResource(
-          &heap, D3D12_HEAP_FLAG_NONE, &d,
-          D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr,
-          IID_PPV_ARGS(&created)))) {
-    return false;
+  return SUCCEEDED(device->CreateCommittedResource(
+      &heap, D3D12_HEAP_FLAG_NONE, &d,
+      D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr,
+      IID_PPV_ARGS(&created))) && created != nullptr;
+}
+
+void RetireSlot(Microsoft::WRL::ComPtr<ID3D12Resource>& slot) {
+  if (slot != nullptr) {
+    // Transfer the detached reference to the deferred-release queue.
+    RetireToGuides(slot.Detach());
   }
-  slot = std::move(created);
-  return true;
 }
 
 }  // namespace
@@ -79,8 +78,11 @@ bool SkinDetect::EnsureResources(ID3D12Device* device,
                                  unsigned int width,
                                  unsigned int height,
                                  DXGI_FORMAT format) {
-  if (device == nullptr) return false;
-  if (working_input_ != nullptr && width_ == width && height_ == height &&
+  if (device == nullptr || width == 0 || height == 0) return false;
+  const bool resources_complete =
+      working_input_ != nullptr && prepared_input_ != nullptr &&
+      working_output_ != nullptr && mask_[0] != nullptr && mask_[1] != nullptr;
+  if (resources_complete && width_ == width && height_ == height &&
       format_ == format) {
     return true;
   }
@@ -95,16 +97,39 @@ bool SkinDetect::EnsureResources(ID3D12Device* device,
   color_desc.SampleDesc.Count = 1;
   color_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 
-  if (!RetireAndCreate(device, working_input_, color_desc)) return false;
-  if (!RetireAndCreate(device, prepared_input_, color_desc)) return false;
-  if (!RetireAndCreate(device, working_output_, color_desc)) return false;
-
+  // Build a complete resource generation before changing the active set. If
+  // any allocation fails, the current generation and its cached dimensions
+  // stay consistent and can still be retired safely on a later successful
+  // resize. This avoids a partially recreated set after an allocation failure.
+  Microsoft::WRL::ComPtr<ID3D12Resource> new_working_input;
+  Microsoft::WRL::ComPtr<ID3D12Resource> new_prepared_input;
+  Microsoft::WRL::ComPtr<ID3D12Resource> new_working_output;
+  Microsoft::WRL::ComPtr<ID3D12Resource> new_mask[2];
   D3D12_RESOURCE_DESC mask_desc = color_desc;
   mask_desc.Format = DXGI_FORMAT_R8_UNORM;
-  if (!RetireAndCreate(device, mask_[0], mask_desc)) return false;
-  if (!RetireAndCreate(device, mask_[1], mask_desc)) return false;
 
-  // Fresh pair, no history. First frame after this writes the vote fresh.
+  if (!CreateDetectionResource(device, color_desc, new_working_input) ||
+      !CreateDetectionResource(device, color_desc, new_prepared_input) ||
+      !CreateDetectionResource(device, color_desc, new_working_output) ||
+      !CreateDetectionResource(device, mask_desc, new_mask[0]) ||
+      !CreateDetectionResource(device, mask_desc, new_mask[1])) {
+    return false;
+  }
+
+  RetireSlot(working_input_);
+  RetireSlot(prepared_input_);
+  RetireSlot(working_output_);
+  RetireSlot(mask_[0]);
+  RetireSlot(mask_[1]);
+
+  working_input_ = std::move(new_working_input);
+  prepared_input_ = std::move(new_prepared_input);
+  working_output_ = std::move(new_working_output);
+  mask_[0] = std::move(new_mask[0]);
+  mask_[1] = std::move(new_mask[1]);
+
+  // A new pair has no temporal history. The first mask dispatch writes a fresh
+  // vote, and the public output remains invalid until that dispatch succeeds.
   mask_index_ = 0;
   mask_valid_ = false;
   width_ = width;
@@ -132,7 +157,7 @@ bool SkinDetect::Run(CommandContext& cmd,
     return false;
   }
 
-  const float scale = std::clamp(settings.skin.scale, 0.1f, 1.0f);
+  const float scale = GetDetectionScale(settings.skin);
   const unsigned int work_w = std::max(
       1u, static_cast<unsigned int>(guides.output_width * scale + 0.5f));
   const unsigned int work_h = std::max(

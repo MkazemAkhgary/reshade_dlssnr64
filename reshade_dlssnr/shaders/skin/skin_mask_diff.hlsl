@@ -31,8 +31,10 @@ bool PixelIsSkin(int2 xy)
         min(min(a.r, a.g), a.b) > lo &&
         min(min(b.r, b.g), b.b) > lo;
 
-    // --- Hysteresis to reduce temporal flickering ---
-    float prev = gPrevMask.Load(int3(xy, 0));
+    // During a fresh mask generation, do not sample the newly allocated,
+    // uninitialized history texture. Alpha 1 means this frame replaces history.
+    float prev = kMaskAlpha >= 0.999
+        ? 0.0 : gPrevMask.Load(int3(xy, 0));
     float hysteresis = lerp(1.0, 0.5, saturate(prev * 2.0));
 
     float a_luma = dot(a, kLuma709);
@@ -73,6 +75,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         }
     }
     float vote = (total > 0 && hits * 2 >= total) ? 1.0 : 0.0;
-    float prev = gPrevMask.Load(int3(id.xy, 0));
+    float prev = kMaskAlpha >= 0.999
+        ? 0.0 : gPrevMask.Load(int3(id.xy, 0));
     gMask[id.xy] = lerp(prev, vote, kMaskAlpha);
 }

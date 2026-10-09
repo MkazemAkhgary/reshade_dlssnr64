@@ -30,6 +30,12 @@ struct SkinSettings {
   float mask_response = 0.15f;
 };
 
+// Scale is edited by the overlay while the NGX EvaluateFeature hook can run on
+// another thread. Route accesses through these synchronized helpers.
+float GetDetectionScale(const SkinSettings& skin);
+void SetDetectionScale(SkinSettings& skin, float scale);
+float NormalizeDetectionScale(float scale);
+
 void LoadSkinSettings(SkinSettings& skin);
 void SaveSkinSettings(const SkinSettings& skin);
 
