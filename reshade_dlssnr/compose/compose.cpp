@@ -10,6 +10,7 @@ bool ComposeOutput(
     PassResources& resources,
     ComputeEngine* codec,
     ID3D12Resource* packed_source,
+    ID3D12Resource* hdr_source,
     ID3D12Resource* low_input,
     ID3D12Resource* low_enhanced,
     unsigned int full_width,
@@ -21,7 +22,8 @@ bool ComposeOutput(
     const GradeSettings* grade_input,
     const HdrUniforms* hdr) {
   if (codec == nullptr || command_list == nullptr || packed_source == nullptr ||
-      low_input == nullptr || low_enhanced == nullptr || params == nullptr) {
+      hdr_source == nullptr || low_input == nullptr || low_enhanced == nullptr ||
+      params == nullptr) {
     return false;
   }
 
@@ -79,8 +81,6 @@ bool ComposeOutput(
     constants.hdr.Bt2446K2 = hdr->bt2446_k2;
     constants.hdr.Bt2446K4 = hdr->bt2446_k4;
     constants.hdr.Crosstalk = hdr->bt2446_crosstalk;
-    constants.hdr.BaseOffset = hdr->gain_base_offset;
-    constants.hdr.AlternateOffset = hdr->gain_alternate_offset;
     constants.hdr.GainMinLog2 = hdr->gain_min_log2;
     constants.hdr.GainMaxLog2 = hdr->gain_max_log2;
     constants.hdr.EffectiveSceneWhiteNits = hdr->effective_scene_white_nits;
@@ -113,19 +113,12 @@ bool ComposeOutput(
                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   state.Transition(command_list, low_enhanced,
                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-  ID3D12Resource* effective_exposure = packed_source;
-  if (hdr != nullptr && residual.hdr_compose_mode == HdrComposeMode::InverseToneMap &&
-      hdr->local_exposure_strength > 0.0f &&
-      resources.GetEffectiveExposureMap() != nullptr) {
-    effective_exposure = resources.GetEffectiveExposureMap();
-    state.Transition(command_list, effective_exposure,
-                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    constants.shader.Params1.w = 1.0f;
-  }
+  state.Transition(command_list, hdr_source,
+                   D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
   ID3D12Resource* srvs[kSrvCount] = {
-      packed_source, low_input, low_enhanced, effective_exposure};
+      packed_source, low_input, low_enhanced,
+      hdr != nullptr ? hdr_source : packed_source};
   ID3D12Resource* uavs[kUavCount] = {resources.GetCompositeOutput()};
 
   return codec->Dispatch(pass_name, command_list, constants, srvs, uavs);

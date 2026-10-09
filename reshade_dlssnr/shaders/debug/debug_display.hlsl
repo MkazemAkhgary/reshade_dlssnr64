@@ -36,8 +36,10 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         // will perform the final presentation transform.
         rgb = c.rgb;
     } else if (mode == 5) {
-        // Diagnostic-only mapping: raw log2 gain [-4, +6] -> [0, 1].
-        float g = saturate((c.a + 4.0) / 10.0);
+        // Alpha stores the carrier-to-HDR reconstruction multiplier; display its log2
+        // value as stops, mapped from [-4, +6] to [0, 1].
+        float stops = log2(max(c.a, 1.0e-20));
+        float g = saturate((stops + 4.0) / 10.0);
         rgb = g.xxx;
     } else if (mode == 9) {
         // Exposure is shown in stops; magenta marks unavailable data.

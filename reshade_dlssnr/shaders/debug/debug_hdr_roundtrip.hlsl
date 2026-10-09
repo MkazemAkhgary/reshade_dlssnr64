@@ -35,10 +35,9 @@ float3 ForwardHdrToModelSdr(float3 hdr_encoded, uint2 pixel)
         kSdrReferenceWhiteNits, max(kEffectiveSceneWhiteNits, 0.01));
     float y_curve = y_exposed * kPqPeakNits / effective_peak_nits;
     float y_sdr = max(HdrBt2446Forward(y_curve) / 100.0, 0.0);
-    float chroma_scale = y_exposed > 1e-8 ? y_sdr / y_exposed : 0.0;
-    float3 pre_sdr = pre_exposed * chroma_scale;
-    float3 sdr_global = HdrInversePreDesaturate(
-        pre_sdr, saturate(kCrosstalk));
+    float chroma_scale = y_exposed > 0.0 ? y_sdr / y_exposed : 0.0;
+    float3 sdr_global = max(hdr_linear, 0.0) *
+                        (max(kExposure, 1e-6) * chroma_scale);
 
     float local_scale = 1.0;
     if (kLocalExposureStrength > 0.0 && kEffectiveExposureMapValid > 0.5)
@@ -59,9 +58,6 @@ float3 EncodeDiagnosticSdr(float3 sdr)
     return v;
 }
 
-// Compare the composed HDR against an upsampled model endpoint using the same
-// local-exposure map and RCAS settings as composition. At reduced working scales,
-// retained full-resolution source detail can still differ from the upsampled view.
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
@@ -69,6 +65,28 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         return;
 
     float2 uv = (float2(id.xy) + 0.5) / float2(Width, Height);
+    int mode = (int)(kDiagMode + 0.5);
+
+    // Measure the full-resolution carrier round trip independently of model
+    // upsampling and RCAS so those operations cannot masquerade as transfer error.
+    if (mode == 1)
+    {
+        const float3 source_encoded = gSource.Load(int3(id.xy, 0)).rgb;
+        const float3 source_linear = DecodeToLinear(
+            source_encoded, (int)(kFormat + 0.5), kSdrReferenceWhiteNits);
+        const float4 packed = gModelOut.Load(int3(id.xy, 0));
+        const float3 reconstructed_linear = HdrReconstructFromGainMap(
+            packed.rgb, packed.a);
+        const float3 denominator = max(abs(source_linear), 1e-6.xxx);
+        const float3 relative_error =
+            (reconstructed_linear - source_linear) / denominator;
+        // 1/4096 relative error is the neutral tolerance band; deviations are
+        // magnified while keeping the full-float reconstruction unmodified.
+        const float3 display = saturate(0.5 + relative_error * 2048.0);
+        gOutput[id.xy] = float4(EncodeDiagnosticSdr(display), 1.0);
+        return;
+    }
+
     float3 roundtrip = ForwardHdrToModelSdr(
         gComposed.SampleLevel(s0, uv, 0.0).rgb, id.xy);
     const float2 easu_con3 = float2(0.0, 4.0 * kEasuCon1.y);
@@ -94,7 +112,6 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         model_out = FsrRcasF(b_out, d_out, model_out, f_out, h_out, kRcasStrength);
     }
 
-    int mode = (int)(kDiagMode + 0.5);
     float3 display = 0.0;
     if (mode == 0) {
         bool right = uv.x >= 0.5;
@@ -109,9 +126,6 @@ void CSMain(uint3 id : SV_DispatchThreadID)
             float3 diff = roundtrip - model_out;
             display = saturate(0.5 + diff * 4.0);
         }
-    } else if (mode == 1) {
-        float3 diff = roundtrip - model_out;
-        display = saturate(0.5 + diff * 4.0);
     } else if (mode == 2) {
         float local_scale = kLocalExposureStrength > 0.0 &&
                 kEffectiveExposureMapValid > 0.5

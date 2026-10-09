@@ -193,8 +193,6 @@ Snapshot BuildSnapshot(const Settings& settings,
   Append(snap, "hdr_bt2446_k3", FloatText(settings.hdr.bt2446_k3));
   Append(snap, "hdr_bt2446_k4", FloatText(settings.hdr.bt2446_k4));
   Append(snap, "hdr_bt2446_crosstalk", FloatText(settings.hdr.bt2446_crosstalk));
-  Append(snap, "hdr_gain_base_offset", FloatText(settings.hdr.gain_base_offset));
-  Append(snap, "hdr_gain_alternate_offset", FloatText(settings.hdr.gain_alternate_offset));
   Append(snap, "hdr_gain_min_log2", FloatText(settings.hdr.gain_min_log2));
   Append(snap, "hdr_gain_max_log2", FloatText(settings.hdr.gain_max_log2));
   Append(snap, "structure_detect_enable", BoolText(settings.skin.enable));

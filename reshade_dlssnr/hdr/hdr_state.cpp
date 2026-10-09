@@ -276,7 +276,7 @@ void HdrState::Shutdown() {
   have_gain_stats_ = false;
   gain_min_log2_ = 0.0f;
   gain_max_log2_ = 0.0f;
-  gain_sdr_clipped_pixels_ = 0;
+  gain_sdr_excursion_pixels_ = 0;
   gain_out_of_range_pixels_ = 0;
 }
 
@@ -309,7 +309,7 @@ HdrSnapshot HdrState::GetSnapshot() const {
   snapshot.gain_map_ready = have_gain_stats_;
   snapshot.gain_min_log2 = gain_min_log2_;
   snapshot.gain_max_log2 = gain_max_log2_;
-  snapshot.gain_sdr_clipped_pixels = gain_sdr_clipped_pixels_;
+  snapshot.gain_sdr_excursion_pixels = gain_sdr_excursion_pixels_;
   snapshot.gain_out_of_range_pixels = gain_out_of_range_pixels_;
   return snapshot;
 }
@@ -560,7 +560,7 @@ void HdrState::PollReadback(ID3D12Fence* fence, const Settings& settings) {
       };
       gain_min_log2_ = std::bit_cast<float>(unsort(min_sortable));
       gain_max_log2_ = std::bit_cast<float>(unsort(max_sortable));
-      gain_sdr_clipped_pixels_ = stats[2];
+      gain_sdr_excursion_pixels_ = stats[2];
       gain_out_of_range_pixels_ = stats[3];
       if (std::isfinite(gain_min_log2_) && std::isfinite(gain_max_log2_))
         have_gain_stats_ = true;

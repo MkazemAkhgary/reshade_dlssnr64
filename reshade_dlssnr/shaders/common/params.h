@@ -63,8 +63,9 @@ DLSSNR_BLOCK(HdrBlock)
     float Bt2446K2;
     float Bt2446K4;
     float Crosstalk;
-    float BaseOffset;
-    float AlternateOffset;
+    // Reserved legacy gain-map slots; retained to preserve the shared cbuffer layout.
+    float ReservedGain0;
+    float ReservedGain1;
     float GainMinLog2;
     float GainMaxLog2;
     // Absolute effective scene-white peak in nits.

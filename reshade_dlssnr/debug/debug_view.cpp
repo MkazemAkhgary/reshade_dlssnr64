@@ -125,22 +125,23 @@ const DebugViewDef kDebugViews[] = {
      "White = the model edit matched the selected detection target.",
      DebugDisplayMode::Mask, SelectSkinMask},
     {"SDR Base (pre-model)",
-     "Full-resolution linear SDR base produced by the BT.2446C gain-map split. "
+     "Full-resolution linear SDR carrier produced by the BT.2446C split. "
      "This is the RGB payload the model is downsampled from.",
      DebugDisplayMode::PackedSdr, SelectPackedSdr},
     {"Gain Map",
-     "Raw f32 log2 gain from the gain-map split. Displayed with -4 as black and +6 as white.",
+     "Raw f32 carrier-to-HDR reconstruction multiplier, displayed in log2 stops from -4 (black) to +6 (white).",
      DebugDisplayMode::GainMap, SelectGainMap},
     {"HDR Roundtrip Diagnostic",
-     "2x2 comparison: Model Input | Model Output / HDR->SDR Roundtrip | Error. "
-     "The reference applies the same RCAS setting as composition. For a clean "
-     "transfer test, set Working Scale to 1.0 and disable input/output grades and RCAS.",
+     "2x2 model/compose comparison: upscaled Model Input | Model Output / "
+     "composed HDR mapped back to model SDR | model comparison error. This view "
+     "includes working-scale reconstruction and RCAS; use HDR Roundtrip Error "
+     "to inspect the full-resolution gain-map transfer itself.",
      DebugDisplayMode::HdrRoundtripDiagnostic, SelectComposedOutput},
     {"HDR Roundtrip Error",
-     "False-color difference from the model output after the final HDR result is "
-     "converted back through the same HDR->SDR transform. At lower Working Scale, "
-     "edges also show full-resolution source detail retained by composition.",
-     DebugDisplayMode::HdrRoundtripError, SelectComposedOutput},
+     "False-color relative error between the original decoded HDR source and the "
+     "direct float32 reconstruction from the RGBA32F carrier and carrier-to-HDR multiplier. "
+     "Independent of Working Scale, RCAS, and output-format encoding.",
+     DebugDisplayMode::HdrRoundtripError, SelectPackedSdr},
     {"HDR Local Exposure",
      "Local exposure factor in stops, mapped so 0 stops is mid-gray, -2 stops "
      "is black, and +2 stops is white.",
@@ -193,12 +194,17 @@ bool RenderDebugView(
   const bool hdr_diag = display_mode == DebugDisplayMode::HdrRoundtripDiagnostic ||
                         display_mode == DebugDisplayMode::HdrRoundtripError ||
                         display_mode == DebugDisplayMode::HdrLocalExposure;
-  const bool hdr_needs_model = display_mode == DebugDisplayMode::HdrRoundtripDiagnostic ||
-                               display_mode == DebugDisplayMode::HdrRoundtripError;
+  const bool hdr_needs_model =
+      display_mode == DebugDisplayMode::HdrRoundtripDiagnostic;
+  const bool hdr_needs_carrier =
+      display_mode == DebugDisplayMode::HdrRoundtripError;
+  const bool hdr_needs_composed =
+      display_mode == DebugDisplayMode::HdrRoundtripDiagnostic;
   if (hdr_diag &&
-      (hdr == nullptr || snapshot.composed_output == nullptr ||
-       snapshot.source == nullptr ||
-       (hdr_needs_model && snapshot.model_output == nullptr))) {
+      (hdr == nullptr || snapshot.source == nullptr ||
+       (hdr_needs_composed && snapshot.composed_output == nullptr) ||
+       (hdr_needs_model && snapshot.model_output == nullptr) ||
+       (hdr_needs_carrier && snapshot.packed_hdr_sdr == nullptr))) {
     return false;
   }
 
@@ -223,8 +229,6 @@ bool RenderDebugView(
     constants.hdr.Bt2446K2 = hdr->bt2446_k2;
     constants.hdr.Bt2446K4 = hdr->bt2446_k4;
     constants.hdr.Crosstalk = hdr->bt2446_crosstalk;
-    constants.hdr.BaseOffset = hdr->gain_base_offset;
-    constants.hdr.AlternateOffset = hdr->gain_alternate_offset;
     constants.hdr.GainMinLog2 = hdr->gain_min_log2;
     constants.hdr.GainMaxLog2 = hdr->gain_max_log2;
     constants.hdr.EffectiveSceneWhiteNits = hdr->effective_scene_white_nits;
@@ -256,12 +260,16 @@ bool RenderDebugView(
     constants.rcas.Enabled = snapshot.rcas_enabled ? 1.0f : 0.0f;
     constants.rcas.Strength = snapshot.rcas_strength;
 
-    state.Transition(command_list, snapshot.composed_output,
-                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    if (snapshot.composed_output != nullptr) {
+      state.Transition(command_list, snapshot.composed_output,
+                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    }
     state.Transition(command_list, snapshot.source,
                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    if (snapshot.model_output != nullptr) {
-      state.Transition(command_list, snapshot.model_output,
+    ID3D12Resource* auxiliary_resource = hdr_needs_carrier
+        ? snapshot.packed_hdr_sdr : snapshot.model_output;
+    if (auxiliary_resource != nullptr) {
+      state.Transition(command_list, auxiliary_resource,
                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     }
     if (snapshot.effective_exposure_map != nullptr) {
@@ -272,8 +280,9 @@ bool RenderDebugView(
                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
     ID3D12Resource* srvs[kSrvCount] = {
-        snapshot.composed_output, snapshot.source,
-        snapshot.model_output != nullptr ? snapshot.model_output : snapshot.source,
+        snapshot.composed_output != nullptr ? snapshot.composed_output : snapshot.source,
+        snapshot.source,
+        auxiliary_resource != nullptr ? auxiliary_resource : snapshot.source,
         snapshot.effective_exposure_map != nullptr
             ? snapshot.effective_exposure_map : snapshot.source};
     constants.shader.Params1.w =

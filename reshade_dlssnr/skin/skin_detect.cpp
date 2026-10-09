@@ -202,8 +202,6 @@ bool SkinDetect::Run(CommandContext& cmd,
     constants.hdr.Bt2446K2 = settings.hdr.bt2446_k2;
     constants.hdr.Bt2446K4 = settings.hdr.bt2446_k4;
     constants.hdr.Crosstalk = settings.hdr.bt2446_crosstalk;
-    constants.hdr.BaseOffset = settings.hdr.gain_base_offset;
-    constants.hdr.AlternateOffset = settings.hdr.gain_alternate_offset;
     constants.hdr.GainMinLog2 = settings.hdr.gain_min_log2;
     constants.hdr.GainMaxLog2 = settings.hdr.gain_max_log2;
     constants.hdr.EffectiveSceneWhiteNits =

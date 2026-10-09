@@ -93,7 +93,7 @@ enum class PipelineNodeId : uint32_t {
   BuildHdrUniforms = 16,
   GainMapSplit = 17,       // dispatches "GainMapSplit"
   PrepareModelInput = 18,  // dispatches "PrepareModelInput"
-  BuildEffectiveLocalExposure = 19, // full-resolution local SDR exposure scale for HDR inverse compose
+  BuildEffectiveLocalExposure = 19, // full-resolution local SDR exposure scale for HDR diagnostics
   // Grades the image the model is about to read. Follows PrepareModelInput
   // because that is what fills the working input, and precedes the evaluate
   // because that is what consumes it.

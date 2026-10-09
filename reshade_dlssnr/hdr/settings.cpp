@@ -164,12 +164,8 @@ void LoadHdrSettings(HdrSettings& hdr) {
   hdr.bt2446_k4 = std::max(hdr.bt2446_k4, 1e-4f);
   hdr.bt2446_crosstalk = std::clamp(hdr.bt2446_crosstalk, 0.0f, 0.33f);
 
-  LoadFloat("Hdr.GainMap.BaseOffset", hdr.gain_base_offset);
-  LoadFloat("Hdr.GainMap.AlternateOffset", hdr.gain_alternate_offset);
   LoadFloat("Hdr.GainMap.MinLog2", hdr.gain_min_log2);
   LoadFloat("Hdr.GainMap.MaxLog2", hdr.gain_max_log2);
-  hdr.gain_base_offset = std::clamp(hdr.gain_base_offset, 0.0f, 1.0f);
-  hdr.gain_alternate_offset = std::clamp(hdr.gain_alternate_offset, 0.0f, 1.0f);
   hdr.gain_min_log2 = std::clamp(hdr.gain_min_log2, -32.0f, 0.0f);
   hdr.gain_max_log2 = std::clamp(hdr.gain_max_log2, 0.0f, 32.0f);
   if (hdr.gain_max_log2 <= hdr.gain_min_log2) {
@@ -215,8 +211,6 @@ void SaveHdrSettings(const HdrSettings& hdr) {
   SaveFloat("Hdr.BT2446.K3", hdr.bt2446_k3);
   SaveFloat("Hdr.BT2446.K4", hdr.bt2446_k4);
   SaveFloat("Hdr.BT2446.Crosstalk", hdr.bt2446_crosstalk);
-  SaveFloat("Hdr.GainMap.BaseOffset", hdr.gain_base_offset);
-  SaveFloat("Hdr.GainMap.AlternateOffset", hdr.gain_alternate_offset);
   SaveFloat("Hdr.GainMap.MinLog2", hdr.gain_min_log2);
   SaveFloat("Hdr.GainMap.MaxLog2", hdr.gain_max_log2);
 }

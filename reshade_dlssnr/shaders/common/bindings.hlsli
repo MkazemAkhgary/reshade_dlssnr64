@@ -35,8 +35,6 @@
 #define kBt2446K2            hdr.Bt2446K2
 #define kBt2446K4            hdr.Bt2446K4
 #define kCrosstalk           hdr.Crosstalk
-#define kBaseOffset          hdr.BaseOffset
-#define kAlternateOffset     hdr.AlternateOffset
 #define kGainMinLog2         hdr.GainMinLog2
 #define kGainMaxLog2         hdr.GainMaxLog2
 #define kEffectiveSceneWhiteNits hdr.EffectiveSceneWhiteNits

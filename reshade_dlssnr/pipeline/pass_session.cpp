@@ -226,11 +226,10 @@ bool PassSession::EnsureFrameResources(
     return false;
   }
 
-  // HDR model intermediates must stay in full-range float. The published
-  // composite retains the game's original DXGI format. Keeping the model
-  // buffers in the source's 10-bit/16F representation would quantize the SDR
-  // edit before the gain map is reapplied, defeating the point of the raw-f32
-  // round trip.
+  // NGX-facing model textures use the typed FP16 format expected by the current
+  // DLSSNR path. The full-resolution SDR carrier and carrier-to-HDR reconstruction multiplier
+  // are stored separately in RGBA32F, while HDR composition reads the untouched
+  // source resource directly. The published composite uses the game's format.
   D3D12_RESOURCE_DESC model_desc = desc;
   const HdrFormat frame_format = DetectFormatFromDxgi(desc.Format);
   const bool hdr_frame = frame_format == HdrFormat::ScRgb ||
@@ -1006,8 +1005,6 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
   // but the direct Method-C evaluation uses k1, k2 and k4 plus Y_ip = k4/k1.
   constants.hdr.Bt2446K4 = run.hdr_uniforms.bt2446_k4;
   constants.hdr.Crosstalk = run.hdr_uniforms.bt2446_crosstalk;
-  constants.hdr.BaseOffset = run.hdr_uniforms.gain_base_offset;
-  constants.hdr.AlternateOffset = run.hdr_uniforms.gain_alternate_offset;
   constants.hdr.GainMinLog2 = run.hdr_uniforms.gain_min_log2;
   constants.hdr.GainMaxLog2 = run.hdr_uniforms.gain_max_log2;
   constants.hdr.EffectiveSceneWhiteNits = run.hdr_uniforms.effective_scene_white_nits;
@@ -1031,11 +1028,9 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
   self->command_.Transition(run.list, packed,
                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-  // Statistics are intentionally a second pass. The packed gain map is the
-  // canonical lossless carrier used by ComposeModelOutputHdr. Its RGB channels
-  // may legitimately contain super-white SDR values; those are reported as
-  // carrier excursions while gain values outside the configured metadata
-  // envelope are tracked separately. Neither diagnostic alters the carrier.
+  // Statistics are intentionally a second pass. The RGBA32F carrier's RGB can
+  // legitimately contain super-white SDR values. Those excursions and the
+  // multiplier's log2 range are reported separately; neither alters the carrier.
   ID3D12Resource* stats_srvs[kSrvCount] = {packed, packed, packed, packed};
   ID3D12Resource* stats_uavs[kUavCount] = {stats};
   self->command_.Transition(run.list, stats,
@@ -1106,9 +1101,9 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
   return PipelineStatus::Ok;
 }
 
-// Builds the exact full-resolution local SDR exposure scale used by GainMapSplit.
-// HDR inverse composition samples this same field instead of re-estimating local
-// exposure from the downsampled model image.
+// Builds the full-resolution local SDR exposure scale for debug visualization.
+// HDR inverse composition recovers the same multiplier from the source/carrier
+// pair and does not use this extra texture in its descriptor table.
 PipelineStatus PassSession::StepBuildEffectiveLocalExposure(PassRun& run) {
   PassSession* self = run.session;
   if (self == nullptr || run.codec == nullptr || run.hdr == nullptr ||
@@ -1134,8 +1129,6 @@ PipelineStatus PassSession::StepBuildEffectiveLocalExposure(PassRun& run) {
   constants.hdr.Bt2446K2 = run.hdr_uniforms.bt2446_k2;
   constants.hdr.Bt2446K4 = run.hdr_uniforms.bt2446_k4;
   constants.hdr.Crosstalk = run.hdr_uniforms.bt2446_crosstalk;
-  constants.hdr.BaseOffset = run.hdr_uniforms.gain_base_offset;
-  constants.hdr.AlternateOffset = run.hdr_uniforms.gain_alternate_offset;
   constants.hdr.GainMinLog2 = run.hdr_uniforms.gain_min_log2;
   constants.hdr.GainMaxLog2 = run.hdr_uniforms.gain_max_log2;
   constants.hdr.EffectiveSceneWhiteNits =
@@ -1331,9 +1324,9 @@ PipelineStatus PassSession::StepModelOutputBarrier(PassRun& run) {
 // Composition
 // ---------------------------------------------------------------------------
 
-// Compose the model output into PassResources::GetCompositeOutput(). With HDR
-// on, this reconstructs the original HDR source from the packed gain-map's
-// range and encoding.
+// Compose the model output into PassResources::GetCompositeOutput(). HDR uses
+// the packed carrier for model-domain values and the original source resource
+// for full-precision HDR composition.
 PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
   PassSession* self = run.session;
   if (run.codec == nullptr || run.pass == nullptr) {
@@ -1355,15 +1348,16 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
       hdr_active ? &run.hdr_uniforms : nullptr;
 
   // Intensity == 0 means the model edit is explicitly disabled. Use the
-  // exact model input as the compose reference so tiny NGX/evaluation noise
-  // cannot turn into an HDR residual after gain-map reconstruction.
+  // exact model input as the compose reference so NGX/evaluation noise cannot
+  // create a residual when the model output is intentionally bypassed.
   ID3D12Resource* enhanced_for_compose =
       run.pass->intensity <= 0.0f ? run.model_color : run.model_output;
 
   if (!model_pipeline::ComposeOutput(
           self->command_, self->StageList(run, self->command_),
-          self->resources_, run.codec, original, run.model_color,
-          enhanced_for_compose, run.width, run.height, run.pass->params,
+          self->resources_, run.codec, original, run.model_input,
+          run.model_color, enhanced_for_compose, run.width, run.height,
+          run.pass->params,
           run.pass->residual, run.pass->rcas_enabled,
           run.pass->rcas_strength, &run.pass->grade_input, hdr_ptr)) {
     self->FailForStep("failed to compose model output");

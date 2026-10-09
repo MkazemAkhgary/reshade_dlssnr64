@@ -11,6 +11,7 @@
 Texture2D<float4>   gOriginal    : register(t0);
 Texture2D<float4>   gLowInput    : register(t1);
 Texture2D<float4>   gLowEnhanced : register(t2);
+Texture2D<float4>   gHdrSource   : register(t3);
 RWTexture2D<float4> gOutput      : register(u0);
 SamplerState        s0           : register(s0);
 
@@ -22,34 +23,9 @@ float3 DecodePackedHdr(float4 packed)
 }
 
 
-float3 ReconstructHdr(float3 sdr_base, float gain)
-{
-    // A is a single luma gain. Apply the ISO offsets to the luma, recover the
-    // original HDR luma, then rescale the SDR RGB triple so chromaticity is
-    // preserved. Applying the scalar gain independently to RGB with the
-    // offsets would add the same offset to every channel and desaturate dark
-    // colours.
-    const float3 luma = HdrLumaWeights();
-    float y_sdr = max(dot(max(sdr_base, 0.0), luma), 0.0);
-    float y_hdr = (y_sdr + kBaseOffset) * exp2(gain) - kAlternateOffset;
-    y_hdr = max(y_hdr, 0.0);
-    float scale = y_sdr > 1e-8 ? y_hdr / y_sdr : 0.0;
-    return max(sdr_base, 0.0) * scale;
-}
-
 float3 EncodeHdr(float3 lin)
 {
-    int fmt = (int)(kFormat + 0.5);
-    float3 result = max(lin, 0.0);
-    if (fmt == 1) {
-        // The gain-map working domain uses 100-nit SDR white; scRGB encodes
-        // scene-referred 1.0 as 80 nits. Convert back at the boundary.
-        result = lin * (kSdrReferenceWhiteNits / kScRgbReferenceWhiteNits);
-    }
-    else if (fmt == 2) {
-        result = NitsToPq(max(lin, 0.0) * kSdrReferenceWhiteNits);
-    }
-    return result;
+    return HdrEncodeTarget(lin, (int)(kFormat + 0.5), kSdrReferenceWhiteNits);
 }
 
 // `kExposure` is retained in the uniform contract because the exposure EMA
@@ -86,7 +62,7 @@ float3 ShapeHdrTargetDelta(float3 delta, float luma)
     return delta * protect * kEditStrength;
 }
 
-float3 ComposeHdr(float3 sdr_base, float gain,
+float3 ComposeHdr(float3 sdr_base, float3 hdr_src,
                   float3 low_in, float3 low_out)
 {
     float3 low_in_lin = max(SrgbToLinearExt(low_in), 0.0);
@@ -97,10 +73,10 @@ float3 ComposeHdr(float3 sdr_base, float gain,
     const float3 model_sdr_base = GamutFitModelInput(sdr_base);
     const float3 kL = HdrLumaWeights();
     const float base_luma = dot(max(model_sdr_base, 0.0), kL);
-    const float3 hdr_src = ReconstructHdr(sdr_base, gain);
-
     const float3 delta = ShapeResidual(
         ComposeRatioDelta(low_in_lin, low_out_lin), base_luma);
+    if (all(delta == 0.0))
+        return hdr_src;
     const float3 hdr_edited = max(hdr_src * (1.0 + delta), 0.0);
     return BlendYCbCr(hdr_src, hdr_edited, kLumaStrength, kChromaStrength);
 }
@@ -140,13 +116,16 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     }
 
     const float3 sdr_base = DecodePackedHdr(packed);
-    const float3 final_lin = ComposeHdr(sdr_base, packed.a, low_in, low_out);
-    const float3 final_out = EncodeHdr(final_lin);
-
-    // Packed resources are linear gain-map data in the 100-nit normalized domain;
-    // the destination is the game's original HDR encoding. Alpha is preserved
-    // from the packed path only when
-    // the target format conceptually carries it; for the game resource the
-    // color channels are the only meaningful data.
+    const float3 source_encoded = gHdrSource.Load(int3(id.xy, 0)).rgb;
+    const float3 hdr_src = DecodeToLinear(
+        source_encoded, (int)(kFormat + 0.5), kSdrReferenceWhiteNits);
+    const float3 final_lin = ComposeHdr(sdr_base, hdr_src, low_in, low_out);
+    const float3 encoded_result = EncodeHdr(final_lin);
+    // Preserve the exact native-format code for unchanged channels. This avoids
+    // decode/encode round-off moving an untouched FP16/PQ channel by one code.
+    const float3 final_out = float3(
+        final_lin.r == hdr_src.r ? source_encoded.r : encoded_result.r,
+        final_lin.g == hdr_src.g ? source_encoded.g : encoded_result.g,
+        final_lin.b == hdr_src.b ? source_encoded.b : encoded_result.b);
     gOutput[id.xy] = float4(final_out, 1.0);
 }

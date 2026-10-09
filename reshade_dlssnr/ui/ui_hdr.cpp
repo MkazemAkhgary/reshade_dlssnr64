@@ -229,12 +229,6 @@ void DrawControls(HdrSettings& hdr, bool& changed) {
   changed |= DrawFloatRow(0, "hdr_bt2446_crosstalk", "Crosstalk",
                           "BT.2446C pre-desaturation amount.", &hdr.bt2446_crosstalk,
                           nullptr, 0.04f, 0.0f, 0.33f, 0.04f);
-  changed |= DrawFloatRow(0, "hdr_gain_base_offset", "Gain Base Offset",
-                          "ISO 21496-1 base offset for the gain map.",
-                          &hdr.gain_base_offset, nullptr, 1.0f / 64.0f, 0.0f, 1.0f, 1.0f / 64.0f);
-  changed |= DrawFloatRow(0, "hdr_gain_alternate_offset", "Gain Alternate Offset",
-                          "ISO 21496-1 alternate offset for the gain map.",
-                          &hdr.gain_alternate_offset, nullptr, 1.0f / 64.0f, 0.0f, 1.0f, 1.0f / 64.0f);
   changed |= DrawFloatRow(0, "hdr_gain_min_log2", "Gain Min",
                           "Configured log2 gain metadata minimum.",
                           &hdr.gain_min_log2, nullptr, -4.0f, -32.0f, 0.0f, -4.0f);
@@ -314,7 +308,7 @@ void DrawDiagnostics(const HdrSnapshot& snap, const HdrSettings& hdr,
     ImGui::Separator();
     ImGui::Text("Gain map range: %.4f .. %.4f log2", snap.gain_min_log2, snap.gain_max_log2);
     ImGui::Text("SDR excursions: %u  |  Gain outside range: %u",
-                snap.gain_sdr_clipped_pixels, snap.gain_out_of_range_pixels);
+                snap.gain_sdr_excursion_pixels, snap.gain_out_of_range_pixels);
   }
   if (!snap.has_histogram) return;
 

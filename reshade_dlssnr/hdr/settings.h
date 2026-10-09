@@ -85,8 +85,6 @@ struct HdrSettings {
   float bt2446_k4 = 78.99439f;
   float bt2446_crosstalk = 0.04f;
 
-  float gain_base_offset = 1.0f / 64.0f;
-  float gain_alternate_offset = 1.0f / 64.0f;
   float gain_min_log2 = -4.0f;
   float gain_max_log2 = 6.0f;
 };

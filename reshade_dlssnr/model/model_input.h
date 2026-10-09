@@ -26,10 +26,8 @@ struct HdrUniforms {
   float bt2446_k4 = 78.99439f;
   float bt2446_crosstalk = 0.04f;
 
-  // Raw ISO 21496-1 gain-map apply parameters. Gain itself is stored as raw
-  // log2 in packed.a, so no unnormalization/gamma step is needed.
-  float gain_base_offset = 1.0f / 64.0f;
-  float gain_alternate_offset = 1.0f / 64.0f;
+  // packed.a stores the direct linear HDR-to-SDR-carrier luminance multiplier.
+  // The RGBA32F carrier path intentionally avoids offset-based gain encoding.
   float gain_min_log2 = -4.0f;
   float gain_max_log2 = 6.0f;
   // Absolute effective scene-white peak in nits. Histogram and exposure

@@ -35,7 +35,7 @@ struct DebugSnapshot {
   // Model input after HDR normalization and optional resize — what the
   // model actually sees.
   // Full-resolution HDR gain-map split. Both selectors point at the packed
-  // R32G32B32A32_FLOAT texture; RGB is the SDR base, A is raw log2 gain.
+  // R32G32B32A32_FLOAT texture; RGB is SDR base, A is the linear HDR/carrier multiplier.
   ID3D12Resource* packed_hdr_sdr = nullptr;
   ID3D12Resource* packed_hdr_gain = nullptr;
   unsigned int packed_width = 0;
@@ -43,7 +43,7 @@ struct DebugSnapshot {
 
   ID3D12Resource* prepared_input = nullptr;
   unsigned int prepared_input_width = 0;
-  // Full-resolution local SDR exposure scale used by HDR inverse compose.
+  // Full-resolution local SDR exposure scale used by HDR diagnostics.
   ID3D12Resource* effective_exposure_map = nullptr;
   unsigned int effective_exposure_width = 0;
   unsigned int effective_exposure_height = 0;

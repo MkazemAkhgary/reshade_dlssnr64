@@ -486,7 +486,7 @@ void AddonController::RefreshStatus(const Settings& settings) {
   status_.gain_map_ready = hdr.gain_map_ready;
   status_.gain_map_min_log2 = hdr.gain_min_log2;
   status_.gain_map_max_log2 = hdr.gain_max_log2;
-  status_.gain_map_sdr_clipped_pixels = hdr.gain_sdr_clipped_pixels;
+  status_.gain_map_sdr_excursion_pixels = hdr.gain_sdr_excursion_pixels;
   status_.gain_map_out_of_range_pixels = hdr.gain_out_of_range_pixels;
 
   status_.pass_count = kMaxPasses;

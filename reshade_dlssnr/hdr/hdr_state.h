@@ -70,7 +70,7 @@ struct HdrSnapshot {
   bool gain_map_ready = false;
   float gain_min_log2 = 0.0f;
   float gain_max_log2 = 0.0f;
-  uint32_t gain_sdr_clipped_pixels = 0;
+  uint32_t gain_sdr_excursion_pixels = 0;
   uint32_t gain_out_of_range_pixels = 0;
 };
 
@@ -179,7 +179,7 @@ class HdrState {
   bool have_gain_stats_ = false;
   float gain_min_log2_ = 0.0f;
   float gain_max_log2_ = 0.0f;
-  uint32_t gain_sdr_clipped_pixels_ = 0;
+  uint32_t gain_sdr_excursion_pixels_ = 0;
   uint32_t gain_out_of_range_pixels_ = 0;
 };
 

@@ -142,7 +142,7 @@ void DrawStatusSection(Settings& settings, bool& changed) {
     ImGui::Spacing();
     ImGui::Text("Gain map: %.3f .. %.3f log2 · SDR excursions: %u · gain-range: %u",
                 snap.gain_map_min_log2, snap.gain_map_max_log2,
-                snap.gain_map_sdr_clipped_pixels,
+                snap.gain_map_sdr_excursion_pixels,
                 snap.gain_map_out_of_range_pixels);
   }
 

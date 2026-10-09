@@ -19,6 +19,7 @@ bool ComposeOutput(
     PassResources& resources,
     ComputeEngine* codec,
     ID3D12Resource* packed_source,
+    ID3D12Resource* hdr_source,
     ID3D12Resource* low_input,
     ID3D12Resource* low_enhanced,
     unsigned int full_width,

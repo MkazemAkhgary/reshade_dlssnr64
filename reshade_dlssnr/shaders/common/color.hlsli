@@ -91,26 +91,23 @@ float ModelGamutCompressMax(float max_channel)
                     kModelGamutCompressionWhite, saturate(t));
     }
 
-    const float superwhite_span = log2(kModelGamutMaxLinear);
+    // The mapped white is a reference point, not a ceiling. The logarithmic
+    // curve is extrapolated and inverted symmetrically for arbitrary super-whites.
+    const float superwhite_span = log2(kModelGamutReferenceLinear);
     const float t = log2(max_channel) / max(superwhite_span, 1e-6);
     return lerp(kModelGamutCompressionWhite,
-                kModelGamutCompressionCeiling, saturate(t));
+                kModelGamutReferenceMappedWhite, t);
 }
 
 float3 GamutFitModelInput(float3 c)
 {
     c = max(c, 0.0);
-    const float source_max = max(c.r, max(c.g, c.b));
-    if (source_max > kModelGamutMaxLinear)
-        c *= kModelGamutMaxLinear / source_max;
-
-    const float max_channel = min(source_max, kModelGamutMaxLinear);
+    const float max_channel = max(c.r, max(c.g, c.b));
     if (max_channel <= kModelGamutCompressionStart)
         return c;
 
-    // Spread highlights over more FP16 code values before sRGB encoding. Values
-    // below the compression start stay untouched; white and the supported
-    // super-white range share a reversible mapping below 1.0.
+    // Monotonic, unbounded mapping: preserve values above reference white rather
+    // than saturating them to a fixed maximum.
     const float desat = saturate(
         kModelHighlightDesaturation *
         (max_channel - kModelGamutHighlightDesaturationStart) /
@@ -128,33 +125,25 @@ float3 GamutUnfitModelInput(float3 c)
         return c;
 
     const float mapped_white = ModelGamutCompressMax(1.0);
-    const float mapped_limit = ModelGamutCompressMax(kModelGamutMaxLinear);
-    float mapped_max = actual_mapped_max;
-    if (actual_mapped_max > mapped_limit)
-    {
-        // EASU/RCAS can overshoot the fitted range. Clamp that overshoot to the
-        // supported model gamut instead of interpreting it as unbounded HDR.
-        // Scale every channel together so highlight hue does not shift.
-        c *= mapped_limit / actual_mapped_max;
-        mapped_max = mapped_limit;
-    }
+    // EASU/RCAS and the model can produce super-white values. Extend the inverse
+    // curve for them rather than clipping to the reference mapped white.
 
     float original_max;
-    if (mapped_max <= mapped_white)
+    if (actual_mapped_max <= mapped_white)
     {
-        const float t = (mapped_max - kModelGamutCompressionStart) /
+        const float t = (actual_mapped_max - kModelGamutCompressionStart) /
                         max(mapped_white - kModelGamutCompressionStart, 1e-6);
         original_max = lerp(kModelGamutCompressionStart, 1.0, saturate(t));
     }
     else
     {
-        const float t = saturate(
-            (mapped_max - mapped_white) /
-            max(kModelGamutCompressionCeiling - mapped_white, 1e-6));
-        original_max = exp2(t * log2(kModelGamutMaxLinear));
+        const float t =
+            (actual_mapped_max - mapped_white) /
+            max(kModelGamutReferenceMappedWhite - mapped_white, 1e-6);
+        original_max = exp2(t * log2(kModelGamutReferenceLinear));
     }
 
-    const float scale = mapped_max / max(original_max, 1e-6);
+    const float scale = actual_mapped_max / max(original_max, 1e-6);
     const float desat = saturate(
         kModelHighlightDesaturation *
         (original_max - kModelGamutHighlightDesaturationStart) /

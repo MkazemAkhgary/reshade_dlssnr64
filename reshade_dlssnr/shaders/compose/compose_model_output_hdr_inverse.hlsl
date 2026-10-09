@@ -11,12 +11,11 @@
 Texture2D<float4>   gOriginal    : register(t0);
 Texture2D<float4>   gLowInput    : register(t1);
 Texture2D<float4>   gLowEnhanced : register(t2);
-Texture2D<float>    gEffectiveExposure : register(t3);
+Texture2D<float4>   gHdrSource   : register(t3);
 RWTexture2D<float4> gOutput      : register(u0);
 SamplerState        s0           : register(s0);
 
 #define kLocalExposureStrength hdr.LocalExposure.x
-#define kEffectiveExposureMapValid shader.Params1.w
 
 #include "common/fsr.hlsli"
 
@@ -26,66 +25,15 @@ float3 DecodePackedHdr(float4 packed)
 }
 
 
-float3 ReconstructHdr(float3 sdr_base, float gain)
-{
-    // A is a single luma gain. Apply the ISO offsets to the luma, recover the
-    // original HDR luma, then rescale the SDR RGB triple so chromaticity is
-    // preserved. Applying the scalar gain independently to RGB with the
-    // offsets would add the same offset to every channel and desaturate dark
-    // colours.
-    const float3 luma = HdrLumaWeights();
-    float y_sdr = max(dot(max(sdr_base, 0.0), luma), 0.0);
-    float y_hdr = (y_sdr + kBaseOffset) * exp2(gain) - kAlternateOffset;
-    y_hdr = max(y_hdr, 0.0);
-    float scale = y_sdr > 1e-8 ? y_hdr / y_sdr : 0.0;
-    return max(sdr_base, 0.0) * scale;
-}
-
-float CombinedExposureFromPacked(float3 sdr_base, float3 hdr_src,
-                                   float effective_peak_nits)
-{
-    // GainMapSplit applies the global and local exposure before BT.2446 and
-    // stores the resulting SDR carrier. Recover that exact combined factor
-    // from the carrier itself rather than re-running the local-exposure
-    // estimator at compose time.
-    const float3 pre_sdr = HdrPreDesaturate(max(sdr_base, 0.0), saturate(kCrosstalk));
-    const float y_sdr = max(dot(pre_sdr, HdrLumaWeights()), 0.0);
-    if (y_sdr <= 1e-8)
-        return max(kExposure, 1e-6);
-
-    const float y_curve = HdrBt2446Inverse(y_sdr * 100.0);
-    const float y_exposed =
-        y_curve * max(effective_peak_nits, kSdrReferenceWhiteNits) /
-        kPqPeakNits;
-
-    const float3 pre_hdr =
-        HdrPreDesaturate(max(hdr_src, 0.0), saturate(kCrosstalk));
-    const float y_hdr = max(dot(pre_hdr, HdrLumaWeights()), 0.0);
-    if (y_hdr <= 1e-8)
-        return max(kExposure, 1e-6);
-
-    return max(y_exposed / y_hdr, 1e-6);
-}
-
 float3 EncodeHdr(float3 lin)
 {
-    int fmt = (int)(kFormat + 0.5);
-    float3 result = max(lin, 0.0);
-    if (fmt == 1) {
-        // The gain-map working domain uses 100-nit SDR white; scRGB encodes
-        // scene-referred 1.0 as 80 nits. Convert back at the boundary.
-        result = lin * (kSdrReferenceWhiteNits / kScRgbReferenceWhiteNits);
-    }
-    else if (fmt == 2) {
-        result = NitsToPq(max(lin, 0.0) * kSdrReferenceWhiteNits);
-    }
-    return result;
+    return HdrEncodeTarget(lin, (int)(kFormat + 0.5), kSdrReferenceWhiteNits);
 }
 
 // Inverse-tone-map shader reconstructs the model output as a scene-referred HDR
-// target. The model exposure is recovered from the actual packed carrier, so it
-// uses the same local SDR exposure scale that created the model input.
-float3 ComposeHdrInverse(float3 sdr_base, float gain,
+// target. It recovers the exact local multiplier from the original HDR source and
+// the carrier generated from that source, without consulting a second estimator.
+float3 ComposeHdrInverse(float3 sdr_base, float3 hdr_src,
                          float3 low_in, float3 low_out, float local_sdr_scale)
 {
     float3 low_in_lin = max(SrgbToLinearExt(low_in), 0.0);
@@ -100,12 +48,12 @@ float3 ComposeHdrInverse(float3 sdr_base, float gain,
         low_in_lin = max(GradeLinearInv(low_in_lin), 0.0);
         low_out_lin = max(GradeLinearInv(low_out_lin), 0.0);
     }
+    if (all(low_in_lin == low_out_lin))
+        return hdr_src;
 
     const float3 model_sdr_base = GamutFitModelInput(sdr_base);
     const float3 kL = HdrLumaWeights();
     const float base_luma = dot(max(model_sdr_base, 0.0), kL);
-    const float3 hdr_src = ReconstructHdr(sdr_base, gain);
-
     // Reconstruct both model-domain endpoints in scene-referred HDR using the
     // exact exposure that created the model input. The edit is the model
     // output minus model input, not model output minus the original HDR. That
@@ -146,6 +94,9 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float2 uv = (float2(id.xy) + 0.5) / float2(Width, Height);
 
     float4 packed = gOriginal.SampleLevel(s0, uv, 0);
+    const float3 source_encoded = gHdrSource.Load(int3(id.xy, 0)).rgb;
+    const float3 hdr_src = DecodeToLinear(
+        source_encoded, (int)(kFormat + 0.5), kSdrReferenceWhiteNits);
 
     // EASU upsample from the actual model working resolution back to full HDR
     // resolution. Both textures are in the same sRGB-encoded model domain.
@@ -172,18 +123,25 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     }
 
     const float3 sdr_base = DecodePackedHdr(packed);
-    const float local_sdr_scale =
-        kLocalExposureStrength > 0.0 && kEffectiveExposureMapValid > 0.5
-            ? max(gEffectiveExposure.Load(int3(id.xy, 0)), 1e-6)
-            : 1.0;
+    float local_sdr_scale = 1.0;
+    if (kLocalExposureStrength > 0.0) {
+        const float effective_peak_nits = max(
+            kSdrReferenceWhiteNits, max(kEffectiveSceneWhiteNits, 0.01));
+        const float3 global_sdr = HdrToGlobalLinearSdrCarrier(
+            hdr_src, kExposure, effective_peak_nits);
+        const float global_luma = max(dot(global_sdr, HdrLumaWeights()), 0.0);
+        const float carrier_luma = max(dot(sdr_base, HdrLumaWeights()), 0.0);
+        if (global_luma > 0.0)
+            local_sdr_scale = carrier_luma / global_luma;
+    }
     const float3 final_lin = ComposeHdrInverse(
-        sdr_base, packed.a, low_in, low_out, local_sdr_scale);
-    const float3 final_out = EncodeHdr(final_lin);
-
-    // Packed resources are linear gain-map data in the 100-nit normalized domain;
-    // the destination is the game's original HDR encoding. Alpha is preserved
-    // from the packed path only when
-    // the target format conceptually carries it; for the game resource the
-    // color channels are the only meaningful data.
+        sdr_base, hdr_src, low_in, low_out, max(local_sdr_scale, 1e-20));
+    const float3 encoded_result = EncodeHdr(final_lin);
+    // Preserve native-format codes in untouched channels rather than running
+    // their source values through a lossy decode/encode pair.
+    const float3 final_out = float3(
+        final_lin.r == hdr_src.r ? source_encoded.r : encoded_result.r,
+        final_lin.g == hdr_src.g ? source_encoded.g : encoded_result.g,
+        final_lin.b == hdr_src.b ? source_encoded.b : encoded_result.b);
     gOutput[id.xy] = float4(final_out, 1.0);
 }

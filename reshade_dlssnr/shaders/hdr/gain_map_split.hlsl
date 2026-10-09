@@ -38,18 +38,26 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         kSdrReferenceWhiteNits, max(kEffectiveSceneWhiteNits, 0.01));
     const float y_curve = y_exposed * kPqPeakNits / effective_peak_nits;
     const float y_sdr = max(HdrBt2446Forward(y_curve) / 100.0, 0.0);
-    const float chroma_scale = y_exposed > 1e-8 ? y_sdr / y_exposed : 0.0;
-    const float3 pre_sdr = pre_hdr * exposure * chroma_scale;
-    const float3 global_sdr = HdrInversePreDesaturate(pre_sdr, saturate(kCrosstalk));
+    const float chroma_scale = y_exposed > 0.0 ? y_sdr / y_exposed : 0.0;
+    // The pre-desaturation transform is linear and immediately inverted after
+    // tone mapping. Their product is the identity, so apply the derived scalar
+    // directly to the source RGB. This avoids cancellation noise in near-zero
+    // channels of bright saturated colors without changing the intended mapping.
+    const float3 global_sdr = max(hdr_linear, 0.0) *
+                              (exposure * chroma_scale);
     const float2 uv = (float2(id.xy) + 0.5) /
                       float2(max(Width, 1u), max(Height, 1u));
     const float local_scale = LocalExposureScale(uv, y_sdr, source_hdr_luma);
-    const float3 sdr = max(global_sdr * local_scale, 0.0);
+    const float global_scale = exposure * chroma_scale;
+    const float carrier_scale = global_scale * local_scale;
+    const float3 sdr = max(hdr_linear, 0.0) * carrier_scale;
 
-    const float y_hdr_gain = max(dot(max(hdr_linear, 0.0), luma_weights), 0.0);
-    const float y_sdr_gain = max(dot(sdr, luma_weights), 0.0);
-    const float gain = log2(
-        max(y_hdr_gain + kAlternateOffset, 1e-12) /
-        max(y_sdr_gain + kBaseOffset, 1e-12));
-    gOutput[id.xy] = float4(sdr, gain);
+    // RGB was formed by multiplying the source by carrier_scale. Store its
+    // direct reciprocal, avoiding a second luminance reduction and preserving
+    // a single scalar relationship for all channels, including super-whites.
+    // RGBA32F keeps the multiplier linear; no log/exp conversion or ceiling.
+    const float carrier_to_hdr_scale = carrier_scale > 0.0
+        ? rcp(carrier_scale)
+        : 1.0;
+    gOutput[id.xy] = float4(sdr, carrier_to_hdr_scale);
 }

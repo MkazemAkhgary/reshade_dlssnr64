@@ -22,8 +22,6 @@ PipelineStatus PassSession::StepBuildHdrUniforms(PassRun& run) {
   run.hdr_uniforms.bt2446_k3 = hs.bt2446_k3;
   run.hdr_uniforms.bt2446_k4 = hs.bt2446_k4;
   run.hdr_uniforms.bt2446_crosstalk = hs.bt2446_crosstalk;
-  run.hdr_uniforms.gain_base_offset = hs.gain_base_offset;
-  run.hdr_uniforms.gain_alternate_offset = hs.gain_alternate_offset;
   run.hdr_uniforms.gain_min_log2 = hs.gain_min_log2;
   run.hdr_uniforms.gain_max_log2 = hs.gain_max_log2;
   run.hdr_uniforms.effective_scene_white_nits = run.hdr->EffectiveSceneWhiteNits(hs);

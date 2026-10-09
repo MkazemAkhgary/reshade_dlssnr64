@@ -42,7 +42,7 @@ class PassResources {
   DXGI_FORMAT composite_output_format = DXGI_FORMAT_UNKNOWN;
 
   // Full-resolution packed HDR gain-map representation. RGB is the linear SDR
-  // base; A is raw f32 log2 gain. This is deliberately RGBA32F: no quantization
+  // base; A is the linear carrier-to-HDR reconstruction multiplier. This is RGBA32F: no quantization
   // is acceptable in the round-trip path.
   Microsoft::WRL::ComPtr<ID3D12Resource> packed_hdr_sdr;
   unsigned int packed_width = 0;

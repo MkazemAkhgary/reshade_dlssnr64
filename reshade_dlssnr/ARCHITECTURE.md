@@ -4,7 +4,7 @@
 
 The addon runs NVIDIA DLSS Neural Rendering (NGX feature 18) through `nvngx_dlssnr.dll` on top of a game's existing DLSS Super Sampling path. It supports two injection points: **Post-DLSS**, where work is recorded inline on the game's command list immediately after the game's DLSS `EvaluateFeature`, and **Present**, where work is recorded on an addon-owned command list against the final swapchain backbuffer. The two paths share the same `PassSession` pipeline and differ mainly in their input resource, command-list ownership, and output publication point.
 
-HDR is handled in the Post-DLSS path. The source is converted into a lossless SDR carrier plus a log2 gain map, the model operates on the SDR carrier, and the compose stage reconstructs the original HDR range and applies the model's residual directly in HDR. The final backbuffer grade can also operate in SDR, scRGB, or HDR10 according to the detected/selected format.
+HDR is handled in the Post-DLSS path. The source is converted into an SDR carrier plus a full-precision carrier-to-HDR reconstruction multiplier, and the model operates on the SDR carrier. Composition reads the untouched HDR source directly and applies the model residual in HDR. The final backbuffer grade can also operate in SDR, scRGB, or HDR10 according to the detected/selected format.
 
 ## Repository layout
 
@@ -47,9 +47,9 @@ reshade_dlssnr/
 
   shaders/compose/
     compose_model_output.hlsl       SDR compose with FSR upsampling
-    compose_model_output_hdr.hlsl   HDR compose with FSR upsampling and gain-map reconstruction
+    compose_model_output_hdr.hlsl   HDR compose with FSR upsampling and source-preserving HDR composition
     compose_model_output_hdr_inverse.hlsl
-                                    HDR inverse-tone-map compose with FSR upsampling and effective-exposure reconstruction
+                                    HDR inverse-tone-map compose with FSR upsampling and source-preserving HDR composition
   shaders/debug/
     debug_display.hlsl              Debug-view renderer
     debug_hdr_roundtrip.hlsl        HDR round-trip, error, and local-exposure diagnostic renderer
@@ -58,9 +58,9 @@ reshade_dlssnr/
   shaders/hdr/
     zero_histogram.hlsl             Clears the full-frame 256-bin histogram buffer
     build_histogram.hlsl            Builds the full-frame log2-luma histogram
-    gain_map_split.hlsl             Builds the full-resolution SDR carrier + log2 gain map
+    gain_map_split.hlsl             Builds the full-resolution SDR carrier + HDR multiplier
     build_effective_local_exposure.hlsl
-                                    Builds the full-resolution local SDR exposure scale for HDR inverse compose
+                                    Builds the full-resolution local SDR exposure scale for HDR diagnostics
     zero_gain_map_stats.hlsl        Clears gain-map diagnostic counters
     build_gain_map_stats.hlsl       Builds gain-map diagnostic statistics
   shaders/model/
@@ -230,7 +230,7 @@ RenderDebugView
 WriteToGameResource
 ```
 
-`HdrBeginFrame` and `SkinDetect` are effectively first-pass operations even though they are present in the stage table for every Post-DLSS pass. The controller marks only the first enabled Post-DLSS pass as `is_first_pass`; subsequent passes reuse the HDR measurement state and persistent structure mask. Each exposure layer has a separate histogram population using that layer's enabled structure-mask, depth, and percentile filters. Because `HdrBeginFrame` precedes `SkinDetect`, the histogram uses the previous valid mask; carrier splitting later in the frame uses the newly produced mask.
+`HdrBeginFrame` and `SkinDetect` are effectively first-pass operations even though they are present in the stage table for every Post-DLSS pass. The controller marks only the first enabled Post-DLSS pass as `is_first_pass`; subsequent passes reuse HDR measurement state and the persistent structure mask. Each exposure layer applies only its own selected filters: Adaptive Exposure filters the histogram population, while Local Exposure filters the spatial correction. The previous valid structure mask is used for the current measurement because the new mask is produced later in the frame.
 
 ### Present injection
 
@@ -297,9 +297,7 @@ Includes are written relative to `shaders/`, for example:
 #include "common/color.hlsli"
 ```
 
-Root `.hlsl` files use shader-root-relative includes such as `common/color.hlsli`. Includes inside a shared `.hlsli` or `.h` may use sibling-relative paths such as `"color.hlsli"` or `"params.h"`; nested includes are resolved relative to the including file first, then relative to `shaders/`. Shared headers include the other headers they depend on, and the order of each include directive is preserved.
-
-`tools/generate_shaders.ps1` and `tools/generate_shaders.py` embed every `.hlsl`, `.hlsli`, and `.h` file into `generated/shader_sources.cpp`. For each runtime `.hlsl` root, generation recursively expands local includes at the point where they occur, honors `#pragma once`, detects missing includes and unguarded include cycles, and adds `#line` markers so diagnostics can identify the original source file. Authored `.hlsli` and `.h` entries remain embedded in their original form for include-handler fallback. FXC verification and optional bytecode precompilation still compile the on-disk roots and use the same nested include layout. Generated files should never be hand-edited.
+The same root-relative name is used by the runtime include handler. `tools/generate_shaders.ps1` embeds every `.hlsl`, `.hlsli`, and `.h` file into `generated/shader_sources.cpp`. The generated table is keyed by the literal path used by `#include`. Generated files should never be hand-edited.
 
 `shadertoolsconfig.json` supplies `shaders` and `shaders/common` as HLSL editor include directories.
 
@@ -320,7 +318,7 @@ struct ComputePassDef {
 
 - source = embedded root source
 - source name = the root path, so compiler diagnostics identify the shader file
-- include handler = `EmbeddedInclude`, which resolves both sibling-relative and shader-root-relative paths when a compile-time include is needed
+- include handler = `EmbeddedInclude`
 - entry point = `CSMain`
 - target = `cs_5_1`
 - optimization = `D3DCOMPILE_OPTIMIZATION_LEVEL3`
@@ -339,7 +337,7 @@ The project selects the latest installed Windows 10 SDK using `ToolLocationHelpe
 
 | Resource | Registers | Count |
 |---|---|---:|
-| SRV | `t0..t3` | 4 |
+| SRV | `t0..t2` | 3 |
 | UAV | `u0` | 1 |
 | CBV | `b0` | 1 |
 | Static sampler | `s0` | 1 |
@@ -377,7 +375,7 @@ The layout intentionally avoids `float2`, `float3`, `packoffset`, platform heade
 
 The model input downsample is `BoxAreaAverage` from `shaders/common/box_filter.hlsli`. It uses the exact source footprint covered by each destination pixel, including fractional edge coverage, and fetches with `Texture2D.Load`. It does not rely on the global linear sampler.
 
-The non-HDR `PrepareModelInput` path therefore treats the source as already in the model's target sRGB space and passes the averaged RGB through unchanged. The HDR carrier path averages the linear carrier, applies the reversible model highlight/gamut fit, and applies `LinearToSrgb` before the model sees it. Values at or below 0.90 remain unchanged. The fit maps the bright SDR range and super-whites up to a linear carrier value of 1.5 into a logarithmic headroom region below 1.0 to preserve more distinct values in the FP16 model texture. Higher carrier values are scaled into that supported model range while the packed HDR carrier remains untouched. The inverse clamps EASU/RCAS overshoot to the supported ceiling with a neutral channel scale, avoiding a spurious HDR spike or highlight hue shift.
+The non-HDR `PrepareModelInput` path therefore treats the source as already in the model's target sRGB space and passes the averaged RGB through unchanged. The HDR carrier path averages the linear carrier, applies the reversible model highlight/gamut fit, and applies `LinearToSrgb` before the model sees it. Normal colors are unchanged; super-whites are smoothly compressed toward white so emissive highlights keep a white/yellow core.
 
 Both SDR and HDR compose paths use the same FSR 1.0 EASU and optional RCAS implementation from `shaders/common/fsr.hlsli` to reconstruct full resolution from the working-scale model images. The EASU constants and RCAS controls come from the shared cbuffer.
 
@@ -493,18 +491,21 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 **Format detection is explicit and overridable.** Auto detection treats `R16G16B16A16_FLOAT` and `R11G11B10_FLOAT` as scRGB, `R10G10B10A2_UNORM` as HDR10, and 8-bit RGBA/BGRA formats as SDR. `HdrSettings::format` can override auto detection.
 
-**Exposure is measurement state, not compose state.** Histogram-derived exposure changes what the model sees; HDR compose reconstructs the source from its own gain map and applies the model residual directly in HDR.
+**Exposure is measurement state, not compose state.** Histogram-derived exposure changes what the model sees; HDR compose reads the untouched source directly and applies the model residual in HDR.
 
-**Game Exposure, Adaptive Exposure, and Local Exposure are independent stackable layers.** Game Exposure samples the game's NGX `ExposureTexture` before `EvaluateFeature` and uses asynchronous GPU readback. Its scalar remains the global anchor, with an optional manual bias and optional bounded adaptive tuning; unavailable game exposure falls back to Adaptive Exposure when that layer is enabled. Adaptive Exposure independently tracks a target from its own filtered histogram and can apply a clamped, adjustable correction over the game value. Local Exposure applies the base/detail spatial operator after the global transfer. The normal layer order is Game base, Adaptive correction, then Local spatial correction.
+**Game Exposure is one layer in the exposure stack.** When enabled, the addon captures the game's NGX `ExposureTexture` before `EvaluateFeature`. If it is a usable 1x1 texture, a compute pass samples its scalar and an asynchronous GPU readback updates HDR state without waiting on the CPU. Game Exposure remains the base when available; its optional bias and bounded tuning use that value as their anchor. Adaptive Exposure can add a bounded histogram-derived correction, and Local Exposure can apply a spatial correction afterward. If game exposure is unavailable, Adaptive Exposure can provide the global exposure on its own. The Status panel reports availability and the last sampled value; `Debug View -> Game Exposure` shows the sampled value in stops.
 
-**Every layer owns its filter combination.** Structure Mask, depth interval, and percentile range can be enabled independently for each layer. Game-layer filters affect the optional bounded-tuning population because the game's exposure scalar itself is not spatially metered. Adaptive filters select the population used to estimate its exposure target. Local filters affect where local correction is applied: the structure mask weights correction spatially, depth restricts correction to an interval, and percentile limits are derived from that layer's independently filtered luminance histogram. If a required resource is unavailable, the corresponding filter is skipped. Percentile range on Game/Adaptive controls the histogram band used for the target; on Local it defines a softly feathered luminance band.
+**Histogram exposure uses the full-frame histogram with optional structure-mask priority.** The first frame has only the full-frame population. Once a persistent structure mask exists, the measurement also builds a mask-conditioned histogram and blends the normalized masked population with the full-frame population using `Hdr.SkinPriority`, provided the masked fraction reaches `Hdr.SkinFractionThreshold`. The automatic method then adapts with separate brighten/darken speeds and takes the white point from that same effective metering population. The mask is intentionally one-frame-latched because it is produced after `HdrBeginFrame`; it therefore conditions the next HDR measurement and all following Post-DLSS passes rather than changing exposure halfway through the current pass chain.
 
-**Adaptive Exposure uses a dedicated histogram population.** Full-frame, Game tuning, Adaptive, and Local populations are accumulated separately in the same measurement dispatch sequence. Mask-conditioned histogram weight follows the persistent mask; depth is normalized to a selected near/far interval; percentile ranges are applied to the population on CPU when estimating the histogram target. If an available filter combination selects no pixels, that layer holds its last valid estimate instead of silently reverting to full-frame metering. The mask is intentionally one-frame-latched for `HdrBeginFrame` because it is produced later in the stage, while Local Exposure uses the current pass's available mask.
+**Adaptive and Local Exposure are independent layers.** Adaptive Exposure maps the filtered histogram to its midtone target and can provide global exposure by itself or a bounded correction on top of Game Exposure. Local Exposure operates on a bilateral low-frequency luminance base while preserving high-frequency detail. Each layer has independent Structure Mask, Depth, and Percentile Range filter settings, so the metering population and spatial correction can be tuned separately.
 
-**Local exposure is part of the HDR round-trip contract.** GainMapSplit applies the base/detail adjustment after the global BT.2446 Method C mapping. BuildEffectiveLocalExposure records the exact per-pixel local scale used by that transform, with the same filter settings. Inverse Tone Map reuses that map rather than re-estimating local exposure from the edited image.
+**The HDR carrier and source have separate responsibilities.** `GainMapSplit` writes RGB linear SDR carrier plus a direct reciprocal of the RGB carrier scale to `R32G32B32A32_FLOAT`. The multiplier is stored linearly in alpha to avoid an unnecessary log2/exp2 precision cycle; gain statistics and the debug view convert it to stops. The paired pre-desaturation/inverse operations are reduced algebraically to a scalar RGB multiply so saturated super-whites do not suffer cancellation noise in near-zero channels. No additive offsets or fixed super-white ceiling are applied. HDR composition reads the untouched source resource and decodes it into float shader values, then transfers the model residual onto that source; it never reconstructs the original from the SDR carrier. NGX-facing input/output textures remain `R16G16B16A16_FLOAT` for the model path, while the model carrier and reconstruction math remain float32. The model-gamut mapping is monotonic and its inverse extrapolates above reference white; it must not clamp super-whites to a fixed range.
 
+**`HDR Roundtrip Error` isolates the carrier transfer.** It compares the original decoded full-resolution HDR source directly with HDR reconstructed from the RGBA32F carrier and multiplier. It does not run EASU, RCAS, model processing, or output-format encoding. Alpha stores the reciprocal of the scalar used to create RGB from the original HDR source; it is the carrier-to-HDR reconstruction multiplier. Gain statistics and the gain-map debug view display its log2 value in stops. HDR composition itself uses the untouched source and therefore does not inherit carrier reconstruction error. `HDR Roundtrip Diagnostic` remains the separate view for model edits and full-resolution reconstruction, so its edge differences may vary with working scale and sharpening.
 
-**HDR round-trip diagnostic.** The debug menu also exposes `HDR Roundtrip Diagnostic`, `HDR Roundtrip Error`, and `HDR Local Exposure`. These are test-only views for the HDR compose path. With local exposure enabled, the round-trip path uses the same full-resolution exposure map as inverse compose. The diagnostic applies the same EASU and RCAS processing to its model endpoints as composition, then compares the model output with the composed HDR converted back through the same HDR-to-SDR transform. For a clean transfer/gamut-fit test, disable input/output grades and RCAS and use working scale 1.0. At lower working scales, edge error also includes high-frequency full-resolution source detail that compose deliberately preserves but the upsampled model endpoint cannot represent; RCAS changes that comparison because it sharpens the model endpoints.
+**Local exposure is reversed from the exact carrier/source pair.** GainMapSplit applies the local base/detail adjustment after the global BT.2446 Method C mapping. Inverse Tone Map compares the packed carrier against the global SDR carrier recomputed from the untouched source to recover the actual local multiplier for that pixel. The effective-exposure map remains available for the debug view but is not required by the compose root signature.
+
+**HDR round-trip diagnostics.** `HDR Roundtrip Error` compares the original decoded full-resolution source directly against HDR reconstructed from the RGBA32F carrier and carrier-to-HDR multiplier, isolating split/reconstruction math from working scale, model output, EASU, RCAS, and output-format quantization. `HDR Roundtrip Diagnostic` is the separate 2x2 model/compose comparison and therefore includes working-scale reconstruction and RCAS. Use the Error view to verify carrier round-trip accuracy; use the Diagnostic view to inspect how model edits are transferred to full resolution.
 
 **Render debug images at pass time.** The resource state is trustworthy while the producing pass still owns the command list and has just produced the resource. `MaybeRenderDebug` renders into `FrameDebugContext::output`; the Release stage only copies that already-rendered output to the backbuffer.
 
@@ -520,9 +521,9 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 **HDR composition is a per-pass UI setting.** The Residual Edit section exposes `HDR Composition` with `Ratio (Current)` and `Inverse Tone Map (Scene-Referred)`. The choice is persisted as `PassN.Residual.HdrComposeMode` and only affects HDR composition; the default remains Ratio. Legacy value `2` is migrated to Inverse Tone Map.
 
-**HDR exposure is configured as a layer stack.** The HDR section exposes tabbed `Game Exposure`, `Adaptive Exposure`, and `Local Exposure` layers, each with its own enable state, parameters, and independently configured combination of Structure Mask, depth interval, and percentile-range filters. Settings are persisted under `Hdr.Layer.Game`, `Hdr.Layer.Adaptive`, and `Hdr.Layer.Local`. Existing exclusive exposure settings are migrated to the closest current layer-stack setup; the old Median implementation is not retained as a runtime mode. A fresh configuration keeps Local Exposure disabled until selected so Game Exposure remains unchanged by default.
+**HDR exposure is configured as a layer stack.** The HDR UI has separate `Game Exposure`, `Adaptive Exposure`, and `Local Exposure` tabs. The default stack order is Game Exposure base, Adaptive Exposure correction, then Local Exposure. Each layer is independently enabled and owns its own filter combination of Structure Mask, Depth, and Percentile Range. The exclusive Median and combined Auto Exposure + Local modes are removed; old settings are migrated to the closest layer configuration.
 
-**Structure Detection uses the same resolved HDR exposure stack.** The detection input follows the current Game/Adaptive/Local settings, including Local filter configuration. Its mask-based filter uses the previous mask during mask generation for temporal stability. Dedicated detector exposure methods are no longer exposed or tracked.
+**Structure Detection uses the same resolved layer stack.** It uses the same Game Exposure and Adaptive Exposure result, Local Exposure configuration, and filter selections as the main HDR model input. During mask generation it uses the previous valid mask for temporal stability; it does not maintain a separate legacy exposure mode.
 
 **Once the first Present pass exists, later passes are forced to Present.** This keeps the pass chain monotonic: Post-DLSS can feed later Post-DLSS work, while a Present pass cannot hand its output back into the earlier DLSS injection point.
 
@@ -534,12 +535,12 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 The HDR path is gain-map based and exists only in Post-DLSS processing.
 
-1. `HdrState` detects the source format and resolves the exposure layer stack. Game Exposure uses the game's NGX exposure scalar with optional bounded tuning; when unavailable or disabled, Adaptive Exposure can supply the base. The independent layer histograms use each layer's own structure-mask, depth, and percentile settings. Game exposure keeps scene white at 1.0.
-2. `SkinDetect` (shown as `Structure Detection` in the UI), when enabled, prepares a working-scale model input using the same resolved exposure stack and Local Exposure filters as the main path, evaluates a dedicated model feature built at full output resolution, and builds a temporal mask from the input/output difference. The `Skin Range` target excludes pixels near black or clipped white; it is a range gate, not a skin-hue classifier. `All Structure` accepts any detected model edit, including dark and clipped-highlight pixels. These target modes control mask eligibility and are separate from the individual model-strength sliders. The detection pass has three additional compute dispatches in its HDR worst case, and the descriptor/constant ring is sized for those dispatches in addition to the normal frame budget.
-3. `GainMapSplit` converts the full-resolution HDR source into an RGBA32F carrier: RGB is the linear SDR base and A is log2 gain. BT.2446-C parameters, gain-map offsets and scene-white control the split.
+1. `HdrState` detects the source format and resolves the enabled exposure layers. Game Exposure is the base when its game-provided value is valid; Adaptive Exposure contributes its filtered histogram correction or supplies global exposure when Game Exposure is unavailable. Local Exposure adds a spatial scale using its own filters. These layers remain separate in settings and are applied in stack order.
+2. `SkinDetect` (shown as `Structure Detection` in the UI), when enabled, prepares a working-scale model input using the same resolved exposure layers and filters as the main input, evaluates a dedicated model feature built at full output resolution, and builds a temporal mask from the input/output difference. The target can be skin-oriented or general model structure. The detection pass has three additional compute dispatches in its HDR worst case, and the descriptor/constant ring is sized for those dispatches in addition to the normal frame budget.
+3. `GainMapSplit` converts the full-resolution HDR source into an RGBA32F carrier: RGB is the linear SDR base and A is the direct linear ratio between source HDR luminance and carrier luminance. BT.2446-C parameters and scene-white control the carrier; no additive gain offsets or gain ceiling are applied.
 4. `PrepareModelInput` performs exact Box Area downsampling. For the HDR carrier path it applies the reversible model highlight/gamut fit and sRGB encoding. The packed carrier is not modified.
 5. The model feature evaluates at the selected working scale while being built at full frame resolution.
-6. `ComposeModelOutputHdr` uses FSR EASU and optional RCAS to reconstruct the model's working-scale images at full resolution. The default `Ratio` mode uses the existing linear-SDR ratio transfer. `Inverse Tone Map` selects `ComposeModelOutputHdrInverse`, which inverts the same BT.2446 transfer used by the HDR split. When local exposure is enabled, it uses the full-resolution local SDR exposure map; otherwise it falls back to the global/packed-carrier exposure recovery. It reconstructs both model endpoints in scene-referred HDR, transfers the model-output-minus-model-input edit onto the original full-resolution HDR, and therefore preserves source detail when Working Scale is below 1.0.
+6. `ComposeModelOutputHdr` uses FSR EASU and optional RCAS to reconstruct the model's working-scale images at full resolution. The default `Ratio` mode uses the existing linear-SDR ratio transfer. `Inverse Tone Map` selects `ComposeModelOutputHdrInverse`, which inverts the same BT.2446 transfer used by the HDR split. Both HDR modes decode the untouched full-resolution source for composition and transfer the model edit onto it. Inverse Tone Map derives the local scale from the source and packed carrier, so it removes the exact spatial multiplier applied during split without re-running the local exposure estimator. This preserves source detail when Working Scale is below 1.0.
 7. `EncodeHdr` writes the reconstructed result back into scRGB or HDR10 as required by the source format. The inverse compose path first reverses the model highlight/gamut fit so super-white model edits can reconstruct their HDR magnitude.
 
 The SDR compose uses the same FSR path but does not reconstruct an HDR carrier; it applies the residual in the source SDR space and uses the shared grade/compose helpers.
