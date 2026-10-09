@@ -200,6 +200,8 @@ Game -> NVSDK_NGX_D3D12_EvaluateFeature
 
 The hook gives NGX exactly the command list the game supplied. The addon uses the unwrapped native interface only for its own D3D12 work. D3D12 state tracking is disabled while the real NGX call runs, then restored only if a Post-DLSS pass actually recorded work.
 
+Game Exposure Buffer mode also captures the game's NGX `ExposureTexture` pointer from the parameter block before the real `EvaluateFeature` call. The pointer is consumed only for the current Post-DLSS run; it does not become a persistent addon-owned resource.
+
 The Post-DLSS stage never closes, submits, or waits on the game's command list. It records its work inline and returns control to the game. Each pass writes its final result back to the supplied DLSS output resource so a later Post-DLSS pass can consume the previous pass's result.
 
 The current Post-DLSS step order is:
@@ -493,7 +495,9 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 **Exposure is measurement state, not compose state.** Histogram-derived exposure changes what the model sees; HDR compose reconstructs the source from its own gain map and applies the model residual directly in HDR.
 
-**HDR exposure uses the full-frame histogram with optional structure-mask priority.** The first frame has only the full-frame population. Once a persistent structure mask exists, the measurement also builds a mask-conditioned histogram and blends the normalized masked population with the full-frame population using `Hdr.SkinPriority`, provided the masked fraction reaches `Hdr.SkinFractionThreshold`. The automatic method then adapts with separate brighten/darken speeds and takes the white point from that same effective metering population. The mask is intentionally one-frame-latched because it is produced after `HdrBeginFrame`; it therefore conditions the next HDR measurement and all following Post-DLSS passes rather than changing exposure halfway through the current pass chain.
+**Game Exposure Buffer is an alternate exposure source.** `Hdr.ExposureMethod` may select `Game Exposure Buffer` in addition to `Auto Exposure + Local` and `Median (Legacy)`. The addon captures the game's NGX `ExposureTexture` parameter from the NGX parameter block before the real `EvaluateFeature` call. NGX defines this parameter as a 1x1 texture containing the final exposure scale; the pointer is forwarded only for the current Post-DLSS run and is not retained as a persistent addon resource. If usable, a 1x1 compute pass samples its first float channel into an addon-owned 32-bit UAV, and an asynchronous GPU readback updates HDR state without a CPU wait on the game command list. If the game does not provide a usable value, the selected histogram path remains the fallback. The histogram exposure path and the independent Structure Detection exposure track are not removed. When a valid game value is present, main HDR exposure uses it directly and keeps scene white at 1.0; Structure Detection `Follow Main` also uses it, while detector-specific Median/Auto+Local modes remain independent. This addon uses its existing command-list path and asynchronous readback instead of adding a dedicated copy queue.
+
+**Histogram exposure uses the full-frame histogram with optional structure-mask priority.** The first frame has only the full-frame population. Once a persistent structure mask exists, the measurement also builds a mask-conditioned histogram and blends the normalized masked population with the full-frame population using `Hdr.SkinPriority`, provided the masked fraction reaches `Hdr.SkinFractionThreshold`. The automatic method then adapts with separate brighten/darken speeds and takes the white point from that same effective metering population. The mask is intentionally one-frame-latched because it is produced after `HdrBeginFrame`; it therefore conditions the next HDR measurement and all following Post-DLSS passes rather than changing exposure halfway through the current pass chain.
 
 **Auto Exposure + Local is the primary HDR method.** Global eye adaptation maps the histogram band to the model midtone target. A separate local stage then operates on a bilateral low-frequency luminance base while preserving the local high-frequency detail. This lets bright sky and darker geometry coexist without using depth or skin to decide which pixels count.
 
@@ -517,9 +521,9 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 **HDR composition is a per-pass UI setting.** The Residual Edit section exposes `HDR Composition` with `Ratio (Current)` and `Inverse Tone Map (Scene-Referred)`. The choice is persisted as `PassN.Residual.HdrComposeMode` and only affects HDR composition; the default remains Ratio. Legacy value `2` is migrated to Inverse Tone Map.
 
-**HDR exposure is a global UI setting.** The HDR section exposes `Exposure Method` with `Auto Exposure + Local` and `Median (Legacy)`. The choice is persisted as `Hdr.ExposureMethod`; the default is Auto Exposure + Local.
+**HDR exposure is a global UI setting.** The HDR section exposes `Exposure Method` with `Auto Exposure + Local`, `Median (Legacy)`, and `Game Exposure Buffer`. The choice is persisted as `Hdr.ExposureMethod`; the default is Auto Exposure + Local. `Game Exposure Buffer` falls back to the selected histogram path when no usable game `ExposureTexture` is available.
 
-**Structure detection has its own model-facing exposure controls.** The `Structure Detection` section can follow the main HDR exposure, use a dedicated median exposure, or use a dedicated `Auto + Local` histogram exposure. Its local exposure is applied through the same BT.2446 carrier path used by the main model input.
+**Structure detection has its own model-facing exposure controls.** The `Structure Detection` section can follow the main HDR exposure, use a dedicated median exposure, or use a dedicated `Auto + Local` histogram exposure. Its local exposure is applied through the same BT.2446 carrier path used by the main model input. When the main HDR exposure method is `Game Exposure Buffer`, `Follow Main` uses the game exposure value; dedicated `Median` and `Auto + Local` modes remain independent.
 
 **Once the first Present pass exists, later passes are forced to Present.** This keeps the pass chain monotonic: Post-DLSS can feed later Post-DLSS work, while a Present pass cannot hand its output back into the earlier DLSS injection point.
 
@@ -531,7 +535,7 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 The HDR path is gain-map based and exists only in Post-DLSS processing.
 
-1. `HdrState` detects the source format and maintains exposure/scene-white state from the histogram. Auto Exposure + Local uses the full-frame histogram for global adaptation and the same histogram for white point. Median (Legacy) is also full-frame and does not use skin or depth.
+1. `HdrState` detects the source format and maintains exposure/scene-white state. For `Auto Exposure + Local`, it uses the full-frame histogram for global adaptation and the same histogram for white point. `Median (Legacy)` is also full-frame and does not use skin or depth. For `Game Exposure Buffer`, it uses the game's NGX `ExposureTexture` when a usable 1x1 exposure scalar has been captured and read back; otherwise it falls back to the selected histogram path. Game-buffer mode keeps scene white at 1.0. The histogram path and independent Structure Detection exposure track remain available.
 2. `SkinDetect` (shown as `Structure Detection` in the UI), when enabled, prepares a working-scale model input using its selected exposure method, evaluates a dedicated model feature built at full output resolution, and builds a temporal mask from the input/output difference. The target can be skin-oriented or general model structure. The detection pass has three additional compute dispatches in its HDR worst case, and the descriptor/constant ring is sized for those dispatches in addition to the normal frame budget.
 3. `GainMapSplit` converts the full-resolution HDR source into an RGBA32F carrier: RGB is the linear SDR base and A is log2 gain. BT.2446-C parameters, gain-map offsets and scene-white control the split.
 4. `PrepareModelInput` performs exact Box Area downsampling. For the HDR carrier path it applies the reversible model highlight/gamut fit and sRGB encoding. The packed carrier is not modified.
@@ -553,7 +557,7 @@ Pass failures are represented by `PassSession::Fail()` and surfaced through the 
 
 ### Status
 
-`StatusSnapshot` is the UI-facing current state: addon enabled state, runtime initialization state, guide availability, HDR/gain-map measurements, post-DLSS block reason, and per-pass runtime status. It is refreshed by `AddonController` after frame processing.
+`StatusSnapshot` is the UI-facing current state: addon enabled state, runtime initialization state, guide availability, HDR/gain-map measurements, game-exposure availability/value, post-DLSS block reason, and per-pass runtime status. It is refreshed by `AddonController` after frame processing. For Game Exposure Buffer, the snapshot reports `FOUND (last valid)` when an asynchronous readback has produced a finite exposure value, together with the sampled exposure value and source resource dimensions/format, or `NOT FOUND` when no usable game exposure value has been obtained yet.
 
 Use Status for information that must remain visible as current state. Do not replace it with a per-frame log line.
 
@@ -597,6 +601,8 @@ The dynamic table is copied contiguously into `ShaderBlock.Params0/Params1`; `gp
 1. Add a selector to `kDebugViews` in `debug/debug_view.cpp`.
 2. If the resource is not already in `DebugSnapshot`, add it to `debug/debug_view.h` and populate it from the step that produces the resource.
 3. Keep the rendering on the producing pass's command list; do not defer the shader work to Present.
+
+`Debug View -> Game Exposure` visualizes the sampled game-exposure scalar in stops: 1.0x (0 stops) appears mid-gray, higher/lower values trend toward white/black, and magenta indicates that no valid game exposure has been read.
 
 ### Add a pipeline step
 
