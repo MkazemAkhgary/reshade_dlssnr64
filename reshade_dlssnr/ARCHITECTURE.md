@@ -429,7 +429,7 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 **Post-DLSS work must stay on the game's command list and must not submit it.** The addon records inline and lets the game's queue submit that work.
 
-**Present/Release command contexts own their own fence.** `CommandContext::WaitGpu` is the synchronization point for addon-owned lists and for deferred resource release that depends on them.
+**Present/Release command contexts own their own fence.** `CommandContext::WaitGpu` is the synchronization point for addon-owned lists and for deferred resource release that depends on them. When either retired-resource queue is non-empty, `OnPresent` must open and submit the Release command list even if backbuffer grading and debug output are disabled; otherwise the old Structure Detection working textures can be released while the game's earlier command list is still in flight.
 
 **Abandoned Present recordings must be closed before allocator reuse.** `CommandContext::Abort` closes a recording that exited before the normal `SubmitAndWait` tail; `Reset` must never reset an allocator while its command list is still recording.
 

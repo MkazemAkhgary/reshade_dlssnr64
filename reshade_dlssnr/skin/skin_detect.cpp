@@ -120,7 +120,7 @@ bool SkinDetect::Run(CommandContext& cmd,
                      const DlssGuideState& guides,
                      HdrState* hdr,
                      const Settings& settings) {
-  output_.valid = false;
+  output_ = {};
 
   if (command_list == nullptr) return false;
   if (guides.dlss_output_color == nullptr) return false;

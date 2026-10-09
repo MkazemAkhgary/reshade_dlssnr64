@@ -80,9 +80,9 @@ class AddonController {
   // release steps record into a single submit. EndReleaseCommands closes,
   // submits and waits.
   //
-  // A frame in which nothing records never opens the list, so it pays neither
-  // the submit nor the wait — which is the point, because the wait is a full
-  // GPU sync at present time and this stage runs on every frame.
+  // Normally an idle frame does not pay for a submit/wait. When retired
+  // resources are waiting for GPU completion, OnPresent explicitly opens this
+  // list so the Release stage provides a queue-ordered lifetime fence.
   ID3D12GraphicsCommandList* BeginReleaseCommands(
       ID3D12CommandQueue* command_queue);
   void EndReleaseCommands(ID3D12CommandQueue* command_queue);

@@ -86,9 +86,8 @@ PipelineStatus AddonController::RunSingleStage(
 
   const PipelineStatus status = PipelineRunner::RunStage(stage, run);
 
-  // The stage owns its list, and this is the single submit point: every step
-  // that recorded has had its turn by now. A frame in which nothing recorded
-  // never opened the list, and this is a no-op.
+  // This is the single submit point for the Release list. OnPresent may have
+  // opened it solely to fence retired resources even if no stage step records.
   EndReleaseCommands(command_queue);
 
   return status;
@@ -247,26 +246,6 @@ void AddonController::OnPresent(
     IDXGISwapChain* swapchain) {
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
-  // Both queues are drained at the end of every frame. The count reported
-  // here is what that drain released: a working texture replaced by a
-  // working-scale change, or all three guide clones replaced by a resolution
-  // or format change. Reading the queues before the drain instead made every
-  // such frame look like a leak, because the disposal that refilled them had
-  // happened earlier in the same frame.
-  {
-    DlssGuides& guides = DlssGuides::Get();
-    const size_t guide_pending = guides.RetiredResourceCount();
-    const size_t game_pending = guides.RetiredGameResourceCount();
-    if (guide_pending > 0 || game_pending > 0) {
-      char message[160];
-      std::snprintf(message, sizeof(message),
-                    "DLSSNR: released retired resources "
-                    "(guide=%zu game=%zu)",
-                    guide_pending, game_pending);
-      reshade::log::message(reshade::log::level::info, message);
-    }
-  }
-
   const Settings& settings = GetSettings();
   if (!settings.enabled) { frame_debug_.Reset(); return; }
   if (command_queue == nullptr || swapchain == nullptr) {
@@ -299,22 +278,41 @@ void AddonController::OnPresent(
     }
   }
 
+  // Retired resources can be held by commands recorded on the game's list,
+  // including the working textures replaced when Structure Detection's scale
+  // changes. The Release stage normally opens a list only when grading or a
+  // debug copy needs GPU work, so force one when either retirement queue is
+  // non-empty. Its submit-and-wait is the lifetime fence for those resources.
+  DlssGuides& guides = DlssGuides::Get();
+  const bool have_retired_resources =
+      guides.RetiredGameResourceCount() != 0 ||
+      guides.RetiredResourceCount() != 0;
+  const bool retirement_sync_ready =
+      !have_retired_resources || BeginReleaseCommands(command_queue) != nullptr;
+
   RunSingleStage(PipelineReleaseStage(), command_queue, swapchain);
 
-  // Drain both of DlssGuides' queues. ReleaseRetiredGameResources is what
-  // PassResources::Dispose routes into via RetireResourceCallback, so a frame
-  // with only PostDLSS passes never reaches PassSession::SubmitAndWait and
-  // never releases anything; every working-scale change disposes both working
-  // textures, so without a frame-end drain the queue grows without bound.
-  // ReleaseRetiredResources holds the guide clones, replaced on a resolution
-  // or format change; they accumulate over a session for the same reason.
-  //
-  // RunSingleStage ends in EndReleaseCommands, which submits and waits on the
-  // game's queue. Because the game's earlier DLSS work is ahead of the release
-  // list in that queue's FIFO, that wait covers it too, so every resource on
-  // both queues was last referenced by work that has completed.
-  DlssGuides::Get().ReleaseRetiredGameResources();
-  DlssGuides::Get().ReleaseRetiredResources();
+  // If a release list could not be opened, keep the resources queued. Releasing
+  // them without a completed queue wait is unsafe; a later Present can drain
+  // them once synchronization is available.
+  if (have_retired_resources && retirement_sync_ready) {
+    const size_t guide_pending = guides.RetiredResourceCount();
+    const size_t game_pending = guides.RetiredGameResourceCount();
+    guides.ReleaseRetiredGameResources();
+    guides.ReleaseRetiredResources();
+    if (guide_pending > 0 || game_pending > 0) {
+      char message[160];
+      std::snprintf(message, sizeof(message),
+                    "DLSSNR: released retired resources "
+                    "(guide=%zu game=%zu)",
+                    guide_pending, game_pending);
+      reshade::log::message(reshade::log::level::info, message);
+    }
+  } else if (have_retired_resources) {
+    reshade::log::message(
+        reshade::log::level::warning,
+        "DLSSNR: deferred resource release; GPU queue synchronization unavailable");
+  }
 
   RefreshStatus(settings);
   frame_debug_.Reset();
