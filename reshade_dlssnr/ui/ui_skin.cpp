@@ -46,10 +46,10 @@ void DrawModelGroup(SkinSettings& detection, bool& model_open, bool& changed) {
 }
 
 void DrawTargetGroup(SkinSettings& detection, bool& changed) {
-  static const char* kNames[] = {"Skin", "Structure"};
+  static const char* kNames[] = {"Skin Range", "All Structure"};
   static const char* kTips[] = {
-      "Use the model edit with the skin-color gate.",
-      "Use the model edit without the skin-color gate. This can capture faces, clothing, geometry, and other structure.",
+      "Only accept model edits where every input/output channel is away from near-black and clipped-white values. This is a range gate, not a skin-hue classifier.",
+      "Accept model edits at any pixel, including dark and clipped highlights. This can include faces, clothing, geometry, and other structure.",
   };
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("Detection Target");

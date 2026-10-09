@@ -82,30 +82,39 @@ float ModelGamutCompressMax(float max_channel)
     if (max_channel <= kModelGamutCompressionStart)
         return max_channel;
 
-    const float headroom = 1.0 - kModelGamutCompressionStart;
-    const float distance = max_channel - kModelGamutCompressionStart;
-    return 1.0 - headroom /
-        (1.0 + kModelGamutCompressionStrength * distance);
+    if (max_channel <= 1.0)
+    {
+        const float t = (max_channel - kModelGamutCompressionStart) /
+                        max(1.0 - kModelGamutCompressionStart, 1e-6);
+        return lerp(kModelGamutCompressionStart,
+                    kModelGamutCompressionWhite, saturate(t));
+    }
+
+    const float superwhite_span = log2(kModelGamutMaxLinear);
+    const float t = log2(max_channel) / max(superwhite_span, 1e-6);
+    return lerp(kModelGamutCompressionWhite,
+                kModelGamutCompressionCeiling, saturate(t));
 }
 
 float3 GamutFitModelInput(float3 c)
 {
     c = max(c, 0.0);
-    const float max_channel = max(c.r, max(c.g, c.b));
+    const float source_max = max(c.r, max(c.g, c.b));
+    if (source_max > kModelGamutMaxLinear)
+        c *= kModelGamutMaxLinear / source_max;
+
+    const float max_channel = min(source_max, kModelGamutMaxLinear);
     if (max_channel <= kModelGamutCompressionStart)
         return c;
 
-    // Compress the highlight magnitude into [0, 1] and progressively pull
-    // very bright colors toward white. This preserves normal SDR colors while
-    // retaining emissive/fire highlight structure instead of normalizing every
-    // super-white to the same RGB direction. The transform is analytically
-    // invertible for HDR compose.
+    // Spread highlights over more FP16 code values before sRGB encoding. Values
+    // below the compression start stay untouched; white and the supported
+    // super-white range share a reversible mapping below 1.0.
     const float desat = saturate(
         kModelHighlightDesaturation *
-        (max_channel - kModelGamutCompressionStart) /
+        (max_channel - kModelGamutHighlightDesaturationStart) /
         max(max_channel + 1.0, 1e-6));
-    const float3 white_pulled = lerp(
-        c, max_channel.xxx, desat);
+    const float3 white_pulled = lerp(c, max_channel.xxx, desat);
     const float compressed_max = ModelGamutCompressMax(max_channel);
     return white_pulled * (compressed_max / max(max_channel, 1e-6));
 }
@@ -113,23 +122,41 @@ float3 GamutFitModelInput(float3 c)
 float3 GamutUnfitModelInput(float3 c)
 {
     c = max(c, 0.0);
-    const float mapped_max = min(max(c.r, max(c.g, c.b)), 1.0 - 1e-6);
-    if (mapped_max <= kModelGamutCompressionStart)
+    const float actual_mapped_max = max(c.r, max(c.g, c.b));
+    if (actual_mapped_max <= kModelGamutCompressionStart)
         return c;
 
-    const float headroom = 1.0 - kModelGamutCompressionStart;
-    const float distance =
-        (headroom / max(1.0 - mapped_max, 1e-6) - 1.0) /
-        max(kModelGamutCompressionStrength, 1e-6);
-    const float original_max = min(
-        kModelGamutCompressionStart + max(distance, 0.0),
-        kModelGamutMaxLinear);
-    const float compressed_max = ModelGamutCompressMax(original_max);
-    const float scale = compressed_max / max(original_max, 1e-6);
+    const float mapped_white = ModelGamutCompressMax(1.0);
+    const float mapped_limit = ModelGamutCompressMax(kModelGamutMaxLinear);
+    float mapped_max = actual_mapped_max;
+    if (actual_mapped_max > mapped_limit)
+    {
+        // EASU/RCAS can overshoot the fitted range. Clamp that overshoot to the
+        // supported model gamut instead of interpreting it as unbounded HDR.
+        // Scale every channel together so highlight hue does not shift.
+        c *= mapped_limit / actual_mapped_max;
+        mapped_max = mapped_limit;
+    }
 
+    float original_max;
+    if (mapped_max <= mapped_white)
+    {
+        const float t = (mapped_max - kModelGamutCompressionStart) /
+                        max(mapped_white - kModelGamutCompressionStart, 1e-6);
+        original_max = lerp(kModelGamutCompressionStart, 1.0, saturate(t));
+    }
+    else
+    {
+        const float t = saturate(
+            (mapped_max - mapped_white) /
+            max(kModelGamutCompressionCeiling - mapped_white, 1e-6));
+        original_max = exp2(t * log2(kModelGamutMaxLinear));
+    }
+
+    const float scale = mapped_max / max(original_max, 1e-6);
     const float desat = saturate(
         kModelHighlightDesaturation *
-        (original_max - kModelGamutCompressionStart) /
+        (original_max - kModelGamutHighlightDesaturationStart) /
         max(original_max + 1.0, 1e-6));
     const float3 white_pulled = c / max(scale, 1e-6);
     const float3 original =

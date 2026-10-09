@@ -132,12 +132,14 @@ const DebugViewDef kDebugViews[] = {
      "Raw f32 log2 gain from the gain-map split. Displayed with -4 as black and +6 as white.",
      DebugDisplayMode::GainMap, SelectGainMap},
     {"HDR Roundtrip Diagnostic",
-     "2x2 math test: Model Input | Model Output / HDR->SDR Roundtrip | Error. "
-     "Use Adaptive Exposure and/or Local Exposure with input/output grades and RCAS disabled.",
+     "2x2 comparison: Model Input | Model Output / HDR->SDR Roundtrip | Error. "
+     "The reference applies the same RCAS setting as composition. For a clean "
+     "transfer test, set Working Scale to 1.0 and disable input/output grades and RCAS.",
      DebugDisplayMode::HdrRoundtripDiagnostic, SelectComposedOutput},
     {"HDR Roundtrip Error",
-     "False-color difference between the model output and the final HDR result "
-     "converted back through the same HDR->SDR transform.",
+     "False-color difference from the model output after the final HDR result is "
+     "converted back through the same HDR->SDR transform. At lower Working Scale, "
+     "edges also show full-resolution source detail retained by composition.",
      DebugDisplayMode::HdrRoundtripError, SelectComposedOutput},
     {"HDR Local Exposure",
      "Local exposure factor in stops, mapped so 0 stops is mid-gray, -2 stops "
@@ -250,6 +252,9 @@ bool RenderDebugView(
     constants.easu.Con2.y = 2.0f / in_h;
     constants.easu.Con2.z = 1.0f / in_w;
     constants.easu.Con2.w = 2.0f / in_h;
+
+    constants.rcas.Enabled = snapshot.rcas_enabled ? 1.0f : 0.0f;
+    constants.rcas.Strength = snapshot.rcas_strength;
 
     state.Transition(command_list, snapshot.composed_output,
                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);

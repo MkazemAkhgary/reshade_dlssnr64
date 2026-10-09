@@ -38,11 +38,11 @@ void CSMain(uint3 gtid : SV_GroupThreadID,
 
     if (dtid.x < Width && dtid.y < Height) {
         const float3 encoded = gSource.Load(int3(dtid.xy, 0)).rgb;
-        const float3 lin = DecodeToLinear(
+        const float3 linear_rgb = DecodeToLinear(
             encoded, (int)(kFormat + 0.5), kSdrReferenceWhiteNits);
         const float3 luma_weights = ((int)(kFormat + 0.5) == 2)
             ? kLuma2020 : kLuma709;
-        const float luma = dot(max(lin, 0.0), luma_weights);
+        const float luma = dot(max(linear_rgb, 0.0), luma_weights);
 
         uint contribution = 1u;
         if ((kFilterFlags & 1u) != 0u) {

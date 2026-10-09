@@ -20,10 +20,10 @@ float GlobalHdrLumaToSdr(float hdr_luma, float exposure)
 float SampleGlobalSdrLuma(float2 uv)
 {
     const float3 c = gSource.SampleLevel(s0, saturate(uv), 0).rgb;
-    float3 lin = DecodeToLinear(
+    float3 linear_rgb = DecodeToLinear(
         c, (int)(kFormat + 0.5), kSdrReferenceWhiteNits);
-    lin = HdrPreDesaturate(lin, saturate(kCrosstalk));
-    const float hdr_luma = max(dot(max(lin, 0.0), HdrLumaWeights()), 0.0);
+    linear_rgb = HdrPreDesaturate(linear_rgb, saturate(kCrosstalk));
+    const float hdr_luma = max(dot(max(linear_rgb, 0.0), HdrLumaWeights()), 0.0);
     return max(GlobalHdrLumaToSdr(hdr_luma, kExposure), 1e-8);
 }
 
