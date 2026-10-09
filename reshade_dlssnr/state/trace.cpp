@@ -75,6 +75,17 @@ void Append(Snapshot& snap, const std::string& name, std::string value) {
   snap.push_back(TraceField{std::move(name), std::move(value), std::string(), false});
 }
 
+void AppendExposureFilters(Snapshot& snap, const std::string& prefix,
+                           const ExposureFilterSettings& filter) {
+  Append(snap, prefix + ".structure_mask", BoolText(filter.structure_mask));
+  Append(snap, prefix + ".depth", BoolText(filter.depth));
+  Append(snap, prefix + ".percentile_range", BoolText(filter.percentile_range));
+  Append(snap, prefix + ".depth_near", FloatText(filter.depth_near));
+  Append(snap, prefix + ".depth_far", FloatText(filter.depth_far));
+  Append(snap, prefix + ".percentile_low", FloatText(filter.percentile_low));
+  Append(snap, prefix + ".percentile_high", FloatText(filter.percentile_high));
+}
+
 void AppendGrade(Snapshot& snap, const std::string& prefix,
                  const GradeSettings& grade) {
   Append(snap, prefix + ".enabled", BoolText(grade.enabled));
@@ -148,12 +159,35 @@ Snapshot BuildSnapshot(const Settings& settings,
   Append(snap, "hdr_format", HdrFormatText(settings.hdr.format));
   Append(snap, "hdr_measure_interval",
          std::to_string(settings.hdr.measure_interval));
-  Append(snap, "hdr_exposure_method",
-         std::to_string(static_cast<int>(settings.hdr.exposure_method)));
-  Append(snap, "hdr_midtone", FloatText(settings.hdr.midtone));
-  Append(snap, "hdr_white_percentile", FloatText(settings.hdr.white_percentile));
   Append(snap, "hdr_highlight_headroom",
          FloatText(settings.hdr.highlight_headroom));
+  const auto& game = settings.hdr.game_exposure;
+  Append(snap, "hdr.layer.game.enabled", BoolText(game.enabled));
+  Append(snap, "hdr.layer.game.bias_stops", FloatText(game.bias_stops));
+  Append(snap, "hdr.layer.game.bounded_tuning", BoolText(game.bounded_tuning));
+  Append(snap, "hdr.layer.game.tuning_strength", FloatText(game.tuning_strength));
+  Append(snap, "hdr.layer.game.max_tuning_stops", FloatText(game.max_tuning_stops));
+  Append(snap, "hdr.layer.game.tuning_midtone", FloatText(game.tuning_midtone));
+  Append(snap, "hdr.layer.game.tuning_speed_up", FloatText(game.tuning_speed_up));
+  Append(snap, "hdr.layer.game.tuning_speed_down", FloatText(game.tuning_speed_down));
+  AppendExposureFilters(snap, "hdr.layer.game.filters", game.filters);
+
+  const auto& adaptive = settings.hdr.adaptive_exposure;
+  Append(snap, "hdr.layer.adaptive.enabled", BoolText(adaptive.enabled));
+  Append(snap, "hdr.layer.adaptive.midtone", FloatText(adaptive.midtone));
+  Append(snap, "hdr.layer.adaptive.speed_up", FloatText(adaptive.speed_up));
+  Append(snap, "hdr.layer.adaptive.speed_down", FloatText(adaptive.speed_down));
+  Append(snap, "hdr.layer.adaptive.strength_over_game", FloatText(adaptive.strength_over_game));
+  Append(snap, "hdr.layer.adaptive.max_correction_stops", FloatText(adaptive.max_correction_stops));
+  AppendExposureFilters(snap, "hdr.layer.adaptive.filters", adaptive.filters);
+
+  const auto& local = settings.hdr.local_exposure;
+  Append(snap, "hdr.layer.local.enabled", BoolText(local.enabled));
+  Append(snap, "hdr.layer.local.strength", FloatText(local.strength));
+  Append(snap, "hdr.layer.local.max_brighten", FloatText(local.max_brighten));
+  Append(snap, "hdr.layer.local.max_darken", FloatText(local.max_darken));
+  Append(snap, "hdr.layer.local.midtone", FloatText(local.midtone));
+  AppendExposureFilters(snap, "hdr.layer.local.filters", local.filters);
   Append(snap, "hdr_bt2446_k1", FloatText(settings.hdr.bt2446_k1));
   Append(snap, "hdr_bt2446_k2", FloatText(settings.hdr.bt2446_k2));
   Append(snap, "hdr_bt2446_k3", FloatText(settings.hdr.bt2446_k3));
@@ -163,69 +197,23 @@ Snapshot BuildSnapshot(const Settings& settings,
   Append(snap, "hdr_gain_alternate_offset", FloatText(settings.hdr.gain_alternate_offset));
   Append(snap, "hdr_gain_min_log2", FloatText(settings.hdr.gain_min_log2));
   Append(snap, "hdr_gain_max_log2", FloatText(settings.hdr.gain_max_log2));
-  Append(snap, "hdr_rate_cap", FloatText(settings.hdr.rate_cap));
-  Append(snap, "hdr_auto_low_percent", FloatText(settings.hdr.auto_low_percent));
-  Append(snap, "hdr_auto_high_percent", FloatText(settings.hdr.auto_high_percent));
-  Append(snap, "hdr_speed_up", FloatText(settings.hdr.speed_up));
-  Append(snap, "hdr_speed_down", FloatText(settings.hdr.speed_down));
-  Append(snap, "hdr_local_exposure_strength",
-         FloatText(settings.hdr.local_exposure_strength));
-  Append(snap, "hdr_local_max_brighten",
-         FloatText(settings.hdr.local_max_brighten));
-  Append(snap, "hdr_local_max_darken",
-         FloatText(settings.hdr.local_max_darken));
   Append(snap, "structure_detect_enable", BoolText(settings.skin.enable));
   Append(snap, "structure_detect_scale", FloatText(settings.skin.scale));
-  Append(snap, "structure_detect_luma_threshold",
-         FloatText(settings.skin.luma_threshold));
-  Append(snap, "structure_detect_luma_relative",
-         FloatText(settings.skin.luma_relative));
-  Append(snap, "structure_detect_chroma_threshold",
-         FloatText(settings.skin.chroma_threshold));
-  Append(snap, "structure_detect_clip_threshold",
-         FloatText(settings.skin.clip_threshold));
-  Append(snap, "structure_detect_preset",
-         std::to_string(settings.skin.preset));
-  Append(snap, "structure_detect_intensity",
-         FloatText(settings.skin.intensity));
-  Append(snap, "structure_detect_local_tone",
-         FloatText(settings.skin.local_tone));
-  Append(snap, "structure_detect_local_structure",
-         FloatText(settings.skin.local_structure));
-  Append(snap, "structure_detect_skin_structure",
-         FloatText(settings.skin.skin_structure));
-  Append(snap, "structure_detect_ui_correction",
-         BoolText(settings.skin.ui_correction));
-  Append(snap, "structure_detect_edit_strength",
-         FloatText(settings.skin.edit_strength));
-  Append(snap, "structure_detect_mask_smoothing",
-         FloatText(settings.skin.mask_smoothing));
-  Append(snap, "structure_detect_mask_response",
-         FloatText(settings.skin.mask_response));
+  Append(snap, "structure_detect_luma_threshold", FloatText(settings.skin.luma_threshold));
+  Append(snap, "structure_detect_luma_relative", FloatText(settings.skin.luma_relative));
+  Append(snap, "structure_detect_chroma_threshold", FloatText(settings.skin.chroma_threshold));
+  Append(snap, "structure_detect_clip_threshold", FloatText(settings.skin.clip_threshold));
+  Append(snap, "structure_detect_preset", std::to_string(settings.skin.preset));
+  Append(snap, "structure_detect_intensity", FloatText(settings.skin.intensity));
+  Append(snap, "structure_detect_local_tone", FloatText(settings.skin.local_tone));
+  Append(snap, "structure_detect_local_structure", FloatText(settings.skin.local_structure));
+  Append(snap, "structure_detect_skin_structure", FloatText(settings.skin.skin_structure));
+  Append(snap, "structure_detect_ui_correction", BoolText(settings.skin.ui_correction));
+  Append(snap, "structure_detect_edit_strength", FloatText(settings.skin.edit_strength));
+  Append(snap, "structure_detect_mask_smoothing", FloatText(settings.skin.mask_smoothing));
+  Append(snap, "structure_detect_mask_response", FloatText(settings.skin.mask_response));
   Append(snap, "structure_detect_target_mode",
          std::to_string(static_cast<int>(settings.skin.target_mode)));
-  Append(snap, "structure_detect_exposure_mode",
-         std::to_string(static_cast<int>(settings.skin.exposure_mode)));
-  Append(snap, "structure_detect_exposure_midtone",
-         FloatText(settings.skin.exposure_midtone));
-  Append(snap, "structure_detect_exposure_rate_cap",
-         FloatText(settings.skin.exposure_rate_cap));
-  Append(snap, "structure_detect_exposure_measure_interval",
-         std::to_string(settings.skin.exposure_measure_interval));
-  Append(snap, "structure_detect_auto_low_percent",
-         FloatText(settings.skin.exposure_auto_low_percent));
-  Append(snap, "structure_detect_auto_high_percent",
-         FloatText(settings.skin.exposure_auto_high_percent));
-  Append(snap, "structure_detect_speed_up",
-         FloatText(settings.skin.exposure_speed_up));
-  Append(snap, "structure_detect_speed_down",
-         FloatText(settings.skin.exposure_speed_down));
-  Append(snap, "structure_detect_local_exposure_strength",
-         FloatText(settings.skin.exposure_local_strength));
-  Append(snap, "structure_detect_local_max_brighten",
-         FloatText(settings.skin.exposure_local_max_brighten));
-  Append(snap, "structure_detect_local_max_darken",
-         FloatText(settings.skin.exposure_local_max_darken));
   AppendGrade(snap, "grade_backbuffer", settings.grade_backbuffer);
 
   for (uint32_t i = 0; i < kMaxPasses; ++i) {

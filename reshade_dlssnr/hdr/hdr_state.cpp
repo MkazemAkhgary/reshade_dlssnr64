@@ -35,9 +35,9 @@ HdrFormat DetectFormatFromDxgi(DXGI_FORMAT format) {
 namespace {
 
 constexpr uint32_t kHistogramBins = 256;
-constexpr uint32_t kMaskWeightScale = 16;
 constexpr uint32_t kHistogramBytes = kHistogramBins * sizeof(uint32_t);
-constexpr uint32_t kCombinedHistogramBytes = 2 * kHistogramBytes;
+constexpr uint32_t kHistogramLayerCount = 4;
+constexpr uint32_t kCombinedHistogramBytes = kHistogramLayerCount * kHistogramBytes;
 constexpr float kLumaMinLog2 = -12.0f;
 constexpr float kLumaMaxLog2 = 12.0f;
 
@@ -61,7 +61,7 @@ float FormatToShaderValue(HdrFormat format) {
 float PercentileBin(const uint32_t* bins, uint32_t total, float fraction) {
   if (bins == nullptr || total == 0) return 0.0f;
   const float f = std::clamp(fraction, 0.0f, 1.0f);
-  const uint32_t target = static_cast<uint32_t>(f * total);
+  const uint32_t target = std::max(1u, static_cast<uint32_t>(std::ceil(f * total)));
   uint32_t cumulative = 0;
   for (uint32_t i = 0; i < kHistogramBins; ++i) {
     cumulative += bins[i];
@@ -127,75 +127,38 @@ void ExposureTracker::Reset() { *this = ExposureTracker{}; }
 void ExposureTracker::Update(const uint32_t* bins,
                              const ExposureParams& params,
                              float delta_seconds) {
+  if (bins == nullptr) return;
   uint32_t total = 0;
   for (uint32_t i = 0; i < kHistogramBins; ++i) total += bins[i];
   if (total == 0) return;
 
-  const bool auto_local = params.exposure_method == HdrExposureMethod::AutoLocal;
-  float exposure_reference_luma = auto_local
-      ? HistogramBandLuma(bins, total, params.auto_low_percent,
-                          params.auto_high_percent)
-      : BinToLinear(PercentileBin(bins, total, 0.50f));
-
-  const float safe_reference = std::max(exposure_reference_luma, 1e-6f);
+  const float low = params.use_percentile_range ? params.percentile_low : 0.0f;
+  const float high = params.use_percentile_range ? params.percentile_high : 1.0f;
+  const float reference = HistogramBandLuma(bins, total, low, high);
   const float raw_target = std::clamp(
-      params.midtone / safe_reference, 0.01f, 4096.0f);
+      params.midtone / std::max(reference, 1e-6f), 0.01f, 4096.0f);
 
   const bool was_ready = have_measurement;
   const float dt = std::clamp(delta_seconds, 1.0f / 240.0f, 0.5f);
   float target = raw_target;
-
-  if (auto_local) {
-    if (was_ready) {
-      const float log_current = std::log2(std::max(exposure, 1e-6f));
-      float delta = std::log2(raw_target) - log_current;
-      if (delta >= 0.0f) {
-        delta = std::min(delta, std::max(params.speed_up, 0.0f) * dt);
-      } else {
-        delta = std::max(delta, -std::max(params.speed_down, 0.0f) * dt);
-      }
-      target = std::exp2(log_current + delta);
-    }
-  } else {
-    const float max_delta = warmup_frames < 30 ? 0.5f : params.rate_cap;
-    if (max_delta > 0.0f) {
-      const float log_current = std::log2(std::max(exposure, 1e-6f));
-      float delta = std::log2(raw_target) - log_current;
-      delta = std::clamp(delta, -max_delta, max_delta);
-      target = std::exp2(log_current + delta);
-    }
+  if (was_ready) {
+    const float current_log = std::log2(std::max(exposure, 1e-6f));
+    float delta = std::log2(raw_target) - current_log;
+    if (delta >= 0.0f)
+      delta = std::min(delta, std::max(params.speed_up, 0.0f) * dt);
+    else
+      delta = std::max(delta, -std::max(params.speed_down, 0.0f) * dt);
+    target = std::exp2(current_log + delta);
   }
 
-  exposure_reference_luma = std::max(exposure_reference_luma, 1e-6f);
   target_exposure = target;
-  metering_source = MeteringSource::FullFrame;
-
-  if (!was_ready) {
-    exposure = target;
-  } else if (auto_local) {
-    exposure = target;
-  } else {
-    const uint32_t interval =
-        std::clamp(params.measure_interval, 1u, 32u);
-    const float resp =
-        (32.0f - static_cast<float>(interval)) / 31.0f;
-    const float alpha = 0.02f + resp * 0.38f;
-    exposure = exposure + (target - exposure) * alpha;
-  }
-
-  const float white_fraction = auto_local
-      ? std::clamp(params.auto_high_percent, 0.01f, 0.999f)
-      : std::clamp(params.white_percentile, 0.90f, 0.999f);
-  const float white_luma =
-      BinToLinear(PercentileBin(bins, total, white_fraction));
-
-  const float white_alpha = auto_local
-      ? (was_ready ? 1.0f - std::exp(-6.0f * dt) : 1.0f)
-      : (was_ready ? 0.08f : 1.0f);
-  scene_white = scene_white +
-                (std::max(white_luma, 1e-6f) - scene_white) * white_alpha;
-
-  this->exposure_reference_luma = exposure_reference_luma;
+  exposure = target;
+  exposure_reference_luma = std::max(reference, 1e-6f);
+  const float white_fraction = params.use_percentile_range
+      ? std::clamp(params.percentile_high, 0.01f, 0.999f) : 0.99f;
+  const float white_luma = BinToLinear(PercentileBin(bins, total, white_fraction));
+  const float white_alpha = was_ready ? 1.0f - std::exp(-6.0f * dt) : 1.0f;
+  scene_white += (std::max(white_luma, 1e-6f) - scene_white) * white_alpha;
   have_measurement = true;
   warmup_frames += 1.0f;
 }
@@ -287,7 +250,8 @@ void HdrState::Shutdown() {
 
   enabled_ = false;
   regular_.Reset();
-  detection_.Reset();
+  adaptive_.Reset();
+  game_tuning_.Reset();
   frame_counter_ = 0;
   frames_until_measure_ = 0;
   frames_since_measure_ = 0;
@@ -296,11 +260,17 @@ void HdrState::Shutdown() {
   have_histogram_ = false;
   for (uint32_t i = 0; i < kHistogramBins; ++i) {
     last_histogram_[i] = 0;
-    last_detection_histogram_[i] = 0;
+    last_full_histogram_[i] = 0;
+    last_game_histogram_[i] = 0;
+    last_local_histogram_[i] = 0;
   }
   p_hi_luma_ = 0.0f;
+  local_luma_min_ = 0.0f;
+  local_luma_max_ = 1.0e8f;
   last_samples_ = 0;
-  last_detection_samples_ = 0;
+  last_full_samples_ = 0;
+  last_game_samples_ = 0;
+  last_local_samples_ = 0;
   have_measurement_time_ = false;
   last_measurement_time_ = {};
   have_gain_stats_ = false;
@@ -311,42 +281,37 @@ void HdrState::Shutdown() {
 }
 
 HdrSnapshot HdrState::GetSnapshot() const {
-  HdrSnapshot s;
-  s.enabled = enabled_;
-  s.ready = regular_.have_measurement;
-  s.resolved_format = resolved_format_;
-  s.exposure = regular_.exposure;
-  s.scene_white = regular_.scene_white;
-  s.detection_exposure = detection_.exposure;
-  s.detection_scene_white = detection_.scene_white;
-  s.detection_samples = last_detection_samples_;
-  if (last_detection_samples_ != 0) {
-    for (uint32_t i = 0; i < kHistogramBins; ++i)
-      s.detection_histogram[i] = last_detection_histogram_[i];
-  }
-  s.frames_since_measure = frames_since_measure_;
-  s.has_histogram = have_histogram_;
+  HdrSnapshot snapshot;
+  snapshot.enabled = enabled_;
+  snapshot.ready = regular_.have_measurement;
+  snapshot.resolved_format = resolved_format_;
+  snapshot.exposure = regular_.exposure;
+  snapshot.scene_white = regular_.scene_white;
+  snapshot.frames_since_measure = frames_since_measure_;
+  snapshot.has_histogram = have_histogram_;
   if (have_histogram_) {
     for (uint32_t i = 0; i < kHistogramBins; ++i)
-      s.histogram[i] = last_histogram_[i];
+      snapshot.histogram[i] = last_histogram_[i];
   }
-  s.exposure_reference_luma = regular_.exposure_reference_luma;
-  s.p_hi_luma = p_hi_luma_;
-  s.target_exposure = regular_.target_exposure;
-  s.samples = last_samples_;
-  s.measurement_generation = measurement_generation_;
-  s.game_exposure_available = game_exposure_available_;
-  s.game_exposure = game_exposure_value_;
-  s.game_exposure_width = game_exposure_width_;
-  s.game_exposure_height = game_exposure_height_;
-  s.game_exposure_format = static_cast<int>(game_exposure_format_);
-  s.metering_source = static_cast<int>(regular_.metering_source);
-  s.gain_map_ready = have_gain_stats_;
-  s.gain_min_log2 = gain_min_log2_;
-  s.gain_max_log2 = gain_max_log2_;
-  s.gain_sdr_clipped_pixels = gain_sdr_clipped_pixels_;
-  s.gain_out_of_range_pixels = gain_out_of_range_pixels_;
-  return s;
+  snapshot.exposure_reference_luma = regular_.exposure_reference_luma;
+  snapshot.p_hi_luma = p_hi_luma_;
+  snapshot.target_exposure = regular_.target_exposure;
+  snapshot.samples = last_samples_;
+  snapshot.local_luma_min = local_luma_min_;
+  snapshot.local_luma_max = local_luma_max_;
+  snapshot.measurement_generation = measurement_generation_;
+  snapshot.game_exposure_available = game_exposure_available_;
+  snapshot.game_exposure = game_exposure_value_;
+  snapshot.game_exposure_width = game_exposure_width_;
+  snapshot.game_exposure_height = game_exposure_height_;
+  snapshot.game_exposure_format = static_cast<int>(game_exposure_format_);
+  snapshot.metering_source = static_cast<int>(regular_.metering_source);
+  snapshot.gain_map_ready = have_gain_stats_;
+  snapshot.gain_min_log2 = gain_min_log2_;
+  snapshot.gain_max_log2 = gain_max_log2_;
+  snapshot.gain_sdr_clipped_pixels = gain_sdr_clipped_pixels_;
+  snapshot.gain_out_of_range_pixels = gain_out_of_range_pixels_;
+  return snapshot;
 }
 
 void HdrState::BeginFrame(CommandContext& cmd,
@@ -358,108 +323,107 @@ void HdrState::BeginFrame(CommandContext& cmd,
                           ComputeEngine& codec,
                           ID3D12Resource* exposure_mask,
                           ID3D12Resource* game_exposure_texture,
+                          ID3D12Resource* depth_texture,
+                          bool depth_inverted,
                           unsigned int exposure_mask_width,
                           unsigned int exposure_mask_height) {
   enabled_ = settings.hdr.enable;
-  if (!enabled_) return;
-
-  if (command_list == nullptr || source == nullptr || width == 0 || height == 0)
+  if (!enabled_ || command_list == nullptr || source == nullptr || width == 0 || height == 0)
     return;
 
-  frames_since_measure_++;
+  ++frames_since_measure_;
   PollReadback(fence_.Get(), settings);
 
-  const HdrFormat prev_format = resolved_format_;
+  const HdrFormat old_format = resolved_format_;
   resolved_format_ = DetectFormatFromResource(source, settings.hdr.format);
-  if (resolved_format_ != prev_format || !have_logged_format_) {
-    const DXGI_FORMAT raw_fmt = source->GetDesc().Format;
-    char msg[160];
-    std::snprintf(msg, sizeof(msg),
+  if (resolved_format_ != old_format || !have_logged_format_) {
+    char message[160];
+    std::snprintf(message, sizeof(message),
                   "HDR: DLSS output format=%d detected=%d (0=SDR,1=scRGB,2=HDR10)",
-                  static_cast<int>(raw_fmt), HdrFormatCode(resolved_format_));
-    reshade::log::message(reshade::log::level::info, msg);
+                  static_cast<int>(source->GetDesc().Format),
+                  HdrFormatCode(resolved_format_));
+    reshade::log::message(reshade::log::level::info, message);
     have_logged_format_ = true;
   }
 
-  if (settings.hdr.exposure_method == HdrExposureMethod::GameExposureBuffer) {
-    if (pending_game_exposure_) {
-      frame_counter_++;
-      return;
-    }
-
-    if (game_exposure_texture != nullptr && game_exposure_value_buffer_ != nullptr &&
-        codec.IsReady() && codec.IsPassCompiled("ReadGameExposure")) {
-      const D3D12_RESOURCE_DESC exposure_desc = game_exposure_texture->GetDesc();
-      game_exposure_width_ = static_cast<uint32_t>(exposure_desc.Width);
-      game_exposure_height_ = exposure_desc.Height;
-      game_exposure_format_ = exposure_desc.Format;
-
-      if (exposure_desc.Width == 1 && exposure_desc.Height == 1) {
-        ComputeConstants constants = {};
-        constants.Width = 1;
-        constants.Height = 1;
-        ID3D12Resource* srvs[kSrvCount] = {
-            game_exposure_texture, game_exposure_texture,
-            game_exposure_texture, game_exposure_texture};
-        ID3D12Resource* uavs[kUavCount] = {game_exposure_value_buffer_.Get()};
-
-        cmd.SetResourceState(game_exposure_texture,
-                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-        cmd.SetResourceState(game_exposure_value_buffer_.Get(),
-                             D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        cmd.Transition(command_list, game_exposure_texture,
-                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  if (settings.hdr.game_exposure.enabled && !pending_game_exposure_ &&
+      game_exposure_texture != nullptr && game_exposure_value_buffer_ != nullptr &&
+      codec.IsReady() && codec.IsPassCompiled("ReadGameExposure")) {
+    const D3D12_RESOURCE_DESC desc = game_exposure_texture->GetDesc();
+    game_exposure_width_ = static_cast<uint32_t>(desc.Width);
+    game_exposure_height_ = desc.Height;
+    game_exposure_format_ = desc.Format;
+    if (desc.Width == 1 && desc.Height == 1) {
+      ComputeConstants constants = {};
+      constants.Width = 1;
+      constants.Height = 1;
+      ID3D12Resource* srvs[kSrvCount] = {
+          game_exposure_texture, game_exposure_texture,
+          game_exposure_texture, game_exposure_texture};
+      ID3D12Resource* uavs[kUavCount] = {game_exposure_value_buffer_.Get()};
+      cmd.SetResourceState(game_exposure_texture,
+                           D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+      cmd.SetResourceState(game_exposure_value_buffer_.Get(),
+                           D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+      cmd.Transition(command_list, game_exposure_texture,
+                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+      cmd.Transition(command_list, game_exposure_value_buffer_.Get(),
+                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+      if (codec.Dispatch("ReadGameExposure", command_list, constants, srvs, uavs,
+                         1, 1, 1)) {
+        cmd.UavBarrier(command_list, game_exposure_value_buffer_.Get());
+        cmd.Transition(command_list, game_exposure_value_buffer_.Get(),
+                       D3D12_RESOURCE_STATE_COPY_SOURCE);
+        const uint64_t next = fence_value_ + 1u;
+        if (game_exposure_readback_.EnqueueCopy(
+                command_list, game_exposure_value_buffer_.Get(), sizeof(uint32_t),
+                fence_.Get(), next)) {
+          pending_game_exposure_fence_value_ = next;
+          pending_game_exposure_ = true;
+        }
         cmd.Transition(command_list, game_exposure_value_buffer_.Get(),
                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-
-        if (codec.Dispatch("ReadGameExposure", command_list, constants, srvs, uavs,
-                           1, 1, 1)) {
-          cmd.UavBarrier(command_list, game_exposure_value_buffer_.Get());
-          cmd.Transition(command_list, game_exposure_value_buffer_.Get(),
-                         D3D12_RESOURCE_STATE_COPY_SOURCE);
-          const uint64_t next_value = fence_value_ + 1u;
-          if (game_exposure_readback_.EnqueueCopy(
-                  command_list, game_exposure_value_buffer_.Get(),
-                  sizeof(uint32_t), fence_.Get(), next_value)) {
-            pending_game_exposure_fence_value_ = next_value;
-            pending_game_exposure_ = true;
-          }
-          cmd.Transition(command_list, game_exposure_value_buffer_.Get(),
-                         D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-          cmd.SetResourceState(game_exposure_texture,
-                               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-        }
       }
-    }
-
-    if (pending_game_exposure_) {
-      frame_counter_++;
-      return;
     }
   }
 
   if (pending_measurement_) {
-    frame_counter_++;
+    ++frame_counter_;
     return;
   }
-
-  const uint32_t capped_every =
-      static_cast<uint32_t>(std::clamp(settings.hdr.measure_interval, 1, 32));
   if (frames_until_measure_ > 0) {
-    frames_until_measure_--;
-    frame_counter_++;
+    --frames_until_measure_;
+    ++frame_counter_;
     return;
   }
-  frames_until_measure_ = capped_every - 1;
-
+  frames_until_measure_ = static_cast<uint32_t>(
+      std::clamp(settings.hdr.measure_interval, 1, 32)) - 1u;
   if (!codec.IsReady()) {
-    frame_counter_++;
+    ++frame_counter_;
     return;
   }
 
-  const bool use_mask =
-      exposure_mask != nullptr && exposure_mask_width != 0 &&
-      exposure_mask_height != 0;
+  const bool have_mask = exposure_mask != nullptr &&
+                         exposure_mask_width != 0 && exposure_mask_height != 0;
+  const bool have_depth = depth_texture != nullptr;
+  ID3D12Resource* mask_srv = have_mask ? exposure_mask : source;
+  ID3D12Resource* depth_srv = have_depth ? depth_texture : source;
+  ID3D12Resource* srvs[kSrvCount] = {source, mask_srv, depth_srv, source};
+  ID3D12Resource* uavs[kUavCount] = {histogram_.Get()};
+  cmd.SetResourceState(source, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  cmd.SetResourceState(histogram_.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  cmd.Transition(command_list, source, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  cmd.Transition(command_list, histogram_.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  if (have_mask) {
+    cmd.SetResourceState(exposure_mask, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    cmd.Transition(command_list, exposure_mask,
+                   D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
+  if (have_depth) {
+    cmd.SetResourceState(depth_texture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    cmd.Transition(command_list, depth_texture,
+                   D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
 
   ComputeConstants constants = {};
   constants.Width = width;
@@ -467,79 +431,55 @@ void HdrState::BeginFrame(CommandContext& cmd,
   constants.shader.Params0.x = FormatToShaderValue(resolved_format_);
   constants.shader.Params0.y = kLumaMinLog2;
   constants.shader.Params0.z = kLumaMaxLog2;
-  constants.shader.Params1 = {};
-  constants.shader.Params1.x = static_cast<float>(exposure_mask_width);
-  constants.shader.Params1.y = static_cast<float>(exposure_mask_height);
-  constants.shader.Params1.z = use_mask ? 1.0f : 0.0f;
+  constants.shader.Params0.w = 0.0f;
+  const ExposureFilterSettings* filters[kHistogramLayerCount] = {
+      nullptr, &settings.hdr.game_exposure.filters,
+      &settings.hdr.adaptive_exposure.filters,
+      &settings.hdr.local_exposure.filters};
 
-  ID3D12Resource* srvs[kSrvCount] = {
-      source, exposure_mask != nullptr ? exposure_mask : source, source, source};
-  ID3D12Resource* uavs[kUavCount] = {histogram_.Get()};
-
-  cmd.SetResourceState(source,
-                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  cmd.SetResourceState(histogram_.Get(),
-                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  cmd.Transition(command_list, source,
-                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  cmd.Transition(command_list, histogram_.Get(),
-                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  if (use_mask) {
-    cmd.SetResourceState(exposure_mask,
-                         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    cmd.Transition(command_list, exposure_mask,
-                   D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  }
-
-  // Clear the full-frame half. The mask-conditioned half is cleared only when
-  // a valid previous-frame detection mask is available.
-  constants.shader.Params1.w = 0.0f;
-  if (!codec.Dispatch("ZeroHistogram", command_list, constants, srvs, uavs,
-                      /*threads_x=*/1, /*threads_y=*/1, /*threads_z=*/1)) {
-    frame_counter_++;
-    return;
-  }
-  if (use_mask) {
-    constants.shader.Params1.w = static_cast<float>(kHistogramBins);
+  for (uint32_t layer = 0; layer < kHistogramLayerCount; ++layer) {
+    constants.shader.Params0.w = 0.0f;
+    constants.shader.Params1.x = 0.0f;
+    constants.shader.Params1.y = 1.0f;
+    constants.shader.Params1.z = 0.0f;
+    constants.shader.Params1.w = static_cast<float>(layer * kHistogramBins);
     if (!codec.Dispatch("ZeroHistogram", command_list, constants, srvs, uavs,
-                        /*threads_x=*/1, /*threads_y=*/1, /*threads_z=*/1)) {
-      frame_counter_++;
+                        1, 1, 1)) {
+      ++frame_counter_;
       return;
     }
+    if (layer + 1 < kHistogramLayerCount)
+      cmd.UavBarrier(command_list, histogram_.Get());
   }
 
-  cmd.UavBarrier(command_list, histogram_.Get());
-  constants.shader.Params1.z = 0.0f;
-  constants.shader.Params1.w = 0.0f;
-  if (!codec.Dispatch("BuildHistogram", command_list, constants, srvs, uavs)) {
-    frame_counter_++;
-    return;
-  }
-
-  if (use_mask) {
-    cmd.UavBarrier(command_list, histogram_.Get());
-    constants.shader.Params1.z = 1.0f;
-    constants.shader.Params1.w = static_cast<float>(kHistogramBins);
+  for (uint32_t layer = 0; layer < kHistogramLayerCount; ++layer) {
+    const ExposureFilterSettings* filter = filters[layer];
+    uint32_t flags = 0;
+    if (filter != nullptr && filter->structure_mask && have_mask) flags |= 1u;
+    if (filter != nullptr && filter->depth && have_depth) flags |= 2u;
+    constants.shader.Params0.w = static_cast<float>(flags);
+    constants.shader.Params1.x = filter != nullptr ? filter->depth_near : 0.0f;
+    constants.shader.Params1.y = filter != nullptr ? filter->depth_far : 1.0f;
+    constants.shader.Params1.z = depth_inverted ? 1.0f : 0.0f;
+    constants.shader.Params1.w = static_cast<float>(layer * kHistogramBins);
     if (!codec.Dispatch("BuildHistogram", command_list, constants, srvs, uavs)) {
-      frame_counter_++;
+      ++frame_counter_;
       return;
     }
+    if (layer + 1 < kHistogramLayerCount)
+      cmd.UavBarrier(command_list, histogram_.Get());
   }
 
-  const uint64_t next_value = fence_value_ + 1;
+  const uint64_t next = fence_value_ + 1u;
   cmd.UavBarrier(command_list, histogram_.Get());
-  cmd.Transition(command_list, histogram_.Get(),
-                 D3D12_RESOURCE_STATE_COPY_SOURCE);
-  if (readback_.EnqueueCopy(command_list, histogram_.Get(),
-                             use_mask ? kCombinedHistogramBytes
-                                      : kHistogramBytes,
-                             fence_.Get(), next_value)) {
-    pending_fence_value_ = next_value;
+  cmd.Transition(command_list, histogram_.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE);
+  if (readback_.EnqueueCopy(command_list, histogram_.Get(), kCombinedHistogramBytes,
+                            fence_.Get(), next)) {
+    pending_fence_value_ = next;
     pending_measurement_ = true;
   }
-  cmd.Transition(command_list, histogram_.Get(),
-                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  frame_counter_++;
+  cmd.Transition(command_list, histogram_.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  ++frame_counter_;
 }
 
 bool HdrState::EnqueueGainMapStatsReadback(
@@ -582,98 +522,27 @@ void HdrState::PollReadback(ID3D12Fence* fence, const Settings& settings) {
     const void* mapped = game_exposure_readback_.TryGet(fence, &bytes);
     pending_game_exposure_ = false;
     if (mapped != nullptr && bytes >= sizeof(uint32_t)) {
-      const uint32_t bits = *static_cast<const uint32_t*>(mapped);
-      const float exposure = std::bit_cast<float>(bits);
-      if (std::isfinite(exposure) && exposure > 1e-5f && exposure < 4096.0f) {
-        game_exposure_value_ = exposure;
+      const float value = std::bit_cast<float>(
+          *static_cast<const uint32_t*>(mapped));
+      if (std::isfinite(value) && value > 1e-5f && value < 4096.0f) {
+        game_exposure_value_ = value;
         game_exposure_available_ = true;
-        regular_.exposure = exposure;
-        regular_.target_exposure = exposure;
-        regular_.scene_white = 1.0f;
-        regular_.exposure_reference_luma =
-            settings.hdr.midtone / std::max(exposure, 1e-6f);
-        regular_.metering_source = MeteringSource::GameExposureBuffer;
-        regular_.have_measurement = true;
-        regular_.warmup_frames += 1.0f;
-      } else {
-        game_exposure_available_ = false;
       }
     }
+    ResolveExposureStack(settings.hdr);
   }
 
   if (pending_measurement_ && completed >= pending_fence_value_) {
     uint32_t bytes = 0;
     const void* mapped = readback_.TryGet(fence, &bytes);
     pending_measurement_ = false;
-    if (mapped != nullptr && bytes >= kHistogramBytes) {
-      const uint32_t* all_bins = static_cast<const uint32_t*>(mapped);
-      const uint32_t* full_bins = all_bins;
-      const uint32_t* mask_bins =
-          bytes >= kCombinedHistogramBytes ? all_bins + kHistogramBins : nullptr;
-
-      uint32_t full_total = 0;
-      uint32_t mask_total = 0;
-      for (uint32_t i = 0; i < kHistogramBins; ++i) {
-        full_total += full_bins[i];
-        if (mask_bins != nullptr) mask_total += mask_bins[i];
-      }
-
-      uint32_t effective_bins[kHistogramBins] = {};
-      const uint32_t* bins = full_bins;
-      bool used_mask = false;
-
-      if (mask_bins != nullptr && full_total != 0 && mask_total != 0) {
-        const float mask_fraction =
-            std::clamp(static_cast<float>(mask_total) /
-                           (static_cast<float>(full_total) *
-                            static_cast<float>(kMaskWeightScale)),
-                       0.0f, 1.0f);
-        const float priority =
-            std::clamp(settings.hdr.skin_priority, 0.0f, 1.0f);
-        const float min_fraction =
-            std::clamp(settings.hdr.skin_fraction_threshold, 0.0f, 0.5f);
-
-        if (priority > 0.0f && mask_fraction >= min_fraction) {
-          // Give the masked population a configurable share of the effective
-          // metering histogram, independent of how large that mask happens
-          // to be. The unmasked full-frame population supplies the rest.
-          const float inverse_fraction =
-              1.0f / std::max(mask_fraction, 1e-6f);
-          const float unmasked_weight = 1.0f - priority;
-          for (uint32_t i = 0; i < kHistogramBins; ++i) {
-            const float masked_normalized =
-                static_cast<float>(mask_bins[i]) *
-                (inverse_fraction / static_cast<float>(kMaskWeightScale));
-            const float blended =
-                unmasked_weight * static_cast<float>(full_bins[i]) +
-                priority * masked_normalized;
-            effective_bins[i] =
-                static_cast<uint32_t>(std::clamp(blended, 0.0f,
-                                                 4294967295.0f));
-          }
-          bins = effective_bins;
-          used_mask = true;
-        }
-      }
-
-      uint32_t total = 0;
-      for (uint32_t i = 0; i < kHistogramBins; ++i) total += bins[i];
-      if (total != 0) {
-        for (uint32_t i = 0; i < kHistogramBins; ++i)
-          last_detection_histogram_[i] = full_bins[i];
-        last_detection_samples_ = full_total;
-
-        UpdateExposure(bins, full_bins, full_total, settings);
-        for (uint32_t i = 0; i < kHistogramBins; ++i)
-          last_histogram_[i] = bins[i];
-        have_histogram_ = true;
-        last_samples_ = total;
-        regular_.metering_source = used_mask
-            ? MeteringSource::SkinMaskPriority
-            : MeteringSource::FullFrame;
-        measurement_generation_ += 1;
-        frames_since_measure_ = 0;
-      }
+    if (mapped != nullptr && bytes >= kCombinedHistogramBytes) {
+      const uint32_t* bins = static_cast<const uint32_t*>(mapped);
+      UpdateExposure(bins, bins + kHistogramBins,
+                     bins + 2 * kHistogramBins,
+                     bins + 3 * kHistogramBins, settings);
+      ++measurement_generation_;
+      frames_since_measure_ = 0;
     }
   }
 
@@ -687,8 +556,7 @@ void HdrState::PollReadback(ID3D12Fence* fence, const Settings& settings) {
       const uint32_t max_sortable = stats[1];
       auto unsort = [](uint32_t sortable) {
         return (sortable & 0x80000000u) != 0u
-            ? (sortable ^ 0x80000000u)
-            : ~sortable;
+            ? (sortable ^ 0x80000000u) : ~sortable;
       };
       gain_min_log2_ = std::bit_cast<float>(unsort(min_sortable));
       gain_max_log2_ = std::bit_cast<float>(unsort(max_sortable));
@@ -700,35 +568,129 @@ void HdrState::PollReadback(ID3D12Fence* fence, const Settings& settings) {
   }
 }
 
-void HdrState::UpdateExposure(const uint32_t* bins, const uint32_t* full_bins,
-                              uint32_t full_total,
+void HdrState::UpdateExposure(const uint32_t* full_bins,
+                              const uint32_t* game_bins,
+                              const uint32_t* adaptive_bins,
+                              const uint32_t* local_bins,
                               const Settings& settings) {
   const auto now = std::chrono::steady_clock::now();
-  const float delta_seconds = have_measurement_time_
+  const float dt = have_measurement_time_
       ? std::chrono::duration<float>(now - last_measurement_time_).count()
-      : (1.0f / 60.0f);
+      : 1.0f / 60.0f;
   last_measurement_time_ = now;
   have_measurement_time_ = true;
 
-  ExposureParams params;
-  params.midtone = settings.hdr.midtone;
-  params.white_percentile = settings.hdr.white_percentile;
-  params.exposure_method = settings.hdr.exposure_method;
-  params.auto_low_percent = settings.hdr.auto_low_percent;
-  params.auto_high_percent = settings.hdr.auto_high_percent;
-  params.speed_up = settings.hdr.speed_up;
-  params.speed_down = settings.hdr.speed_down;
-  params.rate_cap = settings.hdr.rate_cap;
-  params.measure_interval = static_cast<uint32_t>(settings.hdr.measure_interval);
-
-  regular_.Update(bins, params, delta_seconds);
-  if (full_bins != nullptr && full_total != 0) {
-    // Detection exposure is always based on the raw full-frame population.
-    // The structure mask is intentionally excluded here so the mask cannot
-    // perturb the exposure that is used to generate the next mask.
-    detection_.Update(full_bins, params, delta_seconds);
+  auto total_of = [](const uint32_t* source) {
+    uint32_t total = 0;
+    for (uint32_t i = 0; i < kHistogramBins; ++i) total += source[i];
+    return total;
+  };
+  const uint32_t full_total = total_of(full_bins);
+  const uint32_t game_total = total_of(game_bins);
+  const uint32_t adaptive_total = total_of(adaptive_bins);
+  const uint32_t local_total = total_of(local_bins);
+  last_full_samples_ = full_total;
+  last_game_samples_ = game_total;
+  last_local_samples_ = local_total;
+  for (uint32_t i = 0; i < kHistogramBins; ++i) {
+    last_full_histogram_[i] = full_bins[i];
+    last_game_histogram_[i] = game_bins[i];
+    last_local_histogram_[i] = local_bins[i];
   }
-  p_hi_luma_ = regular_.scene_white;
+
+  const auto& adaptive_settings = settings.hdr.adaptive_exposure;
+  ExposureParams adaptive_params;
+  adaptive_params.midtone = adaptive_settings.midtone;
+  adaptive_params.percentile_low = adaptive_settings.filters.percentile_low;
+  adaptive_params.percentile_high = adaptive_settings.filters.percentile_high;
+  adaptive_params.use_percentile_range = adaptive_settings.filters.percentile_range;
+  adaptive_params.speed_up = adaptive_settings.speed_up;
+  adaptive_params.speed_down = adaptive_settings.speed_down;
+  if (adaptive_total != 0) {
+    adaptive_.Update(adaptive_bins, adaptive_params, dt);
+    const bool adaptive_uses_filters =
+        adaptive_settings.filters.structure_mask || adaptive_settings.filters.depth ||
+        adaptive_settings.filters.percentile_range;
+    adaptive_.metering_source = adaptive_uses_filters
+        ? MeteringSource::FilteredPopulation : MeteringSource::FullFrame;
+  }
+
+  const auto& game_settings = settings.hdr.game_exposure;
+  if (game_settings.bounded_tuning) {
+    ExposureParams game_params;
+    game_params.midtone = game_settings.tuning_midtone;
+    game_params.percentile_low = game_settings.filters.percentile_low;
+    game_params.percentile_high = game_settings.filters.percentile_high;
+    game_params.use_percentile_range = game_settings.filters.percentile_range;
+    game_params.speed_up = game_settings.tuning_speed_up;
+    game_params.speed_down = game_settings.tuning_speed_down;
+    if (game_total != 0)
+      game_tuning_.Update(game_bins, game_params, dt);
+  }
+
+  local_luma_min_ = 0.0f;
+  local_luma_max_ = 1.0e8f;
+  if (settings.hdr.local_exposure.filters.percentile_range && local_total != 0) {
+    const auto& filters = settings.hdr.local_exposure.filters;
+    local_luma_min_ = BinToLinear(PercentileBin(
+        local_bins, local_total, filters.percentile_low));
+    local_luma_max_ = BinToLinear(PercentileBin(
+        local_bins, local_total, filters.percentile_high));
+    if (local_luma_max_ < local_luma_min_)
+      std::swap(local_luma_min_, local_luma_max_);
+  }
+
+  const uint32_t chosen_total = adaptive_total != 0 ? adaptive_total : full_total;
+  const uint32_t* chosen = adaptive_total != 0 ? adaptive_bins : full_bins;
+  for (uint32_t i = 0; i < kHistogramBins; ++i) last_histogram_[i] = chosen[i];
+  last_samples_ = chosen_total;
+  have_histogram_ = chosen_total != 0;
+  p_hi_luma_ = adaptive_.scene_white;
+  ResolveExposureStack(settings.hdr);
+}
+
+void HdrState::ResolveExposureStack(const HdrSettings& settings) {
+  const bool use_game = settings.game_exposure.enabled && game_exposure_available_;
+  const bool use_adaptive = settings.adaptive_exposure.enabled && adaptive_.have_measurement;
+  float exposure = 1.0f;
+  float scene_white = 1.0f;
+  MeteringSource source = MeteringSource::FullFrame;
+
+  if (use_game) {
+    exposure = game_exposure_value_ * std::exp2(settings.game_exposure.bias_stops);
+    if (settings.game_exposure.bounded_tuning && game_tuning_.have_measurement) {
+      const float delta = std::log2(std::max(game_tuning_.exposure, 1e-6f) /
+                                    std::max(exposure, 1e-6f));
+      const float correction = std::clamp(
+          delta * settings.game_exposure.tuning_strength,
+          -settings.game_exposure.max_tuning_stops,
+          settings.game_exposure.max_tuning_stops);
+      exposure *= std::exp2(correction);
+    }
+    if (use_adaptive) {
+      const float delta = std::log2(std::max(adaptive_.exposure, 1e-6f) /
+                                    std::max(exposure, 1e-6f));
+      const float correction = std::clamp(
+          delta * settings.adaptive_exposure.strength_over_game,
+          -settings.adaptive_exposure.max_correction_stops,
+          settings.adaptive_exposure.max_correction_stops);
+      exposure *= std::exp2(correction);
+    }
+    scene_white = 1.0f;
+    source = MeteringSource::GameExposureBuffer;
+  } else if (use_adaptive) {
+    exposure = adaptive_.exposure;
+    scene_white = adaptive_.scene_white;
+    source = adaptive_.metering_source;
+  }
+
+  regular_.exposure = std::clamp(exposure, 1e-5f, 4096.0f);
+  regular_.target_exposure = regular_.exposure;
+  regular_.scene_white = std::max(scene_white, 1e-6f);
+  regular_.exposure_reference_luma = adaptive_.exposure_reference_luma;
+  regular_.have_measurement = use_game || use_adaptive;
+  regular_.metering_source = source;
+  regular_.warmup_frames = std::max(regular_.warmup_frames, adaptive_.warmup_frames);
 }
 
 namespace {
@@ -761,7 +723,8 @@ PipelineStatus RunHdrBeginFrame(PassRun& run) {
   run.hdr->BeginFrame(*run.hdr_cmd, run.list, run.guides.dlss_output_color,
                       run.guides.output_width, run.guides.output_height,
                       *run.settings, *run.codec, exposure_mask,
-                      run.game_exposure_texture, exposure_mask_width,
+                      run.game_exposure_texture, run.guides.depth,
+                      run.guides.depth_inverted, exposure_mask_width,
                       exposure_mask_height);
   return PipelineStatus::Ok;
 }

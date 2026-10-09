@@ -1,7 +1,6 @@
 #include "skin/skin_detect.h"
 
 #include <algorithm>
-#include <chrono>
 
 #include <reshade.hpp>
 
@@ -73,9 +72,6 @@ void SkinDetect::Shutdown(NgxRuntime& runtime) {
   width_ = 0;
   height_ = 0;
   format_ = DXGI_FORMAT_UNKNOWN;
-  exposure_tracker_.Reset();
-  last_measurement_generation_ = 0;
-  have_exposure_time_ = false;
   output_ = {};
 }
 
@@ -116,93 +112,6 @@ bool SkinDetect::EnsureResources(ID3D12Device* device,
   format_ = format;
   return true;
 }
-
-namespace {
-
-struct DetectionExposureValues {
-  float exposure = 1.0f;
-  float scene_white = 1.0f;
-  float local_strength = 0.0f;
-  float local_max_brighten = 0.0f;
-  float local_max_darken = 0.0f;
-  float midtone = 0.18f;
-};
-
-DetectionExposureValues ResolveDetectionExposure(
-    HdrState* hdr, const SkinSettings& skin, const Settings& settings,
-    ExposureTracker& exposure_tracker, uint64_t& last_measurement_generation,
-    std::chrono::steady_clock::time_point& last_exposure_time,
-    bool& have_exposure_time) {
-  DetectionExposureValues out;
-  if (hdr == nullptr) return out;
-
-  const HdrSnapshot snapshot = hdr->GetSnapshot();
-  if (skin.exposure_mode == DetectionExposureMode::FollowMain) {
-    // Prefer the game value when available; otherwise keep detector metering
-    // independent from the mask-prioritized exposure.
-    if (snapshot.metering_source ==
-            static_cast<int>(MeteringSource::GameExposureBuffer) &&
-        snapshot.game_exposure_available) {
-      out.exposure = snapshot.game_exposure;
-      out.scene_white = 1.0f;
-    } else {
-      out.exposure = snapshot.detection_exposure;
-      out.scene_white = snapshot.detection_scene_white;
-    }
-    out.midtone = settings.hdr.midtone;
-    out.local_strength =
-        settings.hdr.exposure_method == HdrExposureMethod::AutoLocal
-            ? settings.hdr.local_exposure_strength
-            : 0.0f;
-    out.local_max_brighten = settings.hdr.local_max_brighten;
-    out.local_max_darken = settings.hdr.local_max_darken;
-    return out;
-  }
-
-  if (snapshot.detection_samples != 0 &&
-      snapshot.measurement_generation != 0 &&
-      last_measurement_generation != snapshot.measurement_generation) {
-    ExposureParams params;
-    params.midtone = skin.exposure_midtone;
-    params.white_percentile = skin.exposure_auto_high_percent;
-    params.exposure_method =
-        skin.exposure_mode == DetectionExposureMode::AutoLocal
-            ? HdrExposureMethod::AutoLocal
-            : HdrExposureMethod::Median;
-    params.auto_low_percent = skin.exposure_auto_low_percent;
-    params.auto_high_percent = skin.exposure_auto_high_percent;
-    params.speed_up = skin.exposure_speed_up;
-    params.speed_down = skin.exposure_speed_down;
-    params.rate_cap = skin.exposure_rate_cap;
-    params.measure_interval =
-        static_cast<uint32_t>(std::max(skin.exposure_measure_interval, 1));
-
-    const auto now = std::chrono::steady_clock::now();
-    const float dt = have_exposure_time
-        ? std::chrono::duration<float>(now - last_exposure_time).count()
-        : 1.0f / 60.0f;
-    last_exposure_time = now;
-    have_exposure_time = true;
-    exposure_tracker.Update(snapshot.detection_histogram, params, dt);
-    last_measurement_generation = snapshot.measurement_generation;
-  }
-
-  out.exposure = exposure_tracker.have_measurement
-      ? exposure_tracker.exposure
-      : snapshot.detection_exposure;
-  out.scene_white = exposure_tracker.have_measurement
-      ? exposure_tracker.scene_white
-      : snapshot.detection_scene_white;
-  out.midtone = skin.exposure_midtone;
-  if (skin.exposure_mode == DetectionExposureMode::AutoLocal) {
-    out.local_strength = skin.exposure_local_strength;
-    out.local_max_brighten = skin.exposure_local_max_brighten;
-    out.local_max_darken = skin.exposure_local_max_darken;
-  }
-  return out;
-}
-
-}  // namespace
 
 bool SkinDetect::Run(CommandContext& cmd,
                      NgxRuntime& runtime,
@@ -277,10 +186,9 @@ bool SkinDetect::Run(CommandContext& cmd,
   // 1. Build the model-facing input at the detection working scale.
   const bool hdr_active = hdr != nullptr && hdr->Enabled() &&
                           hdr->ResolvedFormat() != HdrFormat::Sdr;
-  const DetectionExposureValues exposure = ResolveDetectionExposure(
-      hdr, settings.skin, settings, exposure_tracker_,
-      last_measurement_generation_, last_exposure_time_,
-      have_exposure_time_);
+  const HdrSnapshot exposure_snapshot = hdr != nullptr
+      ? hdr->GetSnapshot() : HdrSnapshot{};
+  const LocalExposureLayerSettings& local = settings.hdr.local_exposure;
 
   ComputeConstants constants = {};
   constants.Width = work_w;
@@ -289,7 +197,7 @@ bool SkinDetect::Run(CommandContext& cmd,
 
   if (hdr_active) {
     constants.hdr.Format = static_cast<float>(HdrFormatCode(hdr->ResolvedFormat()));
-    constants.hdr.Exposure = exposure.exposure;
+    constants.hdr.Exposure = hdr->Exposure();
     constants.hdr.Bt2446K1 = settings.hdr.bt2446_k1;
     constants.hdr.Bt2446K2 = settings.hdr.bt2446_k2;
     constants.hdr.Bt2446K4 = settings.hdr.bt2446_k4;
@@ -299,13 +207,40 @@ bool SkinDetect::Run(CommandContext& cmd,
     constants.hdr.GainMinLog2 = settings.hdr.gain_min_log2;
     constants.hdr.GainMaxLog2 = settings.hdr.gain_max_log2;
     constants.hdr.EffectiveSceneWhiteNits =
-        CalcEffectiveSceneWhiteNits(exposure.scene_white, settings.hdr);
-    constants.hdr.LocalExposure.x = exposure.local_strength;
-    constants.hdr.LocalExposure.y = exposure.local_max_brighten;
-    constants.hdr.LocalExposure.z = exposure.local_max_darken;
-    constants.hdr.LocalExposure.w = exposure.midtone;
+        hdr->EffectiveSceneWhiteNits(settings.hdr);
+    constants.hdr.LocalExposure.x = local.enabled ? local.strength : 0.0f;
+    constants.hdr.LocalExposure.y = local.max_brighten;
+    constants.hdr.LocalExposure.z = local.max_darken;
+    constants.hdr.LocalExposure.w = local.midtone;
 
-    ID3D12Resource* srvs[kSrvCount] = {source, source, source, source};
+    uint32_t filter_flags =
+        (local.filters.structure_mask ? 1u : 0u) |
+        (local.filters.depth ? 2u : 0u) |
+        (local.filters.percentile_range ? 4u : 0u);
+    ID3D12Resource* mask_resource = mask_valid_ ? mask_[prev].Get() : nullptr;
+    if (mask_resource == nullptr) filter_flags &= ~1u;
+    ID3D12Resource* depth_resource = guides.depth;
+    if (depth_resource == nullptr) filter_flags &= ~2u;
+    constants.shader.Params0.x = static_cast<float>(filter_flags);
+    constants.shader.Params0.y = local.filters.depth_near;
+    constants.shader.Params0.z = local.filters.depth_far;
+    constants.shader.Params0.w = guides.depth_inverted ? 1.0f : 0.0f;
+    constants.shader.Params1.x = exposure_snapshot.local_luma_min;
+    constants.shader.Params1.y = exposure_snapshot.local_luma_max;
+
+    if (mask_resource != nullptr) {
+      cmd.Transition(command_list, mask_resource,
+                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    }
+    if (depth_resource != nullptr) {
+      cmd.SetResourceState(depth_resource,
+                           D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+      cmd.Transition(command_list, depth_resource,
+                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    }
+    ID3D12Resource* srvs[kSrvCount] = {
+        source, mask_resource != nullptr ? mask_resource : source,
+        depth_resource != nullptr ? depth_resource : source, source};
     ID3D12Resource* uavs[kUavCount] = {working_input_.Get()};
     cmd.Transition(command_list, source,
                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);

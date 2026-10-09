@@ -11,7 +11,6 @@
 #include "ui/ui_widgets.h"
 
 namespace reshade_dlssnr {
-
 namespace {
 
 const char* const kFormatNames[] = {"Auto", "SDR", "scRGB", "HDR10"};
@@ -25,16 +24,15 @@ void DrawStatus(const HdrSnapshot& snap, bool hdr_relevant) {
   const char* format_name = "SDR";
   switch (snap.resolved_format) {
     case HdrFormat::Auto: format_name = "Auto"; break;
-    case HdrFormat::Sdr:  format_name = "SDR"; break;
+    case HdrFormat::Sdr: format_name = "SDR"; break;
     case HdrFormat::ScRgb: format_name = "scRGB"; break;
     case HdrFormat::Hdr10: format_name = "HDR10"; break;
   }
 
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("Status");
-  if (ImGui::IsItemHovered()) {
-    Tip("Format, current exposure, and scene white point.");
-  }
+  if (ImGui::IsItemHovered())
+    Tip("Format, resolved exposure, and scene-white point.");
   ImGui::SameLine(kControlLabelWidth);
 
   if (!hdr_relevant) {
@@ -47,259 +45,289 @@ void DrawStatus(const HdrSnapshot& snap, bool hdr_relevant) {
   }
 }
 
+void DrawFilterControls(const char* id, ExposureFilterSettings& filters,
+                        bool& changed, const char* hint = nullptr) {
+  ImGui::PushID(id);
+  ImGui::Separator();
+  ImGui::TextUnformatted("Filters");
+  ImGui::SameLine();
+  if (ImGui::IsItemHovered()) {
+    Tip(hint != nullptr ? hint :
+        "Enabled filters are combined. Each layer owns its own filter set. "
+        "When a mask or depth resource is unavailable, that filter is skipped.");
+  }
+
+  changed |= ImGui::Checkbox("Structure Mask", &filters.structure_mask);
+  if (ImGui::IsItemHovered())
+    Tip("Meter or correct only pixels weighted by the persistent Structure Detection mask.");
+  ImGui::SameLine();
+  changed |= ImGui::Checkbox("Depth", &filters.depth);
+  if (ImGui::IsItemHovered())
+    Tip("Restrict this layer to the selected normalized depth interval.");
+  ImGui::SameLine();
+  changed |= ImGui::Checkbox("Percentile Range", &filters.percentile_range);
+  if (ImGui::IsItemHovered())
+    Tip("For Game/Adaptive, select a percentile band of this layer's histogram. "
+        "For Local Exposure, fade the local correction outside its measured luminance band.");
+
+  if (filters.depth) {
+    changed |= DrawFloatRow(0, "depth_near", "Depth Near",
+                            "Near end of the accepted normalized depth interval.",
+                            &filters.depth_near, nullptr, 0.0f, 0.0f, 1.0f, 0.0f);
+    changed |= DrawFloatRow(0, "depth_far", "Depth Far",
+                            "Far end of the accepted normalized depth interval.",
+                            &filters.depth_far, nullptr, 1.0f, 0.0f, 1.0f, 1.0f);
+    if (filters.depth_near > filters.depth_far) {
+      std::swap(filters.depth_near, filters.depth_far);
+      changed = true;
+    }
+  }
+  if (filters.percentile_range) {
+    changed |= DrawFloatRow(0, "percentile_low", "Low Percentile",
+                            "Lower percentile boundary. Game/Adaptive use the band for metering; Local uses it as a luminance protection band.",
+                            &filters.percentile_low, nullptr, 0.70f, 0.0f, 0.99f, 0.70f);
+    changed |= DrawFloatRow(0, "percentile_high", "High Percentile",
+                            "Upper percentile boundary for this layer.",
+                            &filters.percentile_high, nullptr, 0.90f, 0.01f, 1.0f, 0.90f);
+    if (filters.percentile_high <= filters.percentile_low) {
+      filters.percentile_high = std::min(1.0f, filters.percentile_low + 0.01f);
+      if (filters.percentile_high <= filters.percentile_low)
+        filters.percentile_low = std::max(0.0f, filters.percentile_high - 0.01f);
+      changed = true;
+    }
+  }
+  ImGui::PopID();
+}
+
+void DrawGameLayer(GameExposureLayerSettings& layer, bool& changed) {
+  changed |= ImGui::Checkbox("Enabled##game_layer", &layer.enabled);
+  ImGui::SameLine();
+  ImGui::TextDisabled("Base exposure from the game's NGX ExposureTexture");
+  WithDisabled(!layer.enabled, [&] {
+    changed |= DrawFloatRow(0, "game_bias_stops", "Exposure Bias",
+                            "Manual bias relative to the game's exposure, in stops. Zero leaves the game's value untouched.",
+                            &layer.bias_stops, nullptr, 0.0f, -4.0f, 4.0f, 0.0f);
+    changed |= ImGui::Checkbox("Bounded Adaptive Tuning", &layer.bounded_tuning);
+    if (ImGui::IsItemHovered())
+      Tip("Allow the adaptive measurement to suggest a small correction, clipped to Max Tuning Stops. The game remains the global exposure anchor.");
+    if (layer.bounded_tuning) {
+      changed |= DrawFloatRow(0, "game_tuning_strength", "Tuning Strength",
+                              "Blend toward the adaptive exposure suggestion.",
+                              &layer.tuning_strength, nullptr, 0.25f, 0.0f, 1.0f, 0.25f);
+      changed |= DrawFloatRow(0, "game_tuning_stops", "Max Tuning Stops",
+                              "Maximum absolute correction away from the game's value.",
+                              &layer.max_tuning_stops, nullptr, 0.5f, 0.0f, 2.0f, 0.5f);
+      changed |= DrawFloatRow(0, "game_tuning_midtone", "Tuning Midtone",
+                              "Target luminance used only to estimate the bounded correction.",
+                              &layer.tuning_midtone, nullptr, 0.18f, 0.01f, 0.5f, 0.18f);
+      changed |= DrawFloatRow(0, "game_tuning_speed_up", "Brighten Speed",
+                              "Maximum brighten correction change in stops per second.",
+                              &layer.tuning_speed_up, nullptr, 3.0f, 0.0f, 20.0f, 3.0f);
+      changed |= DrawFloatRow(0, "game_tuning_speed_down", "Darken Speed",
+                              "Maximum darken correction change in stops per second.",
+                              &layer.tuning_speed_down, nullptr, 1.0f, 0.0f, 20.0f, 1.0f);
+    }
+    ImGui::TextDisabled("These filters scope Bounded Adaptive Tuning only. The game value is a global scalar.");
+    WithDisabled(!layer.bounded_tuning, [&] {
+      DrawFilterControls(
+          "game_filters", layer.filters, changed,
+          "These filters select pixels for the optional bounded tuning estimate. "
+          "NGX supplies one global exposure scalar, so filters cannot spatially edit it.");
+    });
+  });
+}
+
+void DrawAdaptiveLayer(AdaptiveExposureLayerSettings& layer, bool& changed) {
+  changed |= ImGui::Checkbox("Enabled##adaptive_layer", &layer.enabled);
+  ImGui::SameLine();
+  ImGui::TextDisabled("Histogram-driven exposure");
+  WithDisabled(!layer.enabled, [&] {
+    changed |= DrawFloatRow(0, "adaptive_midtone", "Midtone Target",
+                            "Target luminance for the selected population.",
+                            &layer.midtone, nullptr, 0.18f, 0.01f, 0.5f, 0.18f);
+    changed |= DrawFloatRow(0, "adaptive_speed_up", "Brighten Speed",
+                            "Maximum exposure increase in stops per second.",
+                            &layer.speed_up, nullptr, 3.0f, 0.0f, 20.0f, 3.0f);
+    changed |= DrawFloatRow(0, "adaptive_speed_down", "Darken Speed",
+                            "Maximum exposure decrease in stops per second.",
+                            &layer.speed_down, nullptr, 1.0f, 0.0f, 20.0f, 1.0f);
+    changed |= DrawFloatRow(0, "adaptive_strength_over_game", "Strength Over Game",
+                            "When Game Exposure is active, add this fraction of the adaptive target's stop correction. With Game disabled, Adaptive is the base exposure.",
+                            &layer.strength_over_game, nullptr, 0.0f, 0.0f, 1.0f, 0.0f);
+    changed |= DrawFloatRow(0, "adaptive_max_correction", "Max Correction Stops",
+                            "Maximum adjustment around Game Exposure when both layers are enabled.",
+                            &layer.max_correction_stops, nullptr, 0.75f, 0.0f, 3.0f, 0.75f);
+    DrawFilterControls("adaptive_filters", layer.filters, changed);
+  });
+}
+
+void DrawLocalLayer(LocalExposureLayerSettings& layer, bool& changed) {
+  changed |= ImGui::Checkbox("Enabled##local_layer", &layer.enabled);
+  ImGui::SameLine();
+  ImGui::TextDisabled("Spatial base/detail correction");
+  WithDisabled(!layer.enabled, [&] {
+    changed |= DrawFloatRow(0, "local_strength", "Strength",
+                            "Blend factor for the spatial exposure adjustment.",
+                            &layer.strength, nullptr, 0.5f, 0.0f, 1.0f, 0.5f);
+    changed |= DrawFloatRow(0, "local_max_brighten", "Max Brighten",
+                            "Maximum local brightening in stops.",
+                            &layer.max_brighten, nullptr, 1.75f, 0.0f, 4.0f, 1.75f);
+    changed |= DrawFloatRow(0, "local_max_darken", "Max Darken",
+                            "Maximum local darkening in stops.",
+                            &layer.max_darken, nullptr, 1.75f, 0.0f, 4.0f, 1.75f);
+    changed |= DrawFloatRow(0, "local_midtone", "Local Midtone",
+                            "Reference luminance for the local base/detail operator.",
+                            &layer.midtone, nullptr, 0.18f, 0.01f, 0.5f, 0.18f);
+    DrawFilterControls("local_filters", layer.filters, changed);
+  });
+}
+
 void DrawControls(HdrSettings& hdr, bool& changed) {
   int fmt = static_cast<int>(hdr.format);
   changed |= DrawGroupRow(
       "hdr_format", "Format",
-      "How the source image is encoded. Auto detects from the DLSS "
-      "output's DXGI format.",
+      "How the source image is encoded. Auto detects from the DLSS output's DXGI format.",
       kFormatNames, kFormatTips, 4, &fmt, nullptr);
   hdr.format = static_cast<HdrFormat>(fmt);
 
-  changed |= DrawIntRow(
-      "hdr_measure_interval", "Measure Interval",
-      "How often the scene's brightness is measured, in frames.",
-      &hdr.measure_interval, 32, 1, 4);
+  changed |= DrawIntRow("hdr_measure_interval", "Measure Interval",
+                        "How often exposure histograms are measured, in frames.",
+                        &hdr.measure_interval, 32, 1, 4);
+  changed |= DrawFloatRow(0, "hdr_highlight_headroom", "Highlight Headroom",
+                          "Scales the effective HDR peak used by BT.2446C. This does not change how exposure is interpreted.",
+                          &hdr.highlight_headroom, nullptr, 8.0f, 0.25f, 16.0f, 8.0f);
 
-  static const char* const kExposureMethodLabels[] = {
-      "Median (Legacy)", "Auto Exposure + Local", "Game Exposure Buffer"};
-  static const char* const kExposureMethodTips[] = {
-      "Legacy median exposure. When structure detection has a valid persistent mask, the masked population can bias metering.",
-      "Histogram eye adaptation with separate brighten/darken speeds, with optional structure-mask priority, followed by the base/detail local exposure stage.",
-      "Use the 1x1 ExposureTexture supplied by the game's DLSS/NGX call. Falls back to the selected histogram method when the game does not provide a usable buffer."};
-  int exposure_method = static_cast<int>(hdr.exposure_method);
-  changed |= DrawComboRow(
-      "hdr_exposure_method", "Exposure Method",
-      "Choose how the scene brightness target is measured.",
-      &exposure_method, kExposureMethodLabels, kExposureMethodTips, 3);
-  hdr.exposure_method = static_cast<HdrExposureMethod>(exposure_method);
-
-  changed |= DrawFloatRow(
-      0, "hdr_midtone", "Midtone Target",
-      "Neutral model luminance target. 0.18 is the normal reference; changing it is an explicit artistic bias, not a required per-scene adjustment.",
-      &hdr.midtone, nullptr, 0.0f, 0.01f, 0.50f, 0.18f);
-
-  if (hdr.exposure_method == HdrExposureMethod::Median) {
-    changed |= DrawFloatRow(
-        0, "hdr_white_percentile", "White Percentile",
-        "Which percentile defines the white point for the fixed exposure method.",
-        &hdr.white_percentile, nullptr, 0.0f, 0.90f, 0.999f, 0.99f);
+  if (ImGui::BeginTabBar("HdrExposureLayers")) {
+    if (ImGui::BeginTabItem("Game Exposure")) {
+      DrawGameLayer(hdr.game_exposure, changed);
+      ImGui::EndTabItem();
+    }
+    if (ImGui::BeginTabItem("Adaptive Exposure")) {
+      DrawAdaptiveLayer(hdr.adaptive_exposure, changed);
+      ImGui::EndTabItem();
+    }
+    if (ImGui::BeginTabItem("Local Exposure")) {
+      DrawLocalLayer(hdr.local_exposure, changed);
+      ImGui::EndTabItem();
+    }
+    ImGui::EndTabBar();
   }
+  ImGui::TextDisabled("Stack order: Game Exposure base, Adaptive correction, then Local Exposure. Each layer's filters are independent.");
 
-  changed |= DrawFloatRow(
-      0, "hdr_highlight_headroom", "Highlight Headroom",
-      "Scales the effective HDR peak used by BT.2446C. Higher values preserve more SDR headroom so the model can add highlights without consuming the gain map.",
-      &hdr.highlight_headroom, nullptr, 0.0f, 0.25f, 16.0f, 8.0f);
-
-  if (hdr.exposure_method == HdrExposureMethod::AutoLocal) {
-    changed |= DrawFloatRow(
-        0, "hdr_auto_low_percent", "Low Percent",
-        "Lower percentile of the histogram band used for global eye adaptation.",
-        &hdr.auto_low_percent, nullptr, 0.0f, 0.0f, 0.99f, 0.70f);
-
-    changed |= DrawFloatRow(
-        0, "hdr_auto_high_percent", "High Percent",
-        "Upper percentile of the histogram band used for global eye adaptation.",
-        &hdr.auto_high_percent, nullptr, 0.0f, 0.01f, 0.999f, 0.90f);
-
-    changed |= DrawFloatRow(
-        0, "hdr_speed_up", "Speed Up",
-        "Maximum exposure increase in stops per second when adapting brighter.",
-        &hdr.speed_up, nullptr, 0.0f, 0.0f, 20.0f, 3.0f);
-
-    changed |= DrawFloatRow(
-        0, "hdr_speed_down", "Speed Down",
-        "Maximum exposure decrease in stops per second when adapting darker.",
-        &hdr.speed_down, nullptr, 0.0f, 0.0f, 20.0f, 1.0f);
-
-    changed |= DrawFloatRow(
-        0, "hdr_local_exposure_strength", "Local Exposure",
-        "How strongly local luminance adjusts the model-facing exposure. 0 disables the local stage.",
-        &hdr.local_exposure_strength, nullptr, 0.0f, 0.0f, 1.0f, 0.50f);
-
-    changed |= DrawFloatRow(
-        0, "hdr_local_max_brighten", "Local Max Brighten",
-        "Maximum local brightening in stops for dark regions.",
-        &hdr.local_max_brighten, nullptr, 0.0f, 0.0f, 4.0f, 1.75f);
-
-    changed |= DrawFloatRow(
-        0, "hdr_local_max_darken", "Local Max Darken",
-        "Maximum local darkening in stops for bright regions.",
-        &hdr.local_max_darken, nullptr, 0.0f, 0.0f, 4.0f, 1.75f);
-  }
-
-  changed |= DrawFloatRow(
-      0, "hdr_bt2446_k1", "BT.2446C k1",
-      "Linear-region slope. Default matches zentone's skin-tone-tuned Method C.",
-      &hdr.bt2446_k1, nullptr, 0.001f, 0.001f, 2.0f, 0.83802f);
-
-  changed |= DrawFloatRow(
-      0, "hdr_bt2446_k2", "BT.2446C k2",
-      "Log-region slope. Default matches the gain-map reference implementation.",
-      &hdr.bt2446_k2, nullptr, 0.001f, 0.001f, 32.0f, 15.09968f);
-
-  changed |= DrawFloatRow(
-      0, "hdr_bt2446_k3", "BT.2446C k3",
-      "Reference construction parameter retained for parity/trace. The direct Method-C formula uses k1, k2 and k4.",
-      &hdr.bt2446_k3, nullptr, 0.001f, 0.001f, 1.0f, 0.74204f);
-
-  changed |= DrawFloatRow(
-      0, "hdr_bt2446_k4", "BT.2446C k4",
-      "Log-region intercept in nits.",
-      &hdr.bt2446_k4, nullptr, 0.001f, 0.001f, 200.0f, 78.99439f);
-
-  changed |= DrawFloatRow(
-      0, "hdr_bt2446_crosstalk", "Crosstalk",
-      "BT.2446C pre-desaturation amount. Higher values protect highlight hue at the cost of highlight saturation.",
-      &hdr.bt2446_crosstalk, nullptr, 0.0f, 0.0f, 0.33f, 0.04f);
-
-
-  changed |= DrawFloatRow(
-      0, "hdr_gain_base_offset", "Gain Base Offset",
-      "ISO 21496-1 base offset. Applied to SDR luminance for the single-channel gain map; it is not added independently to RGB channels.",
-      &hdr.gain_base_offset, nullptr, 0.0f, 0.0f, 1.0f, 1.0f / 64.0f);
-
-  changed |= DrawFloatRow(
-      0, "hdr_gain_alternate_offset", "Gain Alternate Offset",
-      "ISO 21496-1 alternate offset. Applied to HDR luminance for the single-channel gain map; it is not added independently to RGB channels.",
-      &hdr.gain_alternate_offset, nullptr, 0.0f, 0.0f, 1.0f, 1.0f / 64.0f);
-
-  changed |= DrawFloatRow(
-      0, "hdr_gain_min_log2", "Gain Min",
-      "Configured ISO 21496-1 log2 gain metadata minimum. Raw f32 gain remains unquantized.",
-      &hdr.gain_min_log2, nullptr, 0.0f, -32.0f, 0.0f, -4.0f);
-
-  changed |= DrawFloatRow(
-      0, "hdr_gain_max_log2", "Gain Max",
-      "Configured ISO 21496-1 log2 gain metadata maximum. Raw f32 gain remains unquantized.",
-      &hdr.gain_max_log2, nullptr, 0.0f, 0.0f, 32.0f, 6.0f);
-
-  if (hdr.exposure_method == HdrExposureMethod::Median) {
-    changed |= DrawFloatRow(
-        0, "hdr_rate_cap", "Response Cap",
-        "Maximum log2 change in exposure per measurement for the legacy median method.",
-        &hdr.rate_cap, nullptr, 0.0f, 0.0f, 2.0f, 0.1f);
-  }
+  changed |= DrawFloatRow(0, "hdr_bt2446_k1", "BT.2446C k1",
+                          "Linear-region slope.", &hdr.bt2446_k1, nullptr,
+                          0.83802f, 0.001f, 2.0f, 0.83802f);
+  changed |= DrawFloatRow(0, "hdr_bt2446_k2", "BT.2446C k2",
+                          "Log-region slope.", &hdr.bt2446_k2, nullptr,
+                          15.09968f, 0.001f, 32.0f, 15.09968f);
+  changed |= DrawFloatRow(0, "hdr_bt2446_k3", "BT.2446C k3",
+                          "Reference construction parameter retained for parity/trace.",
+                          &hdr.bt2446_k3, nullptr, 0.74204f, 0.001f, 1.0f, 0.74204f);
+  changed |= DrawFloatRow(0, "hdr_bt2446_k4", "BT.2446C k4",
+                          "Log-region intercept in nits.", &hdr.bt2446_k4, nullptr,
+                          78.99439f, 0.001f, 200.0f, 78.99439f);
+  changed |= DrawFloatRow(0, "hdr_bt2446_crosstalk", "Crosstalk",
+                          "BT.2446C pre-desaturation amount.", &hdr.bt2446_crosstalk,
+                          nullptr, 0.04f, 0.0f, 0.33f, 0.04f);
+  changed |= DrawFloatRow(0, "hdr_gain_base_offset", "Gain Base Offset",
+                          "ISO 21496-1 base offset for the gain map.",
+                          &hdr.gain_base_offset, nullptr, 1.0f / 64.0f, 0.0f, 1.0f, 1.0f / 64.0f);
+  changed |= DrawFloatRow(0, "hdr_gain_alternate_offset", "Gain Alternate Offset",
+                          "ISO 21496-1 alternate offset for the gain map.",
+                          &hdr.gain_alternate_offset, nullptr, 1.0f / 64.0f, 0.0f, 1.0f, 1.0f / 64.0f);
+  changed |= DrawFloatRow(0, "hdr_gain_min_log2", "Gain Min",
+                          "Configured log2 gain metadata minimum.",
+                          &hdr.gain_min_log2, nullptr, -4.0f, -32.0f, 0.0f, -4.0f);
+  changed |= DrawFloatRow(0, "hdr_gain_max_log2", "Gain Max",
+                          "Configured log2 gain metadata maximum.",
+                          &hdr.gain_max_log2, nullptr, 6.0f, 0.0f, 32.0f, 6.0f);
 }
 
 void DrawDiagnostics(const HdrSnapshot& snap, const HdrSettings& hdr,
                      bool& diagnostics_open, bool& changed) {
   IndentScope indent;
-  if (!PersistentSubHeader("Diagnostics", diagnostics_open, changed)) {
-    return;
-  }
+  if (!PersistentSubHeader("Diagnostics", diagnostics_open, changed)) return;
 
-  const bool game_mode = hdr.exposure_method == HdrExposureMethod::GameExposureBuffer;
-  const bool show_table = snap.has_histogram || game_mode;
-  if (!show_table) {
+  const bool game_enabled = hdr.game_exposure.enabled;
+  const bool any_layer = game_enabled || hdr.adaptive_exposure.enabled || hdr.local_exposure.enabled;
+  if (!snap.has_histogram && !game_enabled) {
     ImGui::TextDisabled("Waiting for first measurement...");
   }
-
-  if (show_table && ImGui::BeginTable("hdr_diag", 2, ImGuiTableFlags_SizingStretchSame)) {
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    if (snap.has_histogram) {
-      ImGui::Text("Samples: %u", snap.samples);
-    } else {
-      ImGui::TextUnformatted("Samples: n/a (game buffer)");
-    }
-    ImGui::TableNextColumn();
-    ImGui::Text("Frames since: %u", snap.frames_since_measure);
-
-    const char* exposure_method_name =
-        hdr.exposure_method == HdrExposureMethod::AutoLocal
-            ? "Auto Exposure + Local"
-            : (game_mode ? "Game Exposure Buffer"
-                         : "Median (Legacy)");
-
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("Exposure reference (100-nit domain): %.4f",
-                snap.exposure_reference_luma);
-    ImGui::TableNextColumn();
-    if (snap.has_histogram) {
-      ImGui::Text("White source (same metering set): %.4f", snap.p_hi_luma);
-    } else {
-      ImGui::TextUnformatted("White source: fixed 1.0 (game buffer)");
-    }
-
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("Exposure method: %s", exposure_method_name);
-    ImGui::TableNextColumn();
-    ImGui::TextUnformatted(
-        snap.metering_source == static_cast<int>(MeteringSource::GameExposureBuffer)
-            ? "Game Exposure Buffer"
-            : (snap.metering_source == static_cast<int>(MeteringSource::SkinMaskPriority)
-                   ? "Skin Mask Priority"
-                   : "Full Frame"));
-
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("Target exposure: %.3f", snap.target_exposure);
-    ImGui::TableNextColumn();
-    ImGui::Text("Current: %.3f", snap.exposure);
-
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("White (post-headroom, 100-nit domain): %.3f",
-                CalcEffectiveSceneWhite(snap.scene_white, hdr));
-    ImGui::TableNextColumn();
-    ImGui::Text("Metering: %s",
-                game_mode ? "Game ExposureTexture (histogram fallback)"
-                          : "Full frame histogram");
-
-    if (game_mode) {
+  if (snap.has_histogram || game_enabled) {
+    if (ImGui::BeginTable("hdr_diag", 2, ImGuiTableFlags_SizingStretchSame)) {
       ImGui::TableNextRow();
       ImGui::TableNextColumn();
-      ImGui::Text("Game buffer: %s",
-                  snap.game_exposure_available ? "FOUND (last valid)" : "NOT FOUND");
+      ImGui::Text("Samples: %s", snap.has_histogram ? "measured" : "n/a");
       ImGui::TableNextColumn();
-      if (snap.game_exposure_available) {
-        ImGui::Text("Exposure: %.5f (%ux%u, fmt %d)", snap.game_exposure,
-                    snap.game_exposure_width, snap.game_exposure_height,
-                    snap.game_exposure_format);
-      } else {
-        ImGui::TextUnformatted("Waiting for usable ExposureTexture");
+      ImGui::Text("Frames since: %u", snap.frames_since_measure);
+
+      ImGui::TableNextRow();
+      ImGui::TableNextColumn();
+      ImGui::Text("Exposure reference: %.4f", snap.exposure_reference_luma);
+      ImGui::TableNextColumn();
+      ImGui::Text("Current exposure: %.4f", snap.exposure);
+
+      ImGui::TableNextRow();
+      ImGui::TableNextColumn();
+      ImGui::Text("Scene white: %.3f", CalcEffectiveSceneWhite(snap.scene_white, hdr));
+      ImGui::TableNextColumn();
+      ImGui::Text("White percentile: %.4f", snap.p_hi_luma);
+
+      ImGui::TableNextRow();
+      ImGui::TableNextColumn();
+      ImGui::Text("Stack: %s%s%s",
+                  game_enabled ? "Game" : "",
+                  hdr.adaptive_exposure.enabled ? (game_enabled ? " + Adaptive" : "Adaptive") : "",
+                  hdr.local_exposure.enabled ? ((game_enabled || hdr.adaptive_exposure.enabled) ? " + Local" : "Local") : "");
+      ImGui::TableNextColumn();
+      ImGui::Text("Metering set: %s",
+                  snap.metering_source == static_cast<int>(MeteringSource::GameExposureBuffer)
+                      ? "Game exposure" :
+                  snap.metering_source == static_cast<int>(MeteringSource::FilteredPopulation)
+                      ? "Filtered population" : "Full frame");
+
+      if (game_enabled) {
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::Text("Game buffer: %s", snap.game_exposure_available ? "FOUND (last valid)" : "NOT FOUND");
+        ImGui::TableNextColumn();
+        if (snap.game_exposure_available) {
+          ImGui::Text("%.5f (%ux%u, fmt %d)", snap.game_exposure,
+                      snap.game_exposure_width, snap.game_exposure_height,
+                      snap.game_exposure_format);
+        } else {
+          ImGui::TextUnformatted("Waiting for ExposureTexture");
+        }
       }
+      ImGui::EndTable();
     }
-
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::Text("Local exposure: %s",
-                hdr.exposure_method == HdrExposureMethod::AutoLocal
-                    ? "base/detail" : "off");
-    ImGui::TableNextColumn();
-    ImGui::TextUnformatted(game_mode
-                               ? "Source: NGX ExposureTexture"
-                               : "Source: histogram");
-
-    ImGui::EndTable();
   }
+
+  ImGui::Text("Local exposure correction: %s", hdr.local_exposure.enabled ? "enabled" : "disabled");
+  if (hdr.local_exposure.enabled && hdr.local_exposure.filters.percentile_range) {
+    ImGui::Text("Local luminance band: %.5f .. %.5f",
+                snap.local_luma_min, snap.local_luma_max);
+  }
+  if (!any_layer) ImGui::TextDisabled("All exposure layers are disabled.");
 
   if (snap.gain_map_ready) {
     ImGui::Separator();
-    ImGui::Text("Gain map range: %.4f .. %.4f log2",
-                snap.gain_min_log2, snap.gain_max_log2);
+    ImGui::Text("Gain map range: %.4f .. %.4f log2", snap.gain_min_log2, snap.gain_max_log2);
     ImGui::Text("SDR excursions: %u  |  Gain outside range: %u",
-                snap.gain_sdr_clipped_pixels,
-                snap.gain_out_of_range_pixels);
+                snap.gain_sdr_clipped_pixels, snap.gain_out_of_range_pixels);
   }
-
   if (!snap.has_histogram) return;
 
   ImGui::Separator();
   ImGui::TextUnformatted("Histogram (log2 luminance)");
-
   float bins_float[256];
   float peak = 1.0f;
   for (int i = 0; i < 256; ++i) {
     bins_float[i] = static_cast<float>(snap.histogram[i]);
     if (bins_float[i] > peak) peak = bins_float[i];
   }
-
-  ImGui::PlotHistogram("##hdr_histogram", bins_float, 256,
-                       0, nullptr, 0.0f, peak, ImVec2(-1.0f, 80.0f));
+  ImGui::PlotHistogram("##hdr_histogram", bins_float, 256, 0, nullptr,
+                       0.0f, peak, ImVec2(-1.0f, 80.0f));
 }
 
 }  // namespace
@@ -308,28 +336,17 @@ void DrawHdrSection(Settings& settings, bool hdr_relevant, bool& changed) {
   if (!PersistentHeader("HDR", settings.ui_hdr_open, changed)) return;
 
   changed |= ImGui::Checkbox("Enable HDR Handling", &settings.hdr.enable);
-  if (ImGui::IsItemHovered()) {
-    Tip(
-        "Prepares HDR content for the model, which expects a "
-        "display-referred SDR image.\n"
-        "Only affects passes at DLSS Output.");
-  }
+  if (ImGui::IsItemHovered())
+    Tip("Prepares HDR content for the model, which expects a display-referred SDR image. Only affects DLSS Output passes.");
 
   if (!hdr_relevant) ImGui::BeginDisabled();
-
   const bool hdr_on = settings.hdr.enable;
-
-  if (hdr_on) {
-    DrawStatus(AddonController::Get().GetHdrSnapshot(), hdr_relevant);
-  }
-
+  if (hdr_on) DrawStatus(AddonController::Get().GetHdrSnapshot(), hdr_relevant);
   WithDisabled(!hdr_on, [&] { DrawControls(settings.hdr, changed); });
-
   if (hdr_on) {
     DrawDiagnostics(AddonController::Get().GetHdrSnapshot(), settings.hdr,
                     settings.ui_hdr_diagnostics_open, changed);
   }
-
   if (!hdr_relevant) ImGui::EndDisabled();
 }
 

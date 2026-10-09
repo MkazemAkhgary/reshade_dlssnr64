@@ -3,6 +3,7 @@
 #pragma once
 
 #include <d3d12.h>
+#include <cstdint>
 
 #include "command_context.h"
 #include "compute_engine.h"
@@ -37,12 +38,17 @@ struct HdrUniforms {
   float effective_scene_white_nits =
       color_constants::kScRgbReferenceWhiteNits;
 
-  // Local-exposure parameters used by the HDR carrier split and inverse
-  // compose. Strength is zero for the fixed median method.
+  // Local-exposure controls are shared by carrier split and inverse map.
   float local_exposure_strength = 0.0f;
   float local_max_brighten = 2.0f;
   float local_max_darken = 2.0f;
   float midtone = 0.18f;
+  uint32_t local_filter_flags = 0;
+  float local_depth_near = 0.0f;
+  float local_depth_far = 1.0f;
+  float local_depth_inverted = 0.0f;
+  float local_luma_min = 0.0f;
+  float local_luma_max = 1.0e8f;
 };
 
 // The source is already in the model domain (gain-map split happens in its

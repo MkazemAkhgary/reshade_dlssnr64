@@ -91,65 +91,6 @@ void DrawMaskGroup(SkinSettings& detection, bool& mask_open, bool& changed) {
                           1.0f, 0.97f);
 }
 
-void DrawExposureGroup(Settings& settings, SkinSettings& detection,
-                       bool& hdr_open, bool& changed) {
-  IndentScope indent;
-  if (!PersistentSubHeader("Detection Exposure", hdr_open, changed)) return;
-
-  static const char* kNames[] = {"Follow Main", "Median", "Auto + Local"};
-  static const char* kTips[] = {
-      "Use the main HDR exposure and local-exposure settings.",
-      "Use a dedicated median exposure for the analysis pass, with local exposure disabled.",
-      "Use a dedicated histogram-driven eye adaptation and local exposure for the analysis pass.",
-  };
-  const int current = static_cast<int>(detection.exposure_mode);
-  ImGui::AlignTextToFramePadding();
-  ImGui::TextUnformatted("Exposure Method");
-  ImGui::SameLine(kControlLabelWidth);
-  const int clicked = DrawGroupButtons("structure_detect_exposure_method",
-                                       kNames, kTips, 3, current, nullptr);
-  if (clicked >= 0 && clicked != current) {
-    detection.exposure_mode = static_cast<DetectionExposureMode>(clicked);
-    changed = true;
-  }
-
-  if (detection.exposure_mode == DetectionExposureMode::FollowMain) return;
-
-  changed |= DrawFloatRow(0, "structure_detect_exposure_midtone", "Midtone Target",
-                          nullptr, &detection.exposure_midtone, nullptr, 0.18f,
-                          0.01f, 0.50f, 0.18f);
-  changed |= DrawIntRow("structure_detect_exposure_interval", "Measure Interval",
-                        nullptr, &detection.exposure_measure_interval, 32, 1, 4);
-
-  if (detection.exposure_mode == DetectionExposureMode::Median) {
-    changed |= DrawFloatRow(0, "structure_detect_exposure_rate_cap", "Response Cap",
-                            nullptr, &detection.exposure_rate_cap, nullptr, 0.1f,
-                            0.0f, 2.0f, 0.1f);
-    return;
-  }
-
-  changed |= DrawFloatRow(0, "structure_detect_auto_low_percent", "Low Percent",
-                          nullptr, &detection.exposure_auto_low_percent, nullptr,
-                          0.70f, 0.0f, 0.99f, 0.70f);
-  changed |= DrawFloatRow(0, "structure_detect_auto_high_percent", "High Percent",
-                          nullptr, &detection.exposure_auto_high_percent, nullptr,
-                          0.90f, 0.01f, 0.999f, 0.90f);
-  changed |= DrawFloatRow(0, "structure_detect_speed_up", "Speed Up",
-                          nullptr, &detection.exposure_speed_up, nullptr, 3.0f,
-                          0.0f, 20.0f, 3.0f);
-  changed |= DrawFloatRow(0, "structure_detect_speed_down", "Speed Down",
-                          nullptr, &detection.exposure_speed_down, nullptr, 1.0f,
-                          0.0f, 20.0f, 1.0f);
-  changed |= DrawFloatRow(0, "structure_detect_local_exposure", "Local Exposure",
-                          nullptr, &detection.exposure_local_strength, nullptr, 0.50f,
-                          0.0f, 1.0f, 0.50f);
-  changed |= DrawFloatRow(0, "structure_detect_local_brighten", "Max Brighten",
-                          nullptr, &detection.exposure_local_max_brighten, nullptr,
-                          1.75f, 0.0f, 4.0f, 1.75f);
-  changed |= DrawFloatRow(0, "structure_detect_local_darken", "Max Darken",
-                          nullptr, &detection.exposure_local_max_darken, nullptr,
-                          1.75f, 0.0f, 4.0f, 1.75f);
-}
 
 }  // namespace
 
@@ -175,8 +116,7 @@ void DrawStructureDetectSection(Settings& settings, bool& changed) {
                             0.25f);
     DrawModelGroup(detection, settings.ui_skin_detect_model_open, changed);
     DrawMaskGroup(detection, settings.ui_skin_detect_mask_open, changed);
-    DrawExposureGroup(settings, detection, settings.ui_skin_detect_hdr_open,
-                      changed);
+    ImGui::TextDisabled("Structure Detection uses the Game, Adaptive, and Local Exposure layers and their filter settings from the HDR section.");
   });
 }
 

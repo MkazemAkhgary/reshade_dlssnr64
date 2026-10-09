@@ -122,7 +122,6 @@ struct Settings {
   bool ui_skin_detect_open = true;
   bool ui_skin_detect_model_open = true;
   bool ui_skin_detect_mask_open = true;
-  bool ui_skin_detect_hdr_open = true;
 };
 
 Settings& GetSettings();

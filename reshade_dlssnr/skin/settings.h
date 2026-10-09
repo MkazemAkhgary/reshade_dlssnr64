@@ -1,5 +1,4 @@
-// Model-guided structure detection settings: classifier thresholds, model
-// tuning, mask smoothing, and the detection pass's own HDR exposure.
+// Structure/skin detection settings.
 #pragma once
 
 namespace reshade_dlssnr {
@@ -7,12 +6,6 @@ namespace reshade_dlssnr {
 enum class DetectionTargetMode : int {
   Skin = 0,
   Structure = 1,
-};
-
-enum class DetectionExposureMode : int {
-  FollowMain = 0,
-  Median = 1,
-  AutoLocal = 2,
 };
 
 struct SkinSettings {
@@ -35,18 +28,6 @@ struct SkinSettings {
   float edit_strength = 1.0f;
   float mask_smoothing = 0.5f;
   float mask_response = 0.15f;
-
-  DetectionExposureMode exposure_mode = DetectionExposureMode::AutoLocal;
-  float exposure_midtone = 0.18f;
-  float exposure_rate_cap = 0.1f;
-  int exposure_measure_interval = 4;
-  float exposure_auto_low_percent = 0.70f;
-  float exposure_auto_high_percent = 0.90f;
-  float exposure_speed_up = 3.0f;
-  float exposure_speed_down = 1.0f;
-  float exposure_local_strength = 0.50f;
-  float exposure_local_max_brighten = 1.75f;
-  float exposure_local_max_darken = 1.75f;
 };
 
 void LoadSkinSettings(SkinSettings& skin);

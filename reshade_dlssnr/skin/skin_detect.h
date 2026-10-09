@@ -3,7 +3,6 @@
 #include <d3d12.h>
 #include <wrl/client.h>
 
-#include <chrono>
 #include "command_context.h"
 #include "hdr/hdr_state.h"
 #include "compute_engine.h"
@@ -63,10 +62,6 @@ class SkinDetect {
   DXGI_FORMAT format_ = DXGI_FORMAT_UNKNOWN;
 
   PassSettings tuning_;
-  ExposureTracker exposure_tracker_;
-  uint64_t last_measurement_generation_ = 0;
-  std::chrono::steady_clock::time_point last_exposure_time_{};
-  bool have_exposure_time_ = false;
   Output output_;
 };
 

@@ -133,7 +133,7 @@ const DebugViewDef kDebugViews[] = {
      DebugDisplayMode::GainMap, SelectGainMap},
     {"HDR Roundtrip Diagnostic",
      "2x2 math test: Model Input | Model Output / HDR->SDR Roundtrip | Error. "
-     "Use Auto Exposure + Local with grade input/output and RCAS disabled.",
+     "Use Adaptive Exposure and/or Local Exposure with input/output grades and RCAS disabled.",
      DebugDisplayMode::HdrRoundtripDiagnostic, SelectComposedOutput},
     {"HDR Roundtrip Error",
      "False-color difference between the model output and the final HDR result "

@@ -8,12 +8,13 @@
 namespace reshade_dlssnr {
 
 PipelineStatus PassSession::StepBuildHdrUniforms(PassRun& run) {
-  PassSession* self = run.session;
   run.hdr_uniforms_ready = false;
   if (run.hdr == nullptr || run.settings == nullptr) return PipelineStatus::Ok;
   if (!run.hdr->Enabled()) return PipelineStatus::Ok;
 
   const HdrSettings& hs = run.settings->hdr;
+  const LocalExposureLayerSettings& local = hs.local_exposure;
+  const HdrSnapshot snapshot = run.hdr->GetSnapshot();
   run.hdr_uniforms.format = static_cast<float>(HdrFormatCode(run.hdr->ResolvedFormat()));
   run.hdr_uniforms.exposure = run.hdr->Exposure();
   run.hdr_uniforms.bt2446_k1 = hs.bt2446_k1;
@@ -25,15 +26,20 @@ PipelineStatus PassSession::StepBuildHdrUniforms(PassRun& run) {
   run.hdr_uniforms.gain_alternate_offset = hs.gain_alternate_offset;
   run.hdr_uniforms.gain_min_log2 = hs.gain_min_log2;
   run.hdr_uniforms.gain_max_log2 = hs.gain_max_log2;
-  run.hdr_uniforms.effective_scene_white_nits =
-      run.hdr->EffectiveSceneWhiteNits(hs);
-  run.hdr_uniforms.local_exposure_strength =
-      hs.exposure_method == HdrExposureMethod::AutoLocal
-          ? hs.local_exposure_strength
-          : 0.0f;
-  run.hdr_uniforms.local_max_brighten = hs.local_max_brighten;
-  run.hdr_uniforms.local_max_darken = hs.local_max_darken;
-  run.hdr_uniforms.midtone = hs.midtone;
+  run.hdr_uniforms.effective_scene_white_nits = run.hdr->EffectiveSceneWhiteNits(hs);
+  run.hdr_uniforms.local_exposure_strength = local.enabled ? local.strength : 0.0f;
+  run.hdr_uniforms.local_max_brighten = local.max_brighten;
+  run.hdr_uniforms.local_max_darken = local.max_darken;
+  run.hdr_uniforms.midtone = local.midtone;
+  run.hdr_uniforms.local_filter_flags =
+      (local.filters.structure_mask ? 1u : 0u) |
+      (local.filters.depth ? 2u : 0u) |
+      (local.filters.percentile_range ? 4u : 0u);
+  run.hdr_uniforms.local_depth_near = local.filters.depth_near;
+  run.hdr_uniforms.local_depth_far = local.filters.depth_far;
+  run.hdr_uniforms.local_depth_inverted = run.guides.depth_inverted ? 1.0f : 0.0f;
+  run.hdr_uniforms.local_luma_min = snapshot.local_luma_min;
+  run.hdr_uniforms.local_luma_max = snapshot.local_luma_max;
   run.hdr_uniforms_ready = true;
   return PipelineStatus::Ok;
 }

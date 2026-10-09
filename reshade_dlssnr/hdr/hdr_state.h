@@ -1,13 +1,11 @@
-// HDR measurement state. Owns the histogram buffer, readback ring, and
-// global exposure / white-point adaptation. When structure detection is
-// enabled, the persistent detection mask can bias metering for later passes.
+// HDR exposure-layer state and asynchronous GPU measurements.
 #pragma once
 
 #include <d3d12.h>
 #include <wrl/client.h>
 
-#include <cstdint>
 #include <chrono>
+#include <cstdint>
 
 #include "command_context.h"
 #include "compute_engine.h"
@@ -18,26 +16,21 @@ namespace reshade_dlssnr {
 
 enum class MeteringSource {
   FullFrame = 0,
-  SkinMaskPriority = 1,
+  FilteredPopulation = 1,
   GameExposureBuffer = 2,
 };
 
 struct ExposureParams {
   float midtone = 0.18f;
-  float white_percentile = 0.99f;  // Legacy Median method only.
-  HdrExposureMethod exposure_method = HdrExposureMethod::AutoLocal;
-  float auto_low_percent = 0.70f;
-  float auto_high_percent = 0.90f;
+  float percentile_low = 0.0f;
+  float percentile_high = 1.0f;
   float speed_up = 3.0f;
   float speed_down = 1.0f;
-  float rate_cap = 0.1f;           // Legacy Median method only.
-  uint32_t measure_interval = 4;
+  bool use_percentile_range = false;
 };
 
 struct ExposureTracker {
   float exposure = 1.0f;
-  // Smoothed white percentile from the same full-frame metering histogram,
-  // in the 100-nit SDR/gain-map working domain.
   float scene_white = 1.0f;
   float target_exposure = 1.0f;
   float exposure_reference_luma = 0.0f;
@@ -56,26 +49,16 @@ struct HdrSnapshot {
   HdrFormat resolved_format = HdrFormat::Sdr;
   float exposure = 1.0f;
   float scene_white = 1.0f;
-
-  // Unmasked/full-frame exposure used only to drive Structure Detection.
-  // This is deliberately independent of the mask-prioritized exposure above
-  // so the detector cannot feed its own mask back into the exposure that
-  // generates the next mask.
-  float detection_exposure = 1.0f;
-  float detection_scene_white = 1.0f;
-  uint32_t detection_samples = 0;
-  uint32_t detection_histogram[256] = {};
-
   uint32_t frames_since_measure = 0;
-
   bool has_histogram = false;
   uint32_t histogram[256] = {};
   float exposure_reference_luma = 0.0f;
   float p_hi_luma = 0.0f;
   float target_exposure = 1.0f;
   uint32_t samples = 0;
+  float local_luma_min = 0.0f;
+  float local_luma_max = 1.0e8f;
 
-  // Most recently read value supplied by the game's NGX exposure texture.
   bool game_exposure_available = false;
   float game_exposure = 1.0f;
   uint32_t game_exposure_width = 0;
@@ -84,7 +67,6 @@ struct HdrSnapshot {
 
   uint64_t measurement_generation = 0;
   int metering_source = 0;
-
   bool gain_map_ready = false;
   float gain_min_log2 = 0.0f;
   float gain_max_log2 = 0.0f;
@@ -108,12 +90,13 @@ class HdrState {
                   ComputeEngine& codec,
                   ID3D12Resource* exposure_mask = nullptr,
                   ID3D12Resource* game_exposure_texture = nullptr,
+                  ID3D12Resource* depth_texture = nullptr,
+                  bool depth_inverted = false,
                   unsigned int exposure_mask_width = 0,
                   unsigned int exposure_mask_height = 0);
 
   bool EnqueueGainMapStatsReadback(ID3D12GraphicsCommandList* command_list,
                                    ID3D12Resource* stats);
-
   void SignalAtPresent(ID3D12CommandQueue* queue);
 
   bool Enabled() const { return enabled_; }
@@ -126,9 +109,6 @@ class HdrState {
   float EffectiveSceneWhiteNits(const HdrSettings& hdr) const {
     return CalcEffectiveSceneWhiteNits(SceneWhite(), hdr);
   }
-
-  // Kept for the skin-detect feature. Skin detection does not participate in
-  // HDR exposure metering; it only consumes the current scene state.
   float FallbackExposure() const { return regular_.exposure; }
   float FallbackSceneWhite() const { return regular_.scene_white; }
   float FallbackEffectiveSceneWhite(const HdrSettings& hdr) const {
@@ -142,8 +122,10 @@ class HdrState {
 
  private:
   void PollReadback(ID3D12Fence* fence, const Settings& settings);
-  void UpdateExposure(const uint32_t* bins, const uint32_t* full_bins,
-                      uint32_t full_total, const Settings& settings);
+  void UpdateExposure(const uint32_t* full_bins, const uint32_t* game_bins,
+                      const uint32_t* adaptive_bins, const uint32_t* local_bins,
+                      const Settings& settings);
+  void ResolveExposureStack(const HdrSettings& settings);
 
   Microsoft::WRL::ComPtr<ID3D12Device> device_;
   Microsoft::WRL::ComPtr<ID3D12Resource> histogram_;
@@ -170,9 +152,9 @@ class HdrState {
 
   bool enabled_ = false;
   HdrFormat resolved_format_ = HdrFormat::Sdr;
-
   ExposureTracker regular_;
-  ExposureTracker detection_;
+  ExposureTracker adaptive_;
+  ExposureTracker game_tuning_;
   uint32_t frame_counter_ = 0;
   uint32_t frames_until_measure_ = 0;
   uint32_t frames_since_measure_ = 0;
@@ -181,10 +163,16 @@ class HdrState {
 
   bool have_histogram_ = false;
   uint32_t last_histogram_[256] = {};
-  uint32_t last_detection_histogram_[256] = {};
+  uint32_t last_full_histogram_[256] = {};
+  uint32_t last_game_histogram_[256] = {};
+  uint32_t last_local_histogram_[256] = {};
   float p_hi_luma_ = 0.0f;
+  float local_luma_min_ = 0.0f;
+  float local_luma_max_ = 1.0e8f;
   uint32_t last_samples_ = 0;
-  uint32_t last_detection_samples_ = 0;
+  uint32_t last_full_samples_ = 0;
+  uint32_t last_game_samples_ = 0;
+  uint32_t last_local_samples_ = 0;
   std::chrono::steady_clock::time_point last_measurement_time_{};
   bool have_measurement_time_ = false;
 

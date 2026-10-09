@@ -39,6 +39,56 @@ void LogPresentInterfacesOnce(bool device_is_proxy, ID3D12CommandQueue* queue) {
                 queue_is_proxy ? "was a Streamline proxy" : "is not a Streamline proxy");
   reshade::log::message(reshade::log::level::info, message);
 }
+
+void BindLocalExposureFilters(PassRun& run, ComputeConstants& constants,
+                              ID3D12Resource* source, CommandContext& command,
+                              ID3D12GraphicsCommandList* list,
+                              ID3D12Resource** srvs) {
+  uint32_t flags = run.hdr_uniforms.local_filter_flags;
+  ID3D12Resource* mask = source;
+  ID3D12Resource* depth = source;
+
+  if ((flags & 1u) != 0u && run.settings != nullptr &&
+      run.settings->skin.enable && run.skin_detect != nullptr) {
+    const SkinDetect::Output& detection = run.skin_detect->GetOutput();
+    if (detection.valid && detection.mask != nullptr &&
+        detection.width != 0 && detection.height != 0) {
+      mask = detection.mask;
+    } else {
+      flags &= ~1u;
+    }
+  } else {
+    flags &= ~1u;
+  }
+
+  if ((flags & 2u) != 0u && run.guides.depth != nullptr) {
+    depth = run.guides.depth;
+  } else {
+    flags &= ~2u;
+  }
+
+  constants.shader.Params0.x = static_cast<float>(flags);
+  constants.shader.Params0.y = run.hdr_uniforms.local_depth_near;
+  constants.shader.Params0.z = run.hdr_uniforms.local_depth_far;
+  constants.shader.Params0.w = run.hdr_uniforms.local_depth_inverted;
+  constants.shader.Params1.x = run.hdr_uniforms.local_luma_min;
+  constants.shader.Params1.y = run.hdr_uniforms.local_luma_max;
+  constants.shader.Params1.z = 0.0f;
+  constants.shader.Params1.w = 0.0f;
+
+  srvs[0] = source;
+  srvs[1] = mask;
+  srvs[2] = depth;
+  srvs[3] = source;
+  if (mask != source) {
+    command.Transition(list, mask,
+                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
+  if (depth != source) {
+    command.Transition(list, depth,
+                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
+}
 }  // namespace
 
 void PassSession::Fail(const char* reason) {
@@ -966,7 +1016,8 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
   constants.hdr.LocalExposure.z = run.hdr_uniforms.local_max_darken;
   constants.hdr.LocalExposure.w = run.hdr_uniforms.midtone;
 
-  ID3D12Resource* srvs[kSrvCount] = {source, source, source, source};
+  ID3D12Resource* srvs[kSrvCount] = {};
+  BindLocalExposureFilters(run, constants, source, self->command_, run.list, srvs);
   ID3D12Resource* uavs[kUavCount] = {packed};
   self->command_.Transition(run.list, source,
                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -1094,11 +1145,11 @@ PipelineStatus PassSession::StepBuildEffectiveLocalExposure(PassRun& run) {
   constants.hdr.LocalExposure.z = run.hdr_uniforms.local_max_darken;
   constants.hdr.LocalExposure.w = run.hdr_uniforms.midtone;
 
-  ID3D12Resource* srvs[kSrvCount] = {source, source, source, source};
+  ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
+  ID3D12Resource* srvs[kSrvCount] = {};
+  BindLocalExposureFilters(run, constants, source, self->command_, list, srvs);
   ID3D12Resource* uavs[kUavCount] = {
       self->resources_.GetEffectiveExposureMap()};
-
-  ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
   self->command_.Transition(list, source,
                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   self->command_.Transition(
