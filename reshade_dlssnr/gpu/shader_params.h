@@ -1,4 +1,4 @@
-// Dynamic shader parameter definitions for experimental effects.
+// Dynamic shader parameter definitions for optional effects.
 #pragma once
 
 #include <cstdint>
@@ -19,9 +19,8 @@ struct ShaderParamDef {
   const char* depends_on;
 };
 
-// Add experimental parameters here. They automatically appear in the UI
-// grouped by category, persist to settings, and map to shader cbuffer
-// without further code changes.
+// Parameters added here appear in the categorized UI, persist to settings,
+// and map to the shader cbuffer automatically.
 constexpr ShaderParamDef kShaderParams[] = {
     {"LumaStrength",   "Strength",   "Blend between original and edited luminance.",          0.0f, 1.0f, 1.00f, false, nullptr},
     {"ChromaStrength", "Strength",   "Blend between original and edited chroma.",             0.0f, 1.0f, 1.00f, false, nullptr},
