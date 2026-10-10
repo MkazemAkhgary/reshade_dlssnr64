@@ -173,27 +173,40 @@ void DrawStatusSection(Settings& settings, bool& changed) {
 
   ImGui::Separator();
 
-  for (uint32_t i = 0; i < snap.pass_count; ++i) {
-    char buf[kStatusTextLength];
-    FormatPassStatus(snap.passes[i], settings.passes[i].injection_stage,
-                     GetResolvedPass(i).working_scale,
-                     snap.post_dlss_blocked, buf, sizeof(buf));
+  // Match the runtime's established execution grouping: Pre-DLSS, then
+  // Post-DLSS, then Backbuffer. Within each target group, retain pass/tab
+  // order. Status remains indexed by the original pass ID, so rows display
+  // the original Pass N label and look up the matching settings/status.
+  constexpr InjectionStage kStatusStageOrder[] = {
+      InjectionStage::PreDLSS,
+      InjectionStage::PostDLSS,
+      InjectionStage::Backbuffer,
+  };
+  for (const InjectionStage display_stage : kStatusStageOrder) {
+    for (uint32_t i = 0; i < snap.pass_count; ++i) {
+      if (settings.passes[i].injection_stage != display_stage) continue;
 
-    char label[32];
-    std::snprintf(label, sizeof(label), "Pass %u", i + 1);
+      char buf[kStatusTextLength];
+      FormatPassStatus(snap.passes[i], settings.passes[i].injection_stage,
+                       GetResolvedPass(i).working_scale,
+                       snap.post_dlss_blocked, buf, sizeof(buf));
 
-    const bool stage_blocked =
-        snap.post_dlss_blocked &&
-        settings.passes[i].injection_stage == InjectionStage::PostDLSS;
-    const bool ok = snap.passes[i].enabled && !snap.passes[i].failed &&
-                    !stage_blocked;
+      char label[32];
+      std::snprintf(label, sizeof(label), "Pass %u", i + 1);
 
-    bullet(ok);
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(label);
+      const bool stage_blocked =
+          snap.post_dlss_blocked &&
+          settings.passes[i].injection_stage == InjectionStage::PostDLSS;
+      const bool ok = snap.passes[i].enabled && !snap.passes[i].failed &&
+                      !stage_blocked;
 
-    ImGui::SameLine(kControlLabelWidth);
-    ImGui::TextUnformatted(buf);
+      bullet(ok);
+      ImGui::AlignTextToFramePadding();
+      ImGui::TextUnformatted(label);
+
+      ImGui::SameLine(kControlLabelWidth);
+      ImGui::TextUnformatted(buf);
+    }
   }
 }
 
