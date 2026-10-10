@@ -34,63 +34,60 @@ void LogFailureOnce(const char* what, HRESULT result) {
 }  // namespace
 
 bool CommandContext::Ensure(ID3D12Device* device) {
-  if (command_allocator_ != nullptr) return true;
+  if (frames_[0].allocator != nullptr) return true;
   if (device == nullptr) return false;
 
-  if (FAILED(device->CreateCommandAllocator(
-          D3D12_COMMAND_LIST_TYPE_DIRECT,
-          IID_PPV_ARGS(&command_allocator_)))) {
-    return false;
-  }
+  for (FrameCommands& frame : frames_) {
+    if (FAILED(device->CreateCommandAllocator(
+            D3D12_COMMAND_LIST_TYPE_DIRECT,
+            IID_PPV_ARGS(&frame.allocator)))) {
+      Shutdown();
+      return false;
+    }
 
-  if (FAILED(device->CreateCommandList(
-          0,
-          D3D12_COMMAND_LIST_TYPE_DIRECT,
-          command_allocator_.Get(),
-          nullptr,
-          IID_PPV_ARGS(&command_list_)))) {
-    command_allocator_.Reset();
-    return false;
-  }
+    if (FAILED(device->CreateCommandList(
+            0, D3D12_COMMAND_LIST_TYPE_DIRECT, frame.allocator.Get(), nullptr,
+            IID_PPV_ARGS(&frame.command_list)))) {
+      Shutdown();
+      return false;
+    }
 
-  recording_ = true;
-  const HRESULT initial_close_hr = command_list_->Close();
-  if (SUCCEEDED(initial_close_hr)) {
-    recording_ = false;
-  } else {
-    LogFailureOnce("initial command list close", initial_close_hr);
+    const HRESULT close_hr = frame.command_list->Close();
+    if (FAILED(close_hr)) {
+      LogFailureOnce("initial command list close", close_hr);
+      Shutdown();
+      return false;
+    }
   }
 
   if (FAILED(device->CreateFence(
-          0,
-          D3D12_FENCE_FLAG_NONE,
-          IID_PPV_ARGS(&fence_)))) {
-    command_list_.Reset();
-    command_allocator_.Reset();
+          0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence_)))) {
+    Shutdown();
     return false;
   }
 
   fence_event_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
   if (fence_event_ == nullptr) {
-    fence_.Reset();
-    command_list_.Reset();
-    command_allocator_.Reset();
+    Shutdown();
     return false;
   }
 
+  current_frame_ = 0;
+  fence_value_ = 0;
+  last_signaled_fence_value_ = 0;
+  recording_ = false;
+  submitted_since_reset_ = false;
   return true;
 }
 
 bool CommandContext::Abort() {
-  if (command_list_ == nullptr || command_allocator_ == nullptr) return true;
+  FrameCommands& frame = frames_[current_frame_];
+  if (frame.command_list == nullptr || frame.allocator == nullptr) return true;
 
-  // A skipped/failed Present stage can return before StepSubmitAndWait closes
-  // the private list. D3D12 does not permit resetting an allocator while a
-  // list that references it is still recording. Close the abandoned list and
-  // discard its commands instead of letting the next frame report a spurious
-  // allocator/list reset error.
+  // A skipped/failed Present stage can return before its submit tail. Close and
+  // discard that recording, then safely reuse the same, never-submitted slot.
   if (recording_) {
-    const HRESULT hr = command_list_->Close();
+    const HRESULT hr = frame.command_list->Close();
     if (FAILED(hr)) {
       LogFailureOnce("abandoned command list close", hr);
       return false;
@@ -101,29 +98,51 @@ bool CommandContext::Abort() {
   return true;
 }
 
-void CommandContext::Reset() {
-  if (command_allocator_ == nullptr || command_list_ == nullptr) return;
+bool CommandContext::WaitForFenceValue(UINT64 value) {
+  if (value == 0 || fence_ == nullptr || fence_->GetCompletedValue() >= value) {
+    return true;
+  }
+  if (fence_event_ == INVALID_HANDLE_VALUE || fence_event_ == nullptr) {
+    return false;
+  }
+  const HRESULT hr = fence_->SetEventOnCompletion(value, fence_event_);
+  if (FAILED(hr)) {
+    LogFailureOnce("fence SetEventOnCompletion", hr);
+    return false;
+  }
+  return WaitForSingleObject(fence_event_, INFINITE) == WAIT_OBJECT_0;
+}
 
-  // Normal frame flow has already waited on the internal fence. This guard is
-  // only for an abnormal caller path; do not submit or execute anything here.
-  if (recording_ && !Abort()) {
-    return;
+void CommandContext::Reset() {
+  FrameCommands& previous = frames_[current_frame_];
+  if (previous.command_list == nullptr || previous.allocator == nullptr) return;
+
+  if (recording_) {
+    if (!Abort()) return;
+  } else if (submitted_since_reset_) {
+    current_frame_ = (current_frame_ + 1) % kCommandRingSize;
   }
 
-  const HRESULT allocator_hr = command_allocator_->Reset();
+  FrameCommands& frame = frames_[current_frame_];
+  // This wait happens only when the allocator/list slot is reused, up to once
+  // every kCommandRingSize submissions; the common next-frame path is free to
+  // record while earlier lists remain queued on the GPU.
+  if (!WaitForFenceValue(frame.fence_value)) return;
+
+  const HRESULT allocator_hr = frame.allocator->Reset();
   if (FAILED(allocator_hr)) {
     LogFailureOnce("command allocator reset", allocator_hr);
     return;
   }
 
-  const HRESULT list_hr =
-      command_list_->Reset(command_allocator_.Get(), nullptr);
+  const HRESULT list_hr = frame.command_list->Reset(frame.allocator.Get(), nullptr);
   if (FAILED(list_hr)) {
     LogFailureOnce("command list reset", list_hr);
     return;
   }
 
   recording_ = true;
+  submitted_since_reset_ = false;
 }
 
 void CommandContext::ClearState() {
@@ -131,22 +150,22 @@ void CommandContext::ClearState() {
 }
 
 void CommandContext::CloseAndSubmit(ID3D12CommandQueue* command_queue) {
-  if (command_list_ == nullptr || command_queue == nullptr) return;
+  FrameCommands& frame = frames_[current_frame_];
+  if (frame.command_list == nullptr || command_queue == nullptr) return;
 
-  const HRESULT close_hr = command_list_->Close();
+  const HRESULT close_hr = frame.command_list->Close();
   LogFailureOnce("command list close", close_hr);
   if (FAILED(close_hr)) return;
   recording_ = false;
 
-  ID3D12CommandList* lists[] = {command_list_.Get()};
+  ID3D12CommandList* lists[] = {frame.command_list.Get()};
   command_queue->ExecuteCommandLists(1, lists);
-  TRACE_CMD(this, "close_and_submit queue=%d", trace::ResourceId(command_queue));
+  submitted_since_reset_ = true;
+  TRACE_CMD(this, "close_and_submit queue=%d slot=%zu",
+            trace::ResourceId(command_queue), current_frame_);
 
-  // ExecuteCommandLists returns void, so the only way to learn that it was
-  // rejected is to ask the device afterwards. This is the call that turns an
-  // invalid command into a removed device, so it is the one worth watching.
   ID3D12Device* device = nullptr;
-  if (SUCCEEDED(command_list_->GetDevice(IID_PPV_ARGS(&device))) &&
+  if (SUCCEEDED(frame.command_list->GetDevice(IID_PPV_ARGS(&device))) &&
       device != nullptr) {
     LogFailureOnce("device removed after execute_command_lists",
                    device->GetDeviceRemovedReason());
@@ -154,21 +173,34 @@ void CommandContext::CloseAndSubmit(ID3D12CommandQueue* command_queue) {
   }
 }
 
-void CommandContext::WaitGpu(ID3D12CommandQueue* command_queue) {
-  if (command_queue == nullptr || fence_ == nullptr) return;
+uint64_t CommandContext::SignalGpu(ID3D12CommandQueue* command_queue) {
+  if (command_queue == nullptr || fence_ == nullptr) return 0;
 
-  const UINT64 value = ++fence_value_;
-  command_queue->Signal(fence_.Get(), value);
-  TRACE_CMD(this, "wait_gpu signal=%llu queue=%d",
-            static_cast<unsigned long long>(value),
-            trace::ResourceId(command_queue));
-
-  if (fence_->GetCompletedValue() < value) {
-    fence_->SetEventOnCompletion(value, fence_event_);
-    WaitForSingleObject(fence_event_, INFINITE);
+  const UINT64 value = fence_value_ + 1;
+  const HRESULT hr = command_queue->Signal(fence_.Get(), value);
+  if (FAILED(hr)) {
+    LogFailureOnce("command queue fence signal", hr);
+    return 0;
   }
+  fence_value_ = value;
+  last_signaled_fence_value_ = value;
+  if (submitted_since_reset_) frames_[current_frame_].fence_value = value;
+  TRACE_CMD(this, "signal_gpu value=%llu queue=%d slot=%zu",
+            static_cast<unsigned long long>(value),
+            trace::ResourceId(command_queue), current_frame_);
+  return value;
+}
+
+void CommandContext::WaitGpu(ID3D12CommandQueue* command_queue) {
+  const UINT64 value = SignalGpu(command_queue);
+  if (value == 0) return;
+  WaitForFenceValue(value);
   TRACE_CMD(this, "wait_gpu done signal=%llu",
             static_cast<unsigned long long>(value));
+}
+
+uint64_t CommandContext::CompletedFenceValue() const {
+  return fence_ != nullptr ? fence_->GetCompletedValue() : 0;
 }
 
 void CommandContext::Transition(
@@ -256,18 +288,28 @@ void CommandContext::CopyResourceToBackbuffer(
 }
 
 void CommandContext::Shutdown() {
-  if (fence_event_ != INVALID_HANDLE_VALUE) {
+  Abort();
+  // Shutdown is rare; drain all submitted commands before releasing allocator
+  // and list objects. The frame path uses rotating slots and never does this.
+  if (fence_ != nullptr && last_signaled_fence_value_ != 0) {
+    WaitForFenceValue(last_signaled_fence_value_);
+  }
+  for (FrameCommands& frame : frames_) {
+    frame.command_list.Reset();
+    frame.allocator.Reset();
+    frame.fence_value = 0;
+  }
+  fence_.Reset();
+  if (fence_event_ != INVALID_HANDLE_VALUE && fence_event_ != nullptr) {
     CloseHandle(fence_event_);
     fence_event_ = INVALID_HANDLE_VALUE;
   }
-
-  fence_.Reset();
-  command_list_.Reset();
-  command_allocator_.Reset();
-  resource_states_.clear();
-
+  current_frame_ = 0;
   fence_value_ = 0;
+  last_signaled_fence_value_ = 0;
   recording_ = false;
+  submitted_since_reset_ = false;
+  resource_states_.clear();
 }
 
 }  // namespace reshade_dlssnr

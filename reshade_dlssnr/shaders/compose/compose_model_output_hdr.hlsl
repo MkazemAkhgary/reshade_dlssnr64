@@ -86,10 +86,19 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     // EASU upsample from the actual model working resolution back to full HDR
     // resolution. Both textures are in the same sRGB-encoded model domain.
     const float2 easu_con3 = float2(0.0, 4.0 * kEasuCon1.y);
-    float3 low_in = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
-                             easu_con3, 0);
-    float3 low_out = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
-                              easu_con3, 1);
+    float3 low_in;
+    float3 low_out;
+    if (kEasuCon0.x == 1.0 && kEasuCon0.y == 1.0) {
+        // With matching working/output extents, reconstruction is identity.
+        // Keep optional RCAS and final HDR compose, but avoid EASU gathers.
+        low_in = gLowInput.Load(int3(id.xy, 0)).rgb;
+        low_out = gLowEnhanced.Load(int3(id.xy, 0)).rgb;
+    } else {
+        low_in = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
+                          easu_con3, 0);
+        low_out = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
+                           easu_con3, 1);
+    }
 
     if (kRcasEnabled > 0.5) {
         const float2 texel = float2(kEasuCon1.x, kEasuCon1.y);

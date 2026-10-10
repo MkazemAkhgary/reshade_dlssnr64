@@ -86,9 +86,9 @@ class AddonController {
   // BeginReleaseCommands opens it on first use in a frame and returns it;
   // later calls in the same frame hand back the same open list, so several
   // release steps record into a single submit. EndReleaseCommands closes,
-  // submits and waits.
+  // submits, and signals the list without blocking the CPU.
   //
-  // Normally an idle frame does not pay for a submit/wait. When retired
+  // Normally an idle frame does not pay for a submit. When retired
   // resources are waiting for GPU completion, OnPresent explicitly opens this
   // list so the Release stage provides a queue-ordered lifetime fence.
   ID3D12GraphicsCommandList* BeginReleaseCommands(
@@ -183,16 +183,15 @@ class AddonController {
 
   // True between BeginReleaseCommands and EndReleaseCommands. Distinguishes
   // "the list is open and has work in it" from "the list was never opened",
-  // which is what keeps an idle frame from paying a submit and a GPU wait.
+  // which keeps an idle frame from paying a submit. Submission is asynchronous.
   bool release_list_begun_ = false;
   // Real ApplyGrade failures are logged once; startup-not-ready is not a failure.
   bool grade_backbuffer_failure_logged_ = false;
 
   // Ping-pong target for the backbuffer grade, sized from the backbuffer it
-  // was last used with. Recreated on a size or format change, which is safe
-  // without a retire callback because the Release stage waits for its list at
-  // the end of every frame: the previous frame's use cannot still be in
-  // flight.
+  // was last used with. Recreated on a size or format change; replaced
+  // textures are sent through the deferred-retire queue and released after a
+  // queue-ordered fence completes.
   Microsoft::WRL::ComPtr<ID3D12Resource> grade_scratch_;
 
   // The grade writes here, not to the backbuffer: a swapchain image has no

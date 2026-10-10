@@ -1,4 +1,5 @@
 #include "state/settings.h"
+#include "hooks/dlss_guides.h"
 
 #include <reshade.hpp>
 
@@ -77,6 +78,9 @@ void LoadSettings() {
                             g_settings.only_super_sampling);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "ShowTooltips",
                             g_settings.show_tooltips);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "CloneResources",
+                            g_settings.clone_resources);
+  DlssGuides::Get().RequestCloneResources(g_settings.clone_resources);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "DebugView",
                             g_settings.debug_view);
   if (g_settings.debug_view < 0) g_settings.debug_view = 0;
@@ -89,6 +93,8 @@ void LoadSettings() {
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.StatusOpen",
                             g_settings.ui_status_open);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.AdvancedOpen",
+                            g_settings.ui_advanced_open);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.HdrOpen",
                             g_settings.ui_hdr_open);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.GradeOpen",
@@ -147,6 +153,8 @@ void SaveSettings() {
                             g_settings.only_super_sampling);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "ShowTooltips",
                             g_settings.show_tooltips);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "CloneResources",
+                            g_settings.clone_resources);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "DebugView",
                             g_settings.debug_view);
 
@@ -158,6 +166,8 @@ void SaveSettings() {
 
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.StatusOpen",
                             g_settings.ui_status_open);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.AdvancedOpen",
+                            g_settings.ui_advanced_open);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.HdrOpen",
                             g_settings.ui_hdr_open);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.GradeOpen",

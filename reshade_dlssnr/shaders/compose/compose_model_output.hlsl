@@ -62,10 +62,20 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     // FSR 1.0 EASU upsample from the actual model working resolution back to
     // full SDR resolution. Both HDR and SDR compose use the same reconstruction.
     const float2 easu_con3 = float2(0.0, 4.0 * kEasuCon1.y);
-    float3 in_rgb = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
-                             easu_con3, 0);
-    float3 out_rgb = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
-                              easu_con3, 1);
+    float3 in_rgb;
+    float3 out_rgb;
+    if (kEasuCon0.x == 1.0 && kEasuCon0.y == 1.0) {
+        // Working scale 1:1 needs no EASU reconstruction. Keep the compose
+        // dispatch (and optional RCAS below), but replace neighbourhood gathers
+        // with direct loads from the two already full-resolution textures.
+        in_rgb = gLowInput.Load(int3(id.xy, 0)).rgb;
+        out_rgb = gLowEnhanced.Load(int3(id.xy, 0)).rgb;
+    } else {
+        in_rgb = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
+                          easu_con3, 0);
+        out_rgb = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
+                           easu_con3, 1);
+    }
 
     if (kRcasEnabled > 0.5) {
         const float2 texel = float2(kEasuCon1.x, kEasuCon1.y);

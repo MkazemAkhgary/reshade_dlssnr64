@@ -120,7 +120,7 @@ enum class PipelineNodeId : uint32_t {
   RenderDebugView = 29,      // dispatches "DebugDisplay"
   WriteToBackbuffer = 30,
   WriteToGameResource = 31,
-  SubmitAndWait = 32,        // Backbuffer stage only
+  SubmitBackbuffer = 32,        // Backbuffer stage only
 
   // -- release stage --------------------------------------------------------
   // Grades the final backbuffer. Listed first in the Release stage on purpose:
@@ -245,7 +245,7 @@ struct PassRun {
   //
   // Note NVSDK_NGX_Result_Success is 0x1, NOT 0, so zero is a sentinel meaning
   // "EvaluateFeature was never reached this frame" rather than a success. The
-  // check in StepSubmitAndWait treats anything other than Success as a failure,
+  // check in StepSubmitBackbuffer treats anything other than Success as a failure,
   // which is correct either way, but the sentinel is why a step that bailed out
   // early cannot be mistaken for a clean evaluation.
   int eval_result = 0;
@@ -636,7 +636,7 @@ inline constexpr PipelineNodeId kPresentStepNodes[] = {
     PipelineNodeId::GradeModelOutput,
     PipelineNodeId::RenderDebugView,
     PipelineNodeId::WriteToBackbuffer,
-    PipelineNodeId::SubmitAndWait,
+    PipelineNodeId::SubmitBackbuffer,
 };
 
 inline constexpr PipelineNodeId kPreDlssStepNodes[] = {

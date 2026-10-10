@@ -5,6 +5,7 @@
 #include <cstdio>
 
 #include "gpu/shader_params.h"
+#include "hooks/dlss_guides.h"
 #include "state/settings.h"
 #include "ui/ui_sections.h"
 #include "ui/ui_widgets.h"
@@ -122,6 +123,22 @@ void DrawOverlay(reshade::api::effect_runtime*) {
         "its input.");
   }
 
+  SectionDivider();
+
+  // --- Shared advanced options ---
+  if (PersistentHeader("Advanced", settings.ui_advanced_open, changed)) {
+    if (ImGui::Checkbox("Clone Game Resources", &settings.clone_resources)) {
+      DlssGuides::Get().RequestCloneResources(settings.clone_resources);
+      changed = true;
+    }
+    if (ImGui::IsItemHovered()) {
+      Tip("Off (default): read the game's current depth/motion resources and "
+          "the DLSS output directly. On: copy current-frame depth/motion, "
+          "and the DLSS output when Post-DLSS is enabled, into addon-owned "
+          "textures. One option applies to every stage, including Backbuffer; "
+          "the requested mode is latched at the next DLSS evaluation.");
+    }
+  }
   SectionDivider();
 
   // --- Debug view (shared across passes) ---

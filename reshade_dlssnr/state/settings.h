@@ -82,6 +82,11 @@ struct Settings {
   // the master switch as "Show Tooltips"; defaults to on.
   bool show_tooltips = true;
 
+  // Shared advanced guide/output resource policy. Disabled uses game-owned
+  // depth, motion, and post-DLSS output resources directly; enabled snapshots
+  // current-evaluation resources into addon-owned clones for timing tests.
+  bool clone_resources = false;
+
   // Debug view selection, shared across all passes. 0 = off; N (1-based)
   // selects kDebugViews[N-1] in runtime/debug_view.h. The active pass
   // renders the selected view; switching tabs keeps the selection.
@@ -117,6 +122,7 @@ struct Settings {
   bool ui_residual_open = true;
   bool ui_rcas_open = true;
   bool ui_status_open = true;
+  bool ui_advanced_open = false;
   bool ui_hdr_open = true;
   bool ui_grade_open = true;
   bool ui_hdr_diagnostics_open = false;

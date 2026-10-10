@@ -126,7 +126,7 @@ void AddonController::EndReleaseCommands(ID3D12CommandQueue* command_queue) {
 
   TRACE_CMD(this, "end_release_commands");
   release_command_.CloseAndSubmit(command_queue);
-  release_command_.WaitGpu(command_queue);
+  release_command_.SignalGpu(command_queue);
 }
 
 void AddonController::GradeBackbuffer(ComputeEngine& codec,
@@ -177,8 +177,19 @@ void AddonController::GradeBackbuffer(ComputeEngine& codec,
         device == nullptr) {
       return;
     }
-    grade_scratch_.Reset();
-    grade_scratch_out_.Reset();
+    // The previous frame may still be reading these scratch textures: the
+    // release list no longer waits every Present. Transfer references to the
+    // same fence-delayed retire queue used for replaced pass resources.
+    if (grade_scratch_ != nullptr) {
+      grade_scratch_->AddRef();
+      DlssGuides::Get().RetireGameResource(grade_scratch_.Get());
+      grade_scratch_.Reset();
+    }
+    if (grade_scratch_out_ != nullptr) {
+      grade_scratch_out_->AddRef();
+      DlssGuides::Get().RetireGameResource(grade_scratch_out_.Get());
+      grade_scratch_out_.Reset();
+    }
     ID3D12Resource* raw = nullptr;
     if (!CreateUavTexture(device.Get(), desc, &raw)) return;
     grade_scratch_.Attach(raw);
@@ -249,8 +260,27 @@ void AddonController::OnPresent(
     IDXGISwapChain* swapchain) {
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
+  DlssGuides& guides = DlssGuides::Get();
+  guides.ReleaseRetiredResourcesCompleted(release_command_.CompletedFenceValue());
+
   const Settings& settings = GetSettings();
-  if (!settings.enabled) { frame_debug_.Reset(); pre_stage_seen_ = false; return; }
+  if (!settings.enabled) {
+    // The effect can be disabled after a mode/resource change retired objects.
+    // Submit an empty marker only; do not run grading/debug steps while the
+    // master switch is off.
+    if (command_queue != nullptr &&
+        (guides.RetiredGameResourceCount() != 0 ||
+         guides.RetiredResourceCount() != 0) &&
+        BeginReleaseCommands(command_queue) != nullptr) {
+      const uint64_t before_marker = release_command_.LastSignaledFenceValue();
+      EndReleaseCommands(command_queue);
+      const uint64_t marker = release_command_.LastSignaledFenceValue();
+      if (marker > before_marker) guides.TagRetiredResources(marker);
+    }
+    frame_debug_.Reset();
+    pre_stage_seen_ = false;
+    return;
+  }
   if (command_queue == nullptr || swapchain == nullptr) {
     frame_debug_.Reset();
     pre_stage_seen_ = false;
@@ -282,40 +312,32 @@ void AddonController::OnPresent(
     }
   }
 
-  // Retired resources can be held by commands recorded on the game's list,
-  // including the working textures replaced when Structure Detection's scale
-  // changes. The Release stage normally opens a list only when grading or a
-  // debug copy needs GPU work, so force one when either retirement queue is
-  // non-empty. Its submit-and-wait is the lifetime fence for those resources.
-  DlssGuides& guides = DlssGuides::Get();
+  // Queue-retired game resources and replaced addon textures need a fence
+  // behind the game's/effect's work, but must not stall every Present. Ensure
+  // the Release list gets submitted even when no grade/debug dispatch is active.
   const bool have_retired_resources =
       guides.RetiredGameResourceCount() != 0 ||
       guides.RetiredResourceCount() != 0;
   const bool retirement_sync_ready =
       !have_retired_resources || BeginReleaseCommands(command_queue) != nullptr;
+  const uint64_t fence_before_release = release_command_.LastSignaledFenceValue();
 
   RunSingleStage(PipelineReleaseStage(), command_queue, swapchain);
 
-  // If a release list could not be opened, keep the resources queued. Releasing
-  // them without a completed queue wait is unsafe; a later Present can drain
-  // them once synchronization is available.
   if (have_retired_resources && retirement_sync_ready) {
-    const size_t guide_pending = guides.RetiredResourceCount();
-    const size_t game_pending = guides.RetiredGameResourceCount();
-    guides.ReleaseRetiredGameResources();
-    guides.ReleaseRetiredResources();
-    if (guide_pending > 0 || game_pending > 0) {
-      char message[160];
-      std::snprintf(message, sizeof(message),
-                    "DLSSNR: released retired resources "
-                    "(guide=%zu game=%zu)",
-                    guide_pending, game_pending);
-      reshade::log::message(reshade::log::level::info, message);
+    const uint64_t retirement_fence = release_command_.LastSignaledFenceValue();
+    if (retirement_fence > fence_before_release) {
+      guides.TagRetiredResources(retirement_fence);
+      guides.ReleaseRetiredResourcesCompleted(release_command_.CompletedFenceValue());
+    } else {
+      reshade::log::message(
+          reshade::log::level::warning,
+          "DLSSNR: deferred resource release; GPU queue marker failed");
     }
   } else if (have_retired_resources) {
     reshade::log::message(
         reshade::log::level::warning,
-        "DLSSNR: deferred resource release; GPU queue synchronization unavailable");
+        "DLSSNR: deferred resource release; GPU queue marker unavailable");
   }
 
   RefreshStatus(settings);

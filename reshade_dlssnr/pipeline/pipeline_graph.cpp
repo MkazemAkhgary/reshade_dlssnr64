@@ -49,7 +49,7 @@ const char* const kNodeNames[] = {
     "RenderDebugView",
     "WriteToBackbuffer",
     "WriteToGameResource",
-    "SubmitAndWait",
+    "SubmitBackbuffer",
     "GradeBackbuffer",
     "WriteDebugToBackbuffer",
     "SignalHdrAtPresent",
@@ -188,7 +188,7 @@ const PipelineStepDef* FindPipelineStep(PipelineNodeId id) {
 //
 // The two stages also differ inside their early-exit guards, and those guards
 // are NOT steps - they abandon the frame, so they live inside EnsureFeature:
-//   - Present, on ConsumeJustRebuilt, submits (SubmitAndWait) and then returns
+//   - Present, on ConsumeJustRebuilt, submits (SubmitBackbuffer) and then returns
 //     SkipFrame.
 //   - PostDLSS, on ConsumeJustRebuilt, returns SkipFrame with no submit at all.
 //   - Both stages return early when the codec is not ready; neither submits.
@@ -204,7 +204,7 @@ constexpr PipelineNodeId kPresentSteps[] = {
     PipelineNodeId::EnsureFrameResources, // includes SetRetireCallback
     PipelineNodeId::SeedResourceStates,   // Reset + ClearState + SeedFrameState
     PipelineNodeId::EnsureFeature,
-    PipelineNodeId::SnapshotGuides,       // GetState + seed guide states
+    PipelineNodeId::SnapshotGuides,       // Seed the stage-entry guide snapshot
     PipelineNodeId::EnsureComputeEngine,
     PipelineNodeId::ResolveModelInput,    // backbuffer -> SRV
     PipelineNodeId::PrepareModelInput,
@@ -216,7 +216,7 @@ constexpr PipelineNodeId kPresentSteps[] = {
     PipelineNodeId::GradeModelOutput,
     PipelineNodeId::RenderDebugView,
     PipelineNodeId::WriteToBackbuffer,
-    PipelineNodeId::SubmitAndWait,        // includes CleanupFrameState
+    PipelineNodeId::SubmitBackbuffer,        // includes CleanupFrameState
 };
 
 constexpr PipelinePhaseDef kPresentPhases[] = {

@@ -106,7 +106,7 @@ class PassSession {
   static PipelineStatus StepRenderDebugView(PassRun& run);
   static PipelineStatus StepWriteToBackbuffer(PassRun& run);
   static PipelineStatus StepWriteToGameResource(PassRun& run);
-  static PipelineStatus StepSubmitAndWait(PassRun& run);
+  static PipelineStatus StepSubmitBackbuffer(PassRun& run);
 
  private:
   // Sets failed_ and reason_, and logs the failure once. Use in place of
@@ -187,12 +187,12 @@ class PassSession {
 
   // Returns every pass-owned resource to UNORDERED_ACCESS so the next frame's
   // SeedFrameState() is truthful. Called at the very end of each pass, before
-  // SubmitAndWait().
+  // SubmitBackbuffer().
   void CleanupFrameState(ID3D12GraphicsCommandList* command_list);
 
-  // Closes the command list, submits it, waits for the GPU, and releases
-  // retired game resources.
-  void SubmitAndWait();
+  // Closes and submits the command list, then signals a queue fence without
+  // blocking. The allocator waits for completion only when its ring slot is reused.
+  void SubmitBackbuffer();
 
   // If this pass is the active one (matching Settings::active_pass) and a
   // debug view is selected, renders it into `frame_debug.output`. Runs on
@@ -281,7 +281,7 @@ class PassSession {
   bool eval_log_key_valid_ = false;
 
   // Set by StepEvaluateFeature when it emits the descriptor line, so
-  // StepSubmitAndWait can tell a fresh line was already written and does not
+  // StepSubmitBackbuffer can tell a fresh line was already written and does not
   // repeat it when the same frame also fails.
   bool eval_log_written_this_frame_ = false;
 };

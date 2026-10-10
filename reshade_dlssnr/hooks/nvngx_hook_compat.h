@@ -173,9 +173,23 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
   }
 
   bool recorded_pass = false;
+  bool hooks_available = false;
+  bool guides_captured_before_evaluate = false;
+  if (feature_id == NVSDK_NGX_Feature_SuperSampling && settings.enabled &&
+      any_pass_enabled) {
+    hooks_available = EnsureHooks(work_list);
+    if (hooks_available) {
+      // DLSS has already populated these resources before EvaluateFeature is
+      // entered. Capture the current frame before Pre-DLSS so temporal guide
+      // inputs are correct for all three injection points.
+      DlssGuides::Get().CaptureGuides(work_list, parameters, feature_id);
+      guides_captured_before_evaluate = true;
+    }
+  }
+
   if (feature_id == NVSDK_NGX_Feature_SuperSampling && settings.enabled &&
       any_pre_dlss) {
-    if (!EnsureHooks(work_list)) {
+    if (!hooks_available) {
       static bool logged_pre_hook_failure = false;
       LogOnce(logged_pre_hook_failure, reshade::log::level::warning,
               "Pre-DLSS skipped: D3D12 command-list state hooks are unavailable");
@@ -187,11 +201,6 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
         LogOnce(logged_pre_color_unsupported, reshade::log::level::warning,
                 "Pre-DLSS skipped: NGX Color must be a full-resource, single-sample 2D texture");
       } else {
-        // Do not capture guide resources before DLSS: doing so would insert
-        // barriers/copies against resources the game's upcoming evaluation is
-        // about to consume. PreDLSS uses the last stable guide snapshot for
-        // optional depth/mask filters; fresh guides and output are captured
-        // after the real EvaluateFeature call below.
         AddonController::Get().OnPreDlssEvaluate(
             work_list, color, exposure_texture);
         // Restore the application's command-list bindings before NGX records
@@ -218,20 +227,26 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
 
   if (result == NVSDK_NGX_Result_Success && feature_handle != nullptr &&
       parameters != nullptr && feature_id == NVSDK_NGX_Feature_SuperSampling) {
-    if (!EnsureHooks(work_list)) {
+    if (!hooks_available) hooks_available = EnsureHooks(work_list);
+    if (!hooks_available) {
       if (any_post_dlss) {
         AddonController::Get().SetPostDlssBlocked(
             "Post-DLSS disabled: D3D12 command list hooks are not installed");
       }
     } else {
-      // Refresh the snapshot after DLSS so PostDLSS always reads the current
-      // frame's upscaled output and fresh depth/motion clones.
-      if (any_pass_enabled) {
-        DlssGuides::Get().Capture(work_list, parameters, feature_id);
+      // Rare hook-install fallback: if the pre-evaluation capture could not
+      // run, refresh current guides now. A Pre-DLSS stage was already skipped
+      // in this case, but Post-DLSS/Backbuffer can still use this snapshot.
+      if (settings.enabled && any_pass_enabled &&
+          !guides_captured_before_evaluate) {
+        DlssGuides::Get().CaptureGuides(work_list, parameters, feature_id);
       }
 
       if (settings.enabled) {
         if (any_post_dlss) {
+          // The post-evaluation output is only needed by this stage. In direct
+          // mode Post reads the game's resource; clone mode refreshes the copy.
+          DlssGuides::Get().CaptureOutput(work_list, parameters, feature_id);
           AddonController::Get().SetPostDlssBlocked(nullptr);
           ID3D12Resource* output =
               GetResourceParameter(parameters, NVSDK_NGX_Parameter_Output);

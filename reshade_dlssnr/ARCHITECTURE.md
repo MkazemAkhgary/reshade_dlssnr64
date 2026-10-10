@@ -196,18 +196,18 @@ Game -> hooked NVSDK_NGX_D3D12_EvaluateFeature
   -> real NGX EvaluateFeature (game upscales the modified input)
 ```
 
-Pre-DLSS records inline on the game's command list and never closes, submits, or waits on it. Its output resource is the game's input Color texture, and `WriteToGameResource` restores it to `NON_PIXEL_SHADER_RESOURCE` before NGX consumes it. To avoid disturbing resources that the imminent NGX call is about to read, the pre-hook does not capture/copy depth, motion, or output resources. Optional depth/structure-mask filters therefore use the last stable guide/mask snapshot; fresh guides are captured after the game evaluation. Structure Detection is not run in this stage because its current-frame mask is produced from the upscaled DLSS output.
+Pre-DLSS records inline on the game's command list and never closes, submits, or waits on it. Its output resource is the game's input Color texture, and `WriteToGameResource` restores it to `NON_PIXEL_SHADER_RESOURCE` before NGX consumes it. At hook entry the game has already populated the current evaluation's depth and motion resources, so `CaptureGuides` publishes those exact guides before Pre-DLSS runs. With the shared advanced **Clone Game Resources** option off (default), the addon retains direct references and performs no guide copies; when on, it copies current depth/motion into reusable addon-owned textures. The option is latched at the next NGX evaluation and applies to all stages. Structure Detection is not run in this stage because its current-frame mask is produced from the upscaled DLSS output.
 
 ### Post-DLSS injection
 
-After the real NGX evaluation succeeds, the hook refreshes the captured DLSS output/depth/motion clones. When any enabled pass targets Post-DLSS, `AddonController::OnPostDlssEvaluate` runs that target group against the game's upscaled output.
+Depth and motion are captured before the real NGX evaluation so every stage sees current-frame guides. After evaluation succeeds, the hook captures the DLSS output only when at least one enabled Post-DLSS pass needs it. With cloning off, Post-DLSS reads the game's output resource directly; with cloning on, it refreshes a reusable full-resolution output clone before running the target group.
 
 ```text
 Game -> NVSDK_NGX_D3D12_EvaluateFeature
   -> hooked_NVSDK_NGX_D3D12_EvaluateFeature
      -> Pre-DLSS pass group (if configured)
      -> real NGX EvaluateFeature
-     -> capture fresh depth, motion, and DLSS output color
+     -> capture the DLSS output only when Post-DLSS is enabled (clone only if requested)
      -> AddonController::OnPostDlssEvaluate(native_list, output_resource)
         -> one PassSession::RunStage(PostDLSS) per enabled Post-DLSS pass
 ```
@@ -263,7 +263,7 @@ ReShade present
      -> release retired resources
 ```
 
-The Backbuffer stage runs on the session's private command list and owns its submit/wait tail. Its current step order is:
+The Backbuffer stage runs on the session's private command list. It submits and queues a fence signal without waiting on every Present; the 16-slot allocator/list ring waits only if a slot is reused before its fence completes. Its current step order is:
 
 ```text
 AcquireBackbuffer
@@ -284,7 +284,7 @@ ComposeModelOutput
 GradeModelOutput
 RenderDebugView
 WriteToBackbuffer
-SubmitAndWait
+SubmitBackbuffer
 ```
 
 The Release stage uses a controller-owned command list because it runs after the normal pass stage and has no pass session to own that list. Its order is deliberately fixed:
@@ -437,7 +437,7 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 ### D3D12 / GPU
 
-**Own every replaced resource until the GPU is finished with it.** `PassResources` transfers replaced resources into the retire callback rather than releasing them immediately; Structure Detection transfers retired texture references into the same deferred-release queues. Those queues are drained only after the frame-end queue synchronization. Direct `ComPtr::Reset()` on an in-flight resource is unsafe.
+**Own every replaced resource until the GPU is finished with it.** `PassResources` transfers replaced resources into the retire callback rather than releasing them immediately; Structure Detection and resized backbuffer-grade scratch textures use the same deferred-release queues. Resources are tagged with a queue-ordered Release fence and released on a later Present only after that fence completes. Direct `ComPtr::Reset()` on an in-flight resource is unsafe.
 
 **Seed states for resources the addon owns.** `InferResourceState` is only a fallback for resources whose exact state is not otherwise known. Pass-owned resources are seeded at frame boundaries and cleaned back to their expected states before submission.
 
@@ -445,9 +445,9 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 **Pre-DLSS and Post-DLSS work must stay on the game's command list and must not submit it.** Pre-DLSS records before the real NGX evaluation and writes the result to its Color input; Post-DLSS records afterwards and writes the result to the upscaled output. The game's queue submits both. Backbuffer work uses an addon-owned command list.
 
-**Present/Release command contexts own their own fence.** `CommandContext::WaitGpu` is the synchronization point for addon-owned lists and for deferred resource release that depends on them. When either retired-resource queue is non-empty, `OnPresent` must open and submit the Release command list even if backbuffer grading and debug output are disabled. This puts the wait behind the work already submitted to that command queue before retired textures are released.
+**Present/Release command contexts own their own fence, but the frame path is asynchronous.** Backbuffer and Release submissions signal the command queue without an unconditional CPU wait. A 16-slot allocator/list ring waits only before reusing an allocator whose signal has not completed. When either retired-resource queue is non-empty, `OnPresent` still submits a Release queue marker even if grading and debug output are disabled; retired entries are tagged with that fence and released only after its value completes. `WaitGpu` remains available for shutdown or other callers that genuinely require completion immediately.
 
-**Abandoned Present recordings must be closed before allocator reuse.** `CommandContext::Abort` closes a recording that exited before the normal `SubmitAndWait` tail; `Reset` must never reset an allocator while its command list is still recording.
+**Abandoned Present recordings must be closed before allocator reuse.** `CommandContext::Abort` closes a recording that exited before the normal `SubmitBackbuffer` tail; `Reset` must never reset an allocator while its command list is still recording.
 
 **The descriptor/constant ring cannot be reused ahead of the GPU.** Descriptor views and the 256-byte constant slot are written by the CPU while commands are recorded but consumed later by the GPU. The ring depth therefore has to cover the maximum CPU lead and worst-case dispatch count.
 
@@ -532,6 +532,10 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 **Debug selection is global, rendering is pass-local.** `Settings::debug_view` is shared, while only the active pass renders the selected view.
 
 ### Settings and UI
+
+**Guide/output cloning is one shared advanced option.** `CloneResources` defaults to false and is read atomically by the NGX hook at the next evaluation boundary. Off uses current game resources directly; on clones current depth/motion and, only for Post-DLSS, the post-evaluation color output. The same toggle governs Pre-DLSS, Post-DLSS, and the guides available to Backbuffer, so it can compare copy-path costs without reverting to stale guides.
+
+**Working scale 1 avoids identity scaling work.** For SDR inputs with no input grade and equal input/working dimensions, `PrepareModelInput` passes the original resource to the model instead of dispatching an identity downsample. SDR/HDR composition still dispatches because it applies the model residual and writes the final image, but the shaders skip EASU reconstruction when the working and output sizes are equal; optional RCAS remains active. The HDR carrier preparation is not bypassed because it performs required color-domain conversion.
 
 **Inheritance is resolved only when settings change.** `RecomputeResolved()` runs on load and save; runtime code reads `GetResolvedPass()` directly and never recomputes inheritance per frame.
 

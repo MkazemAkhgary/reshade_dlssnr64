@@ -5,6 +5,9 @@
 #include <windows.h>
 #include <wrl/client.h>
 
+#include <array>
+#include <cstddef>
+#include <cstdint>
 #include <unordered_map>
 
 namespace reshade_dlssnr {
@@ -24,7 +27,13 @@ class CommandContext {
   // when the tracked state may no longer reflect the GPU's actual state.
   void ClearState();
   void CloseAndSubmit(ID3D12CommandQueue* command_queue);
+  // Queue a fence signal without blocking the CPU. The current command-list
+  // slot can be reused only after its associated value completes.
+  uint64_t SignalGpu(ID3D12CommandQueue* command_queue);
+  // Synchronous fence for callers that genuinely need completion now.
   void WaitGpu(ID3D12CommandQueue* command_queue);
+  uint64_t LastSignaledFenceValue() const { return last_signaled_fence_value_; }
+  uint64_t CompletedFenceValue() const;
 
   // Auto-tracked transition: uses tracked state (or resource's initial state
   // from its descriptor if not yet tracked) and transitions to `after`.
@@ -40,7 +49,7 @@ class CommandContext {
       ID3D12Resource* source,
       ID3D12Resource* backbuffer);
 
-  ID3D12GraphicsCommandList* GetCommandList() const { return command_list_.Get(); }
+  ID3D12GraphicsCommandList* GetCommandList() const { return frames_[current_frame_].command_list.Get(); }
 
   void SetResourceState(ID3D12Resource* resource, D3D12_RESOURCE_STATES state);
 
@@ -55,24 +64,37 @@ class CommandContext {
       ID3D12GraphicsCommandList* command_list,
       ID3D12Resource* resource);
 
-  // The internal fence used by WaitGpu. Only valid after Ensure(). Readback
-  // primitives that need to know when a copy has completed use this fence.
+  // The internal fence used for queued work and optional synchronous waits.
+  // Only valid after Ensure().
   ID3D12Fence* GetFence() const { return fence_.Get(); }
 
-  // The fence value that the next WaitGpu() call will signal. Enqueue any
-  // GPU-side operation that must be guaranteed complete by the time WaitGpu
-  // returns against this value; WaitGpu will signal exactly it.
+  // The next value SignalGpu() will enqueue on this queue-ordered fence.
+  // Consumers may attach queued GPU work to that value without a CPU wait.
   uint64_t GetNextFenceValue() const { return fence_value_ + 1; }
 
   void Shutdown();
 
  private:
-  Microsoft::WRL::ComPtr<ID3D12CommandAllocator> command_allocator_;
-  Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> command_list_;
+  // The command queue may be several frames ahead of GPU completion. Keep a
+  // command allocator/list per possible swapchain frame and wait only when a
+  // particular slot is reused, never immediately after every Present.
+  static constexpr size_t kCommandRingSize = 16;
+  struct FrameCommands {
+    Microsoft::WRL::ComPtr<ID3D12CommandAllocator> allocator;
+    Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> command_list;
+    UINT64 fence_value = 0;
+  };
+
+  bool WaitForFenceValue(UINT64 value);
+
+  std::array<FrameCommands, kCommandRingSize> frames_;
+  size_t current_frame_ = 0;
   Microsoft::WRL::ComPtr<ID3D12Fence> fence_;
   HANDLE fence_event_ = INVALID_HANDLE_VALUE;
   UINT64 fence_value_ = 0;
+  UINT64 last_signaled_fence_value_ = 0;
   bool recording_ = false;
+  bool submitted_since_reset_ = false;
 
   std::unordered_map<ID3D12Resource*, D3D12_RESOURCE_STATES> resource_states_;
 };

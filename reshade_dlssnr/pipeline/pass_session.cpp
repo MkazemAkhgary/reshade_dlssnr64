@@ -204,10 +204,8 @@ void PassSession::RetireResourceCallback(ID3D12Resource* resource,
   if (resource == nullptr) return;
   auto* guides = static_cast<DlssGuides*>(user_data);
   if (guides != nullptr) {
-    // DlssGuides::RetireGameResource adds a reference and queues the
-    // resource for release after the next GPU wait. We already own a
-    // reference here, so AddRef first so the queue's eventual Release()
-    // balances out.
+    // Transfer one reference into the deferred-release queue. The controller
+    // tags it with a queue-ordered fence and releases it only after completion.
     resource->AddRef();
     guides->RetireGameResource(resource);
     resource->Release();
@@ -314,8 +312,8 @@ bool PassSession::FillEvaluateParams(
     block.SetUInt("DLSSNR.DepthSubrectHeight", guides.guide_height);
     block.SetUInt("DLSSNR.MVecSubrectBaseX", 0u);
     block.SetUInt("DLSSNR.MVecSubrectBaseY", 0u);
-    block.SetUInt("DLSSNR.MVecSubrectWidth", guides.guide_width);
-    block.SetUInt("DLSSNR.MVecSubrectHeight", guides.guide_height);
+    block.SetUInt("DLSSNR.MVecSubrectWidth", guides.motion_width);
+    block.SetUInt("DLSSNR.MVecSubrectHeight", guides.motion_height);
   }
 
   block.SetUInt("DLSSNR.Reset", feature_.ShouldReset() ? 1u : 0u);
@@ -374,13 +372,12 @@ void PassSession::CleanupFrameState(ID3D12GraphicsCommandList* command_list) {
   }
 }
 
-void PassSession::SubmitAndWait() {
-  // Through CommandContext, so the submit goes through the one place that
-  // reports what the runtime said about it. ExecuteCommandLists returns void
-  // and a rejected call shows up as a removed device somewhere else entirely.
+void PassSession::SubmitBackbuffer() {
+  // The backbuffer commands are ordered before Present on this same queue.
+  // Signal completion for future allocator reuse and deferred retirement, but
+  // do not make every frame's CPU thread wait for that fence.
   command_.CloseAndSubmit(command_queue_);
-  command_.WaitGpu(command_queue_);
-  guides_->ReleaseRetiredGameResources();
+  command_.SignalGpu(command_queue_);
 }
 
 bool PassSession::MaybeRenderDebug(
@@ -569,6 +566,11 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
 
   TRACE_EVT(this, "ENTER stage=%s pass=%u", stage.name, pass_index_);
 
+  // Each game-list invocation starts with a clean per-stage state map. This
+  // also makes early-exit cleanup independent of pointers/states cached by the
+  // preceding frame's invocation of this pass.
+  if (!stage.owns_submit) command_.ClearState();
+
   PassRun run;
   PrepareRun(run, settings, codec, runtime, command_list, output_resource,
              is_first_pass, frame_debug, hdr, hdr_cmd, skin_detect,
@@ -576,9 +578,30 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
 
   const PipelineStatus status = PipelineRunner::RunStage(stage, run);
 
+  // Direct Post-DLSS mode transitions the game's output to SRV before HDR
+  // metering/Structure Detection. A stage can then skip before its normal
+  // WriteToGameResource restore (for example while shaders compile). Restore
+  // the output state on every such exit. In clone mode the original output is
+  // not touched unless writeback began, which is tracked by command_.
+  if (status != PipelineStatus::Ok && !stage.owns_submit && !stage.is_pre_dlss &&
+      output_resource != nullptr && run.guides.dlss_output_color != nullptr) {
+    D3D12_RESOURCE_STATES tracked = command_.GetResourceState(output_resource);
+    if (!run.guides.clone_resources &&
+        tracked == D3D12_RESOURCE_STATE_COMMON) {
+      // CaptureOutput already transitioned the direct resource to SRV, but
+      // an early skip may precede this stage's resource-state seeding.
+      tracked = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+      command_.SetResourceState(output_resource, tracked);
+    }
+    if (tracked != D3D12_RESOURCE_STATE_COMMON) {
+      command_.Transition(command_list, output_resource,
+                          InferResourceState(output_resource));
+    }
+  }
+
   // A Present-stage step can stop after StepSeedResourceStates has already
   // opened this pass's private command list, but before the normal
-  // StepSubmitAndWait tail is reached. Discard that abandoned recording so the
+  // StepSubmitBackbuffer tail is reached. Discard that abandoned recording so the
   // next frame never tries to Reset an allocator/list that is still recording.
   // This is transient frame cleanup, not a GPU execution error.
   if (status != PipelineStatus::Ok && stage.owns_submit) {
@@ -782,10 +805,9 @@ PipelineStatus PassSession::StepResolveWorkingScale(PassRun& run) {
 // Create/resize the per-pass output, composite and working resources.
 //
 // Always retire replaced resources rather than releasing them immediately.
-// Even in Backbuffer mode, a resource replaced this frame might still be read by
-// the game's queue from a previous DLSS-mode frame (the game's present is
-// queued, not necessarily flushed). Retiring hands ownership to a deferred
-// queue that is drained only after we synchronize with the GPU.
+// Commands from earlier frames may still read them; the controller tags each
+// retired item with a queue-ordered Release fence and drains it asynchronously
+// after that fence has completed.
 PipelineStatus PassSession::StepEnsureFrameResources(PassRun& run) {
   PassSession* self = run.session;
   if (run.device == nullptr) return PipelineStatus::SkipFrame;
@@ -835,13 +857,10 @@ PipelineStatus PassSession::StepSeedResourceStates(PassRun& run) {
   return PipelineStatus::Ok;
 }
 
-// Re-read the guide state, and seed the guide resources' tracked state.
-//
-// This must run after EnsureFeature. Creating the NGX feature is what makes
-// the game re-capture its DLSS guides, so a snapshot taken before the feature
-// exists can be stale — and on the first frame is entirely invalid. The
-// pre-refactor code called guides_->GetState() at exactly this point in both
-// stages, and this node is that call.
+// Seed the guide resources' tracked state from the snapshot taken once by
+// PrepareRun. Do not re-read the global guide state mid-stage: another NGX
+// evaluation must not mix its guides with the model input selected at stage
+// entry, and retired resources remain alive through the Release fence.
 //
 // Seeding the guide states belongs here rather than in SeedResourceStates
 // because the two stages place it differently relative to the feature build;
@@ -849,30 +868,32 @@ PipelineStatus PassSession::StepSeedResourceStates(PassRun& run) {
 PipelineStatus PassSession::StepSnapshotGuides(PassRun& run) {
   PassSession* self = run.session;
 
-  run.guides = self->guides_->GetState();
-  run.guides_valid = run.guides.valid;
-
+  // PrepareRun already took the stage's immutable guide snapshot.
   if (run.cmd == nullptr) return PipelineStatus::Ok;
 
-  // Guides are owned by DlssGuides and always left in SRV. Without this the
-  // tracker would infer a state from the resource descriptor, which may be
-  // wrong (typeless depth, etc.).
+  // The clone copies leave addon-owned guides in NON_PIXEL_SHADER_RESOURCE.
+  // Direct depth/motion are already in the DLSS-readable state at this point;
+  // seed those expectations explicitly because typeless descriptors are not
+  // enough to infer their read-only state. Do not overwrite the output game's
+  // state seeded by StepSeedResourceStates: in direct Post-DLSS mode the output
+  // guide aliases run.output_resource, which may still be in UAV state.
   if (run.guides_valid) {
     self->command_.SetResourceState(
         run.guides.depth, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     self->command_.SetResourceState(
         run.guides.motion, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    self->command_.SetResourceState(
-        run.guides.dlss_output_color,
-        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    if (run.guides.clone_resources) {
+      self->command_.SetResourceState(
+          run.guides.dlss_output_color,
+          D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    }
   }
   return PipelineStatus::Ok;
 }
 
-// PostDLSS takes its guide snapshot at the same point, but needs the states
-// seeded before the model-input resolve rather than after the feature build.
-// Rather than duplicate the seeding, this node re-uses SnapshotGuides for the
-// seeding half only: the snapshot itself is taken by SnapshotGuides.
+// PostDLSS seeds guide states before model-input resolve rather than after
+// the feature build. Its guide pointers/dimensions were snapshotted by
+// PrepareRun, just like the other stages.
 PipelineStatus PassSession::StepSeedGuideStates(PassRun& run) {
   PassSession* self = run.session;
   if (run.cmd == nullptr) return PipelineStatus::Ok;
@@ -882,9 +903,19 @@ PipelineStatus PassSession::StepSeedGuideStates(PassRun& run) {
         run.guides.depth, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     self->command_.SetResourceState(
         run.guides.motion, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    self->command_.SetResourceState(
-        run.guides.dlss_output_color,
-        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    if (run.guides.clone_resources) {
+      self->command_.SetResourceState(
+          run.guides.dlss_output_color,
+          D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    } else if (run.stage != nullptr && !run.stage->is_pre_dlss &&
+               run.guides.dlss_output_color != nullptr) {
+      // CaptureOutput transitioned the direct DLSS output into shader-read
+      // state before HdrBeginFrame; don't leave the tracker at the descriptor
+      // inference used before that hook-side barrier.
+      self->command_.SetResourceState(
+          run.guides.dlss_output_color,
+          D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    }
   }
   return PipelineStatus::Ok;
 }
@@ -913,7 +944,7 @@ PipelineStatus PassSession::StepResolveModelInput(PassRun& run) {
     return PipelineStatus::Ok;
   }
 
-  // PostDLSS: first pass reads the captured DLSS output clone.
+  // PostDLSS: first pass reads either the game output or its optional clone.
   if (run.is_first_pass) {
     if (run.guides.dlss_output_color == nullptr) {
       TRACE_EVT(self, "SKIP stage=PostDLSS pass=%u reason=no_guide_color",
@@ -921,8 +952,13 @@ PipelineStatus PassSession::StepResolveModelInput(PassRun& run) {
       return PipelineStatus::SkipFrame;
     }
     run.model_input = run.guides.dlss_output_color;
-    self->command_.SetResourceState(run.model_input,
-                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    // A cloned output is known to be an SRV. In direct mode this aliases the
+    // game's output_resource, whose state was seeded from its descriptor in
+    // StepSeedResourceStates; preserve that state instead of overwriting it.
+    if (run.guides.clone_resources) {
+      self->command_.SetResourceState(
+          run.model_input, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    }
     return PipelineStatus::Ok;
   }
 
@@ -992,7 +1028,7 @@ PipelineStatus PassSession::StepEnsureFeature(PassRun& run) {
     TRACE_EVT(self, "SKIP stage=%s pass=%u reason=feature_rebuilt",
               run.stage != nullptr ? run.stage->name : "?", self->pass_index_);
     if (run.stage != nullptr && run.stage->owns_submit) {
-      self->SubmitAndWait();
+      self->SubmitBackbuffer();
     }
     reshade::log::message(
         reshade::log::level::info,
@@ -1113,7 +1149,8 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
           &model_color, &model_output, &eval_width, &eval_height,
           run.work_width, run.work_height,
           run.hdr_uniforms_ready && run.hdr != nullptr &&
-              run.hdr->ResolvedFormat() != HdrFormat::Sdr)) {
+              run.hdr->ResolvedFormat() != HdrFormat::Sdr,
+          run.pass != nullptr && !run.pass->grade_input.enabled)) {
     self->FailForStep("failed to prepare model input");
     return PipelineStatus::Fail;
   }
@@ -1293,7 +1330,7 @@ bool PassSession::EvalKeysDiffer(const EvalLogKey& a, const EvalLogKey& b) {
 // Invoke NGX.
 //
 // Backbuffer captures the result and reports a failure after the frame has been
-// submitted (see StepSubmitAndWait); PostDLSS ignores the result entirely,
+// submitted (see StepSubmitBackbuffer); PostDLSS ignores the result entirely,
 // which is what the pre-refactor code did — deliberately or not, it is the
 // behaviour this refactor preserves. The Stage 5 bug list records it.
 PipelineStatus PassSession::StepEvaluateFeature(PassRun& run) {
@@ -1437,13 +1474,13 @@ PipelineStatus PassSession::StepWriteToGameResource(PassRun& run) {
   return PipelineStatus::Ok;
 }
 
-// Backbuffer: return pass-owned resources to UNORDERED_ACCESS, then close,
-// submit, wait and drain the retire queue. This is the only submit point in
-// the Backbuffer stage.
-PipelineStatus PassSession::StepSubmitAndWait(PassRun& run) {
+// Backbuffer: return pass-owned resources to their frame-boundary states,
+// submit with a queue fence, and return without blocking the CPU. The fence is
+// polled later; allocator reuse waits only when this session's ring slot wraps.
+PipelineStatus PassSession::StepSubmitBackbuffer(PassRun& run) {
   PassSession* self = run.session;
   self->CleanupFrameState(self->command_.GetCommandList());
-  self->SubmitAndWait();
+  self->SubmitBackbuffer();
 
   // Backbuffer reports the NGX result after the frame is on the GPU, matching the
   // pre-refactor ordering: the frame is never dropped because the model
@@ -1567,7 +1604,7 @@ constexpr PipelineStepDef kSessionSteps[] = {
     {PipelineNodeId::WriteToGameResource, "WriteToGameResource",
      &PassSession::StepWriteToGameResource, kNoDeps,
      StageInput::CommandList | StageInput::OutputResource, false},
-    {PipelineNodeId::SubmitAndWait, "SubmitAndWait", &PassSession::StepSubmitAndWait,
+    {PipelineNodeId::SubmitBackbuffer, "SubmitBackbuffer", &PassSession::StepSubmitBackbuffer,
      kNoDeps, StageInput::None, false},
 };
 
