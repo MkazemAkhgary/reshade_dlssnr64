@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <mutex>
 
 #include <reshade.hpp>
@@ -1248,12 +1249,12 @@ PipelineStatus PassSession::StepFillEvaluateParams(PassRun& run) {
 // DLSSNR_TRACE, and this has to be visible to someone who just enabled the
 // pass and saw it fail.
 //
-// The caller emits it only when something about the evaluation changed, plus
-// always when a resource is null or an evaluation fails. Printing this every
-// frame costs a formatting pass and a log write in the present path, which is
-// measurable as stutter, and in a steady state every field is constant — so a
-// repeated line carries no information and only the transitions are worth
-// printing.
+// The caller emits it on first use and when the descriptor contract changes,
+// plus always when a resource is null or an evaluation fails. Resource pointer
+// identity is intentionally not treated as a contract change: the backbuffer
+// rotates through swapchain images and makes that pointer change every frame.
+// Logging those expected rotations caused measurable Present-path overhead
+// without adding diagnostic information.
 void PassSession::FormatEvalLine(const PassRun& run, const EvalLogKey& key,
                                  char* line, size_t line_size) {
   char color_part[128] = "color=null";
@@ -1314,7 +1315,17 @@ void PassSession::BuildEvalKey(const PassRun& run, void* feature_handle,
 }
 
 bool PassSession::EvalKeysDiffer(const EvalLogKey& a, const EvalLogKey& b) {
-  return a.stage != b.stage || a.color != b.color || a.output != b.output ||
+  // This is a per-session diagnostic, not a per-evaluation trace. Only compare
+  // stable descriptor-contract values. Swapchain resource identity naturally
+  // rotates, guide availability can fluctuate while the game refreshes its
+  // capture, and NGX can change/recreate handles independently of the resource
+  // descriptor. None of those warrants reprinting the full INFO line every
+  // frame. Feature rebuilds and failed evaluations have their own diagnostics.
+  const char* const a_stage = a.stage != nullptr ? a.stage : "";
+  const char* const b_stage = b.stage != nullptr ? b.stage : "";
+  return std::strcmp(a_stage, b_stage) != 0 ||
+         ((a.color == nullptr) != (b.color == nullptr)) ||
+         ((a.output == nullptr) != (b.output == nullptr)) ||
          a.color_width != b.color_width || a.color_height != b.color_height ||
          a.output_width != b.output_width ||
          a.output_height != b.output_height ||
@@ -1322,9 +1333,7 @@ bool PassSession::EvalKeysDiffer(const EvalLogKey& a, const EvalLogKey& b) {
          a.eval_width != b.eval_width || a.eval_height != b.eval_height ||
          a.frame_width != b.frame_width || a.frame_height != b.frame_height ||
          a.input_width != b.input_width || a.input_height != b.input_height ||
-         a.work_width != b.work_width || a.work_height != b.work_height ||
-         a.guides_valid != b.guides_valid || a.pass_index != b.pass_index ||
-         a.feature_handle != b.feature_handle || a.params != b.params;
+         a.work_width != b.work_width || a.work_height != b.work_height;
 }
 
 // Invoke NGX.
@@ -1341,23 +1350,27 @@ PipelineStatus PassSession::StepEvaluateFeature(PassRun& run) {
   EvalLogKey key = {};
   BuildEvalKey(run, feature_handle, &key);
 
-  // A null input is itself the answer to FAIL_InvalidParameter, so the line
-  // that would reveal it must never be suppressed by the change check.
-  const bool null_input = run.model_color == nullptr || run.model_output == nullptr;
+  // Log on first use and on a descriptor/nullness transition. A persistent
+  // null input is reported once as a diagnostic, not once per frame; the
+  // evaluation failure path carries the actionable error if it persists.
   const bool first = !self->eval_log_key_valid_;
   const bool changed = first || EvalKeysDiffer(key, self->eval_log_key_);
 
   self->eval_log_written_this_frame_ = false;
-  if (changed || null_input) {
+  if (changed) {
     char line[384] = {};
     FormatEvalLine(run, key, line, sizeof(line));
     reshade::log::message(reshade::log::level::info, line);
     TRACE_EVT(self, "%s", line);
-
-    self->eval_log_key_ = key;
-    self->eval_log_key_valid_ = true;
     self->eval_log_written_this_frame_ = true;
   }
+
+  // Keep the latest pointers as well as the latest descriptor values even
+  // when the diagnostic is suppressed. If NGX fails later in this same frame,
+  // the error path can report the current evaluation rather than a stale
+  // swapchain resource from a previous frame.
+  self->eval_log_key_ = key;
+  self->eval_log_key_valid_ = true;
 
   if (run.stage != nullptr && !run.stage->owns_submit) {
     run.runtime->EvaluateFeature(self->StageList(run, self->command_), self->feature_.FeatureHandle(),

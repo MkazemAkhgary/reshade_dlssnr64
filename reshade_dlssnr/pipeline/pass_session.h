@@ -215,18 +215,13 @@ class PassSession {
   static void RetireResourceCallback(ID3D12Resource* resource,
                                      void* user_data);
 
-  // Everything the evaluate diagnostic prints, kept so the line can be
-  // emitted only when it would say something new.
-  //
-  // The descriptor line is the one piece of the pipeline's logging that has to
-  // be per-frame accurate but costs a printf and a log write every frame, which
-  // shows up as stutter in a frame-limited game. None of the fields below
-  // change frame to frame in a steady state, so comparing against the previous
-  // frame's values keeps the diagnostic without paying for it — a resolution
-  // change, a resource swap, a feature rebuild or a format change still prints.
-  //
-  // A failure (or a null input) forces the line out regardless, because that is
-  // exactly when the descriptors are the answer; see StepEvaluateFeature.
+  // The descriptor diagnostic is emitted on first use and when stable NGX
+  // descriptor-contract values change (stage, dimensions, formats). Resource
+  // identities, guide-valid state, feature handles, and the shared parameter
+  // pointer are deliberately excluded from change detection because they may
+  // vary across evaluations without changing the descriptor contract. Null
+  // input transitions are reported once; persistent evaluation failures remain
+  // visible through the error path without repeating this INFO line.
   struct EvalLogKey {
     const char* stage = nullptr;
     ID3D12Resource* color = nullptr;
@@ -259,7 +254,8 @@ class PassSession {
   static void BuildEvalKey(const PassRun& run, void* feature_handle,
                            EvalLogKey* key);
 
-  // True when any field the diagnostic prints differs.
+  // True when the stable stage/descriptor contract differs; transient runtime
+  // identities and guide availability are intentionally ignored.
   static bool EvalKeysDiffer(const EvalLogKey& a, const EvalLogKey& b);
 
   CommandContext command_;
