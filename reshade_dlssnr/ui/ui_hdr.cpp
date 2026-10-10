@@ -15,7 +15,7 @@ namespace {
 
 const char* const kFormatNames[] = {"Auto", "SDR", "scRGB", "HDR10"};
 const char* const kFormatTips[] = {
-    "Detect the format automatically from the DLSS output.",
+    "Detect the format automatically from the active Pre/Post-DLSS source.",
     "Treat the source as SDR sRGB.",
     "Treat the source as linear scRGB (1.0 = 80 nits).",
     "Treat the source as HDR10 PQ (ST.2084)."};
@@ -36,7 +36,7 @@ void DrawStatus(const HdrSnapshot& snap, bool hdr_relevant) {
   ImGui::SameLine(kControlLabelWidth);
 
   if (!hdr_relevant) {
-    ImGui::TextDisabled("Inactive (no DLSS Output pass)");
+    ImGui::TextDisabled("Inactive (no Pre/Post-DLSS pass)");
   } else if (!snap.ready) {
     ImGui::TextDisabled("Waiting for first measurement...");
   } else {
@@ -342,7 +342,7 @@ void DrawHdrSection(Settings& settings, bool hdr_relevant, bool& changed) {
 
   changed |= ImGui::Checkbox("Enable HDR Handling", &settings.hdr.enable);
   if (ImGui::IsItemHovered())
-    Tip("Prepares HDR content for the model, which expects a display-referred SDR image. Only affects DLSS Output passes.");
+    Tip("Prepares HDR content for the model, which expects a display-referred SDR image. Affects Pre-DLSS and Post-DLSS passes; Backbuffer remains SDR.");
 
   if (!hdr_relevant) ImGui::BeginDisabled();
   const bool hdr_on = settings.hdr.enable;

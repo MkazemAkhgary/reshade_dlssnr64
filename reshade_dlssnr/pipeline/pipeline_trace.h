@@ -76,7 +76,8 @@ void Flush();
 // A game frame is not one stream. The DLSS evaluate happens mid-frame and the
 // present happens at the end, so a single counter incremented at either point
 // labels the other stream's lines with the wrong frame. Each entry point gets
-// its own counter, printed on every line as `d=` (PostDlss) and `p=` (Present).
+// its own counter, printed on every line as `b=` (PreDlss), `d=` (PostDlss),
+// and `p=` (Present).
 //
 // BeginFrame/EndFrame also emit a `frm` marker line, so frames are greppable
 // and each END names the line range the frame spans:
@@ -84,11 +85,12 @@ void Flush();
 //   grep ' frm '                 every boundary
 //   grep 'frm.*BEGIN'            every frame start
 //
-// Neither counter is a game-frame number when the game calls DLSS more than
-// once per frame; `d` counts evaluate calls, not frames.
+// None of these counters is a game-frame number when the game calls DLSS more
+// than once per frame; the two evaluate counters count hook calls, not frames.
 enum class FrameStream : uint32_t {
-  PostDlss = 0,
-  Present = 1,
+  PreDlss = 0,
+  PostDlss = 1,
+  Present = 2,
 };
 
 // Emits the BEGIN marker for `stream` and increments its counter. Returns the
@@ -143,7 +145,7 @@ const char* StatePairName(D3D12_RESOURCE_STATES before,
 //   set <name> <old> -> <new>       on every SaveSettings
 //
 // `grep ' cfg '` isolates them, so a change in behavior can be read against
-// the frame counters (`d=`/`p=`) of the frame it happened on.
+// the frame counters (`b=`/`d=`/`p=`) of the frame it happened on.
 #define TRACE_CFG(...)                                               \
   do {                                                               \
     if (::reshade_dlssnr::trace::Enabled()) {                        \

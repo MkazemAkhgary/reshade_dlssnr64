@@ -26,13 +26,15 @@ struct FrameDebugContext {
   // AddonController before passes run. When UNKNOWN, falls back to the
   // pass's own source format.
   DXGI_FORMAT preferred_format = DXGI_FORMAT_UNKNOWN;
+  unsigned int preferred_width = 0;
+  unsigned int preferred_height = 0;
 
   // True when `output` holds a debug render produced this frame.
   bool valid = false;
 
   void Reset() {
     valid = false;
-    // Note: `output`, `width`, `height`, `format` are intentionally kept —
+    // Note: `output`, target dimensions, `format`, and preferred backbuffer extent are intentionally kept —
     // the resource is reused across frames to avoid churn.
   }
 
@@ -43,6 +45,9 @@ struct FrameDebugContext {
     width = 0;
     height = 0;
     format = DXGI_FORMAT_UNKNOWN;
+    preferred_format = DXGI_FORMAT_UNKNOWN;
+    preferred_width = 0;
+    preferred_height = 0;
     valid = false;
   }
 };

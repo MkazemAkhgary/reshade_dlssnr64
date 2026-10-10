@@ -406,11 +406,24 @@ bool PassSession::MaybeRenderDebug(
           ? frame_debug.preferred_format
           : format;
 
+  // Debug views are displayed on the backbuffer. When the source stage runs
+  // at render resolution (Pre-DLSS), render the diagnostic at the cached
+  // backbuffer extent so the present copy remains valid and the source is
+  // scaled by DebugDisplay rather than being silently skipped.
+  if (frame_debug.preferred_width == 0 || frame_debug.preferred_height == 0) {
+    // Pre/Post-DLSS execute before the first Present can populate the target
+    // extent. Skip only that first diagnostic rather than allocating a
+    // render-sized texture that would be retired on the following frame.
+    return false;
+  }
+  const unsigned int target_width = frame_debug.preferred_width;
+  const unsigned int target_height = frame_debug.preferred_height;
+
   // (Re)create the shared debug output when its shape changes. The output
   // is owned by FrameDebugContext and lives across frames.
   if (frame_debug.output == nullptr ||
-      frame_debug.width != width ||
-      frame_debug.height != height ||
+      frame_debug.width != target_width ||
+      frame_debug.height != target_height ||
       frame_debug.format != target_format) {
     Microsoft::WRL::ComPtr<ID3D12Device> device;
     if (FAILED(command_list->GetDevice(IID_PPV_ARGS(&device))) ||
@@ -423,8 +436,8 @@ bool PassSession::MaybeRenderDebug(
 
     D3D12_RESOURCE_DESC desc = {};
     desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-    desc.Width = width;
-    desc.Height = height;
+    desc.Width = target_width;
+    desc.Height = target_height;
     desc.DepthOrArraySize = 1;
     desc.MipLevels = 1;
     desc.Format = target_format;
@@ -441,8 +454,8 @@ bool PassSession::MaybeRenderDebug(
     }
 
     frame_debug.output = std::move(new_output);
-    frame_debug.width = width;
-    frame_debug.height = height;
+    frame_debug.width = target_width;
+    frame_debug.height = target_height;
     frame_debug.format = target_format;
   }
 
@@ -454,7 +467,7 @@ bool PassSession::MaybeRenderDebug(
   if (!RenderDebugView(command_, codec, command_list, snapshot,
                        hdr,
                        settings.debug_view, frame_debug.output.Get(),
-                       width, height)) {
+                       target_width, target_height)) {
     return false;
   }
 
@@ -544,17 +557,14 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
   if (!settings.enabled) return PipelineStatus::SkipFrame;
   if (failed_) return PipelineStatus::SkipFrame;
 
-  if (stage.is_post_dlss) {
-    // PostDLSS records onto the game's list and writes into the game's
-    // resource, so both must be present.
+  if (!stage.owns_submit) {
+    // PreDLSS and PostDLSS record on the game's list and publish to a game
+    // resource; both are required. Backbuffer passes own their command list.
     if (command_list == nullptr || output_resource == nullptr) {
       return PipelineStatus::SkipFrame;
     }
-  } else {
-    // Present owns its list, so it needs a queue and a swapchain instead.
-    if (command_queue == nullptr || swapchain == nullptr) {
-      return PipelineStatus::SkipFrame;
-    }
+  } else if (command_queue == nullptr || swapchain == nullptr) {
+    return PipelineStatus::SkipFrame;
   }
 
   TRACE_EVT(this, "ENTER stage=%s pass=%u", stage.name, pass_index_);
@@ -571,7 +581,7 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
   // StepSubmitAndWait tail is reached. Discard that abandoned recording so the
   // next frame never tries to Reset an allocator/list that is still recording.
   // This is transient frame cleanup, not a GPU execution error.
-  if (status != PipelineStatus::Ok && !stage.is_post_dlss) {
+  if (status != PipelineStatus::Ok && stage.owns_submit) {
     command_.Abort();
   }
 
@@ -620,7 +630,7 @@ void PassSession::FailForStep(const char* reason) {
 // Setup
 // ---------------------------------------------------------------------------
 
-// Present only: acquire the swapchain backbuffer and the device behind the
+// Backbuffer only: acquire the swapchain backbuffer and the device behind the
 // command queue. Replaces the block at the top of the old OnPresent.
 PipelineStatus PassSession::StepAcquireBackbuffer(PassRun& run) {
   PassSession* self = run.session;
@@ -654,16 +664,16 @@ PipelineStatus PassSession::StepAcquireBackbuffer(PassRun& run) {
 // Resolve the device and bring up the two objects every later step needs:
 // the NGX runtime and this session's own command list.
 //
-// Present gets the device from the command queue; PostDLSS from the game's
+// Backbuffer gets the device from the queue; PreDLSS/PostDLSS from the game's
 // command list. The difference in failure handling is deliberate and matches
 // the pre-refactor code: Present treats both failures as fatal, PostDLSS
 // treats a missing device as transient (the game may not have loaded the DLSS
 // model yet) and a failing runtime.Initialize as transient too.
 PipelineStatus PassSession::StepResolveDevice(PassRun& run) {
   PassSession* self = run.session;
-  const bool is_post_dlss = run.stage != nullptr && run.stage->is_post_dlss;
+  const bool uses_game_list = run.stage != nullptr && !run.stage->owns_submit;
 
-  if (is_post_dlss) {
+  if (uses_game_list) {
     if (run.list == nullptr) return PipelineStatus::SkipFrame;
 
     Microsoft::WRL::ComPtr<ID3D12Device> device;
@@ -701,8 +711,9 @@ PipelineStatus PassSession::StepResolveDevice(PassRun& run) {
       return PipelineStatus::SkipFrame;
     }
 
-    // PostDLSS records onto the game's list, so description and extent come
-    // from the resource it will write into.
+    // PreDLSS records onto the game's list against the input Color resource;
+    // PostDLSS targets the upscaled output. In both cases dimensions and format
+    // come from the game resource this stage will write into.
     run.desc = run.output_resource != nullptr ? run.output_resource->GetDesc()
                                               : D3D12_RESOURCE_DESC{};
   } else {
@@ -771,7 +782,7 @@ PipelineStatus PassSession::StepResolveWorkingScale(PassRun& run) {
 // Create/resize the per-pass output, composite and working resources.
 //
 // Always retire replaced resources rather than releasing them immediately.
-// Even in Present mode, a resource replaced this frame might still be read by
+// Even in Backbuffer mode, a resource replaced this frame might still be read by
 // the game's queue from a previous DLSS-mode frame (the game's present is
 // queued, not necessarily flushed). Retiring hands ownership to a deferred
 // queue that is drained only after we synchronize with the GPU.
@@ -795,21 +806,27 @@ PipelineStatus PassSession::StepSeedResourceStates(PassRun& run) {
   PassSession* self = run.session;
   if (run.cmd == nullptr) return PipelineStatus::SkipFrame;
 
-  if (run.stage != nullptr && run.stage->is_post_dlss) {
+  if (run.stage != nullptr && !run.stage->owns_submit) {
     // Fresh state tracking per pass: no cross-pass aliasing to rely on.
     self->command_.ClearState();
     self->SeedFrameState(nullptr);
 
-    // `output_resource` belongs to the game and we do not know what state DLSS
-    // left it in. InferResourceState() guesses from the descriptor flags
+    // `output_resource` belongs to the game (the Color input for PreDLSS,
+    // the DLSS output for PostDLSS), and we do not know its exact current
+    // state. InferResourceState() guesses from the descriptor flags
     // (UAV-flagged -> UNORDERED_ACCESS, RT-flagged -> RENDER_TARGET, else
     // COMMON), which matches what DLSS produces in practice but is not
     // guaranteed. There is no fully safe assumption for a resource we did not
     // create, so this is best-effort. If a game ships with a mismatched
     // barrier here, the D3D12 debug layer will name it at the CopyResource in
     // WriteToGameResource.
-    self->command_.SetResourceState(run.output_resource,
-                              InferResourceState(run.output_resource));
+    // The previous PreDLSS pass deliberately leaves Color in SRV for the real
+    // NGX consumer, so chained PreDLSS passes start from that known state.
+    const D3D12_RESOURCE_STATES initial_state =
+        run.stage != nullptr && run.stage->is_pre_dlss && !run.is_first_pass
+            ? D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE
+            : InferResourceState(run.output_resource);
+    self->command_.SetResourceState(run.output_resource, initial_state);
   } else {
     self->command_.Reset();
     self->command_.ClearState();
@@ -876,18 +893,23 @@ PipelineStatus PassSession::StepSeedGuideStates(PassRun& run) {
 // Model input
 // ---------------------------------------------------------------------------
 
-// Select the image the model consumes. Present reads the backbuffer; PostDLSS
-// reads the captured DLSS output on the first pass and a scratch snapshot of
-// the previous pass's result afterwards.
+// Select the image the model consumes. Backbuffer reads the swapchain image;
+// PreDLSS reads the game's Color input; PostDLSS reads the captured DLSS
+// output. Chained game-resource passes snapshot the previous result.
 PipelineStatus PassSession::StepResolveModelInput(PassRun& run) {
   PassSession* self = run.session;
-  if (run.stage != nullptr && !run.stage->is_post_dlss) {
-    // Present: the backbuffer is the source, and it starts in PRESENT.
+  if (run.stage != nullptr && run.stage->owns_submit) {
     run.model_input = run.backbuffer;
     if (run.model_input != nullptr) {
       self->command_.Transition(self->command_.GetCommandList(), run.model_input,
                           D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     }
+    return PipelineStatus::Ok;
+  }
+
+  if (run.stage != nullptr && run.stage->is_pre_dlss) {
+    if (run.output_resource == nullptr) return PipelineStatus::SkipFrame;
+    run.model_input = run.output_resource;
     return PipelineStatus::Ok;
   }
 
@@ -943,8 +965,8 @@ PipelineStatus PassSession::StepEnsureFeature(PassRun& run) {
     return PipelineStatus::SkipFrame;
   }
 
-  // The list this stage records on: its own for Present, the game's for
-  // PostDLSS.
+  // The list this stage records on: its own for Backbuffer, the game's for
+  // PreDLSS and PostDLSS.
   ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
 
   // Brackets the call so a crash inside it is attributable rather than just
@@ -956,9 +978,9 @@ PipelineStatus PassSession::StepEnsureFeature(PassRun& run) {
   if (!self->feature_.EnsureFeature(*run.runtime, *run.pass, list, run.width,
                               run.height)) {
     self->FailForStep(self->feature_.GetLastError());
-    if (run.stage != nullptr && !run.stage->is_post_dlss) {
-      // Present owns the list, so it has to close what it opened before
-      // bailing; PostDLSS must leave the game's list alone.
+    if (run.stage != nullptr && run.stage->owns_submit) {
+      // Backbuffer owns the list, so it has to close it; game-resource stages
+      // must leave the game's list alone.
       list->Close();
     }
     return PipelineStatus::Fail;
@@ -969,7 +991,7 @@ PipelineStatus PassSession::StepEnsureFeature(PassRun& run) {
     // the model has a frame to fully initialize.
     TRACE_EVT(self, "SKIP stage=%s pass=%u reason=feature_rebuilt",
               run.stage != nullptr ? run.stage->name : "?", self->pass_index_);
-    if (run.stage != nullptr && !run.stage->is_post_dlss) {
+    if (run.stage != nullptr && run.stage->owns_submit) {
       self->SubmitAndWait();
     }
     reshade::log::message(
@@ -1074,12 +1096,12 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
   PassSession* self = run.session;
   if (run.codec == nullptr) return PipelineStatus::SkipFrame;
 
-  ID3D12Resource* model_input = run.stage != nullptr && run.stage->is_post_dlss
-                                    ? (run.hdr_uniforms_ready && run.hdr != nullptr &&
-                                             run.hdr->ResolvedFormat() != HdrFormat::Sdr
-                                           ? self->resources_.GetPackedOutput()
-                                           : run.model_input)
-                                    : run.backbuffer;
+  const bool hdr_source = run.hdr_uniforms_ready && run.hdr != nullptr &&
+                          run.hdr->ResolvedFormat() != HdrFormat::Sdr;
+  ID3D12Resource* model_input = run.stage != nullptr && run.stage->owns_submit
+                                    ? run.backbuffer
+                                    : (hdr_source ? self->resources_.GetPackedOutput()
+                                                  : run.model_input);
   ID3D12Resource* model_color = model_input;
   ID3D12Resource* model_output = self->resources_.GetOutput();
   unsigned int eval_width = run.width;
@@ -1270,7 +1292,7 @@ bool PassSession::EvalKeysDiffer(const EvalLogKey& a, const EvalLogKey& b) {
 
 // Invoke NGX.
 //
-// Present captures the result and reports a failure after the frame has been
+// Backbuffer captures the result and reports a failure after the frame has been
 // submitted (see StepSubmitAndWait); PostDLSS ignores the result entirely,
 // which is what the pre-refactor code did — deliberately or not, it is the
 // behaviour this refactor preserves. The Stage 5 bug list records it.
@@ -1300,7 +1322,7 @@ PipelineStatus PassSession::StepEvaluateFeature(PassRun& run) {
     self->eval_log_written_this_frame_ = true;
   }
 
-  if (run.stage != nullptr && run.stage->is_post_dlss) {
+  if (run.stage != nullptr && !run.stage->owns_submit) {
     run.runtime->EvaluateFeature(self->StageList(run, self->command_), self->feature_.FeatureHandle(),
                                  run.runtime->Parameters().Get(), nullptr);
     return PipelineStatus::Ok;
@@ -1335,16 +1357,16 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
     return PipelineStatus::SkipFrame;
   }
 
-  // Present composes the model edit against the backbuffer; PostDLSS composes
+  // Backbuffer composes the model edit against the backbuffer; PostDLSS composes
   // it against the model input, which is the DLSS output or a snapshot of it.
   const bool hdr_active = run.hdr_uniforms_ready &&
                           run.hdr != nullptr &&
                           run.hdr->ResolvedFormat() != HdrFormat::Sdr;
   ID3D12Resource* original = hdr_active
                                  ? self->resources_.GetPackedOutput()
-                                 : (run.stage != nullptr && run.stage->is_post_dlss
-                                        ? run.model_input
-                                        : run.backbuffer);
+                                 : (run.stage != nullptr && run.stage->owns_submit
+                                        ? run.backbuffer
+                                        : run.model_input);
 
   const model_pipeline::HdrUniforms* hdr_ptr =
       hdr_active ? &run.hdr_uniforms : nullptr;
@@ -1374,7 +1396,7 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
 // ---------------------------------------------------------------------------
 
 
-// Present: publish the composed image on the backbuffer.
+// Backbuffer: publish the composed image on the swapchain backbuffer.
 PipelineStatus PassSession::StepWriteToBackbuffer(PassRun& run) {
   PassSession* self = run.session;
   // Always write the real composed output; the debug override happens in the
@@ -1387,7 +1409,7 @@ PipelineStatus PassSession::StepWriteToBackbuffer(PassRun& run) {
   return PipelineStatus::Ok;
 }
 
-// PostDLSS: publish the composed image into the game's resource.
+// PreDLSS/PostDLSS: publish the composed image into the game's resource.
 PipelineStatus PassSession::StepWriteToGameResource(PassRun& run) {
   PassSession* self = run.session;
   if (run.output_resource == nullptr) return PipelineStatus::SkipFrame;
@@ -1400,7 +1422,9 @@ PipelineStatus PassSession::StepWriteToGameResource(PassRun& run) {
   self->command_.Transition(run.list, self->resources_.GetCompositeOutput(),
                       D3D12_RESOURCE_STATE_COPY_SOURCE);
   const D3D12_RESOURCE_STATES out_state =
-      InferResourceState(run.output_resource);
+      (run.stage != nullptr && run.stage->is_pre_dlss)
+          ? D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE
+          : InferResourceState(run.output_resource);
   self->command_.Transition(run.list, run.output_resource,
                       D3D12_RESOURCE_STATE_COPY_DEST);
   run.list->CopyResource(run.output_resource, self->resources_.GetCompositeOutput());
@@ -1413,15 +1437,15 @@ PipelineStatus PassSession::StepWriteToGameResource(PassRun& run) {
   return PipelineStatus::Ok;
 }
 
-// Present: return pass-owned resources to UNORDERED_ACCESS, then close,
+// Backbuffer: return pass-owned resources to UNORDERED_ACCESS, then close,
 // submit, wait and drain the retire queue. This is the only submit point in
-// the Present stage.
+// the Backbuffer stage.
 PipelineStatus PassSession::StepSubmitAndWait(PassRun& run) {
   PassSession* self = run.session;
   self->CleanupFrameState(self->command_.GetCommandList());
   self->SubmitAndWait();
 
-  // Present reports the NGX result after the frame is on the GPU, matching the
+  // Backbuffer reports the NGX result after the frame is on the GPU, matching the
   // pre-refactor ordering: the frame is never dropped because the model
   // failed, but the pass is marked so the user sees it.
   //
@@ -1481,7 +1505,7 @@ constexpr PipelineStepDef kSessionSteps[] = {
     {PipelineNodeId::AcquireBackbuffer, "AcquireBackbuffer",
      &PassSession::StepAcquireBackbuffer, kNoDeps, StageInput::None, false},
     // Reads the run's own carriers and writes run.list. In PostDLSS run.list
-    // is already the game's list; this only resolves it for Present.
+    // is already the game's list; this only resolves it for Backbuffer.
     {PipelineNodeId::ResolveDevice, "ResolveDevice",
      &PassSession::StepResolveDevice, kNoDeps, StageInput::Stage, false},
     {PipelineNodeId::EnsureComputeEngine, "EnsureComputeEngine",
@@ -1512,9 +1536,9 @@ constexpr PipelineStepDef kSessionSteps[] = {
      &PassSession::StepPrepareModelInput, kNoDeps, StageInput::None, false},
     {PipelineNodeId::BuildEffectiveLocalExposure, "BuildEffectiveLocalExposure",
      &PassSession::StepBuildEffectiveLocalExposure, kNoDeps, StageInput::None, false},
-    // Records through StageList(), which is the session's own list in Present
+    // Records through StageList(), which is the session's own list in Backbuffer
     // and the game's in PostDLSS, so like RenderDebugView it declares no
-    // command list: run.list is not what it reads in Present.
+    // command list: run.list is not what it reads in Backbuffer.
     {PipelineNodeId::GradeModelInput, "GradeModelInput",
      &PassSession::StepGradeModelInput, kNoDeps, StageInput::None, false},
     {PipelineNodeId::FillEvaluateParams, "FillEvaluateParams",
@@ -1539,7 +1563,7 @@ constexpr PipelineStepDef kSessionSteps[] = {
      &PassSession::StepWriteToBackbuffer, kNoDeps, StageInput::None, false},
     // Reads run.list directly. Only safe because it is listed in PostDLSS,
     // whose call site supplies the game's command list; StageInputsCoverSteps
-    // below turns moving it into Present into a build error.
+    // below turns moving it into Backbuffer into a build error.
     {PipelineNodeId::WriteToGameResource, "WriteToGameResource",
      &PassSession::StepWriteToGameResource, kNoDeps,
      StageInput::CommandList | StageInput::OutputResource, false},
@@ -1559,7 +1583,13 @@ static_assert(PrerequisitesPrecedeSteps(kPresentStepNodes,
                                         ArrayCount(kPresentStepNodes),
                                         kSessionSteps,
                                         ArrayCount(kSessionSteps)),
-              "a session step in the Present stage declares a prerequisite "
+              "a session step in the Backbuffer stage declares a prerequisite "
+              "that runs after it");
+static_assert(PrerequisitesPrecedeSteps(kPreDlssStepNodes,
+                                        ArrayCount(kPreDlssStepNodes),
+                                        kSessionSteps,
+                                        ArrayCount(kSessionSteps)),
+              "a session step in the PreDLSS stage declares a prerequisite "
               "that runs after it");
 static_assert(PrerequisitesPrecedeSteps(kPostDlssStepNodes,
                                         ArrayCount(kPostDlssStepNodes),
@@ -1568,10 +1598,10 @@ static_assert(PrerequisitesPrecedeSteps(kPostDlssStepNodes,
               "a session step in the PostDLSS stage declares a prerequisite "
               "that runs after it");
 
-// The Present stage is not HDR-capable, so no step listed there may be marked
+// The Backbuffer stage is not HDR-capable, so no step listed there may be marked
 // `requires_hdr_aware`: the runner would skip it silently. This is the guard
 // for a bug that shipped — PrepareModelInput and ComposeModelOutput were
-// flagged HDR-only, got skipped in Present, and left the model to be evaluated
+// flagged HDR-only, got skipped in Backbuffer, and left the model to be evaluated
 // with null inputs (NGX: FAIL_InvalidParameter).
 //
 // Those two steps are not HDR-only: they pick the HDR shader when
@@ -1579,15 +1609,15 @@ static_assert(PrerequisitesPrecedeSteps(kPostDlssStepNodes,
 // genuinely needs `run.hdr`, and it is listed in PostDLSS alone.
 static_assert(NoHdrAwareSteps(kPresentStepNodes, ArrayCount(kPresentStepNodes),
                               kSessionSteps, ArrayCount(kSessionSteps)),
-              "a step in the Present stage is marked requires_hdr_aware, but "
-              "Present is not HDR-capable so it would never run");
+              "a step in the Backbuffer stage is marked requires_hdr_aware, but "
+              "Backbuffer is not HDR-capable so it would never run");
 
 // Every frame input a step declares must be one its stage's call site
 // actually supplies.
 //
 // This is the guard for the null-dereference class of table edit: the steps
 // are shared between stages, and the two call sites pass different things
-// (Present gets a swapchain and no command list, PostDLSS the reverse), so
+// (Backbuffer gets a swapchain and no command list, game-resource stages the reverse), so
 // moving one line between the step tables is enough to hand a step a null
 // pointer it dereferences. StepWriteToGameResource reads run.list, and reaches
 // it safely today only because it is listed in PostDLSS.
@@ -1595,6 +1625,12 @@ static_assert(NoHdrAwareSteps(kPresentStepNodes, ArrayCount(kPresentStepNodes),
 // The declaration on the step is the part the compiler cannot verify, so a
 // step that reads an input without declaring it still passes this check. What
 // it does verify is that no step is listed in a stage that cannot supply it.
+static_assert(
+    StageInputsCoverSteps(kPreDlssStepNodes, ArrayCount(kPreDlssStepNodes),
+                          kSessionSteps, ArrayCount(kSessionSteps),
+                          StageInput::CommandList | StageInput::OutputResource |
+                              StageInput::Stage),
+    "a session step in the PreDLSS stage needs an input its call site does not supply");
 static_assert(
     StageInputsCoverSteps(kPostDlssStepNodes, ArrayCount(kPostDlssStepNodes),
                           kSessionSteps, ArrayCount(kSessionSteps),
@@ -1608,7 +1644,7 @@ static_assert(
                           kSessionSteps, ArrayCount(kSessionSteps),
                           StageInput::Swapchain | StageInput::CommandQueue |
                               StageInput::Stage),
-    "a session step in the Present stage needs an input the Present call site "
+    "a session step in the Backbuffer stage needs an input the Backbuffer call site "
     "does not supply");
 
 // The dispatch ring has to hold one whole frame at the maximum pass count: its

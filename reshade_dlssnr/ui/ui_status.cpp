@@ -12,10 +12,10 @@
 
 namespace reshade_dlssnr {
 
-bool AnyPassUsesDlssOutput(const Settings& settings) {
+bool AnyPassUsesHdrInjection(const Settings& settings) {
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
     if (settings.pass_enabled[i] &&
-        settings.passes[i].injection_stage == InjectionStage::PostDLSS) {
+        settings.passes[i].injection_stage != InjectionStage::Backbuffer) {
       return true;
     }
   }
@@ -30,7 +30,8 @@ void FormatPassStatus(const PassStatus& pass,
                       bool post_dlss_blocked,
                       char* out, size_t out_size) {
   const char* stage_name =
-      stage == InjectionStage::PostDLSS ? "DLSS Output" : "Backbuffer";
+      stage == InjectionStage::PreDLSS ? "Pre-DLSS" :
+      stage == InjectionStage::PostDLSS ? "Post-DLSS" : "Backbuffer";
 
   char scale[24] = "";
   if (pass.enabled && working_scale < 0.999f) {
@@ -107,13 +108,13 @@ void DrawStatusSection(Settings& settings, bool& changed) {
   std::snprintf(guides_buf, sizeof(guides_buf), "%s",
                 snap.guides_valid ? "Valid (depth + motion)" : "Not seen");
 
-  const bool hdr_in_use = AnyPassUsesDlssOutput(settings);
+  const bool hdr_in_use = AnyPassUsesHdrInjection(settings);
   const bool hdr_good = !settings.hdr.enable || !hdr_in_use || snap.hdr_ready;
   char hdr_buf[96];
   if (!settings.hdr.enable) {
     std::snprintf(hdr_buf, sizeof(hdr_buf), "Off");
   } else if (!hdr_in_use) {
-    std::snprintf(hdr_buf, sizeof(hdr_buf), "Inactive (no DLSS Output pass)");
+    std::snprintf(hdr_buf, sizeof(hdr_buf), "Inactive (no Pre/Post-DLSS pass)");
   } else if (snap.hdr_ready) {
     std::snprintf(hdr_buf, sizeof(hdr_buf), "Active · exp %.3f · white %.3f",
                   snap.hdr_exposure, snap.hdr_scene_white);

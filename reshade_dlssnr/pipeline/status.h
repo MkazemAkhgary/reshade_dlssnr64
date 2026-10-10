@@ -21,7 +21,7 @@ constexpr uint32_t kStatusTextLength = 160;
 //     from the current settings; the session itself has no access to them.
 //   - The rest are runtime-owned, populated by PassSession::GetStatus.
 //
-// The pass's injection stage (DLSS Output / Backbuffer) is deliberately not
+// The pass's injection stage (Pre-DLSS / Post-DLSS / Backbuffer) is deliberately not
 // duplicated here — it is a setting, and the UI reads it directly from
 // Settings when formatting the row.
 struct PassStatus {
@@ -50,7 +50,7 @@ struct StatusSnapshot {
   bool post_dlss_blocked = false;
   char post_dlss_block_reason[kStatusTextLength] = {};
 
-  // HDR stage (shared across passes; only used by Post-DLSS passes).
+  // HDR stage (shared across Pre-DLSS/Post-DLSS game-resource passes).
   bool hdr_ready = false;        // has consumed at least one measurement
   float hdr_exposure = 1.0f;
   float hdr_scene_white = 1.0f;

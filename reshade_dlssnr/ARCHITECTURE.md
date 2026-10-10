@@ -2,9 +2,9 @@
 
 ## Purpose
 
-The addon runs NVIDIA DLSS Neural Rendering (NGX feature 18) through `nvngx_dlssnr.dll` on top of a game's existing DLSS Super Sampling path. It supports two injection points: **Post-DLSS**, where work is recorded inline on the game's command list immediately after the game's DLSS `EvaluateFeature`, and **Present**, where work is recorded on an addon-owned command list against the final swapchain backbuffer. The two paths share the same `PassSession` pipeline and differ mainly in their input resource, command-list ownership, and output publication point.
+The addon runs NVIDIA DLSS Neural Rendering (NGX feature 18) through `nvngx_dlssnr.dll` on top of a game's existing DLSS Super Sampling path. Each pass independently targets one of three injection points: **Pre-DLSS**, where work runs on the game's `Color` input before its real DLSS `EvaluateFeature`; **Post-DLSS**, where work runs inline immediately after the real evaluation on the upscaled output; or **Backbuffer**, where work runs on an addon-owned command list against the final swapchain image. The stages share the same `PassSession` pipeline and differ mainly in input resource, command-list ownership, and output publication point.
 
-HDR is handled in the Post-DLSS path. The source is converted into an SDR carrier plus a full-precision carrier-to-HDR reconstruction multiplier, and the model operates on the SDR carrier. Composition reads the untouched HDR source directly and applies the model residual in HDR. The final backbuffer grade can also operate in SDR, scRGB, or HDR10 according to the detected/selected format.
+HDR is handled by the Pre-DLSS and Post-DLSS paths. The source is converted into an SDR carrier plus a full-precision carrier-to-HDR reconstruction multiplier, and the model operates on the SDR carrier. Composition reads the untouched HDR source directly and applies the model residual in HDR. The final backbuffer grade can also operate in SDR, scRGB, or HDR10 according to the detected/selected format.
 
 ## Repository layout
 
@@ -175,34 +175,49 @@ reshade_dlssnr/
 
 ## Runtime flow
 
-There are two independent frame streams: the game's DLSS evaluate path and the ReShade present path. The trace system tracks them separately because a game can call DLSS more than once per presented frame.
+There are three trace streams: Pre-DLSS evaluate work, Post-DLSS evaluate work, and ReShade Present/Backbuffer work. The two evaluate streams are counted separately because a game can call DLSS more than once per presented frame.
 
 ### Addon startup
 
 `AddonInit` registers the ReShade addon, loads persisted settings, installs the crash trace, registers `init_device` and `present`, registers the overlay, and attempts the NGX hook. `init_device` installs the early D3D12 hooks. `OnPresent` retries the NGX hook and D3D12 hook installation for a bounded number of presents because both NVIDIA modules and the device may not be ready at addon initialization.
 
+### Pre-DLSS injection
+
+The NGX hook resolves the feature handle and identifies DLSS Super Sampling before the real `EvaluateFeature` call. When any enabled pass targets Pre-DLSS, it reads `NVSDK_NGX_Parameter_Color` and accepts only a full-resource, single-sample 2D texture whose NGX render dimensions match the resource. Non-zero Color subrects and mismatched extents are skipped safely rather than overwriting unrelated pixels.
+
+```text
+Game -> hooked NVSDK_NGX_D3D12_EvaluateFeature
+  -> capture the current NGX ExposureTexture pointer and Color input resource
+  -> AddonController::OnPreDlssEvaluate(native_list, color, exposure_texture)
+     -> one PassSession::RunStage(PreDLSS) per enabled Pre-DLSS pass
+        -> write the composed result back to the NGX Color input
+  -> restore the game's tracked command-list bindings
+  -> real NGX EvaluateFeature (game upscales the modified input)
+```
+
+Pre-DLSS records inline on the game's command list and never closes, submits, or waits on it. Its output resource is the game's input Color texture, and `WriteToGameResource` restores it to `NON_PIXEL_SHADER_RESOURCE` before NGX consumes it. To avoid disturbing resources that the imminent NGX call is about to read, the pre-hook does not capture/copy depth, motion, or output resources. Optional depth/structure-mask filters therefore use the last stable guide/mask snapshot; fresh guides are captured after the game evaluation. Structure Detection is not run in this stage because its current-frame mask is produced from the upscaled DLSS output.
+
 ### Post-DLSS injection
 
-The NGX hook receives the game's `EvaluateFeature` call.
+After the real NGX evaluation succeeds, the hook refreshes the captured DLSS output/depth/motion clones. When any enabled pass targets Post-DLSS, `AddonController::OnPostDlssEvaluate` runs that target group against the game's upscaled output.
 
 ```text
 Game -> NVSDK_NGX_D3D12_EvaluateFeature
   -> hooked_NVSDK_NGX_D3D12_EvaluateFeature
+     -> Pre-DLSS pass group (if configured)
      -> real NGX EvaluateFeature
-     -> resolve ReShade/Streamline command-list proxies to the native list
-     -> identify the feature as DLSS Super Sampling
-     -> DlssGuides::Capture(depth, motion, DLSS output color)
+     -> capture fresh depth, motion, and DLSS output color
      -> AddonController::OnPostDlssEvaluate(native_list, output_resource)
-        -> one PassSession::RunStage(PostDLSS) per enabled PostDLSS pass
+        -> one PassSession::RunStage(PostDLSS) per enabled Post-DLSS pass
 ```
 
-The hook gives NGX exactly the command list the game supplied. The addon uses the unwrapped native interface only for its own D3D12 work. D3D12 state tracking is disabled while the real NGX call runs, then restored only if a Post-DLSS pass actually recorded work.
+The hook gives NGX exactly the command list the game supplied. The addon uses the unwrapped native interface only for its own D3D12 work. D3D12 state tracking is disabled around addon recording and the real NGX call; tracked command-list bindings are restored before the real evaluation and again after Post-DLSS recording when an addon stage ran.
 
-The Post-DLSS stage never closes, submits, or waits on the game's command list. It records its work inline and returns control to the game. Each pass writes its final result back to the supplied DLSS output resource so a later Post-DLSS pass can consume the previous pass's result.
+The Post-DLSS stage never closes, submits, or waits on the game's command list. It records inline and returns control to the game. Each pass writes its final result back to the supplied DLSS output resource so the next Post-DLSS pass can consume the prior result.
 
 The current Post-DLSS step order is:
 
-```text
+```
 ResolveDevice
 EnsureHdr
 EnsureComputeEngine
@@ -218,6 +233,7 @@ SnapshotGuides
 BuildHdrUniforms
 GainMapSplit
 PrepareModelInput
+BuildEffectiveLocalExposure
 GradeModelInput
 FillEvaluateParams
 EvaluateFeature
@@ -230,15 +246,15 @@ WriteToGameResource
 
 `HdrBeginFrame` and `SkinDetect` are effectively first-pass operations even though they are present in the stage table for every Post-DLSS pass. The controller marks only the first enabled Post-DLSS pass as `is_first_pass`; subsequent passes reuse HDR measurement state and the persistent structure mask. Each exposure layer applies only its own selected filters: Adaptive Exposure filters the histogram population, while Local Exposure filters the spatial correction. The previous valid structure mask is used for the current measurement because the new mask is produced later in the frame.
 
-### Present injection
+### Backbuffer injection
 
-At ReShade present:
+At ReShade present, enabled Backbuffer passes run after all NGX evaluate hooks for the frame:
 
 ```text
 ReShade present
   -> AddonController::OnPresent(queue, swapchain)
      -> refresh backbuffer format/debug target format
-     -> one PassSession::RunStage(Present) per enabled Present pass
+     -> one PassSession::RunStage(Backbuffer) per enabled Backbuffer pass
      -> RunSingleStage(Release)
         -> GradeBackbuffer
         -> WriteDebugToBackbuffer
@@ -246,7 +262,7 @@ ReShade present
      -> release retired resources
 ```
 
-The Present stage runs on the session's private command list and owns its submit/wait tail. Its current step order is:
+The Backbuffer stage runs on the session's private command list and owns its submit/wait tail. Its current step order is:
 
 ```text
 AcquireBackbuffer
@@ -395,8 +411,9 @@ The three current stages are:
 
 | Stage | Injection | Submit owner | HDR capable | Required caller inputs |
 |---|---|---|---|---|
-| `PostDLSS` | NGX `EvaluateFeature` hook | game owns submit | yes | command list, output resource, stage |
-| `Present` | ReShade present | pass session | no | swapchain, command queue, stage |
+| `PreDLSS` | before real NGX `EvaluateFeature` | game owns submit | yes | command list, Color input resource, stage |
+| `PostDLSS` | after real NGX `EvaluateFeature` | game owns submit | yes | command list, output resource, stage |
+| `Backbuffer` | ReShade present | pass session | no | swapchain, command queue, stage |
 | `Release` | controller-owned post-present work | controller | no | swapchain, command queue, stage |
 
 `FailurePolicy` is stage-level policy for unhandled non-OK step results: `Fail`, `Transient`, or `Ignore`.
@@ -425,7 +442,7 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 **The NGX model output needs a UAV barrier before the addon reads it.** A state transition is not sufficient to synchronize the external UAV write performed by NGX.
 
-**Post-DLSS work must stay on the game's command list and must not submit it.** The addon records inline and lets the game's queue submit that work.
+**Pre-DLSS and Post-DLSS work must stay on the game's command list and must not submit it.** Pre-DLSS records before the real NGX evaluation and writes the result to its Color input; Post-DLSS records afterwards and writes the result to the upscaled output. The game's queue submits both. Backbuffer work uses an addon-owned command list.
 
 **Present/Release command contexts own their own fence.** `CommandContext::WaitGpu` is the synchronization point for addon-owned lists and for deferred resource release that depends on them. When either retired-resource queue is non-empty, `OnPresent` must open and submit the Release command list even if backbuffer grading and debug output are disabled. This puts the wait behind the work already submitted to that command queue before retired textures are released.
 
@@ -509,7 +526,7 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 **Render debug images at pass time.** The resource state is trustworthy while the producing pass still owns the command list and has just produced the resource. `MaybeRenderDebug` renders into `FrameDebugContext::output`; the Release stage only copies that already-rendered output to the backbuffer.
 
-**The debug target uses the swapchain's format.** Post-DLSS sources can be HDR, but the final debug copy targets the actual backbuffer format.
+**The debug target uses the swapchain's format and dimensions.** Pre-DLSS and Post-DLSS sources may have a different format or render extent. `DebugDisplay` renders into a backbuffer-sized debug texture and samples the selected source over its normalized extent, so the Release stage can copy it directly to the swapchain.
 
 **Debug selection is global, rendering is pass-local.** `Settings::debug_view` is shared, while only the active pass renders the selected view.
 
@@ -519,13 +536,13 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 **Only explicitly inheritable fields are resolved.** Working scale, intensity, local tone, local structure, skin structure and dynamic shader parameters can inherit. Grade settings, residual settings and RCAS controls are intentionally per-pass.
 
-**HDR composition uses Gain-Map Residual exclusively.** HDR Post-DLSS passes use the packed per-pixel carrier-to-HDR multiplier to transfer model edits back to the untouched full-resolution HDR source. The former HDR Ratio mode and selector are removed. SDR composition, including Present/backbuffer passes, retains its existing log-ratio residual path and settings.
+**HDR composition uses Gain-Map Residual exclusively.** HDR Pre-DLSS and Post-DLSS passes use the packed per-pixel carrier-to-HDR multiplier to transfer model edits back to the untouched full-resolution HDR source. The former HDR Ratio mode and selector are removed. SDR composition, including Present/backbuffer passes, retains its existing log-ratio residual path and settings.
 
 **HDR exposure is configured as a layer stack.** The HDR UI has separate `Game Exposure`, `Adaptive Exposure`, and `Local Exposure` tabs. The default stack order is Game Exposure base, Adaptive Exposure correction, then Local Exposure. Each layer is independently enabled and owns its own filter combination of Structure Mask, Depth, and Percentile Range. Local Exposure also exposes neighborhood block size and optional depth-continuity threshold controls; the field stays continuous per pixel so it does not introduce tile-shaped boundaries. The exclusive Median and combined Auto Exposure + Local modes are removed; old settings are migrated to the closest layer configuration.
 
 **Structure Detection uses the same resolved layer stack.** It uses the same Game Exposure and Adaptive Exposure result, Local Exposure configuration, and filter selections as the main HDR model input. During mask generation it uses the previous valid mask for temporal stability; it does not maintain a separate legacy exposure mode.
 
-**Once the first Present pass exists, later passes are forced to Present.** This keeps the pass chain monotonic: Post-DLSS can feed later Post-DLSS work, while a Present pass cannot hand its output back into the earlier DLSS injection point.
+**Pass targets are independent per-pass settings.** Runtime execution groups enabled passes in frame order: all Pre-DLSS passes before the real NGX evaluation, all Post-DLSS passes after it, then all Backbuffer passes at ReShade Present. Within each target group, passes run in pass-tab order. Each pass target is persisted as `PassN.TargetStage`; the prior two-value `PassN.InjectionStage` key is read only for migration. This means a pass with a higher tab index can run in an earlier stage than a lower-index pass; chaining applies within each target group.
 
 **The debug selection is not per-pass.** The active UI tab selects which pass renders the shared debug view.
 
@@ -533,7 +550,7 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 ## HDR model path
 
-The HDR path is gain-map based and exists only in Post-DLSS processing.
+The HDR path is gain-map based and runs on the Pre-DLSS and Post-DLSS targets. Backbuffer passes use the existing SDR composition path.
 
 1. `HdrState` detects the source format and resolves the enabled exposure layers. Game Exposure is the base when its game-provided value is valid; Adaptive Exposure contributes its filtered histogram correction or supplies global exposure when Game Exposure is unavailable. Local Exposure computes a continuous spatial scale from its configured neighborhood block size and edge-aware luminance base. Depth Continuity prevents the base filter from blending across nearby pixels with incompatible depth when a depth guide is available. The same helper and controls are used by the gain-map split, effective-exposure diagnostic map, and Structure Detection's HDR input.
 2. `SkinDetect` (shown as `Structure Detection` in the UI), when enabled, prepares a working-scale model input using the same resolved exposure layers and filters as the main input, evaluates a dedicated model feature built at full output resolution, and builds a temporal mask from the input/output difference. The target can be skin-oriented or general model structure. The detection pass has three additional compute dispatches in its HDR worst case, and the descriptor/constant ring is sized for those dispatches in addition to the normal frame budget.
@@ -563,7 +580,7 @@ Use Status for information that must remain visible as current state. Do not rep
 
 ### Pipeline trace
 
-Set `DLSSNR_TRACE=<path>` to enable the command/event trace. The trace maintains separate counters for `PostDLSS` and `Present` streams, assigns stable resource ids in first-seen order, and records frame boundaries. `TRACE_CMD` covers resource transitions, barriers, copies and dispatches; `TRACE_EVT` records control-flow decisions such as skips and failures.
+Set `DLSSNR_TRACE=<path>` to enable the command/event trace. The trace maintains separate counters for `PreDLSS`, `PostDLSS`, and `Present` streams, assigns stable resource ids in first-seen order, and records frame boundaries. `TRACE_CMD` covers resource transitions, barriers, copies and dispatches; `TRACE_EVT` records control-flow decisions such as skips and failures.
 
 Because trace lines are intentionally flushed immediately, the file is suitable for diagnosing the final commands leading into a crash. The trace should still be bounded to a deterministic test scene because a full frame contains many transitions and dispatches.
 

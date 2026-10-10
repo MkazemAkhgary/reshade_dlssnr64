@@ -62,7 +62,7 @@ enum class PipelineNodeId : uint32_t {
   Idle = 0,
 
   // -- frame / pass setup ---------------------------------------------------
-  AcquireBackbuffer = 1,   // Present stage only
+  AcquireBackbuffer = 1,   // Backbuffer stage only
   ResolveDevice = 2,       // resolves the device; also runtime.Initialize
   EnsureComputeEngine = 3,
   ResetDebugContext = 4,   // restores the incremental debug state per pass
@@ -74,7 +74,7 @@ enum class PipelineNodeId : uint32_t {
   // Present seeds guides after the feature is built, PostDLSS before.
   SeedGuideStates = 8,
 
-  // -- HDR measurement (PostDLSS stage only, first pass in the chain) -------
+  // -- HDR measurement (game-resource stages, first pass in the chain) -----
   // Lazily creates the HDR histogram resources and starts the compute engine
   // on the first Post-DLSS frame. Distinct from HdrBeginFrame because it runs
   // once per process, not once per frame, and must succeed before BeginFrame
@@ -120,7 +120,7 @@ enum class PipelineNodeId : uint32_t {
   RenderDebugView = 29,      // dispatches "DebugDisplay"
   WriteToBackbuffer = 30,
   WriteToGameResource = 31,
-  SubmitAndWait = 32,        // Present stage only
+  SubmitAndWait = 32,        // Backbuffer stage only
 
   // -- release stage --------------------------------------------------------
   // Grades the final backbuffer. Listed first in the Release stage on purpose:
@@ -184,8 +184,8 @@ struct PassRun {
   FeatureLifecycle* feature = nullptr;
   ComputeEngine* codec = nullptr;
   NgxRuntime* runtime = nullptr;
-  HdrState* hdr = nullptr;                 // null in the Present stage
-  SkinDetect* skin_detect = nullptr;       // null in the Present stage
+  HdrState* hdr = nullptr;                 // null in Backbuffer stage
+  SkinDetect* skin_detect = nullptr;       // null in Backbuffer stage
   // Game-owned NGX ExposureTexture captured from the current DLSS evaluate.
   ID3D12Resource* game_exposure_texture = nullptr;
   // Scratch command context the HDR histogram records through. Owned by the
@@ -201,10 +201,10 @@ struct PassRun {
   // -- frame inputs ---------------------------------------------------------
   ID3D12GraphicsCommandList* list = nullptr;  // the list this pass records on
   ID3D12Device* device = nullptr;
-  ID3D12Resource* backbuffer = nullptr;       // Present stage only
+  ID3D12Resource* backbuffer = nullptr;       // Backbuffer stage only
   ID3D12Resource* output_resource = nullptr;  // PostDLSS stage only
-  IDXGISwapChain* swapchain = nullptr;        // Present stage only
-  ID3D12CommandQueue* command_queue = nullptr; // Present stage only
+  IDXGISwapChain* swapchain = nullptr;        // Backbuffer/Release only
+  ID3D12CommandQueue* command_queue = nullptr; // Backbuffer/Release only
 
   // Present only: the swapchain's IDXGISwapChain3 interface, kept alive for
   // the duration of the stage. The steps that need it (the backbuffer
@@ -240,7 +240,7 @@ struct PassRun {
   unsigned int eval_width = 0;
   unsigned int eval_height = 0;
 
-  // Result of the NGX call. Only the Present stage consults it, and only
+  // Result of the NGX call. Only the Backbuffer stage consults it, and only
   // after the frame has been submitted.
   //
   // Note NVSDK_NGX_Result_Success is 0x1, NOT 0, so zero is a sentinel meaning
@@ -277,8 +277,8 @@ using PipelineStepFn = PipelineStatus (*)(PassRun& run);
 // The frame inputs a stage requires the caller to supply.
 //
 // Each stage is entered from a different call site with a different set of
-// things available: Present passes a swapchain and command queue but no
-// command list, PostDLSS passes the game's command list and output resource
+// things available: Backbuffer passes a swapchain and command queue but no
+// command list, game-list stages pass the game's command list and resource
 // but no swapchain. A step that needs something its stage does not receive
 // dereferences a null pointer — and because the steps are shared across
 // stages, moving one line in a step table is enough to create that.
@@ -373,10 +373,10 @@ struct PipelinePhaseDef {
 struct PipelineStageDef {
   const char* name;
 
-  // The pass's `injection_stage` this stage serves. Present maps to
-  // InjectionStage::Present, PostDLSS to InjectionStage::PostDLSS. A stage
-  // with no mapping (e.g. the release stage) sets has_injection_stage=false.
+  // The pass's `injection_stage` this stage serves. PreDLSS and PostDLSS use
+  // the game's command list; Backbuffer maps to Present. Release has no target.
   bool has_injection_stage = true;
+  bool is_pre_dlss = false;
   bool is_post_dlss = false;
 
   // Ordered steps. One line here is the entire cost of adding, removing or
@@ -551,7 +551,7 @@ constexpr bool NodeListsEqual(const PipelineNodeId (&a)[N],
 // HDR-only step. The runner silently skips such a step, so the mistake shows up
 // as a step that never runs rather than as a compile or runtime error — which
 // is exactly how PrepareModelInput and ComposeModelOutput came to be skipped in
-// the Present stage, leaving the model to be evaluated with null inputs.
+// the Backbuffer stage, leaving the model to be evaluated with null inputs.
 //
 // Steps not listed in `steps` are ignored, mirroring PrerequisitesPrecedeSteps.
 constexpr bool NoHdrAwareSteps(const PipelineNodeId* steps, size_t step_count,
@@ -586,7 +586,7 @@ constexpr bool StepInputsCovered(const PipelineStepDef* def,
 //
 // This is the check that makes a step table edit safe. Moving a step that
 // dereferences `run.list` from the PostDLSS stage (whose call site supplies a
-// command list) into the Present stage (whose call site passes nullptr) used to
+// command list) into the Backbuffer stage (whose call site passes nullptr) used to
 // be an unchecked null dereference several steps into the frame. With this
 // assertion in place it is a build error naming the step.
 //
@@ -637,6 +637,32 @@ inline constexpr PipelineNodeId kPresentStepNodes[] = {
     PipelineNodeId::RenderDebugView,
     PipelineNodeId::WriteToBackbuffer,
     PipelineNodeId::SubmitAndWait,
+};
+
+inline constexpr PipelineNodeId kPreDlssStepNodes[] = {
+    PipelineNodeId::ResolveDevice,
+    PipelineNodeId::EnsureHdr,
+    PipelineNodeId::EnsureComputeEngine,
+    PipelineNodeId::HdrBeginFrame,
+    PipelineNodeId::ResolveWorkingScale,
+    PipelineNodeId::EnsureFrameResources,
+    PipelineNodeId::SeedResourceStates,
+    PipelineNodeId::SeedGuideStates,
+    PipelineNodeId::ResolveModelInput,
+    PipelineNodeId::EnsureFeature,
+    PipelineNodeId::SnapshotGuides,
+    PipelineNodeId::BuildHdrUniforms,
+    PipelineNodeId::GainMapSplit,
+    PipelineNodeId::PrepareModelInput,
+    PipelineNodeId::BuildEffectiveLocalExposure,
+    PipelineNodeId::GradeModelInput,
+    PipelineNodeId::FillEvaluateParams,
+    PipelineNodeId::EvaluateFeature,
+    PipelineNodeId::ModelOutputBarrier,
+    PipelineNodeId::ComposeModelOutput,
+    PipelineNodeId::GradeModelOutput,
+    PipelineNodeId::RenderDebugView,
+    PipelineNodeId::WriteToGameResource,
 };
 
 inline constexpr PipelineNodeId kPostDlssStepNodes[] = {

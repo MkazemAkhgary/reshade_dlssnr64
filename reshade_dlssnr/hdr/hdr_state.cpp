@@ -10,6 +10,7 @@
 
 #include "gpu/d3d12_utils.h"
 #include "pipeline/pipeline_graph.h"
+#include "state/settings.h"
 #include "skin/skin_detect.h"
 #include "pipeline/pipeline_trace.h"
 
@@ -697,10 +698,29 @@ namespace {
 
 PipelineStatus RunHdrBeginFrame(PassRun& run) {
   if (!run.is_first_pass) return PipelineStatus::Ok;
-  if (run.hdr == nullptr || run.hdr_cmd == nullptr) return PipelineStatus::Ok;
-  if (run.guides.dlss_output_color == nullptr || run.guides.output_width == 0 ||
-      run.guides.output_height == 0) {
-    TRACE_EVT(run.session, "hdr_begin_frame SKIP (no guide color)");
+  if (run.hdr == nullptr || run.hdr_cmd == nullptr || run.settings == nullptr)
+    return PipelineStatus::Ok;
+
+  const bool pre_dlss = run.stage != nullptr && run.stage->is_pre_dlss;
+  // When both game-resource targets are in use, PostDLSS remains the metering
+  // authority because it sees the game's upscaled frame. The pre pass uses
+  // the most recently measured exposure. If there is no PostDLSS pass, meter
+  // the pre-upscale Color resource so PreDLSS-only configurations still work.
+  if (pre_dlss) {
+    for (uint32_t i = 0; i < kMaxPasses; ++i) {
+      if (run.settings->pass_enabled[i] &&
+          run.settings->passes[i].injection_stage == InjectionStage::PostDLSS) {
+        return PipelineStatus::Ok;
+      }
+    }
+  }
+
+  ID3D12Resource* source = pre_dlss ? run.output_resource
+                                    : run.guides.dlss_output_color;
+  const unsigned int source_width = pre_dlss ? run.width : run.guides.output_width;
+  const unsigned int source_height = pre_dlss ? run.height : run.guides.output_height;
+  if (source == nullptr || source_width == 0 || source_height == 0) {
+    TRACE_EVT(run.session, "hdr_begin_frame SKIP (no source color)");
     return PipelineStatus::Ok;
   }
 
@@ -717,12 +737,11 @@ PipelineStatus RunHdrBeginFrame(PassRun& run) {
     }
   }
 
-  TRACE_EVT(run.session, "hdr_begin_frame %ux%u mask=%d",
-            run.guides.output_width, run.guides.output_height,
-            exposure_mask != nullptr ? 1 : 0);
-  run.hdr->BeginFrame(*run.hdr_cmd, run.list, run.guides.dlss_output_color,
-                      run.guides.output_width, run.guides.output_height,
-                      *run.settings, *run.codec, exposure_mask,
+  TRACE_EVT(run.session, "hdr_begin_frame stage=%s %ux%u mask=%d",
+            run.stage != nullptr ? run.stage->name : "?", source_width,
+            source_height, exposure_mask != nullptr ? 1 : 0);
+  run.hdr->BeginFrame(*run.hdr_cmd, run.list, source, source_width,
+                      source_height, *run.settings, *run.codec, exposure_mask,
                       run.game_exposure_texture, run.guides.depth,
                       run.guides.depth_inverted, exposure_mask_width,
                       exposure_mask_height);
@@ -750,11 +769,22 @@ constexpr PipelineStepDef kHdrSteps[] = {
 };
 
 static_assert(PrerequisitesPrecedeSteps(
+                  kPreDlssStepNodes, ArrayCount(kPreDlssStepNodes), kHdrSteps,
+                  ArrayCount(kHdrSteps)),
+              "an HDR step declares a prerequisite that the PreDLSS stage "
+              "lists after it");
+static_assert(PrerequisitesPrecedeSteps(
                   kPostDlssStepNodes, ArrayCount(kPostDlssStepNodes), kHdrSteps,
                   ArrayCount(kHdrSteps)),
               "an HDR step declares a prerequisite that the PostDLSS stage "
               "lists after it - reorder kPostDlssStepNodes, not this");
 
+static_assert(
+    StageInputsCoverSteps(kPreDlssStepNodes, ArrayCount(kPreDlssStepNodes),
+                          kHdrSteps, ArrayCount(kHdrSteps),
+                          StageInput::CommandList | StageInput::OutputResource |
+                              StageInput::Stage),
+    "an HDR step in PreDLSS needs an input the stage call site does not supply");
 static_assert(
     StageInputsCoverSteps(kPostDlssStepNodes, ArrayCount(kPostDlssStepNodes),
                           kHdrSteps, ArrayCount(kHdrSteps),

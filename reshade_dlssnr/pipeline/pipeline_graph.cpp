@@ -230,6 +230,46 @@ constexpr PipelinePhaseDef kPresentPhases[] = {
     {"output", 16, 3, nullptr},
 };
 
+// -- Pre-DLSS stage ---------------------------------------------------------
+// Runs on the game's input Color resource before the original EvaluateFeature.
+// Structure Detection is intentionally omitted here: its output is produced
+// from the upscaled DLSS output and is not a current-frame pre-input mask.
+constexpr PipelineNodeId kPreDlssSteps[] = {
+    PipelineNodeId::ResolveDevice,
+    PipelineNodeId::EnsureHdr,
+    PipelineNodeId::EnsureComputeEngine,
+    PipelineNodeId::HdrBeginFrame,
+    PipelineNodeId::ResolveWorkingScale,
+    PipelineNodeId::EnsureFrameResources,
+    PipelineNodeId::SeedResourceStates,
+    PipelineNodeId::SeedGuideStates,
+    PipelineNodeId::ResolveModelInput,
+    PipelineNodeId::EnsureFeature,
+    PipelineNodeId::SnapshotGuides,
+    PipelineNodeId::BuildHdrUniforms,
+    PipelineNodeId::GainMapSplit,
+    PipelineNodeId::PrepareModelInput,
+    PipelineNodeId::BuildEffectiveLocalExposure,
+    PipelineNodeId::GradeModelInput,
+    PipelineNodeId::FillEvaluateParams,
+    PipelineNodeId::EvaluateFeature,
+    PipelineNodeId::ModelOutputBarrier,
+    PipelineNodeId::ComposeModelOutput,
+    PipelineNodeId::GradeModelOutput,
+    PipelineNodeId::RenderDebugView,
+    PipelineNodeId::WriteToGameResource,
+};
+
+constexpr PipelinePhaseDef kPreDlssPhases[] = {
+    {"setup", 0, 4, nullptr},
+    {"resources", 4, 4, nullptr},
+    {"feature", 8, 3, nullptr},
+    {"prepare", 11, 6, nullptr},
+    {"evaluate", 17, 2, nullptr},
+    {"compose", 19, 2, nullptr},
+    {"output", 21, 2, nullptr},
+};
+
 // -- Post-DLSS stage --------------------------------------------------------
 // Was: PassSession::OnPostDlssEvaluate (pass_session.cpp)
 constexpr PipelineNodeId kPostDlssSteps[] = {
@@ -293,6 +333,8 @@ constexpr PipelinePhaseDef kReleasePhases[] = {
 
 constexpr size_t kPresentStepCount =
     sizeof(kPresentSteps) / sizeof(kPresentSteps[0]);
+constexpr size_t kPreDlssStepCount =
+    sizeof(kPreDlssSteps) / sizeof(kPreDlssSteps[0]);
 constexpr size_t kPostDlssStepCount =
     sizeof(kPostDlssSteps) / sizeof(kPostDlssSteps[0]);
 constexpr size_t kReleaseStepCount =
@@ -300,6 +342,8 @@ constexpr size_t kReleaseStepCount =
 
 constexpr size_t kPresentPhaseCount =
     sizeof(kPresentPhases) / sizeof(kPresentPhases[0]);
+constexpr size_t kPreDlssPhaseCount =
+    sizeof(kPreDlssPhases) / sizeof(kPreDlssPhases[0]);
 constexpr size_t kPostDlssPhaseCount =
     sizeof(kPostDlssPhases) / sizeof(kPostDlssPhases[0]);
 constexpr size_t kReleasePhaseCount =
@@ -326,6 +370,9 @@ constexpr bool PhasesCover(const PipelinePhaseDef* phases, size_t count,
 static_assert(PhasesCover(kPresentPhases, kPresentPhaseCount,
                           kPresentStepCount),
               "Present phases must span kPresentSteps with no gap or overlap");
+static_assert(PhasesCover(kPreDlssPhases, kPreDlssPhaseCount,
+                          kPreDlssStepCount),
+              "PreDLSS phases must span kPreDlssSteps with no gap or overlap");
 static_assert(PhasesCover(kPostDlssPhases, kPostDlssPhaseCount,
                           kPostDlssStepCount),
               "PostDLSS phases must span kPostDlssSteps with no gap or overlap");
@@ -339,6 +386,8 @@ static_assert(PhasesCover(kReleasePhases, kReleasePhaseCount,
 // element, not just by length, so the two cannot drift apart silently.
 static_assert(NodeListsEqual(kPresentSteps, kPresentStepNodes),
               "kPresentSteps and kPresentStepNodes disagree - update both");
+static_assert(NodeListsEqual(kPreDlssSteps, kPreDlssStepNodes),
+              "kPreDlssSteps and kPreDlssStepNodes disagree - update both");
 static_assert(NodeListsEqual(kPostDlssSteps, kPostDlssStepNodes),
               "kPostDlssSteps and kPostDlssStepNodes disagree - update both");
 static_assert(NodeListsEqual(kReleaseSteps, kReleaseStepNodes),
@@ -349,6 +398,8 @@ static_assert(NodeListsEqual(kReleaseSteps, kReleaseStepNodes),
 // repeated by hand.
 static_assert(kPresentStepCount == ArrayCount(kPresentStepNodes),
               "kPresentStepNodes is stale - update it to match kPresentSteps");
+static_assert(kPreDlssStepCount == ArrayCount(kPreDlssStepNodes),
+              "kPreDlssStepNodes is stale - update it to match kPreDlssSteps");
 static_assert(kPostDlssStepCount == ArrayCount(kPostDlssStepNodes),
               "kPostDlssStepNodes is stale - update it to match kPostDlssSteps");
 static_assert(kReleaseStepCount == ArrayCount(kReleaseStepNodes),
@@ -364,8 +415,26 @@ static_assert(kReleaseStepCount == ArrayCount(kReleaseStepNodes),
 
 const PipelineStageDef kPipelineStages[] = {
     {
+        /*name=*/"PreDLSS",
+        /*has_injection_stage=*/true,
+        /*is_pre_dlss=*/true,
+        /*is_post_dlss=*/false,
+        /*steps=*/kPreDlssSteps,
+        /*step_count=*/static_cast<uint32_t>(kPreDlssStepCount),
+        /*phases=*/kPreDlssPhases,
+        /*phase_count=*/static_cast<uint32_t>(kPreDlssPhaseCount),
+        /*default_failure=*/FailurePolicy::Transient,
+        /*owns_submit=*/false,
+        /*hdr_capable=*/true,
+        /*reads_dlss_output=*/false,
+        /*max_passes=*/kMaxPasses,
+        /*required_inputs=*/StageInput::CommandList | StageInput::OutputResource |
+            StageInput::Stage,
+    },
+    {
         /*name=*/"PostDLSS",
         /*has_injection_stage=*/true,
+        /*is_pre_dlss=*/false,
         /*is_post_dlss=*/true,
         /*steps=*/kPostDlssSteps,
         /*step_count=*/static_cast<uint32_t>(kPostDlssStepCount),
@@ -382,8 +451,9 @@ const PipelineStageDef kPipelineStages[] = {
             StageInput::Stage,
     },
     {
-        /*name=*/"Present",
+        /*name=*/"Backbuffer",
         /*has_injection_stage=*/true,
+        /*is_pre_dlss=*/false,
         /*is_post_dlss=*/false,
         /*steps=*/kPresentSteps,
         /*step_count=*/static_cast<uint32_t>(kPresentStepCount),
@@ -403,6 +473,7 @@ const PipelineStageDef kPipelineStages[] = {
     {
         /*name=*/"Release",
         /*has_injection_stage=*/false,
+        /*is_pre_dlss=*/false,
         /*is_post_dlss=*/false,
         /*steps=*/kReleaseSteps,
         /*step_count=*/static_cast<uint32_t>(kReleaseStepCount),
@@ -431,7 +502,9 @@ const PipelineStageDef* FindPipelineStageForInjection(int injection_stage) {
   for (uint32_t i = 0; i < kPipelineStageCount; ++i) {
     const PipelineStageDef& stage = kPipelineStages[i];
     if (!stage.has_injection_stage) continue;
-    const int stage_value = stage.is_post_dlss ? 0 : 1;
+    const int stage_value = stage.is_pre_dlss ? 0
+                            : stage.is_post_dlss ? 1
+                                                 : 2;
     if (stage_value == injection_stage) return &stage;
   }
   return nullptr;
@@ -715,7 +788,7 @@ PipelineStatus PipelineRunner::RunStage(const PipelineStageDef& stage,
       // that is not HDR-capable. This is a property of the stage, not a
       // failure — but it is logged at info level rather than left to the
       // trace, because a silent skip here once hid a real bug (two steps
-      // mis-flagged as HDR-only were skipped in Present, so the model was
+      // mis-flagged as HDR-only were skipped in Backbuffer, so the model was
       // evaluated with null inputs). A skip that changes behaviour should be
       // visible without opting into tracing.
       if (def->requires_hdr_aware && !stage.hdr_capable) {

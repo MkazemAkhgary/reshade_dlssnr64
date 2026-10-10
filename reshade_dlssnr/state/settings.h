@@ -19,8 +19,9 @@ namespace reshade_dlssnr {
 constexpr uint32_t kShaderParamCapacity = 32;
 
 enum class InjectionStage : int {
-  PostDLSS = 0,
-  Present = 1,
+  PreDLSS = 0,
+  PostDLSS = 1,
+  Backbuffer = 2,
 };
 
 
@@ -39,9 +40,9 @@ struct PassSettings {
 
   float working_scale = 1.0f;
 
-  // Where this pass runs. Constraint: if any earlier pass runs at Present,
-  // this pass must also run at Present. Enforced at load time and in the UI.
-  InjectionStage injection_stage = InjectionStage::Present;
+  // Independent target for this pass. Runtime groups passes in execution order:
+  // Pre-DLSS, Post-DLSS, then Backbuffer; tab order is preserved within each group.
+  InjectionStage injection_stage = InjectionStage::Backbuffer;
 
   // Grades at this pass's two model boundaries. Not inheritable — carrying
   // one into the next pass would apply it twice.

@@ -39,11 +39,21 @@ void LoadPassSettings(uint32_t index, PassSettings& pass) {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             (pref + "WorkingScale").c_str(), pass.working_scale);
 
-  int injection_stage = static_cast<int>(pass.injection_stage);
+  // TargetStage is the three-state schema. Read the legacy two-state key only
+  // when the new key is absent so old configs retain DLSS Output/Backbuffer.
+  int target_stage = -1;
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            (pref + "InjectionStage").c_str(), injection_stage);
-  if (injection_stage < 0 || injection_stage > 1) injection_stage = 1;
-  pass.injection_stage = static_cast<InjectionStage>(injection_stage);
+                            (pref + "TargetStage").c_str(), target_stage);
+  if (target_stage >= static_cast<int>(InjectionStage::PreDLSS) &&
+      target_stage <= static_cast<int>(InjectionStage::Backbuffer)) {
+    pass.injection_stage = static_cast<InjectionStage>(target_stage);
+  } else {
+    int legacy_stage = 1;
+    reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                              (pref + "InjectionStage").c_str(), legacy_stage);
+    pass.injection_stage = legacy_stage == 0 ? InjectionStage::PostDLSS
+                                              : InjectionStage::Backbuffer;
+  }
 
   LoadResidual(pref + "Residual.", pass.residual);
 
@@ -119,7 +129,7 @@ void SavePassSettings(uint32_t index, const PassSettings& pass) {
                             (pref + "WorkingScale").c_str(), pass.working_scale);
 
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            (pref + "InjectionStage").c_str(),
+                            (pref + "TargetStage").c_str(),
                             static_cast<int>(pass.injection_stage));
 
   SaveResidual(pref + "Residual.", pass.residual);

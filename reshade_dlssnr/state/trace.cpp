@@ -32,7 +32,12 @@ std::string FloatText(float v) {
 const char* BoolText(bool v) { return v ? "1" : "0"; }
 
 const char* StageText(InjectionStage stage) {
-  return stage == InjectionStage::Present ? "Present" : "PostDLSS";
+  switch (stage) {
+    case InjectionStage::PreDLSS: return "PreDLSS";
+    case InjectionStage::PostDLSS: return "PostDLSS";
+    case InjectionStage::Backbuffer: return "Backbuffer";
+    default: return "Unknown";
+  }
 }
 
 const char* HdrFormatText(HdrFormat format) {

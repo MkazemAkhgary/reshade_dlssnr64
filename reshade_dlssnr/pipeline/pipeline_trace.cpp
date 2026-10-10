@@ -37,7 +37,7 @@ std::atomic<bool> g_checked{false};
 
 uint64_t g_sequence = 0;
 
-// One entry per FrameStream. `counter` is printed on every line as d=/p=;
+// One entry per FrameStream. `counter` is printed on every line as b=/d=/p=;
 // `begin_sequence` records the sequence number of the matching BEGIN marker,
 // so EndFrame can name the range the frame spans.
 struct FrameState {
@@ -45,7 +45,7 @@ struct FrameState {
   uint64_t begin_sequence = 0;
 };
 
-constexpr size_t kFrameStreamCount = 2;
+constexpr size_t kFrameStreamCount = 3;
 FrameState g_frames[kFrameStreamCount];
 
 FrameState& FrameStateFor(FrameStream stream) {
@@ -54,7 +54,12 @@ FrameState& FrameStateFor(FrameStream stream) {
 }
 
 const char* FrameStreamName(FrameStream stream) {
-  return stream == FrameStream::Present ? "Present" : "PostDLSS";
+  switch (stream) {
+    case FrameStream::PreDlss: return "PreDLSS";
+    case FrameStream::PostDlss: return "PostDLSS";
+    case FrameStream::Present: return "Present";
+  }
+  return "Unknown";
 }
 
 // setvbuf buffer for g_file. Must outlive the stream, so it is leaked.
@@ -242,11 +247,13 @@ void FlushLocked() {
 uint64_t WritePrefixLocked(FILE* file, const char* category,
                            const char* function, const void* user_object) {
   const uint64_t sequence = g_sequence++;
-  std::fprintf(file, "%06llu %-3s %-28s obj=%d d=%04llu p=%04llu ",
+  std::fprintf(file, "%06llu %-3s %-28s obj=%d b=%04llu d=%04llu p=%04llu ",
                static_cast<unsigned long long>(sequence),
                category != nullptr ? category : "?",
                function != nullptr ? function : "?",
                ResourceId(user_object),
+               static_cast<unsigned long long>(
+                   FrameStateFor(FrameStream::PreDlss).counter),
                static_cast<unsigned long long>(
                    FrameStateFor(FrameStream::PostDlss).counter),
                static_cast<unsigned long long>(

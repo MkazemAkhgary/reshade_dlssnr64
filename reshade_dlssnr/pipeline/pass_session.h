@@ -74,7 +74,7 @@ class PassSession {
   // but stating that it needs nothing else keeps it usable from the table.
   static ID3D12GraphicsCommandList* StageList(const PassRun& run,
                                               CommandContext& command) {
-    return run.stage != nullptr && !run.stage->is_post_dlss
+    return run.stage != nullptr && run.stage->owns_submit
                ? command.GetCommandList()
                : run.list;
   }

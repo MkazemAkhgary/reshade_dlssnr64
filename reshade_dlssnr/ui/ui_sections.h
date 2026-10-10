@@ -17,7 +17,7 @@ extern PendingMove g_pending_move;
 extern int g_pending_move_index;
 
 void DrawSharedDebugView(Settings& settings, bool& changed);
-bool AnyPassUsesDlssOutput(const Settings& settings);
+bool AnyPassUsesHdrInjection(const Settings& settings);
 void DrawStatusSection(Settings& settings, bool& changed);
 
 void DrawGradeSection(const char* id,
@@ -26,7 +26,7 @@ void DrawGradeSection(const char* id,
                       GradeSettings& grade,
                       bool& changed);
 
-// `hdr_relevant` gates the section: HDR only affects passes at DLSS Output.
+// `hdr_relevant` gates the section: HDR affects Pre-DLSS and Post-DLSS passes.
 void DrawHdrSection(Settings& settings, bool hdr_relevant, bool& changed);
 
 void DrawStructureDetectSection(Settings& settings, bool& changed);

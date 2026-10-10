@@ -71,14 +71,14 @@ void OnPresent(
   if (!g_ngx_hooked) {
     g_ngx_hooked = reshade_dlssnr::ngx_hook_compat::TryHookNgx();
 
-    // The DLSS Output stage is dead without this hook, and it used to fail
+    // The Pre-DLSS and Post-DLSS stages require this hook, and it used to fail
     // silently. Say so once it is clear the module is not coming.
     if (!g_ngx_hooked && ++g_ngx_hook_presents > kMaxDeviceHookRetries &&
         !g_ngx_hook_warned) {
       g_ngx_hook_warned = true;
       reshade::log::message(
           reshade::log::level::warning,
-          "nvngx_dlss.dll never appeared; the DLSS Output stage cannot run");
+          "nvngx_dlss.dll never appeared; Pre-DLSS/Post-DLSS stages cannot run");
     }
   }
 

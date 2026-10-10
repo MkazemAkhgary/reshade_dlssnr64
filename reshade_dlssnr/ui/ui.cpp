@@ -19,9 +19,8 @@ namespace reshade_dlssnr {
 int g_force_select_tab = -1;
 
 // Permutes settings.passes, settings.pass_enabled and settings.active_pass so
-// position i holds the pass that was at order[i]. Re-applies what the pass
-// body assumes about positions: pass 0 is the inheritance root and has no
-// flags, and a Present pass forces every later pass to Present as well.
+// position i holds the pass that was at order[i]. Pass targets remain attached
+// to their pass profiles; runtime execution groups them by target stage.
 void ApplyPassReorder(Settings& settings, const int* order, bool& changed) {
   PassSettings new_passes[kMaxPasses];
   bool new_enabled[kMaxPasses];
@@ -50,12 +49,6 @@ void ApplyPassReorder(Settings& settings, const int* order, bool& changed) {
   settings.passes[0].inherit_skin_structure = false;
   for (uint32_t i = 0; i < kShaderParamCount; ++i) {
     settings.passes[0].inherit_params[i] = false;
-  }
-
-  for (uint32_t i = 1; i < kMaxPasses; ++i) {
-    if (settings.passes[i - 1].injection_stage == InjectionStage::Present) {
-      settings.passes[i].injection_stage = InjectionStage::Present;
-    }
   }
 
   g_force_select_tab = settings.active_pass;
@@ -139,10 +132,10 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   // --- Status (shared across passes) ---
   DrawStatusSection(settings, changed);
 
-  // HDR handling only applies to passes that target DLSS Output. The
-  // section is shared, so it is live whenever any enabled pass would use
-  // it — not just the currently-selected tab.
-  const bool hdr_relevant = AnyPassUsesDlssOutput(settings);
+  // HDR handling applies to both game-resource targets. The section is
+  // shared, so it is live whenever any enabled Pre-DLSS or Post-DLSS pass
+  // would use it — not just the currently-selected tab.
+  const bool hdr_relevant = AnyPassUsesHdrInjection(settings);
 
   SectionDivider();
 
@@ -204,7 +197,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
 
   SectionDivider();
 
-  // --- Skin detection (shared across passes; DLSS Output only) ---
+  // --- Structure detection (shared across passes; Post-DLSS only) ---
   DrawStructureDetectSection(settings, changed);
 
   if (changed) {

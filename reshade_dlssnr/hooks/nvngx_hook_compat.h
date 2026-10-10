@@ -93,6 +93,48 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_CreateFeature(
   return result;
 }
 
+static ID3D12Resource* GetResourceParameter(NVSDK_NGX_Parameter* parameters,
+                                                const char* name) {
+  if (parameters == nullptr || name == nullptr) return nullptr;
+  ID3D12Resource* resource = nullptr;
+  if (parameters->Get(name, &resource) == NVSDK_NGX_Result_Success &&
+      resource != nullptr) {
+    return resource;
+  }
+  void* untyped = nullptr;
+  if (parameters->Get(name, &untyped) == NVSDK_NGX_Result_Success &&
+      untyped != nullptr) {
+    return static_cast<ID3D12Resource*>(untyped);
+  }
+  return nullptr;
+}
+
+static bool IsSupportedPreDlssColor(ID3D12Resource* color,
+                                    NVSDK_NGX_Parameter* parameters) {
+  if (color == nullptr || parameters == nullptr) return false;
+  const D3D12_RESOURCE_DESC desc = color->GetDesc();
+  if (desc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D ||
+      desc.DepthOrArraySize != 1 || desc.MipLevels != 1 ||
+      desc.SampleDesc.Count != 1 || desc.Width == 0 || desc.Height == 0) {
+    return false;
+  }
+
+  unsigned int input_width = 0;
+  unsigned int input_height = 0;
+  unsigned int base_x = 0;
+  unsigned int base_y = 0;
+  parameters->Get(NVSDK_NGX_Parameter_Width, &input_width);
+  parameters->Get(NVSDK_NGX_Parameter_Height, &input_height);
+  parameters->Get(NVSDK_NGX_Parameter_DLSS_Input_Color_Subrect_Base_X, &base_x);
+  parameters->Get(NVSDK_NGX_Parameter_DLSS_Input_Color_Subrect_Base_Y, &base_y);
+
+  // Writing the whole Color resource is only safe when NGX consumes the whole
+  // texture. Never overwrite unrelated pixels in an atlas/subrect allocation.
+  return base_x == 0 && base_y == 0 &&
+         (input_width == 0 || input_width == desc.Width) &&
+         (input_height == 0 || input_height == desc.Height);
+}
+
 static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
     ID3D12GraphicsCommandList* command_list,
     const NVSDK_NGX_Handle* feature_handle,
@@ -100,20 +142,70 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
     PFN_NVSDK_NGX_ProgressCallback callback) {
   D3D12Hooks::Get().SetTrackingEnabled(false);
 
-  // Pass the supplied command list back to NGX unchanged; addon work uses the
-  // native interface. Capture exposure before NGX can mutate the parameters.
-  ID3D12Resource* exposure_texture = nullptr;
-  if (parameters != nullptr &&
-      parameters->Get(NVSDK_NGX_Parameter_ExposureTexture, &exposure_texture) !=
-          NVSDK_NGX_Result_Success) {
-    exposure_texture = nullptr;
+  // Exposure and Color are captured before NGX evaluates, since the parameter
+  // block may be reused or mutated by the driver's implementation.
+  ID3D12Resource* exposure_texture =
+      GetResourceParameter(parameters, NVSDK_NGX_Parameter_ExposureTexture);
+
+  bool is_proxy = false;
+  Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> native_list =
+      proxy_unwrap::NativeChain(command_list, &is_proxy);
+  LogCommandListProxyOnce(is_proxy);
+  ID3D12GraphicsCommandList* work_list =
+      native_list != nullptr ? native_list.Get() : command_list;
+
+  NVSDK_NGX_Feature feature_id = NVSDK_NGX_Feature_Reserved0;
+  if (feature_handle != nullptr) {
+    std::lock_guard<std::mutex> lock(g_handle_to_feature_mutex);
+    auto it = g_handle_to_feature.find(feature_handle->Id);
+    if (it != g_handle_to_feature.end()) feature_id = it->second;
   }
-  NVSDK_NGX_Result result = real_NVSDK_NGX_D3D12_EvaluateFeature(
+
+  const Settings& settings = GetSettings();
+  bool any_pass_enabled = false;
+  bool any_pre_dlss = false;
+  bool any_post_dlss = false;
+  for (uint32_t i = 0; i < kMaxPasses; ++i) {
+    if (!settings.pass_enabled[i]) continue;
+    any_pass_enabled = true;
+    any_pre_dlss |= settings.passes[i].injection_stage == InjectionStage::PreDLSS;
+    any_post_dlss |= settings.passes[i].injection_stage == InjectionStage::PostDLSS;
+  }
+
+  bool recorded_pass = false;
+  if (feature_id == NVSDK_NGX_Feature_SuperSampling && settings.enabled &&
+      any_pre_dlss) {
+    if (!EnsureHooks(work_list)) {
+      static bool logged_pre_hook_failure = false;
+      LogOnce(logged_pre_hook_failure, reshade::log::level::warning,
+              "Pre-DLSS skipped: D3D12 command-list state hooks are unavailable");
+    } else {
+      ID3D12Resource* color =
+          GetResourceParameter(parameters, NVSDK_NGX_Parameter_Color);
+      if (!IsSupportedPreDlssColor(color, parameters)) {
+        static bool logged_pre_color_unsupported = false;
+        LogOnce(logged_pre_color_unsupported, reshade::log::level::warning,
+                "Pre-DLSS skipped: NGX Color must be a full-resource, single-sample 2D texture");
+      } else {
+        // Do not capture guide resources before DLSS: doing so would insert
+        // barriers/copies against resources the game's upcoming evaluation is
+        // about to consume. PreDLSS uses the last stable guide snapshot for
+        // optional depth/mask filters; fresh guides and output are captured
+        // after the real EvaluateFeature call below.
+        AddonController::Get().OnPreDlssEvaluate(
+            work_list, color, exposure_texture);
+        // Restore the application's command-list bindings before NGX records
+        // its own work. The final restore below retains the established
+        // post-evaluation behavior when another addon stage also ran.
+        D3D12Hooks::Get().RestoreCommandList(work_list);
+        recorded_pass = true;
+      }
+    }
+  }
+
+  const NVSDK_NGX_Result result = real_NVSDK_NGX_D3D12_EvaluateFeature(
       command_list, feature_handle, parameters, callback);
 
-  // Whether this hook fires at all, and what NGX returned. Without it, "no
-  // Post-DLSS" and "no evaluate ever arrived" look identical -- a distinction
-  // that cost a whole debugging round.
   static bool logged_first = false;
   if (!logged_first) {
     logged_first = true;
@@ -124,88 +216,43 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
     reshade::log::message(reshade::log::level::info, message);
   }
 
-  // The game's list is a ReShade wrapper, over an interposer proxy on 1.x. The
-  // tracker is keyed by what the vtable hooks see, so resolve once here.
-  // Recording through a proxy is also unsafe: its ResourceBarrier runs
-  // Streamline's after-hooks from inside its own evaluate.
-  bool is_proxy = false;
-  Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> native_list =
-      proxy_unwrap::NativeChain(command_list, &is_proxy);
-  LogCommandListProxyOnce(is_proxy);
-
-  ID3D12GraphicsCommandList* work_list =
-      native_list != nullptr ? native_list.Get() : command_list;
-
-  // Set when a Post-DLSS pass actually recorded onto this list, which is the
-  // only condition under which the state below needs putting back.
-  bool recorded_pass = false;
-
-  if (result == NVSDK_NGX_Result_Success && feature_handle != nullptr && parameters != nullptr) {
-    NVSDK_NGX_Feature feature_id = NVSDK_NGX_Feature_Reserved0;
-
-    {
-      std::lock_guard<std::mutex> lock(g_handle_to_feature_mutex);
-      auto it = g_handle_to_feature.find(feature_handle->Id);
-      if (it != g_handle_to_feature.end()) {
-        feature_id = it->second;
-      }
-    }
-
-    if (feature_id == NVSDK_NGX_Feature_SuperSampling) {
-      if (!EnsureHooks(work_list)) {
+  if (result == NVSDK_NGX_Result_Success && feature_handle != nullptr &&
+      parameters != nullptr && feature_id == NVSDK_NGX_Feature_SuperSampling) {
+    if (!EnsureHooks(work_list)) {
+      if (any_post_dlss) {
         AddonController::Get().SetPostDlssBlocked(
             "Post-DLSS disabled: D3D12 command list hooks are not installed");
-      } else {
-        const Settings& settings = GetSettings();
+      }
+    } else {
+      // Refresh the snapshot after DLSS so PostDLSS always reads the current
+      // frame's upscaled output and fresh depth/motion clones.
+      if (any_pass_enabled) {
+        DlssGuides::Get().Capture(work_list, parameters, feature_id);
+      }
 
-        // The guides feed the pass pipeline and the debug view, and both only
-        // run when a pass is enabled. With none enabled this was a clone and a
-        // set of barriers every frame for nothing.
-        bool any_pass_enabled = false;
-        for (uint32_t i = 0; i < kMaxPasses; ++i) {
-          if (settings.pass_enabled[i]) {
-            any_pass_enabled = true;
-            break;
-          }
-        }
-        if (any_pass_enabled) {
-          DlssGuides::Get().Capture(work_list, parameters, feature_id);
-        }
-
-        if (settings.enabled) {
-          bool any_post_dlss = false;
-          for (uint32_t i = 0; i < kMaxPasses; ++i) {
-            if (settings.pass_enabled[i] &&
-                settings.passes[i].injection_stage == InjectionStage::PostDLSS) {
-              any_post_dlss = true;
-              break;
-            }
-          }
-
+      if (settings.enabled) {
+        if (any_post_dlss) {
           AddonController::Get().SetPostDlssBlocked(nullptr);
-
-          if (any_post_dlss) {
-            ID3D12Resource* output = nullptr;
-            if (parameters->Get(NVSDK_NGX_Parameter_Output, &output) ==
-                    NVSDK_NGX_Result_Success &&
-                output != nullptr) {
-              AddonController::Get().OnPostDlssEvaluate(
-                  work_list, output, exposure_texture);
-              recorded_pass = true;
-            }
+          ID3D12Resource* output =
+              GetResourceParameter(parameters, NVSDK_NGX_Parameter_Output);
+          if (output != nullptr) {
+            AddonController::Get().OnPostDlssEvaluate(
+                work_list, output, exposure_texture);
+            recorded_pass = true;
           }
+        } else {
+          AddonController::Get().SetPostDlssBlocked(nullptr);
         }
       }
     }
   }
 
-  // Only after a pass ran. Otherwise the replay re-issues pointers from a
-  // record the game has moved on from, which faults inside the driver.
+  // The restored bindings are only replayed if one of our game-list targets
+  // ran. Otherwise the tracker may hold pointers from a previous recording.
   if (recorded_pass) {
     D3D12Hooks::Get().RestoreCommandList(work_list);
   }
   D3D12Hooks::Get().SetTrackingEnabled(true);
-
   return result;
 }
 

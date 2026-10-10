@@ -48,7 +48,10 @@ void AddonController::RefreshBackbufferFormat(IDXGISwapChain* swapchain) {
   const UINT idx = sc3->GetCurrentBackBufferIndex();
   if (FAILED(sc3->GetBuffer(idx, IID_PPV_ARGS(&bb))) || bb == nullptr) return;
 
-  backbuffer_format_ = bb->GetDesc().Format;
+  const D3D12_RESOURCE_DESC desc = bb->GetDesc();
+  backbuffer_format_ = desc.Format;
+  frame_debug_.preferred_width = static_cast<unsigned int>(desc.Width);
+  frame_debug_.preferred_height = desc.Height;
   trace::NameResource(bb.Get(), "backbuffer");
 }
 
@@ -247,9 +250,10 @@ void AddonController::OnPresent(
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
   const Settings& settings = GetSettings();
-  if (!settings.enabled) { frame_debug_.Reset(); return; }
+  if (!settings.enabled) { frame_debug_.Reset(); pre_stage_seen_ = false; return; }
   if (command_queue == nullptr || swapchain == nullptr) {
     frame_debug_.Reset();
+    pre_stage_seen_ = false;
     return;
   }
 
@@ -268,11 +272,11 @@ void AddonController::OnPresent(
   frame_debug_.preferred_format = backbuffer_format_;
 
   const PipelineStageDef* stage =
-      FindPipelineStageForInjection(static_cast<int>(InjectionStage::Present));
+      FindPipelineStageForInjection(static_cast<int>(InjectionStage::Backbuffer));
   if (stage != nullptr) {
     for (uint32_t i = 0; i < kMaxPasses; ++i) {
       if (!settings.pass_enabled[i]) continue;
-      if (settings.passes[i].injection_stage != InjectionStage::Present) continue;
+      if (settings.passes[i].injection_stage != InjectionStage::Backbuffer) continue;
       TRACE_EVT(this, "controller_dispatch stage=Present pass=%u", i);
       RunPassStage(*stage, i, nullptr, nullptr, false, command_queue, swapchain);
     }
@@ -316,8 +320,61 @@ void AddonController::OnPresent(
 
   RefreshStatus(settings);
   frame_debug_.Reset();
+  pre_stage_seen_ = false;
   TRACE_EVT(this, "controller_exit stage=Present");
   trace::EndFrame(trace::FrameStream::Present);
+}
+
+void AddonController::OnPreDlssEvaluate(
+    ID3D12GraphicsCommandList* command_list,
+    ID3D12Resource* input_resource,
+    ID3D12Resource* exposure_texture) {
+  std::lock_guard<std::mutex> lock(g_direct_mutex);
+
+  const Settings& settings = GetSettings();
+  if (!settings.enabled || command_list == nullptr || input_resource == nullptr)
+    return;
+
+  bool any_pre_dlss = false;
+  for (uint32_t i = 0; i < kMaxPasses; ++i) {
+    if (settings.pass_enabled[i] &&
+        settings.passes[i].injection_stage == InjectionStage::PreDLSS) {
+      any_pre_dlss = true;
+      break;
+    }
+  }
+  if (!any_pre_dlss) return;
+
+  trace::BeginFrame(trace::FrameStream::PreDlss);
+  TRACE_EVT(this, "controller_enter stage=PreDLSS hdr_init=%d",
+            hdr_initialized_ ? 1 : 0);
+
+  // One debug image per evaluate call. If PostDLSS follows, it preserves this
+  // target and only overwrites it when a selected PostDLSS pass renders a view.
+  frame_debug_.Reset();
+  frame_debug_.preferred_format = backbuffer_format_;
+  pre_stage_seen_ = true;
+
+  const PipelineStageDef* stage = FindPipelineStageForInjection(
+      static_cast<int>(InjectionStage::PreDLSS));
+  if (stage != nullptr) {
+    bool is_first = true;
+    for (uint32_t i = 0; i < kMaxPasses; ++i) {
+      if (!settings.pass_enabled[i] ||
+          settings.passes[i].injection_stage != InjectionStage::PreDLSS) {
+        continue;
+      }
+      TRACE_EVT(this, "controller_dispatch stage=PreDLSS pass=%u is_first=%d",
+                i, is_first ? 1 : 0);
+      RunPassStage(*stage, i, command_list, input_resource, is_first, nullptr,
+                   nullptr, exposure_texture);
+      is_first = false;
+    }
+  }
+
+  RefreshStatus(settings);
+  TRACE_EVT(this, "controller_exit stage=PreDLSS");
+  trace::EndFrame(trace::FrameStream::PreDlss);
 }
 
 void AddonController::OnPostDlssEvaluate(
@@ -334,10 +391,10 @@ void AddonController::OnPostDlssEvaluate(
   TRACE_EVT(this, "controller_enter stage=PostDLSS hdr_init=%d guides_out=%d",
             hdr_initialized_ ? 1 : 0, 0);
 
-  // Fresh debug state for the frame's Post-DLSS chain. The debug output
-  // must still match the backbuffer's format (we cached it last Present),
-  // because that's what it will eventually be copied into.
-  frame_debug_.Reset();
+  // The PreDLSS entry resets debug state for this EvaluateFeature call. Keep
+  // its output unless a selected PostDLSS pass replaces it; otherwise reset
+  // here for the existing post-only configuration.
+  if (!pre_stage_seen_) frame_debug_.Reset();
   frame_debug_.preferred_format = backbuffer_format_;
 
   const PipelineStageDef* stage = FindPipelineStageForInjection(
@@ -346,7 +403,7 @@ void AddonController::OnPostDlssEvaluate(
     // `is_first` tracks the first ENABLED Post-DLSS pass, not index 0: the
     // first pass in the chain is the one that reads the captured DLSS output,
     // and it stays the first even if earlier passes are disabled or set to
-    // the Present stage.
+    // the Release stage.
     bool is_first = true;
     for (uint32_t i = 0; i < kMaxPasses; ++i) {
       if (!settings.pass_enabled[i]) continue;

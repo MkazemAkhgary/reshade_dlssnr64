@@ -130,13 +130,6 @@ void LoadSettings() {
     g_settings.passes[0].inherit_params[i] = false;
   }
 
-  // Enforce constraint: once a pass is at Present, all subsequent are too.
-  for (uint32_t i = 1; i < kMaxPasses; ++i) {
-    if (g_settings.passes[i - 1].injection_stage == InjectionStage::Present) {
-      g_settings.passes[i].injection_stage = InjectionStage::Present;
-    }
-  }
-
   // Apply inheritance so g_resolved reflects the loaded state.
   RecomputeResolved();
   TraceSettings(g_settings, g_resolved);

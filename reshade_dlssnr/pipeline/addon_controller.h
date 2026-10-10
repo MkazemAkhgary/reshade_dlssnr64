@@ -31,6 +31,14 @@ class AddonController {
       ID3D12CommandQueue* command_queue,
       IDXGISwapChain* swapchain);
 
+  // Runs enabled Pre-DLSS passes inline before the game's DLSS evaluation.
+  // `input_resource` is NGX's Color parameter; each pass writes its result
+  // back before control returns to the game's original EvaluateFeature call.
+  void OnPreDlssEvaluate(
+      ID3D12GraphicsCommandList* command_list,
+      ID3D12Resource* input_resource,
+      ID3D12Resource* exposure_texture);
+
   // Runs the enabled Post-DLSS passes inline on the game's command list,
   // right after the DLSS pass. Each pass writes its composed result back
   // into `output_resource`. The active pass (if it is a Post-DLSS pass)
@@ -125,19 +133,18 @@ class AddonController {
   AddonController(const AddonController&) = delete;
   AddonController& operator=(const AddonController&) = delete;
 
-  // Refreshes backbuffer_format_ from the swapchain's current backbuffer.
-  // Called once per Present, before any pass runs, so both the debug output
-  // buffer and the Release stage's copy see the format actually in use.
+  // Refreshes the swapchain backbuffer format and extent. Called once per
+  // ReShade Present; game-resource passes reuse the previous cached extent
+  // to render diagnostics at a copy-compatible size.
   // A failure to query leaves the cached value untouched.
   void RefreshBackbufferFormat(IDXGISwapChain* swapchain);
 
   // Builds the PassRun for one pass of `stage` and hands it to the session.
   //
-  // `command_list` / `output_resource` are the game's, and are null for the
-  // Present stage. `command_queue` / `swapchain` are the Present stage's
-  // inputs, and are null for PostDLSS. Both pairs must be forwarded: the
-  // runner rejects a Present stage whose swapchain is missing, so passing
-  // null here silently skips the whole stage rather than failing loudly.
+  // `command_list` / `output_resource` are the game's resources for PreDLSS
+  // and PostDLSS, and are null for Backbuffer. `command_queue` / `swapchain`
+  // are Backbuffer inputs and are null for game-resource stages. Forward the
+  // correct pair for the stage; the runner rejects missing required inputs.
   PipelineStatus RunPassStage(
       const PipelineStageDef& stage,
       uint32_t pass_index,
@@ -164,6 +171,9 @@ class AddonController {
   NgxRuntime runtime_;
   std::vector<PassSession> passes_;
   FrameDebugContext frame_debug_;
+  // The current NGX EvaluateFeature call has already reset the debug target at
+  // PreDLSS. PostDLSS must preserve it so a selected PreDLSS pass can display.
+  bool pre_stage_seen_ = false;
   HdrState hdr_;
   SkinDetect skin_detect_;
 

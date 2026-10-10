@@ -22,48 +22,30 @@ void DrawTargetSection(Settings& settings, uint32_t pass_index,
                        bool& changed) {
   PassSettings& pass = settings.passes[pass_index];
 
-  bool can_be_at_dlss = true;
-  for (uint32_t j = 0; j < pass_index; ++j) {
-    if (settings.passes[j].injection_stage == InjectionStage::Present) {
-      can_be_at_dlss = false;
-      break;
-    }
-  }
-
-  static const char* kTargetLabels[] = {"DLSS Output", "Backbuffer"};
+  static const char* kTargetLabels[] = {"Pre-DLSS", "Post-DLSS", "Backbuffer"};
   static const char* kTargetTips[] = {
-      "Run this pass on the DLSS upscaled image, before the game applies "
-      "UI and tone mapping.\n"
-      "Unavailable when an earlier pass targets the Backbuffer, because "
-      "passes run in order and later stages cannot reach back to earlier "
-      "ones.",
-      "Run this pass on the final frame, after every other effect "
-      "including UI and post-processing.\n"
-      "Selecting this forces all later passes to Backbuffer as well."};
-  const bool kTargetDisabled[] = {!can_be_at_dlss, false};
+      "Run before the game's DLSS evaluation on its input Color resource. "
+      "The game then upscales the modified image. Requires a full-resource Color input.",
+      "Run after the game's DLSS evaluation on its upscaled output, before "
+      "later post-processing and UI.",
+      "Run on the final swapchain backbuffer, after DLSS-stage passes."};
 
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("Target");
   if (ImGui::IsItemHovered()) {
-    Tip("Where this pass runs in the frame.");
+    Tip("Each pass can independently target Pre-DLSS, Post-DLSS, or Backbuffer. "
+        "Execution order is grouped by stage; passes within each stage follow "
+        "their pass-tab order.");
   }
   ImGui::SameLine(kControlLabelWidth);
 
-  const int selected =
-      pass.injection_stage == InjectionStage::PostDLSS ? 0 : 1;
+  const int selected = static_cast<int>(pass.injection_stage);
   const int clicked = DrawGroupButtons("target", kTargetLabels, kTargetTips,
-                                       2, selected, kTargetDisabled);
+                                       3, selected, nullptr);
+  if (clicked < 0 || clicked > 2 || clicked == selected) return;
 
-  if (clicked == 0) {
-    pass.injection_stage = InjectionStage::PostDLSS;
-    changed = true;
-  } else if (clicked == 1) {
-    pass.injection_stage = InjectionStage::Present;
-    for (uint32_t j = pass_index + 1; j < kMaxPasses; ++j) {
-      settings.passes[j].injection_stage = InjectionStage::Present;
-    }
-    changed = true;
-  }
+  pass.injection_stage = static_cast<InjectionStage>(clicked);
+  changed = true;
 }
 
 void DrawPipelineSection(uint32_t pass_index, Settings& settings,

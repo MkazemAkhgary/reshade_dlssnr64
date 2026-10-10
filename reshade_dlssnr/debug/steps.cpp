@@ -14,7 +14,7 @@ PipelineStatus PassSession::StepRenderDebugView(PassRun& run) {
   }
 
   DebugSnapshot debug;
-  debug.source = run.stage != nullptr && run.stage->is_post_dlss
+  debug.source = run.stage != nullptr && !run.stage->owns_submit
                      ? run.model_input
                      : run.backbuffer;
   debug.source_width = run.width;

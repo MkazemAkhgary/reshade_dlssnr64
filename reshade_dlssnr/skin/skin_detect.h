@@ -18,7 +18,7 @@ struct DlssGuideState;
 // Runs the model at reduced scale and thresholds the model edit into a
 // persistent analysis mask. The target can be skin-oriented or general structure.
 //
-// DLSS Output only. Records on the game's command list.
+// Post-DLSS only. Records on the game's command list.
 class SkinDetect {
  public:
   struct Output {
