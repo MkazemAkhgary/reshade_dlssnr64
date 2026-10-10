@@ -1,6 +1,4 @@
 #pragma once
-#ifndef DLSSNR_COMPOSE_COMMON_HLSLI
-#define DLSSNR_COMPOSE_COMMON_HLSLI
 
 #include "bindings.hlsli"
 #include "luma.hlsli"
@@ -112,5 +110,3 @@ float3 ComposeRatioDelta(float3 low_in_lin, float3 low_out_lin) {
     ratio.b = SoftClampRatio(ratio.b, kRatioDarken, kRatioBrighten);
     return ratio - 1.0;
 }
-
-#endif

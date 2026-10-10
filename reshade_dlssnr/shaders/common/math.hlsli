@@ -1,6 +1,4 @@
 #pragma once
-#ifndef DLSSNR_MATH_HLSLI
-#define DLSSNR_MATH_HLSLI
 
 #include "bindings.hlsli"
 
@@ -25,6 +23,3 @@ float3 safe_log3(float3 v)
 {
     return log(max(v, 0.0) + max(kRatioEps, 1e-8));
 }
-
-
-#endif

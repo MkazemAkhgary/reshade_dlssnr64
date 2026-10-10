@@ -1,6 +1,4 @@
 #pragma once
-#ifndef DLSSNR_REGISTERS_HLSI
-#define DLSSNR_REGISTERS_HLSI
 
 // Root signature (ComputeEngine::CreateRootSignature):
 //
@@ -18,5 +16,3 @@
 //
 // The CBV is ComputeConstants from common/params.h and is always a 256-byte
 // CBV slot. The static sampler is the only sampler bound by the root signature.
-
-#endif

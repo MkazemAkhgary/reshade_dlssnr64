@@ -22,6 +22,11 @@ function ConvertTo-RawLiteral([string]$Text) {
 $script:ExpandedOnce = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 $script:ExpansionStack = [System.Collections.Generic.List[string]]::new()
 $script:ShaderRootFull = [IO.Path]::GetFullPath($shaderRoot).TrimEnd([char]'\')
+$expandedRootDir = Join-Path $GeneratedDir "expanded_shaders"
+if (Test-Path -LiteralPath $expandedRootDir) {
+  Remove-Item -LiteralPath $expandedRootDir -Recurse -Force
+}
+New-Item -ItemType Directory -Force -Path $expandedRootDir | Out-Null
 
 function Get-ShaderName([string]$Path) {
   $full = [IO.Path]::GetFullPath($Path)
@@ -33,16 +38,6 @@ function Test-PragmaOnce([string[]]$Lines) {
     if ($line -match '^\s*#\s*pragma\s+once\b') { return $true }
   }
   return $false
-}
-
-function Test-IncludeGuard([string[]]$Lines) {
-  $meaningful = @($Lines | Where-Object {
-    $_.Trim().Length -gt 0 -and $_ -notmatch '^\s*//' -and $_ -notmatch '^\s*#\s*pragma\s+once\b'
-  })
-  if ($meaningful.Count -lt 2) { return $false }
-  $first = [regex]::Match($meaningful[0], '^\s*#\s*ifndef\s+([A-Za-z_]\w*)\s*$')
-  $second = [regex]::Match($meaningful[1], '^\s*#\s*define\s+([A-Za-z_]\w*)(?:\s|$)')
-  return ($first.Success -and $second.Success -and ($first.Groups[1].Value -ceq $second.Groups[1].Value))
 }
 
 function Resolve-ShaderInclude([string]$IncludeName, [string]$IncludingFile) {
@@ -68,14 +63,13 @@ function Expand-ShaderSource([string]$Path) {
   $source = [IO.File]::ReadAllText($full)
   $lines = [regex]::Split($source, "\r?\n")
   $pragmaOnce = Test-PragmaOnce $lines
-  $includeGuard = Test-IncludeGuard $lines
 
   if ($pragmaOnce -and $script:ExpandedOnce.Contains($full)) { return '' }
   if ($script:ExpansionStack.Contains($full)) {
-    if ($pragmaOnce -or $includeGuard) { return '' }
+    if ($pragmaOnce) { return '' }
     $chainPaths = @($script:ExpansionStack.ToArray()) + @($full)
     $chain = ($chainPaths | ForEach-Object { Get-ShaderName $_ }) -join ' -> '
-    throw ('Include cycle without #pragma once/include guard: {0}' -f $chain)
+    throw ('Include cycle without #pragma once: {0}' -f $chain)
   }
   if ($pragmaOnce) { [void]$script:ExpandedOnce.Add($full) }
 
@@ -143,6 +137,16 @@ foreach ($file in $files) {
   if ($file.Extension -eq '.hlsl') {
     $source = $expandedSource
   }
+
+  # Expansion above consumes #pragma once for correct include-once behavior.
+  # Strip it only from the emitted source, including raw embedded header entries.
+  $source = [regex]::Replace($source, '(?m)^[ \t]*#[ \t]*pragma[ \t]+once\b[^\r\n]*(?:\r?\n|$)', '')
+  if ($file.Extension -eq '.hlsl') {
+    $preparedPath = Join-Path $expandedRootDir ($rel.Replace('/', '\'))
+    New-Item -ItemType Directory -Force -Path (Split-Path $preparedPath -Parent) | Out-Null
+    [IO.File]::WriteAllText($preparedPath, $source, (New-Object Text.UTF8Encoding($false)))
+  }
+
   $literal = ConvertTo-RawLiteral $source
   $lines.Add("static constexpr char $symbol`[] = $literal;")
   $entries.Add([pscustomobject]@{ Name = $rel; Symbol = $symbol })

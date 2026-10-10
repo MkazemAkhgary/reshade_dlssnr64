@@ -1,6 +1,4 @@
 #pragma once
-#ifndef DLSSNR_COLOR_HLSLI
-#define DLSSNR_COLOR_HLSLI
 
 #include "color_constants.h"
 
@@ -80,54 +78,62 @@ float3 DecodeToLinear(float3 c, int format_code, float reference_nits)
 
 float ModelGamutCompressMax(float max_channel)
 {
-    if (max_channel <= kModelGamutCompressionStart)
-        return max_channel;
-
-    if (max_channel <= 1.0)
+    float result = max_channel;
+    if (max_channel > kModelGamutCompressionStart)
     {
-        const float t = (max_channel - kModelGamutCompressionStart) /
-                        max(1.0 - kModelGamutCompressionStart, 1e-6);
-        return lerp(kModelGamutCompressionStart,
-                    kModelGamutCompressionWhite, saturate(t));
+        if (max_channel <= 1.0)
+        {
+            const float t = (max_channel - kModelGamutCompressionStart) /
+                            max(1.0 - kModelGamutCompressionStart, 1e-6);
+            result = lerp(kModelGamutCompressionStart,
+                          kModelGamutCompressionWhite, saturate(t));
+        }
+        else
+        {
+            // Super-whites stay inside the model's valid input gamut. The logarithmic
+            // map is invertible, while packed.a retains the full scene-referred scale.
+            const float value_log = log2(max_channel);
+            const float reference_log = log2(kModelGamutReferenceLinear);
+            if (max_channel <= kModelGamutReferenceLinear)
+            {
+                const float t = value_log / max(reference_log, 1e-6);
+                result = lerp(kModelGamutCompressionWhite,
+                              kModelGamutReferenceMappedWhite, saturate(t));
+            }
+            else
+            {
+                // Continue the log curve beyond FP16/scRGB headroom rather than
+                // clamping the input or HDR output.
+                const float extended_log = log2(kModelGamutExtendedLinear);
+                const float tail_slope =
+                    (kModelGamutExtendedMappedWhite - kModelGamutReferenceMappedWhite) /
+                    max(extended_log - reference_log, 1e-6);
+                result = kModelGamutReferenceMappedWhite +
+                         (value_log - reference_log) * tail_slope;
+            }
+        }
     }
-
-    // Super-whites stay inside the model's valid input gamut. The logarithmic
-    // map is invertible, while packed.a retains the full scene-referred scale.
-    const float value_log = log2(max_channel);
-    const float reference_log = log2(kModelGamutReferenceLinear);
-    if (max_channel <= kModelGamutReferenceLinear)
-    {
-        const float t = value_log / max(reference_log, 1e-6);
-        return lerp(kModelGamutCompressionWhite,
-                    kModelGamutReferenceMappedWhite, saturate(t));
-    }
-
-    // The extended linear range covers the native FP16/scRGB headroom. Continue
-    // the log curve beyond it rather than clamping the input or HDR output.
-    const float extended_log = log2(kModelGamutExtendedLinear);
-    const float tail_slope =
-        (kModelGamutExtendedMappedWhite - kModelGamutReferenceMappedWhite) /
-        max(extended_log - reference_log, 1e-6);
-    return kModelGamutReferenceMappedWhite +
-           (value_log - reference_log) * tail_slope;
+    return result;
 }
 
 float3 GamutFitModelInput(float3 c)
 {
     c = max(c, 0.0);
+    float3 result = c;
     const float max_channel = max(c.r, max(c.g, c.b));
-    if (max_channel <= kModelGamutCompressionStart)
-        return c;
-
-    // Map super-whites into the model's valid sub-white domain. The HDR source
-    // magnitude remains losslessly represented by the independent gain scale.
-    const float desat = saturate(
-        kModelHighlightDesaturation *
-        (max_channel - kModelGamutHighlightDesaturationStart) /
-        max(max_channel + 1.0, 1e-6));
-    const float3 white_pulled = lerp(c, max_channel.xxx, desat);
-    const float compressed_max = ModelGamutCompressMax(max_channel);
-    return white_pulled * (compressed_max / max(max_channel, 1e-6));
+    if (!(max_channel <= kModelGamutCompressionStart))
+    {
+        // Map super-whites into the model's valid sub-white domain. The HDR source
+        // magnitude remains losslessly represented by the independent gain scale.
+        const float desat = saturate(
+            kModelHighlightDesaturation *
+            (max_channel - kModelGamutHighlightDesaturationStart) /
+            max(max_channel + 1.0, 1e-6));
+        const float3 white_pulled = lerp(c, max_channel.xxx, desat);
+        const float compressed_max = ModelGamutCompressMax(max_channel);
+        result = white_pulled * (compressed_max / max(max_channel, 1e-6));
+    }
+    return result;
 }
 
 float3 GamutUnfitModelInput(float3 c)
@@ -189,5 +195,3 @@ float3 GamutUnfitModelInput(float3 c)
         max(1.0 - desat, 1e-6);
     return max(original, 0.0);
 }
-
-#endif

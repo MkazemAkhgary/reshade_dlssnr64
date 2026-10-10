@@ -51,12 +51,12 @@ float3 ForwardHdrToModelSdr(float3 hdr_encoded, uint2 pixel)
 float3 EncodeDiagnosticSdr(float3 sdr)
 {
     int fmt = (int)(kFormat + 0.5);
-    float3 v = max(sdr, 0.0);
+    float3 result = max(sdr, 0.0);
     if (fmt == 1)
-        return v * (kSdrReferenceWhiteNits / kScRgbReferenceWhiteNits);
-    if (fmt == 2)
-        return NitsToPq(v * kSdrReferenceWhiteNits);
-    return v;
+        result = result * (kSdrReferenceWhiteNits / kScRgbReferenceWhiteNits);
+    else if (fmt == 2)
+        result = NitsToPq(result * kSdrReferenceWhiteNits);
+    return result;
 }
 
 [numthreads(8, 8, 1)]

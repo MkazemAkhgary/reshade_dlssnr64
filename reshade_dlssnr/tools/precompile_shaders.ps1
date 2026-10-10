@@ -7,13 +7,17 @@ param(
 $project = (Resolve-Path $ProjectDir).Path
 $generated = (Resolve-Path $GeneratedDir).Path
 $shaderRoot = Join-Path $project "shaders"
+$expandedShaderRoot = Join-Path $generated "expanded_shaders"
+if (-not (Test-Path -LiteralPath $expandedShaderRoot -PathType Container)) {
+  throw "Expanded shader sources not found. Run generate_shaders.ps1 before precompiling."
+}
 $csodir = Join-Path $generated "shader_cache"
 New-Item -ItemType Directory -Force -Path $csodir | Out-Null
 
-$roots = Get-ChildItem -Path $shaderRoot -Filter *.hlsl -Recurse -File | Sort-Object FullName
+$roots = Get-ChildItem -Path $expandedShaderRoot -Filter *.hlsl -Recurse -File | Sort-Object FullName
 $entries = @()
 foreach ($shader in $roots) {
-  $rel = $shader.FullName.Substring($shaderRoot.Length + 1).Replace('\','/')
+  $rel = $shader.FullName.Substring($expandedShaderRoot.Length + 1).Replace('\','/')
   $safe = [regex]::Replace($rel, '[^A-Za-z0-9_]', '_')
   $cso = Join-Path $csodir ($safe + '.cso')
   & $FxcPath /nologo /T cs_5_1 /E CSMain /O3 /I $shaderRoot /Fo $cso $shader.FullName

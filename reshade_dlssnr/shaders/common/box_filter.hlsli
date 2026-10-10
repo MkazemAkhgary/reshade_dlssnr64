@@ -1,6 +1,4 @@
 #pragma once
-#ifndef DLSSNR_BOX_FILTER_HLSLI
-#define DLSSNR_BOX_FILTER_HLSLI
 
 float4 BoxAreaAverage(Texture2D<float4> source,
                       uint2 dst_xy,
@@ -42,5 +40,3 @@ float4 BoxAreaAverage(Texture2D<float4> source,
 
     return accum / max(total_weight, 1e-8);
 }
-
-#endif

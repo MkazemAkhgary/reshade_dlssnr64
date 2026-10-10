@@ -1,6 +1,4 @@
 #pragma once
-#ifndef DLSSNR_HDR_TRANSFER_HLSLI
-#define DLSSNR_HDR_TRANSFER_HLSLI
 
 #include "bindings.hlsli"
 #include "color.hlsli"
@@ -71,11 +69,12 @@ float3 HdrEncodeTarget(float3 linear_hdr, int format_code,
                        float reference_nits)
 {
     const float3 positive = max(linear_hdr, 0.0);
+    float3 result = positive;
     if (format_code == 1)
-        return positive * (reference_nits / kScRgbReferenceWhiteNits);
-    if (format_code == 2)
-        return NitsToPq(positive * reference_nits);
-    return positive;
+        result = positive * (reference_nits / kScRgbReferenceWhiteNits);
+    else if (format_code == 2)
+        result = NitsToPq(positive * reference_nits);
+    return result;
 }
 
 float3 HdrFromLinearSdrCarrier(float3 sdr_linear, float exposure,
@@ -105,5 +104,3 @@ float3 HdrFromSdrCarrier(float3 sdr, float exposure,
     const float3 model_linear = GamutUnfitModelInput(max(sdr, 0.0));
     return HdrFromLinearSdrCarrier(model_linear, exposure, effective_peak_nits);
 }
-
-#endif

@@ -3,7 +3,7 @@
 #include "common/color.hlsli"
 #include "common/luma.hlsli"
 
-#define kFormat          shader.Params0.x
+#define kHistogramFormat shader.Params0.x
 #define kLumaMinLog2     shader.Params0.y
 #define kLumaMaxLog2     shader.Params0.z
 #define kFilterFlags     ((uint)(shader.Params0.w + 0.5))
@@ -39,8 +39,8 @@ void CSMain(uint3 gtid : SV_GroupThreadID,
     if (dtid.x < Width && dtid.y < Height) {
         const float3 encoded = gSource.Load(int3(dtid.xy, 0)).rgb;
         const float3 linear_rgb = DecodeToLinear(
-            encoded, (int)(kFormat + 0.5), kSdrReferenceWhiteNits);
-        const float3 luma_weights = ((int)(kFormat + 0.5) == 2)
+            encoded, (int)(kHistogramFormat + 0.5), kSdrReferenceWhiteNits);
+        const float3 luma_weights = ((int)(kHistogramFormat + 0.5) == 2)
             ? kLuma2020 : kLuma709;
         const float luma = dot(max(linear_rgb, 0.0), luma_weights);
 

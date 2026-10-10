@@ -1,6 +1,4 @@
 #pragma once
-#ifndef DLSSNR_GRADE_HLSLI
-#define DLSSNR_GRADE_HLSLI
 
 #include "bindings.hlsli"
 
@@ -271,29 +269,31 @@ float3 GradeChromaVibranceFwd(float3 c, float a)
 
 float3 GradeChromaVibranceInv(float3 c, float a)
 {
+    float3 result = c;
     float y = dot(c, kL709);
     float output_saturation = GradeVibranceSaturation(c);
 
     // Once the input is at or above the smart-saturation knee, the forward
     // gain is exactly 1, so no solve is required.
-    if (output_saturation >= 1.0)
-        return c;
-
-    // Solve s_out = s * (1 + a * (1 - s)^2) for the original saturation s.
-    float s = saturate(output_saturation);
-    [unroll]
-    for (int i = 0; i < 6; ++i)
+    if (!(output_saturation >= 1.0))
     {
-        float muted = 1.0 - s;
-        float gain = 1.0 + a * muted * muted;
-        float f = s * gain - output_saturation;
-        float df = 1.0 + a * (1.0 - 4.0 * s + 3.0 * s * s);
-        s -= f / max(abs(df), kGradeEps) * sign(df);
-        s = saturate(s);
-    }
+        // Solve s_out = s * (1 + a * (1 - s)^2) for the original saturation s.
+        float s = saturate(output_saturation);
+        [unroll]
+        for (int i = 0; i < 6; ++i)
+        {
+            float muted = 1.0 - s;
+            float gain = 1.0 + a * muted * muted;
+            float f = s * gain - output_saturation;
+            float df = 1.0 + a * (1.0 - 4.0 * s + 3.0 * s * s);
+            s -= f / max(abs(df), kGradeEps) * sign(df);
+            s = saturate(s);
+        }
 
-    float g = max(GradeVibranceGain(s, a), kGradeEps);
-    return y + (c - y) / g;
+        float g = max(GradeVibranceGain(s, a), kGradeEps);
+        result = y + (c - y) / g;
+    }
+    return result;
 }
 
 float3 GradeChromaFwd(float3 c, float a, int mode)
@@ -424,5 +424,3 @@ float3 GradeLinearInv(float3 lin)
         result = GradeLinearCoreInv(lin);
     return result;
 }
-
-#endif

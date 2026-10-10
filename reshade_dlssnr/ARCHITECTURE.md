@@ -22,6 +22,7 @@ reshade_dlssnr/
     shader_sources.cpp              Embedded shader-source table definition
     shader_bytecode.h               Optional embedded-bytecode table declaration
     shader_bytecode.cpp             Optional embedded-bytecode table definition/stub
+    expanded_shaders/                Pragma-free, fully expanded FXC inputs (generated)
 
   tools/
     generate_shaders.ps1            Generates embedded shader sources and the default bytecode stub
@@ -341,7 +342,7 @@ Runtime compilation is the default. `PrecompileShaders=false` keeps the generate
 
 ### Build-time verification
 
-`VerifyShaders=true` is the default. `tools/verify_shaders.ps1` locates `fxc.exe` automatically from the installed Windows SDK when `FxcPath` is not supplied, compiles every `.hlsl` root as `cs_5_1`, and forwards actual compiler warnings/errors. It writes objects to a temporary directory and deletes them after each verification pass. Successful FXC object-save messages are intentionally not part of the build output.
+`VerifyShaders=true` is the default. `tools/verify_shaders.ps1` locates `fxc.exe` automatically from the installed Windows SDK when `FxcPath` is not supplied, compiles every `.hlsl` root as `cs_5_1`, and forwards actual compiler warnings/errors. The generator expands local includes while honoring `#pragma once`, then writes pragma-free root sources under `generated/expanded_shaders`; verification and optional precompilation use those expanded files so FXC never sees its unsupported `#pragma once` directive. It writes objects to a temporary directory and deletes them after each verification pass. Successful FXC object-save messages are intentionally not part of the build output.
 
 The project selects the latest installed Windows 10 SDK using `ToolLocationHelper::GetLatestSDKTargetPlatformVersion('Windows', '10.0')`. The `FxcPath` property is derived from `WindowsSdkDir` and that SDK version after the normal MSVC property import; it remains overrideable from MSBuild.
 

@@ -1,6 +1,4 @@
 #pragma once
-#ifndef DLSSNR_LUMA_HLSLI
-#define DLSSNR_LUMA_HLSLI
 
 #include "bindings.hlsli"
 
@@ -19,5 +17,3 @@ float3 HdrLumaWeights()
     int fmt = (int)(kFormat + 0.5);
     return fmt == 2 ? kLuma2020 : kLuma709;
 }
-
-#endif

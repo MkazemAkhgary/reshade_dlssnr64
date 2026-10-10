@@ -7,7 +7,7 @@
 #define kLumaRel       shader.Params0.y
 #define kChromaAbs     shader.Params0.z
 #define kSatBound      shader.Params0.w
-#define kEditStrength  shader.Params1.x
+#define kSkinMaskEditStrength shader.Params1.x
 #define kMaskSmoothing shader.Params1.y
 #define kMaskAlpha     shader.Params1.z
 #define kTargetMode     shader.Params1.w
@@ -39,7 +39,7 @@ bool PixelIsSkin(int2 xy)
 
     float a_luma = dot(a, kLuma709);
     float b_luma = dot(b, kLuma709);
-    float luma_diff = abs(b_luma - a_luma) * kEditStrength;
+    float luma_diff = abs(b_luma - a_luma) * kSkinMaskEditStrength;
     float luma_ref = max(a_luma, b_luma);
 
     bool luma_edit = luma_diff > (kLumaAbs * hysteresis) &&
@@ -47,7 +47,7 @@ bool PixelIsSkin(int2 xy)
 
     float3 chroma_diff = (b - b_luma) - (a - a_luma);
     bool chroma_edit =
-        length(chroma_diff) * kEditStrength > (kChromaAbs * hysteresis);
+        length(chroma_diff) * kSkinMaskEditStrength > (kChromaAbs * hysteresis);
     bool model_edit = luma_edit || chroma_edit;
 
     const int target = (int)(kTargetMode + 0.5);

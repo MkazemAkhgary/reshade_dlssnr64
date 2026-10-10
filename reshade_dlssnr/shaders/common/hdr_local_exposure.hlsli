@@ -1,6 +1,4 @@
 #pragma once
-#ifndef DLSSNR_HDR_LOCAL_EXPOSURE_HLSLI
-#define DLSSNR_HDR_LOCAL_EXPOSURE_HLSLI
 
 #include "bindings.hlsli"
 #include "color.hlsli"
@@ -136,24 +134,24 @@ float LocalFilterWeight(float2 uv, float source_hdr_luma)
 float LocalExposureScale(float2 uv, float global_sdr_luma,
                          float source_hdr_luma)
 {
-    if (kLocalExposureStrength <= 0.0 || global_sdr_luma <= 1e-8)
-        return 1.0;
-
-    const float center_log2 = log2(max(global_sdr_luma, 1e-8));
-    const float base_log2 = LocalBaseLogLuma(uv, center_log2);
-    const float detail_log2 = center_log2 - base_log2;
-    const float mid_log2 = log2(max(kLocalExposureMidtone, 1e-6));
-    const float distance_from_mid = base_log2 - mid_log2;
-    const float shadow_weight = 1.0 - smoothstep(-2.5, -0.5, distance_from_mid);
-    const float highlight_weight = smoothstep(0.5, 2.5, distance_from_mid);
-    const float region_weight = max(shadow_weight, highlight_weight);
-    const float strength = saturate(kLocalExposureStrength) * region_weight;
-    const float new_base_log2 = lerp(base_log2, mid_log2, strength);
-    const float new_log2 = new_base_log2 + detail_log2;
-    const float stops = clamp(new_log2 - center_log2,
-                              -kLocalMaxDarken, kLocalMaxBrighten);
-    const float scale = exp2(stops);
-    return lerp(1.0, scale, LocalFilterWeight(uv, source_hdr_luma));
+    float result = 1.0;
+    if (!(kLocalExposureStrength <= 0.0 || global_sdr_luma <= 1e-8))
+    {
+        const float center_log2 = log2(max(global_sdr_luma, 1e-8));
+        const float base_log2 = LocalBaseLogLuma(uv, center_log2);
+        const float detail_log2 = center_log2 - base_log2;
+        const float mid_log2 = log2(max(kLocalExposureMidtone, 1e-6));
+        const float distance_from_mid = base_log2 - mid_log2;
+        const float shadow_weight = 1.0 - smoothstep(-2.5, -0.5, distance_from_mid);
+        const float highlight_weight = smoothstep(0.5, 2.5, distance_from_mid);
+        const float region_weight = max(shadow_weight, highlight_weight);
+        const float strength = saturate(kLocalExposureStrength) * region_weight;
+        const float new_base_log2 = lerp(base_log2, mid_log2, strength);
+        const float new_log2 = new_base_log2 + detail_log2;
+        const float stops = clamp(new_log2 - center_log2,
+                                  -kLocalMaxDarken, kLocalMaxBrighten);
+        const float scale = exp2(stops);
+        result = lerp(1.0, scale, LocalFilterWeight(uv, source_hdr_luma));
+    }
+    return result;
 }
-
-#endif

@@ -1,6 +1,4 @@
 #pragma once
-#ifndef DLSSNR_FSR_HLSLI
-#define DLSSNR_FSR_HLSLI
 
 // Shared FSR 1.0 EASU + RCAS upsampler. Both SDR and HDR compose passes use
 // this exact implementation so reconstruction does not diverge by output
@@ -225,6 +223,3 @@ float3 FsrRcasF(float3 b, float3 d, float3 e, float3 f, float3 h,
     c.b = (lobe * bB + lobe * dB + lobe * hB + lobe * fB + eB) * rcpL;
     return c;
 }
-
-
-#endif

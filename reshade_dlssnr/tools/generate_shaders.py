@@ -3,11 +3,11 @@
 from pathlib import Path
 import argparse
 import re
+import shutil
 
 INCLUDE_RE = re.compile(r'^\s*#\s*include\s*["<]([^">]+)[">]')
 PRAGMA_ONCE_RE = re.compile(r'^\s*#\s*pragma\s+once\b')
-IFNDEF_RE = re.compile(r'^\s*#\s*ifndef\s+([A-Za-z_]\w*)\s*$')
-DEFINE_RE = re.compile(r'^\s*#\s*define\s+([A-Za-z_]\w*)(?:\s|$)')
+PRAGMA_ONCE_LINE_RE = re.compile(r'(?m)^[ \t]*#[ \t]*pragma[ \t]+once\b[^\r\n]*(?:\r?\n|$)')
 
 
 def normalize_crlf(text: str) -> str:
@@ -31,20 +31,6 @@ def raw_literal(text: str) -> str:
 
 def has_pragma_once(lines: list[str]) -> bool:
     return any(PRAGMA_ONCE_RE.match(line) for line in lines)
-
-
-def has_include_guard(lines: list[str]) -> bool:
-    directives = [
-        line for line in lines
-        if line.strip()
-        and not line.lstrip().startswith("//")
-        and not PRAGMA_ONCE_RE.match(line)
-    ]
-    if len(directives) < 2:
-        return False
-    first = IFNDEF_RE.match(directives[0])
-    second = DEFINE_RE.match(directives[1])
-    return first is not None and second is not None and first.group(1) == second.group(1)
 
 
 def shader_name(path: Path, shader_root: Path) -> str:
@@ -71,7 +57,7 @@ def resolve_include(include_name: str, including_file: Path, shader_root: Path) 
 
 
 def expand_shader(path: Path, shader_root: Path) -> str:
-    """Inline local includes in order; honor #pragma once and include guards."""
+    """Inline local includes in order, honoring #pragma once."""
     expanded_once: set[Path] = set()
     stack: list[Path] = []
 
@@ -80,15 +66,14 @@ def expand_shader(path: Path, shader_root: Path) -> str:
         source = current.read_text(encoding="utf-8")
         lines = source.replace("\r\n", "\n").replace("\r", "\n").splitlines()
         pragma_once = has_pragma_once(lines)
-        include_guard = has_include_guard(lines)
 
         if pragma_once and current in expanded_once:
             return ""
         if current in stack:
-            if pragma_once or include_guard:
+            if pragma_once:
                 return ""
             chain = " -> ".join(shader_name(item, shader_root) for item in stack + [current])
-            raise RuntimeError(f"Include cycle without #pragma once/include guard: {chain}")
+            raise RuntimeError(f"Include cycle without #pragma once: {chain}")
         if pragma_once:
             expanded_once.add(current)
 
@@ -129,6 +114,10 @@ def main() -> None:
     generated = Path(args.generated_dir).resolve()
     shader_root = project / "shaders"
     generated.mkdir(parents=True, exist_ok=True)
+    expanded_root = generated / "expanded_shaders"
+    if expanded_root.exists():
+        shutil.rmtree(expanded_root)
+    expanded_root.mkdir(parents=True, exist_ok=True)
 
     files = sorted(
         (p for p in shader_root.rglob("*")
@@ -155,11 +144,17 @@ const EmbeddedShader* FindEmbeddedShader(const char* name);
         safe = re.sub(r"[^A-Za-z0-9_]", "_", rel)
         symbol = "kEmbeddedShaderSource_" + safe
         raw_source = path.read_text(encoding="utf-8")
-        # Expand every entry once for validation. Root shader entries compile
-        # from the expanded text; header entries retain authored text for the
-        # runtime include fallback and editor tooling.
+        # Process include-once semantics before removing the compiler-unsupported
+        # pragma from the emitted source. Root entries and FXC inputs are expanded;
+        # helper entries retain their authored includes but are pragma-free.
         expanded_source = expand_shader(path, shader_root)
-        source = expanded_source if path.suffix.lower() == ".hlsl" else raw_source
+        is_root_shader = path.suffix.lower() == ".hlsl"
+        source = expanded_source if is_root_shader else raw_source
+        source = PRAGMA_ONCE_LINE_RE.sub("", source)
+        if is_root_shader:
+            prepared = expanded_root / rel
+            prepared.parent.mkdir(parents=True, exist_ok=True)
+            write_crlf(prepared, source)
         out.append(f"static constexpr char {symbol}[] = {raw_literal(source)};")
         entries.append((rel, symbol))
 

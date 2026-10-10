@@ -1,7 +1,19 @@
 param(
   [Parameter(Mandatory=$true)][string]$ProjectDir,
-  [string]$FxcPath = ""
+  [string]$FxcPath = "",
+  [string]$GeneratedDir = ""
 )
+
+$ProjectDir = (Resolve-Path $ProjectDir).Path
+if ([string]::IsNullOrWhiteSpace($GeneratedDir)) {
+  $GeneratedDir = Join-Path $ProjectDir "generated"
+}
+$GeneratedDir = [IO.Path]::GetFullPath($GeneratedDir)
+$expandedShaderRoot = Join-Path $GeneratedDir "expanded_shaders"
+if (-not (Test-Path -LiteralPath $expandedShaderRoot -PathType Container)) {
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $ProjectDir "tools\generate_shaders.ps1") -ProjectDir $ProjectDir -GeneratedDir $GeneratedDir
+  if ($LASTEXITCODE -ne 0) { throw "Failed to generate expanded shader sources for verification." }
+}
 
 if ([string]::IsNullOrWhiteSpace($FxcPath)) {
   $sdkRoot = $env:WindowsSdkDir
@@ -23,7 +35,7 @@ if ([string]::IsNullOrWhiteSpace($FxcPath) -or -not (Test-Path $FxcPath)) {
   throw "fxc.exe was not found. Set FxcPath=... or install a Windows SDK containing fxc.exe."
 }
 
-$roots = Get-ChildItem -Path (Join-Path $ProjectDir "shaders") -Filter *.hlsl -Recurse -File | Sort-Object FullName
+$roots = Get-ChildItem -Path $expandedShaderRoot -Filter *.hlsl -Recurse -File | Sort-Object FullName
 $verifyTemp = Join-Path ([System.IO.Path]::GetTempPath()) ("reshade_dlssnr_fxc_" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path $verifyTemp | Out-Null
 $failedShaders = @()
@@ -36,6 +48,8 @@ try {
     Write-Host ("VERIFYING [{0}/{1}] {2}" -f $index, $roots.Count, $shader.FullName)
     Write-Host ("FXC OBJECT: {0}" -f $objectPath)
 
+    # These sources have already had #pragma once processed during expansion;
+    # FXC therefore sees neither the unsupported pragma nor duplicate includes.
     $output = @(& $FxcPath /nologo /T cs_5_1 /E CSMain /O3 /I (Join-Path $ProjectDir "shaders") /Fo $objectPath $shader.FullName 2>&1)
     $exitCode = $LASTEXITCODE
 

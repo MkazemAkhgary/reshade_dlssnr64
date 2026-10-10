@@ -1,5 +1,4 @@
-#ifndef DLSSNR_COLOR_CONSTANTS_H
-#define DLSSNR_COLOR_CONSTANTS_H
+#pragma once
 
 // Shared colorimetry constants. This file is intentionally valid as both C++
 // and HLSL so format/reference-white assumptions have a single source of truth.
@@ -31,6 +30,4 @@ static const float kModelGamutHighlightDesaturationStart = 1.0;
 static const float kModelHighlightDesaturation = 0.65;
 static const float kModelGamutReferenceLinear = 16.0;
 static const float kModelGamutExtendedLinear = 65504.0;
-#endif
-
 #endif

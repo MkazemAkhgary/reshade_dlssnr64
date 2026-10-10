@@ -1,5 +1,4 @@
-#ifndef DLSSNR_PARAMS_H
-#define DLSSNR_PARAMS_H
+#pragma once
 
 // One file shared by MSVC and D3DCompile's HLSL preprocessor.
 //
@@ -106,5 +105,3 @@ DLSSNR_CBUFFER(ComputeConstants)
     EasuBlock easu;
     RcasBlock rcas;
 };
-
-#endif
