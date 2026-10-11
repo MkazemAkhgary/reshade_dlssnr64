@@ -3,7 +3,9 @@
 
 #include "ui/ui_widgets.h"
 
+#include <algorithm>
 #include <cstdarg>
+#include <cstdio>
 #include <string>
 
 namespace reshade_dlssnr {
@@ -26,10 +28,18 @@ void SectionDivider() {
   ImGui::Spacing();
 }
 
-bool PersistentHeader(const char* label, bool& open_setting, bool& changed) {
+bool PersistentHeader(const char* label, bool& open_setting, bool& changed,
+                      const char* tooltip) {
   ImGui::SetNextItemOpen(open_setting, ImGuiCond_Always);
   const bool open =
       ImGui::TreeNodeEx(label, ImGuiTreeNodeFlags_CollapsingHeader);
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    if (tooltip != nullptr && tooltip[0] != '\0') {
+      Tip("%s", tooltip);
+    } else {
+      Tip("Expand or collapse the %s section.", label);
+    }
+  }
   if (open != open_setting) {
     open_setting = open;
     changed = true;
@@ -38,7 +48,7 @@ bool PersistentHeader(const char* label, bool& open_setting, bool& changed) {
 }
 
 bool PersistentSubHeader(const char* label, bool& open_setting,
-                         bool& changed) {
+                         bool& changed, const char* tooltip) {
   const ImVec4 base = ImGui::GetStyleColorVec4(ImGuiCol_Text);
   const ImVec4 tint(base.x * 0.82f, base.y * 0.82f, base.z * 0.92f, base.w);
 
@@ -60,6 +70,13 @@ bool PersistentSubHeader(const char* label, bool& open_setting,
       ImGui::TreeNodeEx(label, ImGuiTreeNodeFlags_CollapsingHeader);
 
   ImGui::PopStyleColor(4);
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    if (tooltip != nullptr && tooltip[0] != '\0') {
+      Tip("%s", tooltip);
+    } else {
+      Tip("Expand or collapse the %s subsection.", label);
+    }
+  }
 
   if (open != open_setting) {
     open_setting = open;
@@ -79,10 +96,18 @@ bool DrawFloatRow(uint32_t pass_index,
                   float hi,
                   float default_value) {
   bool changed = false;
+  char fallback_tooltip[256];
+  if (tooltip == nullptr || tooltip[0] == '\0') {
+    std::snprintf(fallback_tooltip, sizeof(fallback_tooltip),
+                  "Adjust %s between %.4g and %.4g. Reset returns to %.4g.",
+                  label, static_cast<double>(lo), static_cast<double>(hi),
+                  static_cast<double>(default_value));
+    tooltip = fallback_tooltip;
+  }
 
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted(label);
-  if (tooltip != nullptr && ImGui::IsItemHovered()) {
+  if (tooltip != nullptr && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("%s", tooltip);
   }
 
@@ -93,8 +118,10 @@ bool DrawFloatRow(uint32_t pass_index,
   if (has_inherit) {
     trailing_width += ImGui::GetStyle().ItemSpacing.x + kResetButtonWidth;
   }
-  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - trailing_width -
-                          ImGui::GetStyle().ItemSpacing.x);
+  const float slider_width = std::max(
+      60.0f, ImGui::GetContentRegionAvail().x - trailing_width -
+                 ImGui::GetStyle().ItemSpacing.x);
+  ImGui::SetNextItemWidth(slider_width);
 
   const bool inheriting = has_inherit && *inherit_flag;
   float display_value = inheriting ? inherited_value : *raw_value;
@@ -105,7 +132,7 @@ bool DrawFloatRow(uint32_t pass_index,
     slider_changed =
         ImGui::SliderFloat(slider_id.c_str(), &display_value, lo, hi, "%.3f");
   });
-  if (tooltip != nullptr && ImGui::IsItemHovered()) {
+  if (tooltip != nullptr && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("%s", tooltip);
   }
   if (slider_changed && !inheriting) {
@@ -119,7 +146,7 @@ bool DrawFloatRow(uint32_t pass_index,
     *raw_value = default_value;
     changed = true;
   }
-  if (ImGui::IsItemHovered()) {
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("Reset to default");
   }
   ImGui::PopID();
@@ -138,7 +165,7 @@ bool DrawFloatRow(uint32_t pass_index,
       changed = true;
     }
     if (on) ImGui::PopStyleColor();
-    if (ImGui::IsItemHovered()) {
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
       Tip("Inherit this value from the previous pass");
     }
     ImGui::PopID();
@@ -155,22 +182,31 @@ bool DrawIntRow(const char* id,
                 int hi,
                 int default_value) {
   bool changed = false;
+  char fallback_tooltip[256];
+  if (tooltip == nullptr || tooltip[0] == '\0') {
+    std::snprintf(fallback_tooltip, sizeof(fallback_tooltip),
+                  "Adjust %s between %d and %d. Reset returns to %d.",
+                  label, lo, hi, default_value);
+    tooltip = fallback_tooltip;
+  }
 
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted(label);
-  if (tooltip != nullptr && ImGui::IsItemHovered()) {
+  if (tooltip != nullptr && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("%s", tooltip);
   }
 
   ImGui::SameLine(kControlLabelWidth);
-  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x -
-                          kResetButtonWidth - ImGui::GetStyle().ItemSpacing.x);
+  const float slider_width = std::max(
+      60.0f, ImGui::GetContentRegionAvail().x - kResetButtonWidth -
+                 ImGui::GetStyle().ItemSpacing.x);
+  ImGui::SetNextItemWidth(slider_width);
 
   const std::string slider_id = std::string("##") + id;
   if (ImGui::SliderInt(slider_id.c_str(), raw_value, lo, hi)) {
     changed = true;
   }
-  if (tooltip != nullptr && ImGui::IsItemHovered()) {
+  if (tooltip != nullptr && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("%s", tooltip);
   }
 
@@ -180,7 +216,7 @@ bool DrawIntRow(const char* id,
     *raw_value = default_value;
     changed = true;
   }
-  if (ImGui::IsItemHovered()) {
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("Reset to default");
   }
   ImGui::PopID();
@@ -188,9 +224,17 @@ bool DrawIntRow(const char* id,
   return changed;
 }
 
-bool DrawCheckboxAtLabel(const char* id, bool* value) {
+bool DrawCheckboxAtLabel(const char* id, bool* value, const char* tooltip) {
   const std::string cb_id = std::string("##") + id;
-  return ImGui::Checkbox(cb_id.c_str(), value);
+  const bool changed = ImGui::Checkbox(cb_id.c_str(), value);
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    if (tooltip != nullptr && tooltip[0] != '\0') {
+      Tip("%s", tooltip);
+    } else {
+      Tip("Toggle this option.");
+    }
+  }
+  return changed;
 }
 
 bool DrawComboRow(const char* id,
@@ -200,9 +244,15 @@ bool DrawComboRow(const char* id,
                   const char* const* items,
                   const char* const* item_tooltips,
                   int item_count) {
+  char fallback_tooltip[192];
+  if (tooltip == nullptr || tooltip[0] == '\0') {
+    std::snprintf(fallback_tooltip, sizeof(fallback_tooltip),
+                  "Choose the %s option.", label);
+    tooltip = fallback_tooltip;
+  }
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted(label);
-  if (tooltip != nullptr && ImGui::IsItemHovered()) {
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("%s", tooltip);
   }
 
@@ -223,18 +273,24 @@ bool DrawComboRow(const char* id,
           changed = true;
         }
       }
-      if (ImGui::IsItemHovered() && item_tooltips != nullptr &&
-          item_tooltips[i] != nullptr) {
-        Tip("%s", item_tooltips[i]);
+      if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        if (item_tooltips != nullptr && item_tooltips[i] != nullptr) {
+          Tip("%s", item_tooltips[i]);
+        } else {
+          Tip("Select %s.", items[i]);
+        }
       }
       if (selected) ImGui::SetItemDefaultFocus();
     }
     ImGui::EndCombo();
   }
 
-  if (ImGui::IsItemHovered() && item_tooltips != nullptr &&
-      item_tooltips[clamped] != nullptr) {
-    Tip("%s", item_tooltips[clamped]);
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    if (item_tooltips != nullptr && item_tooltips[clamped] != nullptr) {
+      Tip("%s", item_tooltips[clamped]);
+    } else {
+      Tip("Current %s: %s.", label, preview);
+    }
   }
 
   return changed;
@@ -245,7 +301,8 @@ int DrawGroupButtons(const char* id,
                      const char* const* tooltips,
                      int count,
                      int selected,
-                     const bool* disabled) {
+                     const bool* disabled,
+                     float fixed_button_width) {
   if (count <= 0 || labels == nullptr) return -1;
 
   ImGui::PushID(id);
@@ -253,8 +310,11 @@ int DrawGroupButtons(const char* id,
   const float spacing = ImGui::GetStyle().ItemSpacing.x;
   const float avail = ImGui::GetContentRegionAvail().x;
   const float total_spacing = spacing * static_cast<float>(count - 1);
-  const float button_width = (avail - total_spacing) /
-                             static_cast<float>(count);
+  const float distributed_width = (avail - total_spacing) /
+                                  static_cast<float>(count);
+  const float button_width = fixed_button_width > 0.0f
+                                 ? fixed_button_width
+                                 : std::max(40.0f, distributed_width);
 
   int clicked = -1;
 
@@ -282,9 +342,12 @@ int DrawGroupButtons(const char* id,
 
     if (pushed > 0) ImGui::PopStyleColor(pushed);
 
-    if (tooltips != nullptr && tooltips[i] != nullptr &&
-        ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-      Tip("%s", tooltips[i]);
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      if (tooltips != nullptr && tooltips[i] != nullptr) {
+        Tip("%s", tooltips[i]);
+      } else {
+        Tip("Select %s.", labels[i]);
+      }
     }
 
     if (is_disabled) ImGui::EndDisabled();
@@ -302,9 +365,15 @@ bool DrawGroupRow(const char* id,
                   int count,
                   int* value,
                   const bool* disabled) {
+  char fallback_tooltip[192];
+  if (tooltip == nullptr || tooltip[0] == '\0') {
+    std::snprintf(fallback_tooltip, sizeof(fallback_tooltip),
+                  "Choose the %s setting.", label);
+    tooltip = fallback_tooltip;
+  }
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted(label);
-  if (tooltip != nullptr && ImGui::IsItemHovered()) {
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("%s", tooltip);
   }
 

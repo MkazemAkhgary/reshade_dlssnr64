@@ -7,8 +7,8 @@
 
 namespace reshade_dlssnr {
 
-constexpr float kControlLabelWidth = 220.0f;
-constexpr float kResetButtonWidth = 24.0f;
+constexpr float kControlLabelWidth = 200.0f;
+constexpr float kResetButtonWidth = 22.0f;
 
 // Set from settings at the top of each frame. Read by Tip().
 extern bool g_show_tooltips;
@@ -23,11 +23,12 @@ void WithDisabled(bool disabled, Fn&& fn) {
   if (disabled) ImGui::EndDisabled();
 }
 
-bool PersistentHeader(const char* label, bool& open_setting, bool& changed);
+bool PersistentHeader(const char* label, bool& open_setting, bool& changed,
+                      const char* tooltip = nullptr);
 
 class IndentScope {
  public:
-  explicit IndentScope(float amount = 12.0f) : amount_(amount) {
+  explicit IndentScope(float amount = 16.0f) : amount_(amount) {
     ImGui::Indent(amount_);
   }
   ~IndentScope() { ImGui::Unindent(amount_); }
@@ -38,7 +39,8 @@ class IndentScope {
   float amount_;
 };
 
-bool PersistentSubHeader(const char* label, bool& open_setting, bool& changed);
+bool PersistentSubHeader(const char* label, bool& open_setting, bool& changed,
+                         const char* tooltip = nullptr);
 
 bool DrawFloatRow(uint32_t pass_index,
                   const char* id,
@@ -59,7 +61,8 @@ bool DrawIntRow(const char* id,
                 int hi,
                 int default_value);
 
-bool DrawCheckboxAtLabel(const char* id, bool* value);
+bool DrawCheckboxAtLabel(const char* id, bool* value,
+                          const char* tooltip = nullptr);
 
 bool DrawComboRow(const char* id,
                   const char* label,
@@ -74,7 +77,8 @@ int DrawGroupButtons(const char* id,
                      const char* const* tooltips,
                      int count,
                      int selected,
-                     const bool* disabled);
+                     const bool* disabled,
+                     float fixed_button_width = 0.0f);
 
 bool DrawGroupRow(const char* id,
                   const char* label,

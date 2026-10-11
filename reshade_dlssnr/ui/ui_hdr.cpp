@@ -31,7 +31,7 @@ void DrawStatus(const HdrSnapshot& snap, bool hdr_relevant) {
 
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("Status");
-  if (ImGui::IsItemHovered())
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
     Tip("Format, resolved exposure, and scene-white point.");
   ImGui::SameLine(kControlLabelWidth);
 
@@ -51,22 +51,22 @@ void DrawFilterControls(const char* id, ExposureFilterSettings& filters,
   ImGui::Separator();
   ImGui::TextUnformatted("Filters");
   ImGui::SameLine();
-  if (ImGui::IsItemHovered()) {
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip(hint != nullptr ? hint :
         "Enabled filters are combined. Each layer owns its own filter set. "
         "When a mask or depth resource is unavailable, that filter is skipped.");
   }
 
   changed |= ImGui::Checkbox("Structure Mask", &filters.structure_mask);
-  if (ImGui::IsItemHovered())
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
     Tip("Meter or correct only pixels weighted by the persistent Structure Detection mask.");
   ImGui::SameLine();
   changed |= ImGui::Checkbox("Depth", &filters.depth);
-  if (ImGui::IsItemHovered())
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
     Tip("Restrict this layer to the selected normalized depth interval.");
   ImGui::SameLine();
   changed |= ImGui::Checkbox("Percentile Range", &filters.percentile_range);
-  if (ImGui::IsItemHovered())
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
     Tip("For Game/Adaptive, select a percentile band of this layer's histogram. "
         "For Local Exposure, fade the local correction outside its measured luminance band.");
 
@@ -101,6 +101,9 @@ void DrawFilterControls(const char* id, ExposureFilterSettings& filters,
 
 void DrawGameLayer(GameExposureLayerSettings& layer, bool& changed) {
   changed |= ImGui::Checkbox("Enabled##game_layer", &layer.enabled);
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Use the game's NGX ExposureTexture as the base exposure for the stack.");
+  }
   ImGui::SameLine();
   ImGui::TextDisabled("Base exposure from the game's NGX ExposureTexture");
   WithDisabled(!layer.enabled, [&] {
@@ -108,7 +111,7 @@ void DrawGameLayer(GameExposureLayerSettings& layer, bool& changed) {
                             "Manual bias relative to the game's exposure, in stops. Zero leaves the game's value untouched.",
                             &layer.bias_stops, nullptr, 0.0f, -4.0f, 4.0f, 0.0f);
     changed |= ImGui::Checkbox("Bounded Adaptive Tuning", &layer.bounded_tuning);
-    if (ImGui::IsItemHovered())
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
       Tip("Allow the adaptive measurement to suggest a small correction, clipped to Max Tuning Stops. The game remains the global exposure anchor.");
     if (layer.bounded_tuning) {
       changed |= DrawFloatRow(0, "game_tuning_strength", "Tuning Strength",
@@ -139,6 +142,9 @@ void DrawGameLayer(GameExposureLayerSettings& layer, bool& changed) {
 
 void DrawAdaptiveLayer(AdaptiveExposureLayerSettings& layer, bool& changed) {
   changed |= ImGui::Checkbox("Enabled##adaptive_layer", &layer.enabled);
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Use histogram-derived global exposure or a bounded correction over Game Exposure.");
+  }
   ImGui::SameLine();
   ImGui::TextDisabled("Histogram-driven exposure");
   WithDisabled(!layer.enabled, [&] {
@@ -163,6 +169,9 @@ void DrawAdaptiveLayer(AdaptiveExposureLayerSettings& layer, bool& changed) {
 
 void DrawLocalLayer(LocalExposureLayerSettings& layer, bool& changed) {
   changed |= ImGui::Checkbox("Enabled##local_layer", &layer.enabled);
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Apply spatially varying exposure correction after the global exposure layers.");
+  }
   ImGui::SameLine();
   ImGui::TextDisabled("Spatial base/detail correction");
   WithDisabled(!layer.enabled, [&] {
@@ -182,7 +191,7 @@ void DrawLocalLayer(LocalExposureLayerSettings& layer, bool& changed) {
                             "Neighborhood diameter (4-512 px). The shader uses a fixed 12 neighbor taps, so larger sizes barely change shader work; they spread taps farther apart and can slightly reduce cache locality. Effective diameter is capped at half the shorter source dimension. The field stays continuous per pixel to avoid visible block boundaries.",
                             &layer.block_size_px, nullptr, 24.0f, 4.0f, 512.0f, 24.0f);
     changed |= ImGui::Checkbox("Depth Continuity##local_depth_continuity", &layer.depth_continuity);
-    if (ImGui::IsItemHovered())
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
       Tip("When a DLSS depth guide is available, exclude neighborhood samples across depth discontinuities. This is separate from the Depth filter, which restricts which pixels may receive the correction.");
     if (layer.depth_continuity) {
       changed |= DrawFloatRow(0, "local_depth_edge_threshold", "Depth Edge Threshold",
@@ -203,21 +212,35 @@ void DrawControls(HdrSettings& hdr, bool& changed) {
 
   changed |= DrawIntRow("hdr_measure_interval", "Measure Interval",
                         "How often exposure histograms are measured, in frames.",
-                        &hdr.measure_interval, 32, 1, 4);
+                        &hdr.measure_interval, 1, 32, 4);
   changed |= DrawFloatRow(0, "hdr_highlight_headroom", "Highlight Headroom",
                           "Scales the effective HDR peak used by BT.2446C. This does not change how exposure is interpreted.",
                           &hdr.highlight_headroom, nullptr, 8.0f, 0.25f, 16.0f, 8.0f);
 
   if (ImGui::BeginTabBar("HdrExposureLayers")) {
-    if (ImGui::BeginTabItem("Game Exposure")) {
+    const bool game_open = ImGui::BeginTabItem("Game Exposure");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      Tip("Configure the game's exposure as the base layer.");
+    }
+    if (game_open) {
       DrawGameLayer(hdr.game_exposure, changed);
       ImGui::EndTabItem();
     }
-    if (ImGui::BeginTabItem("Adaptive Exposure")) {
+
+    const bool adaptive_open = ImGui::BeginTabItem("Adaptive Exposure");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      Tip("Configure histogram-based global exposure or a correction over Game Exposure.");
+    }
+    if (adaptive_open) {
       DrawAdaptiveLayer(hdr.adaptive_exposure, changed);
       ImGui::EndTabItem();
     }
-    if (ImGui::BeginTabItem("Local Exposure")) {
+
+    const bool local_open = ImGui::BeginTabItem("Local Exposure");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      Tip("Configure local spatial exposure correction and its independent filters.");
+    }
+    if (local_open) {
       DrawLocalLayer(hdr.local_exposure, changed);
       ImGui::EndTabItem();
     }
@@ -333,15 +356,23 @@ void DrawDiagnostics(const HdrSnapshot& snap, const HdrSettings& hdr,
   }
   ImGui::PlotHistogram("##hdr_histogram", bins_float, 256, 0, nullptr,
                        0.0f, peak, ImVec2(-1.0f, 80.0f));
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Histogram of measured log2 luminance. The population depends on the active exposure filters.");
+  }
 }
 
 }  // namespace
 
 void DrawHdrSection(Settings& settings, bool hdr_relevant, bool& changed) {
-  if (!PersistentHeader("HDR", settings.ui_hdr_open, changed)) return;
+  if (!PersistentHeader(
+          "HDR", settings.ui_hdr_open, changed,
+          "Prepare Pre-DLSS and Post-DLSS source images for the model's SDR input domain and configure the exposure layers.")) {
+    return;
+  }
 
+  IndentScope indent;
   changed |= ImGui::Checkbox("Enable HDR Handling", &settings.hdr.enable);
-  if (ImGui::IsItemHovered())
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
     Tip("Prepares HDR content for the model, which expects a display-referred SDR image. Affects Pre-DLSS and Post-DLSS passes; Backbuffer remains SDR.");
 
   if (!hdr_relevant) ImGui::BeginDisabled();

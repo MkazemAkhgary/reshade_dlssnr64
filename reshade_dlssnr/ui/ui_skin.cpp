@@ -19,9 +19,13 @@ void DrawModelGroup(SkinSettings& detection, bool& model_open, bool& changed) {
 
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("Preset");
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Select the model preset used to generate the Structure Detection mask.");
+  }
   ImGui::SameLine(kControlLabelWidth);
   const int clicked = DrawGroupButtons("structure_detect_preset", kNames,
-                                       kTips, 3, detection.preset, nullptr);
+                                       kTips, 3, detection.preset, nullptr,
+                                       60.0f);
   if (clicked >= 0) {
     detection.preset = clicked;
     changed = true;
@@ -40,9 +44,13 @@ void DrawModelGroup(SkinSettings& detection, bool& model_open, bool& changed) {
 
   ImGui::AlignTextToFramePadding();
   changed |= DrawCheckboxAtLabel("structure_detect_ui_correction",
-                                 &detection.ui_correction);
+                                 &detection.ui_correction,
+                                 "Reduce structure-mask edits where UI elements are detected.");
   ImGui::SameLine();
   ImGui::TextUnformatted("UI Correction");
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Reduce the structure detector's edits where UI elements are detected.");
+  }
 }
 
 void DrawTargetGroup(SkinSettings& detection, bool& changed) {
@@ -53,6 +61,9 @@ void DrawTargetGroup(SkinSettings& detection, bool& changed) {
   };
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("Detection Target");
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Choose whether the persistent mask accepts skin-range-like edits only or all structural edits.");
+  }
   ImGui::SameLine(kControlLabelWidth);
   const int current = static_cast<int>(detection.target_mode);
   const int clicked = DrawGroupButtons("structure_detect_target", kNames,
@@ -95,15 +106,17 @@ void DrawMaskGroup(SkinSettings& detection, bool& mask_open, bool& changed) {
 }  // namespace
 
 void DrawStructureDetectSection(Settings& settings, bool& changed) {
-  if (!PersistentHeader("Structure Detection", settings.ui_skin_detect_open,
-                        changed)) {
+  if (!PersistentHeader(
+          "Structure Detection", settings.ui_skin_detect_open, changed,
+          "Run a secondary model evaluation to build a persistent structure mask used by supported filters.")) {
     return;
   }
 
+  IndentScope section_indent;
   SkinSettings& detection = settings.skin;
 
   changed |= ImGui::Checkbox("Enable Structure Detection", &detection.enable);
-  if (ImGui::IsItemHovered()) {
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip(
         "Run the neural model at reduced resolution and build a persistent analysis mask from its edits."
         " The target can be skin-oriented or general structure.");

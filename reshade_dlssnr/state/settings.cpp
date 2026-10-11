@@ -93,6 +93,12 @@ void LoadSettings() {
 
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.StatusOpen",
                             g_settings.ui_status_open);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.PreferencesOpen",
+                            g_settings.ui_preferences_open);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.PassesOpen",
+                            g_settings.ui_passes_open);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.DebugOpen",
+                            g_settings.ui_debug_open);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.AdvancedOpen",
                             g_settings.ui_advanced_open);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.HdrOpen",
@@ -111,8 +117,18 @@ void LoadSettings() {
                             g_settings.ui_skin_detect_mask_open);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.ModelOpen",
                             g_settings.ui_model_open);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.PassAdvancedOpen",
+                            g_settings.ui_pass_advanced_open);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.ResidualOpen",
                             g_settings.ui_residual_open);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.RcasOpen",
+                            g_settings.ui_rcas_open);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.PassGradeOpen",
+                            g_settings.ui_pass_grade_open);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.GradeInputOpen",
+                            g_settings.ui_grade_input_open);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.GradeOutputOpen",
+                            g_settings.ui_grade_output_open);
   for (uint32_t j = 0; j < kShaderParamCount; ++j) {
     const std::string key = "UI.CategoryOpen" + std::to_string(j);
     reshade::get_config_value(nullptr, "RESHADE_DLSSNR", key.c_str(),
@@ -166,6 +182,12 @@ void SaveSettings() {
 
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.StatusOpen",
                             g_settings.ui_status_open);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.PreferencesOpen",
+                            g_settings.ui_preferences_open);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.PassesOpen",
+                            g_settings.ui_passes_open);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.DebugOpen",
+                            g_settings.ui_debug_open);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.AdvancedOpen",
                             g_settings.ui_advanced_open);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.HdrOpen",
@@ -184,8 +206,18 @@ void SaveSettings() {
                             g_settings.ui_skin_detect_mask_open);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.ModelOpen",
                             g_settings.ui_model_open);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.PassAdvancedOpen",
+                            g_settings.ui_pass_advanced_open);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.ResidualOpen",
                             g_settings.ui_residual_open);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.RcasOpen",
+                            g_settings.ui_rcas_open);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.PassGradeOpen",
+                            g_settings.ui_pass_grade_open);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.GradeInputOpen",
+                            g_settings.ui_grade_input_open);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.GradeOutputOpen",
+                            g_settings.ui_grade_output_open);
   for (uint32_t j = 0; j < kShaderParamCount; ++j) {
     const std::string key = "UI.CategoryOpen" + std::to_string(j);
     reshade::set_config_value(nullptr, "RESHADE_DLSSNR", key.c_str(),

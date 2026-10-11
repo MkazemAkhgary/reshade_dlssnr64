@@ -78,8 +78,8 @@ struct Settings {
   bool enabled = true;
   bool only_super_sampling = true;
 
-  // When true, hover tooltips are drawn in the overlay. Exposed next to
-  // the master switch as "Show Tooltips"; defaults to on.
+  // When true, hover tooltips are drawn in the overlay. Exposed in the
+  // Preferences section; defaults to on.
   bool show_tooltips = true;
 
   // Shared advanced guide/output resource policy. Disabled uses game-owned
@@ -119,9 +119,16 @@ struct Settings {
   bool ui_category_open[16] = {
       true, true, true, true, true, true, true, true,
       true, true, true, true, true, true, true, true};
-  bool ui_residual_open = true;
-  bool ui_rcas_open = true;
+  bool ui_pass_advanced_open = false;
+  bool ui_residual_open = false;
+  bool ui_rcas_open = false;
+  bool ui_pass_grade_open = false;
+  bool ui_grade_input_open = false;
+  bool ui_grade_output_open = false;
   bool ui_status_open = true;
+  bool ui_preferences_open = false;
+  bool ui_passes_open = true;
+  bool ui_debug_open = false;
   bool ui_advanced_open = false;
   bool ui_hdr_open = true;
   bool ui_grade_open = true;

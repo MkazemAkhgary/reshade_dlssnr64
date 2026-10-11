@@ -36,12 +36,15 @@ void DrawGradeSection(const char* id,
   ImGui::PushID(id);
 
   changed |= DrawCheckboxAtLabel("enabled", &grade.enabled);
-  if (ImGui::IsItemHovered() && tooltip != nullptr) {
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && tooltip != nullptr) {
     Tip("%s", tooltip);
   }
 
   ImGui::SameLine();
   ImGui::TextUnformatted(label);
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && tooltip != nullptr) {
+    Tip("%s", tooltip);
+  }
 
   WithDisabled(!grade.enabled, [&] {
     changed |= DrawFloatRow(0, "black_level", "Black Level",

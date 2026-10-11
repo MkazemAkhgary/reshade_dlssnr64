@@ -32,7 +32,7 @@ void DrawTargetSection(Settings& settings, uint32_t pass_index,
 
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("Target");
-  if (ImGui::IsItemHovered()) {
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("Each pass can independently target Pre-DLSS, Post-DLSS, or Backbuffer. "
         "Execution order is grouped by stage; passes within each stage follow "
         "their pass-tab order.");
@@ -66,13 +66,16 @@ bool DrawSkinStructureRow(uint32_t pass_index, PassSettings& pass,
 
   ImGui::AlignTextToFramePadding();
   changed |= DrawCheckboxAtLabel("skin_structure_enabled", &pass.auto_mask);
-  if (ImGui::IsItemHovered()) {
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("Lets the model detect character skin and apply its edits to it "
         "separately.");
   }
 
   ImGui::SameLine();
   ImGui::TextUnformatted("Skin Structure");
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Lets the model detect character skin and apply its edits to it separately.");
+  }
   ImGui::SameLine(kControlLabelWidth);
 
   const bool has_inherit = pass_index > 0;
@@ -95,6 +98,9 @@ bool DrawSkinStructureRow(uint32_t pass_index, PassSettings& pass,
       changed = true;
     }
   });
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Controls how strongly the model applies its skin-specific edits. Disabled when automatic skin masking is off or this value is inherited.");
+  }
 
   ImGui::SameLine();
   ImGui::PushID("skin_structure_reset");
@@ -104,6 +110,9 @@ bool DrawSkinStructureRow(uint32_t pass_index, PassSettings& pass,
       changed = true;
     }
   });
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Reset Skin Structure strength to 1.00.");
+  }
   ImGui::PopID();
 
   if (has_inherit) {
@@ -117,6 +126,9 @@ bool DrawSkinStructureRow(uint32_t pass_index, PassSettings& pass,
     if (ImGui::Button("I", ImVec2(kResetButtonWidth, 0.0f))) {
       pass.inherit_skin_structure = !pass.inherit_skin_structure;
       changed = true;
+    }
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      Tip("Inherit Skin Structure from the previous pass instead of using a local value.");
     }
     if (on) ImGui::PopStyleColor();
     ImGui::PopID();
@@ -136,14 +148,20 @@ void DrawModelSection(uint32_t pass_index, Settings& settings,
   {
     static const char* kPresetNames[] = {"A", "B", "C"};
     static const char* kPresetTooltips[] = {
-        "Model preset A.", "Model preset B.", "Model preset C."};
+        "Use model preset A. Preset changes are applied per evaluation and do not rebuild the feature.",
+        "Use model preset B. Preset changes are applied per evaluation and do not rebuild the feature.",
+        "Use model preset C. Preset changes are applied per evaluation and do not rebuild the feature."};
 
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Preset");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      Tip("Select the model quality/behavior preset for this pass.");
+    }
     ImGui::SameLine(kControlLabelWidth);
 
     const int clicked = DrawGroupButtons(
-        "preset", kPresetNames, kPresetTooltips, 3, pass.preset, nullptr);
+        "preset", kPresetNames, kPresetTooltips, 3, pass.preset, nullptr,
+        60.0f);
     if (clicked >= 0) {
       pass.preset = clicked;
       changed = true;
@@ -173,11 +191,14 @@ void DrawModelSection(uint32_t pass_index, Settings& settings,
 
   ImGui::AlignTextToFramePadding();
   changed |= DrawCheckboxAtLabel("ui_correction", &pass.ui_correction);
-  if (ImGui::IsItemHovered()) {
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("Reduce the model's edits where it detects UI elements.");
   }
   ImGui::SameLine();
   ImGui::TextUnformatted("UI Correction");
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Reduce the model's edits where it detects UI elements.");
+  }
 }
 
 int FindShaderParamIndex(const char* name) {
@@ -227,11 +248,18 @@ void DrawShaderParamSections(uint32_t pass_index, Settings& settings,
             bool checked = pass.params[j] > 0.5f;
             ImGui::AlignTextToFramePadding();
             changed |= DrawCheckboxAtLabel(id.c_str(), &checked);
-            if (ImGui::IsItemHovered() && param.tooltip != nullptr) {
-              Tip("%s", param.tooltip);
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+              Tip("%s", param.tooltip != nullptr
+                              ? param.tooltip
+                              : "Toggle this shader parameter.");
             }
             ImGui::SameLine();
             ImGui::TextUnformatted(param.name);
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+              Tip("%s", param.tooltip != nullptr
+                              ? param.tooltip
+                              : "Toggle this shader parameter.");
+            }
             pass.params[j] = checked ? 1.0f : 0.0f;
           } else {
             changed |= DrawFloatRow(
@@ -299,6 +327,23 @@ void DrawResidualSection(uint32_t pass_index, Settings& settings,
       1.0f / 256.0f, 1.0f, 1.0f / 16.0f);
 }
 
+void ResetPassProfile(uint32_t pass_index, Settings& settings) {
+  if (pass_index >= kMaxPasses) return;
+
+  PassSettings& pass = settings.passes[pass_index];
+  const InjectionStage target = pass.injection_stage;
+  char name[sizeof(pass.custom_name)] = {};
+  std::snprintf(name, sizeof(name), "%s", pass.custom_name);
+
+  PassSettings defaults{};
+  defaults.injection_stage = target;
+  std::snprintf(defaults.custom_name, sizeof(defaults.custom_name), "%s", name);
+  for (uint32_t i = 0; i < kShaderParamCount; ++i) {
+    defaults.params[i] = kShaderParams[i].default_value;
+  }
+  pass = defaults;
+}
+
 void DrawRcasSection(uint32_t pass_index, Settings& settings, bool& changed) {
   PassSettings& pass = settings.passes[pass_index];
 
@@ -309,11 +354,14 @@ void DrawRcasSection(uint32_t pass_index, Settings& settings, bool& changed) {
 
   ImGui::AlignTextToFramePadding();
   changed |= DrawCheckboxAtLabel("rcas_enabled", &pass.rcas_enabled);
-  if (ImGui::IsItemHovered()) {
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("Sharpen the model's upsampled output with FSR RCAS.");
   }
   ImGui::SameLine();
   ImGui::TextUnformatted("Enable RCAS");
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Sharpen the model's upsampled output with FSR RCAS.");
+  }
 
   WithDisabled(!pass.rcas_enabled, [&] {
     changed |= DrawFloatRow(
@@ -334,6 +382,43 @@ void DrawPassSettingsBody(uint32_t pass_index, Settings& settings,
   char label[32];
   std::snprintf(label, sizeof(label), "Enable Pass %u", pass_index + 1);
   changed |= ImGui::Checkbox(label, &settings.pass_enabled[pass_index]);
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Enable or disable this pass profile. Disabled passes do not evaluate the model.");
+  }
+
+  ImGui::SameLine();
+  const bool can_move_left = pass_index > 0;
+  WithDisabled(!can_move_left, [&] {
+    if (ImGui::Button("<", ImVec2(30, 0)) && can_move_left) {
+      g_pending_move = PendingMove::Left;
+      g_pending_move_index = static_cast<int>(pass_index);
+    }
+  });
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Move this pass one position earlier. Execution still groups by target stage.");
+  }
+
+  ImGui::SameLine();
+  const bool can_move_right = pass_index + 1 < kMaxPasses;
+  WithDisabled(!can_move_right, [&] {
+    if (ImGui::Button(">", ImVec2(30, 0)) && can_move_right) {
+      g_pending_move = PendingMove::Right;
+      g_pending_move_index = static_cast<int>(pass_index);
+    }
+  });
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Move this pass one position later. Execution still groups by target stage.");
+  }
+
+  ImGui::SameLine();
+  if (ImGui::Button("Reset Pass")) {
+    ResetPassProfile(pass_index, settings);
+    changed = true;
+  }
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Reset this pass's model, residual, grade, sharpening, shader, and inheritance settings to defaults. Its name, target, and enabled state are preserved.");
+  }
+
   ImGui::Separator();
 
   {
@@ -341,6 +426,9 @@ void DrawPassSettingsBody(uint32_t pass_index, Settings& settings,
     std::snprintf(name_buffer, sizeof(name_buffer), "%s", pass.custom_name);
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Name");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      Tip("Optional label shown on the pass tab. Leave blank to display the default Pass N name.");
+    }
     ImGui::SameLine(kControlLabelWidth);
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x -
                             kResetButtonWidth - ImGui::GetStyle().ItemSpacing.x);
@@ -349,36 +437,17 @@ void DrawPassSettingsBody(uint32_t pass_index, Settings& settings,
                     name_buffer);
       changed = true;
     }
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      Tip("Set a custom display name for this pass. This does not change pass ordering or settings identity.");
+    }
     ImGui::SameLine();
     if (ImGui::Button("R", ImVec2(kResetButtonWidth, 0.0f))) {
       pass.custom_name[0] = '\0';
       changed = true;
     }
-  }
-
-  {
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Order");
-    ImGui::SameLine(kControlLabelWidth);
-
-    const bool can_move_left = pass_index > 0;
-    const bool can_move_right = pass_index + 1 < kMaxPasses;
-
-    WithDisabled(!can_move_left, [&] {
-      if (ImGui::Button("<", ImVec2(30, 0)) && can_move_left) {
-        g_pending_move = PendingMove::Left;
-        g_pending_move_index = static_cast<int>(pass_index);
-      }
-    });
-
-    ImGui::SameLine();
-
-    WithDisabled(!can_move_right, [&] {
-      if (ImGui::Button(">", ImVec2(30, 0)) && can_move_right) {
-        g_pending_move = PendingMove::Right;
-        g_pending_move_index = static_cast<int>(pass_index);
-      }
-    });
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      Tip("Clear the custom name and use the default Pass N label.");
+    }
   }
 
   const bool enabled = settings.pass_enabled[pass_index];
@@ -386,19 +455,45 @@ void DrawPassSettingsBody(uint32_t pass_index, Settings& settings,
     DrawTargetSection(settings, pass_index, changed);
     DrawPipelineSection(pass_index, settings, changed);
     ImGui::Separator();
+
     DrawModelSection(pass_index, settings, changed);
-    DrawShaderParamSections(pass_index, settings, changed);
-    DrawResidualSection(pass_index, settings, changed);
+
+    {
+      IndentScope advanced_indent;
+      if (PersistentSubHeader(
+              "Advanced", settings.ui_pass_advanced_open, changed,
+              "Fine-tune shader parameters and how the model's residual edit is applied.")) {
+        DrawShaderParamSections(pass_index, settings, changed);
+        DrawResidualSection(pass_index, settings, changed);
+      }
+    }
+
     DrawRcasSection(pass_index, settings, changed);
-    ImGui::Separator();
-    DrawGradeSection(
-        "grade_input", "Grade Model Input",
-        "Grade the image the model reads.",
-        settings.passes[pass_index].grade_input, changed);
-    DrawGradeSection(
-        "grade_output", "Grade Model Output",
-        "Grade the image the model produced, before it is published.",
-        settings.passes[pass_index].grade_output, changed);
+
+    {
+      IndentScope grade_indent;
+      if (PersistentSubHeader(
+              "Grade", settings.ui_pass_grade_open, changed,
+              "Optionally grade the model input and output independently.")) {
+        IndentScope grade_children_indent;
+        if (PersistentSubHeader(
+                "Model Input", settings.ui_grade_input_open, changed,
+                "Grade the image before the model reads it. This is independent of the output and backbuffer grades.")) {
+          DrawGradeSection(
+              "grade_input", "Enabled",
+              "Grade the image the model reads, before model evaluation.",
+              settings.passes[pass_index].grade_input, changed);
+        }
+        if (PersistentSubHeader(
+                "Model Output", settings.ui_grade_output_open, changed,
+                "Grade the model's output before it is composed and published. This is independent of the input and backbuffer grades.")) {
+          DrawGradeSection(
+              "grade_output", "Enabled",
+              "Grade the image the model produced, before it is published.",
+              settings.passes[pass_index].grade_output, changed);
+        }
+      }
+    }
   });
   ImGui::PopID();
 }

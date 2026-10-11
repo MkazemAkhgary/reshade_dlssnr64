@@ -64,10 +64,13 @@ void FormatPassStatus(const PassStatus& pass,
 }  // namespace
 
 void DrawStatusSection(Settings& settings, bool& changed) {
-  if (!PersistentHeader("Status", settings.ui_status_open, changed)) {
+  if (!PersistentHeader(
+          "Status", settings.ui_status_open, changed,
+          "Live addon, NGX, guide, HDR, and per-pass health. Pass rows use the same target-stage grouping as execution.")) {
     return;
   }
 
+  IndentScope indent;
   const StatusSnapshot snap = AddonController::Get().GetStatus();
 
   auto bullet = [](bool good) {
@@ -84,10 +87,14 @@ void DrawStatusSection(Settings& settings, bool& changed) {
     ImGui::SameLine();
   };
 
-  auto cell = [&](bool good, const char* label, const char* value) {
+  auto cell = [&](bool good, const char* label, const char* value,
+                  const char* tooltip) {
     bullet(good);
     ImGui::AlignTextToFramePadding();
     ImGui::Text("%s: %s", label, value);
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      Tip("%s", tooltip);
+    }
   };
 
   char dlssnr_buf[16];
@@ -126,15 +133,19 @@ void DrawStatusSection(Settings& settings, bool& changed) {
                         ImGuiTableFlags_SizingStretchSame)) {
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
-    cell(snap.enabled, "DLSSNR", dlssnr_buf);
+    cell(snap.enabled, "DLSSNR", dlssnr_buf,
+         "Master enable state. When disabled, no pass should submit DLSSNR work.");
     ImGui::TableNextColumn();
-    cell(snap.runtime_initialized, "NGX runtime", runtime_buf);
+    cell(snap.runtime_initialized, "NGX runtime", runtime_buf,
+         "Whether the DLSSNR NGX runtime loaded and initialized. Any reason text follows the runtime state.");
 
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
-    cell(snap.guides_valid, "DLSS guides", guides_buf);
+    cell(snap.guides_valid, "DLSS guides", guides_buf,
+         "Depth and motion vectors captured from the current DLSS evaluation. Temporal processing needs current-frame guides.");
     ImGui::TableNextColumn();
-    cell(hdr_good, "HDR", hdr_buf);
+    cell(hdr_good, "HDR", hdr_buf,
+         "HDR handling status. It is relevant only when an enabled pass targets Pre-DLSS or Post-DLSS.");
 
     ImGui::EndTable();
   }
@@ -145,6 +156,9 @@ void DrawStatusSection(Settings& settings, bool& changed) {
                 snap.gain_map_min_log2, snap.gain_map_max_log2,
                 snap.gain_map_sdr_excursion_pixels,
                 snap.gain_map_out_of_range_pixels);
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      Tip("Observed gain-map range and diagnostic counts for SDR-carrier excursions and gains outside the configured range.");
+    }
   }
 
   if (snap.post_dlss_blocked) {
@@ -152,6 +166,9 @@ void DrawStatusSection(Settings& settings, bool& changed) {
     bullet(false);
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(snap.post_dlss_block_reason);
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      Tip("Why Post-DLSS work is currently blocked. Check this message before troubleshooting a Post-DLSS pass.");
+    }
   }
 
   {
@@ -165,7 +182,7 @@ void DrawStatusSection(Settings& settings, bool& changed) {
       if (ImGui::Button("Retry failed passes")) {
         AddonController::Get().RetryAll();
       }
-      if (ImGui::IsItemHovered()) {
+      if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         Tip("Clear every failed pass and rebuild its model on the next frame.");
       }
     }
@@ -203,9 +220,15 @@ void DrawStatusSection(Settings& settings, bool& changed) {
       bullet(ok);
       ImGui::AlignTextToFramePadding();
       ImGui::TextUnformatted(label);
+      if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        Tip("Original pass index %u. Display order is grouped Pre-DLSS, Post-DLSS, then Backbuffer while preserving pass order inside each group.", i + 1);
+      }
 
       ImGui::SameLine(kControlLabelWidth);
       ImGui::TextUnformatted(buf);
+      if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        Tip("Current runtime status for this pass, including its target stage, working scale, initialization state, and any failure reason.");
+      }
     }
   }
 }
