@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Embed shaders and expand nested local includes for runtime compilation."""
+"""Embed reusable shader source fragments and materialize roots for FXC tooling."""
 from pathlib import Path
 import argparse
 import re
@@ -7,30 +7,28 @@ import shutil
 
 INCLUDE_RE = re.compile(r'^\s*#\s*include\s*["<]([^">]+)[">]')
 PRAGMA_ONCE_RE = re.compile(r'^\s*#\s*pragma\s+once\b')
-PRAGMA_ONCE_LINE_RE = re.compile(r'(?m)^[ \t]*#[ \t]*pragma[ \t]+once\b[^\r\n]*(?:\r?\n|$)')
+
+
+def normalize_lf(text: str) -> str:
+    return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
 def normalize_crlf(text: str) -> str:
-    """Normalize text to Windows CRLF line endings."""
-    return text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r\n")
+    return normalize_lf(text).replace("\n", "\r\n")
 
 
 def write_crlf(path: Path, text: str) -> None:
-    # Keep generated C++ and embedded source line endings deterministic.
+    path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as f:
         f.write(normalize_crlf(text))
 
 
 def raw_literal(text: str) -> str:
     text = normalize_crlf(text)
-    delim = "DLSSNR_SHADER"
-    while f")" + delim + '"' in text:
-        delim += "_X"
-    return f'R"{delim}({text}){delim}"'
-
-
-def has_pragma_once(lines: list[str]) -> bool:
-    return any(PRAGMA_ONCE_RE.match(line) for line in lines)
+    delimiter = "DLSSNR_SHADER"
+    while f")" + delimiter + '"' in text:
+        delimiter += "_X"
+    return f'R"{delimiter}({text}){delimiter}"'
 
 
 def shader_name(path: Path, shader_root: Path) -> str:
@@ -56,52 +54,65 @@ def resolve_include(include_name: str, including_file: Path, shader_root: Path) 
     )
 
 
-def expand_shader(path: Path, shader_root: Path) -> str:
-    """Inline local includes in order, honoring #pragma once."""
+def assemble_fragments(root_path: Path, shader_root: Path) -> list[str]:
+    """Return ordered source chunks with include/pragma directives removed.
+
+    Include recursion is resolved into a fragment recipe, not expanded into a
+    duplicated source body. #pragma once is honored while creating each root's
+    recipe. Chunks are split at includes so declarations/macros surrounding an
+    include retain the same relative order as in the original source.
+    """
+    fragments: list[str] = []
     expanded_once: set[Path] = set()
     stack: list[Path] = []
 
-    def expand(current: Path, is_root: bool = False) -> str:
-        current = current.resolve()
-        source = current.read_text(encoding="utf-8")
-        lines = source.replace("\r\n", "\n").replace("\r", "\n").splitlines()
-        pragma_once = has_pragma_once(lines)
+    def flush_chunk(lines: list[str]) -> None:
+        if not lines:
+            return
+        chunk = "".join(lines)
+        if not chunk.strip():
+            lines.clear()
+            return
+        if not chunk.endswith("\n"):
+            chunk += "\n"
+        fragments.append(chunk)
+        lines.clear()
 
-        if pragma_once and current in expanded_once:
-            return ""
+    def visit(current: Path) -> None:
+        current = current.resolve()
+        source = normalize_lf(current.read_text(encoding="utf-8"))
+        lines = source.splitlines(keepends=True)
+        has_pragma_once = any(PRAGMA_ONCE_RE.match(line) for line in lines)
+
+        if has_pragma_once and current in expanded_once:
+            return
         if current in stack:
-            if pragma_once:
-                return ""
+            if has_pragma_once:
+                return
             chain = " -> ".join(shader_name(item, shader_root) for item in stack + [current])
             raise RuntimeError(f"Include cycle without #pragma once: {chain}")
-        if pragma_once:
+        if has_pragma_once:
             expanded_once.add(current)
 
         stack.append(current)
-        current_name = shader_name(current, shader_root)
-        output: list[str] = []
-        for index, line in enumerate(lines):
+        chunk: list[str] = []
+        for line in lines:
             if PRAGMA_ONCE_RE.match(line):
                 continue
             match = INCLUDE_RE.match(line)
             if match is None:
-                output.append(line)
+                chunk.append(line)
                 continue
 
+            flush_chunk(chunk)
             dependency = resolve_include(match.group(1), current, shader_root)
-            dependency_name = shader_name(dependency, shader_root)
-            expanded = expand(dependency)
-            if expanded:
-                output.append(f'#line 1 "{dependency_name}"')
-                output.extend(expanded.rstrip("\r\n").split("\n"))
-            # Resume source locations on the line after the include directive.
-            output.append(f'#line {index + 2} "{current_name}"')
+            visit(dependency)
 
+        flush_chunk(chunk)
         stack.pop()
-        # Keep one newline at EOF. The caller's generator normalizes it to CRLF.
-        return "\n".join(output) + "\n"
 
-    return expand(path, is_root=True)
+    visit(root_path)
+    return fragments
 
 
 def main() -> None:
@@ -124,12 +135,18 @@ def main() -> None:
          if p.is_file() and p.suffix.lower() in {".hlsl", ".hlsli", ".h"}),
         key=lambda p: p.as_posix().lower(),
     )
+    roots = [p for p in files if p.suffix.lower() == ".hlsl"]
 
     header = """#pragma once
 #include <cstddef>
 
 namespace reshade_dlssnr {
-struct EmbeddedShader { const char* name; const char* source; std::size_t size; };
+struct EmbeddedShaderFragment { const char* source; std::size_t size; };
+struct EmbeddedShader {
+  const char* name;
+  const EmbeddedShaderFragment* const* fragments;
+  std::size_t fragment_count;
+};
 extern const EmbeddedShader kEmbeddedShaders[];
 extern const std::size_t kEmbeddedShaderCount;
 const EmbeddedShader* FindEmbeddedShader(const char* name);
@@ -137,30 +154,58 @@ const EmbeddedShader* FindEmbeddedShader(const char* name);
 """
     write_crlf(generated / "shader_sources.h", header)
 
-    out = ['#include "shader_sources.h"', '#include <cstring>', 'namespace reshade_dlssnr {']
-    entries = []
-    for path in files:
+    fragment_ids: dict[str, int] = {}
+    fragment_texts: list[str] = []
+    root_entries: list[tuple[str, str, list[int]]] = []
+
+    for path in roots:
         rel = shader_name(path, shader_root)
+        pieces = assemble_fragments(path, shader_root)
+        if not pieces:
+            raise RuntimeError(f"No compilable source fragments for root shader: {rel}")
+
+        recipe: list[int] = []
+        for piece in pieces:
+            index = fragment_ids.get(piece)
+            if index is None:
+                index = len(fragment_texts)
+                fragment_ids[piece] = index
+                fragment_texts.append(piece)
+            recipe.append(index)
+
         safe = re.sub(r"[^A-Za-z0-9_]", "_", rel)
-        symbol = "kEmbeddedShaderSource_" + safe
-        raw_source = path.read_text(encoding="utf-8")
-        # Process include-once semantics before removing the compiler-unsupported
-        # pragma from the emitted source. Root entries and FXC inputs are expanded;
-        # helper entries retain their authored includes but are pragma-free.
-        expanded_source = expand_shader(path, shader_root)
-        is_root_shader = path.suffix.lower() == ".hlsl"
-        source = expanded_source if is_root_shader else raw_source
-        source = PRAGMA_ONCE_LINE_RE.sub("", source)
-        if is_root_shader:
-            prepared = expanded_root / rel
-            prepared.parent.mkdir(parents=True, exist_ok=True)
-            write_crlf(prepared, source)
-        out.append(f"static constexpr char {symbol}[] = {raw_literal(source)};")
-        entries.append((rel, symbol))
+        root_entries.append((rel, safe, recipe))
+        prepared = expanded_root / rel
+        write_crlf(prepared, "".join(pieces))
+
+    out = [
+        '#include "shader_sources.h"',
+        '#include <cstring>',
+        'namespace reshade_dlssnr {',
+    ]
+    for index, source in enumerate(fragment_texts):
+        text_symbol = f"kEmbeddedShaderText_{index:03d}"
+        fragment_symbol = f"kEmbeddedShaderFragment_{index:03d}"
+        out.append(f"static constexpr char {text_symbol}[] = {raw_literal(source)};")
+        out.append(
+            f"static constexpr EmbeddedShaderFragment {fragment_symbol} = "
+            f"{{{text_symbol}, sizeof({text_symbol}) - 1}};"
+        )
+
+    for rel, safe, recipe in root_entries:
+        parts_symbol = f"kEmbeddedShaderParts_{safe}"
+        out.append(f"static constexpr const EmbeddedShaderFragment* {parts_symbol}[] = {{")
+        for index in recipe:
+            out.append(f"  &kEmbeddedShaderFragment_{index:03d},")
+        out.append("};")
 
     out.append("const EmbeddedShader kEmbeddedShaders[] = {")
-    for name, symbol in entries:
-        out.append(f'  {{"{name}", {symbol}, sizeof({symbol}) - 1}},')
+    for rel, safe, recipe in root_entries:
+        parts_symbol = f"kEmbeddedShaderParts_{safe}"
+        out.append(
+            f'  {{"{rel}", {parts_symbol}, '
+            f"sizeof({parts_symbol}) / sizeof({parts_symbol}[0])}},"
+        )
     out += [
         "};",
         "const std::size_t kEmbeddedShaderCount = sizeof(kEmbeddedShaders) / sizeof(kEmbeddedShaders[0]);",
@@ -197,8 +242,10 @@ const EmbeddedShaderBytecode* FindEmbeddedShaderBytecode(const char*) { return n
 }
 """
     write_crlf(generated / "shader_bytecode.cpp", bytecode_stub)
-    print(f"Embedded {len(files)} shader/header files; expanded includes for "
-          f"{sum(1 for p in files if p.suffix.lower() == '.hlsl')} roots.")
+    print(
+        f"Embedded {len(fragment_texts)} unique source fragments from {len(files)} shader/header files; "
+        f"assembled {len(roots)} shader roots for verification/precompilation."
+    )
 
 
 if __name__ == "__main__":

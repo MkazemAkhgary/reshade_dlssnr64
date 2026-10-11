@@ -2,8 +2,8 @@
 
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <string>
-#include <vector>
 
 #include <reshade.hpp>
 
@@ -38,94 +38,6 @@ std::string TrimShaderDiagnostic(const void* data, size_t size) {
   return text;
 }
 
-std::string NormalizeShaderIncludePath(const std::string &path) {
-  if (path.empty() || path.front() == '/' || path.find(':') != std::string::npos)
-    return {};
-
-  std::string value = path;
-  for (char &ch : value) {
-    if (ch == '\\') ch = '/';
-  }
-
-  std::vector<std::string> parts;
-  size_t start = 0;
-  while (start <= value.size()) {
-    const size_t end = value.find('/', start);
-    const size_t length = end == std::string::npos ? value.size() - start
-                                                    : end - start;
-    const std::string part = value.substr(start, length);
-    if (part.empty() || part == ".") {
-      // Ignore redundant separators and current-directory segments.
-    } else if (part == "..") {
-      if (parts.empty()) return {};
-      parts.pop_back();
-    } else {
-      parts.push_back(part);
-    }
-    if (end == std::string::npos) break;
-    start = end + 1;
-  }
-
-  std::string result;
-  for (const std::string &part : parts) {
-    if (!result.empty()) result += '/';
-    result += part;
-  }
-  return result;
-}
-
-const EmbeddedShader *FindEmbeddedInclude(const char *file_name,
-                                          LPCVOID parent_data) {
-  if (file_name == nullptr) return nullptr;
-
-  const EmbeddedShader *parent = nullptr;
-  if (parent_data != nullptr) {
-    for (size_t i = 0; i < kEmbeddedShaderCount; ++i) {
-      if (kEmbeddedShaders[i].source == parent_data) {
-        parent = &kEmbeddedShaders[i];
-        break;
-      }
-    }
-  }
-
-  const std::string include_name = file_name;
-  if (parent != nullptr) {
-    const std::string parent_name = parent->name != nullptr ? parent->name : "";
-    const size_t slash = parent_name.find_last_of('/');
-    if (slash != std::string::npos) {
-      const std::string relative = NormalizeShaderIncludePath(
-          parent_name.substr(0, slash + 1) + include_name);
-      if (!relative.empty()) {
-        if (const EmbeddedShader *shader = FindEmbeddedShader(relative.c_str()))
-          return shader;
-      }
-    }
-  }
-
-  const std::string normalized = NormalizeShaderIncludePath(include_name);
-  return normalized.empty() ? nullptr : FindEmbeddedShader(normalized.c_str());
-}
-
-class EmbeddedInclude final : public ID3DInclude {
- public:
-  HRESULT STDMETHODCALLTYPE Open(
-      D3D_INCLUDE_TYPE,
-      LPCSTR file_name,
-      LPCVOID parent_data,
-      LPCVOID* data,
-      UINT* bytes) override {
-    if (data == nullptr || bytes == nullptr || file_name == nullptr)
-      return E_INVALIDARG;
-    const EmbeddedShader* shader = FindEmbeddedInclude(file_name, parent_data);
-    if (shader == nullptr)
-      return E_FAIL;
-    *data = shader->source;
-    *bytes = static_cast<UINT>(shader->size);
-    return S_OK;
-  }
-
-  HRESULT STDMETHODCALLTYPE Close(LPCVOID) override { return S_OK; }
-};
 
 }  // namespace
 
@@ -387,10 +299,11 @@ bool ComputeEngine::CompilePipeline(
   ID3DBlob* diagnostic_blob = nullptr;
 
   if (bytecode == nullptr || bytecode_size == 0) {
-    if (source == nullptr) {
+    if (source == nullptr || source->fragments == nullptr ||
+        source->fragment_count == 0) {
       char message[384];
       std::snprintf(message, sizeof(message),
-                    "DLSSNR shader source missing: pass=%s root=%s",
+                    "DLSSNR shader source missing or empty: pass=%s root=%s",
                     pass_name, def.root != nullptr ? def.root : "<null>");
       const std::string key =
           ShaderDiagnosticKey(pass_name, reshade::log::level::error, message);
@@ -404,13 +317,43 @@ bool ComputeEngine::CompilePipeline(
       return false;
     }
 
-    EmbeddedInclude include;
+    std::size_t source_size = 0;
+    for (std::size_t i = 0; i < source->fragment_count; ++i) {
+      const EmbeddedShaderFragment* fragment = source->fragments[i];
+      if (fragment == nullptr || fragment->source == nullptr ||
+          fragment->size == 0 ||
+          fragment->size > std::numeric_limits<std::size_t>::max() - source_size) {
+        char message[384];
+        std::snprintf(message, sizeof(message),
+                      "DLSSNR shader source has an invalid fragment: pass=%s root=%s index=%zu",
+                      pass_name, def.root != nullptr ? def.root : "<null>", i);
+        const std::string key =
+            ShaderDiagnosticKey(pass_name, reshade::log::level::error, message);
+        bool duplicate = false;
+        {
+          std::lock_guard<std::mutex> lock(diagnostic_mutex_);
+          duplicate = !logged_shader_diagnostics_.insert(key).second;
+        }
+        if (!duplicate)
+          reshade::log::message(reshade::log::level::error, message);
+        return false;
+      }
+      source_size += fragment->size;
+    }
+
+    std::string assembled_source;
+    assembled_source.reserve(source_size);
+    for (std::size_t i = 0; i < source->fragment_count; ++i) {
+      const EmbeddedShaderFragment* fragment = source->fragments[i];
+      assembled_source.append(fragment->source, fragment->size);
+    }
+
     const HRESULT compile_hr = D3DCompile(
-        source->source,
-        source->size,
+        assembled_source.data(),
+        assembled_source.size(),
         def.root,
         nullptr,
-        &include,
+        nullptr,
         "CSMain",
         "cs_5_1",
         D3DCOMPILE_OPTIMIZATION_LEVEL3,
