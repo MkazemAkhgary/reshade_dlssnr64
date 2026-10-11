@@ -32,6 +32,8 @@ constexpr uint32_t kGradeScratchSlotB = 3;
 
 class PassResources {
  public:
+  // The full-resolution auxiliary target. In HDR frames with Local Exposure,
+  // it holds the global-only carrier used to build the unlifted model reference.
   Microsoft::WRL::ComPtr<ID3D12Resource> output;
   unsigned int output_width = 0;
   unsigned int output_height = 0;
@@ -55,6 +57,10 @@ class PassResources {
 
   Microsoft::WRL::ComPtr<ID3D12Resource> working_input;
   Microsoft::WRL::ComPtr<ID3D12Resource> working_output;
+  Microsoft::WRL::ComPtr<ID3D12Resource> unlifted_working_input;
+  unsigned int unlifted_working_width = 0;
+  unsigned int unlifted_working_height = 0;
+  DXGI_FORMAT unlifted_working_format = DXGI_FORMAT_UNKNOWN;
   // Full-resolution combined exposure used by HDR inverse compose. R32_FLOAT
   // stores global exposure × the exact local exposure factor applied by the
   // gain-map split to that source pixel.
@@ -85,6 +91,11 @@ class PassResources {
       const D3D12_RESOURCE_DESC& desc,
       unsigned int work_width,
       unsigned int work_height);
+  bool EnsureUnliftedWorkingInput(
+      ID3D12Device* device,
+      const D3D12_RESOURCE_DESC& desc,
+      unsigned int work_width,
+      unsigned int work_height);
   bool EnsureEffectiveExposureMap(
       ID3D12Device* device, unsigned int width, unsigned int height);
 
@@ -99,11 +110,18 @@ class PassResources {
   void Shutdown();
 
   ID3D12Resource* GetOutput() const { return output.Get(); }
+  // The otherwise-unused full-resolution output allocation holds the HDR
+  // carrier with Local Exposure disabled, used to prepare a matching residual
+  // reference at working resolution.
+  ID3D12Resource* GetGlobalHdrCarrier() const { return output.Get(); }
   ID3D12Resource* GetCompositeOutput() const { return composite_output.Get(); }
   ID3D12Resource* GetPackedOutput() const { return packed_hdr_sdr.Get(); }
   ID3D12Resource* GetGainStats() const { return gain_stats.Get(); }
   ID3D12Resource* GetWorkingInput() const { return working_input.Get(); }
   ID3D12Resource* GetWorkingOutput() const { return working_output.Get(); }
+  ID3D12Resource* GetUnliftedWorkingInput() const {
+    return unlifted_working_input.Get();
+  }
   ID3D12Resource* GetEffectiveExposureMap() const { return effective_exposure_map.Get(); }
   // True when slot `index` already holds a texture of the given shape. Lets a
   // caller pick between two slots instead of letting EnsureScratch dispose a

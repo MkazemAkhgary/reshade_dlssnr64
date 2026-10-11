@@ -337,6 +337,10 @@ void PassSession::SeedFrameState(ID3D12Resource* backbuffer) {
                             D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   command_.SetResourceState(resources_.GetWorkingOutput(),
                             D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  if (resources_.GetUnliftedWorkingInput() != nullptr) {
+    command_.SetResourceState(resources_.GetUnliftedWorkingInput(),
+                              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  }
   if (resources_.GetPackedOutput() != nullptr) {
     command_.SetResourceState(resources_.GetPackedOutput(),
                               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -361,6 +365,10 @@ void PassSession::CleanupFrameState(ID3D12GraphicsCommandList* command_list) {
                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   command_.Transition(command_list, resources_.GetWorkingOutput(),
                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  if (resources_.GetUnliftedWorkingInput() != nullptr) {
+    command_.Transition(command_list, resources_.GetUnliftedWorkingInput(),
+                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  }
   if (resources_.GetPackedOutput() != nullptr) {
     command_.Transition(command_list, resources_.GetPackedOutput(),
                         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -1093,6 +1101,28 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
   self->command_.Transition(run.list, packed,
                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
+  if (run.hdr_uniforms.local_exposure_strength > 0.0f) {
+    ID3D12Resource* global_carrier = self->resources_.GetGlobalHdrCarrier();
+    if (global_carrier == nullptr) {
+      self->FailForStep("unlifted HDR carrier resource is unavailable");
+      return PipelineStatus::Fail;
+    }
+
+    ComputeConstants global_constants = constants;
+    global_constants.hdr.LocalExposure.x = 0.0f;
+    self->command_.Transition(run.list, global_carrier,
+                              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    ID3D12Resource* global_uavs[kUavCount] = {global_carrier};
+    if (!run.codec->Dispatch("GainMapSplit", run.list, global_constants,
+                             srvs, global_uavs)) {
+      self->FailForStep("failed to build unlifted HDR reference carrier");
+      return PipelineStatus::Fail;
+    }
+    self->command_.UavBarrier(run.list, global_carrier);
+    self->command_.Transition(run.list, global_carrier,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
+
   // Statistics are intentionally a second pass. The RGBA32F carrier's RGB can
   // legitimately contain super-white SDR values. Those excursions and the
   // multiplier's log2 range are reported separately; neither alters the carrier.
@@ -1158,6 +1188,43 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
           run.pass != nullptr && !run.pass->grade_input.enabled)) {
     self->FailForStep("failed to prepare model input");
     return PipelineStatus::Fail;
+  }
+
+  if (hdr_source && run.hdr_uniforms.local_exposure_strength > 0.0f) {
+    ID3D12Resource* global_carrier = self->resources_.GetGlobalHdrCarrier();
+    if (global_carrier == nullptr ||
+        !self->resources_.EnsureUnliftedWorkingInput(
+            run.device, self->resources_.GetWorkingInput()->GetDesc(),
+            run.work_width, run.work_height)) {
+      self->FailForStep("failed to create unlifted HDR model-input reference");
+      return PipelineStatus::Fail;
+    }
+
+    ID3D12Resource* unlifted_input =
+        self->resources_.GetUnliftedWorkingInput();
+    ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
+    self->command_.SetResourceState(unlifted_input,
+                                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    self->command_.Transition(list, global_carrier,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    self->command_.Transition(list, unlifted_input,
+                              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+    ComputeConstants reference_constants = {};
+    reference_constants.Width = run.work_width;
+    reference_constants.Height = run.work_height;
+    reference_constants.shader.Params0.w = 1.0f;
+    ID3D12Resource* reference_srvs[kSrvCount] = {
+        global_carrier, global_carrier, global_carrier, global_carrier};
+    ID3D12Resource* reference_uavs[kUavCount] = {unlifted_input};
+    if (!run.codec->Dispatch("PrepareModelInput", list, reference_constants,
+                             reference_srvs, reference_uavs)) {
+      self->FailForStep("failed to prepare unlifted HDR model-input reference");
+      return PipelineStatus::Fail;
+    }
+    self->command_.UavBarrier(list, unlifted_input);
+    self->command_.Transition(list, unlifted_input,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   }
 
   run.model_color = model_color;
@@ -1432,10 +1499,17 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
   ID3D12Resource* enhanced_for_compose =
       run.pass->intensity <= 0.0f ? run.model_color : run.model_output;
 
+  ID3D12Resource* compose_input = run.model_color;
+  if (hdr_active && run.pass->intensity > 0.0f &&
+      run.hdr_uniforms.local_exposure_strength > 0.0f &&
+      self->resources_.GetUnliftedWorkingInput() != nullptr) {
+    compose_input = self->resources_.GetUnliftedWorkingInput();
+  }
+
   if (!model_pipeline::ComposeOutput(
           self->command_, self->StageList(run, self->command_),
           self->resources_, run.codec, original, run.model_input,
-          run.model_color, enhanced_for_compose, run.width, run.height,
+          compose_input, enhanced_for_compose, run.width, run.height,
           run.pass->params,
           run.pass->residual, run.pass->rcas_enabled,
           run.pass->rcas_strength, &run.pass->grade_input, hdr_ptr)) {

@@ -9,11 +9,13 @@ namespace reshade_dlssnr {
 
 namespace {
 
-int GradeFormatCode(const PassRun& run, ID3D12Resource* target) {
+int GradeFormatCode(const PassRun& run, ID3D12Resource* target,
+                    bool model_sdr_domain) {
   // DLSSNR.Color is sRGB-encoded SDR in the HDR gain-map path, matching the
   // pre-gain-map TonemapForward output. GradeInPlace therefore decodes/encodes
   // it through the ordinary SDR path.
-  if (run.hdr_uniforms_ready && target == run.model_color) {
+  if (run.hdr_uniforms_ready &&
+      (target == run.model_color || model_sdr_domain)) {
     return HdrFormatCode(HdrFormat::Sdr);
   }
   return target != nullptr ? HdrFormatCode(DetectFormatFromDxgi(target->GetDesc().Format))
@@ -24,7 +26,8 @@ int GradeFormatCode(const PassRun& run, ID3D12Resource* target) {
 
 PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
                                          const GradeSettings& grade,
-                                         uint32_t scratch_slot) {
+                                         uint32_t scratch_slot,
+                                         bool model_sdr_domain) {
   PassSession* self = run.session;
   if (self == nullptr) return PipelineStatus::Ok;
   if (!grade.enabled || target == nullptr) return PipelineStatus::Ok;
@@ -44,7 +47,7 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
   if (!model_pipeline::ApplyGrade(
           self->command_, list, run.codec, target,
           self->resources_.GetScratch(scratch_slot), width, height,
-          GradeFormatCode(run, target), grade)) {
+          GradeFormatCode(run, target, model_sdr_domain), grade)) {
     self->FailForStep("failed to apply the grade");
     return PipelineStatus::Fail;
   }
@@ -61,7 +64,22 @@ PipelineStatus PassSession::StepGradeModelInput(PassRun& run) {
 
   TRACE_EVT(run.session, "grade_model_input pass=%u luma=%.3f chroma=%.3f",
             run.pass_index, grade.luma, grade.chroma);
-  return GradeInPlace(run, run.model_color, grade, kGradeScratchSlotA);
+  PipelineStatus status =
+      GradeInPlace(run, run.model_color, grade, kGradeScratchSlotA);
+  if (status != PipelineStatus::Ok) return status;
+
+  const bool use_unlifted_reference =
+      run.hdr_uniforms_ready && run.hdr != nullptr &&
+      run.hdr->ResolvedFormat() != HdrFormat::Sdr &&
+      run.hdr_uniforms.local_exposure_strength > 0.0f &&
+      run.session != nullptr &&
+      run.session->resources_.GetUnliftedWorkingInput() != nullptr;
+  if (use_unlifted_reference) {
+    return GradeInPlace(run,
+                        run.session->resources_.GetUnliftedWorkingInput(),
+                        grade, kGradeScratchSlotA, true);
+  }
+  return PipelineStatus::Ok;
 }
 
 PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {

@@ -55,7 +55,9 @@ float3 ComposeHdrInverse(float3 sdr_base, float3 hdr_src,
         const float3 relative_delta = model_delta / model_denominator;
         const float3 model_sdr_base = GamutFitModelInput(max(sdr_base, 0.0));
         const float3 kL = HdrLumaWeights();
-        const float base_luma = dot(model_sdr_base, kL);
+        float base_luma = dot(model_sdr_base, kL);
+        if (kLocalExposureStrength > 0.0)
+            base_luma = max(dot(low_in_lin, kL), 0.0);
         const float3 shaped = ShapeResidual(relative_delta, base_luma);
 
         // packed.rgb * packed.a reconstructs this pixel's scene-referred source

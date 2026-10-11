@@ -261,6 +261,39 @@ bool PassResources::EnsureWorkingResources(
   return true;
 }
 
+bool PassResources::EnsureUnliftedWorkingInput(
+    ID3D12Device* device,
+    const D3D12_RESOURCE_DESC& desc,
+    unsigned int work_width,
+    unsigned int work_height) {
+  if (device == nullptr || work_width == 0 || work_height == 0) return false;
+
+  if (unlifted_working_input != nullptr &&
+      unlifted_working_width == work_width &&
+      unlifted_working_height == work_height &&
+      unlifted_working_format == desc.Format) {
+    return true;
+  }
+
+  Dispose(unlifted_working_input);
+
+  D3D12_RESOURCE_DESC working_desc = desc;
+  working_desc.Width = work_width;
+  working_desc.Height = work_height;
+
+  ID3D12Resource* raw = nullptr;
+  if (!CreateUavTexture(device, working_desc, &raw)) return false;
+  unlifted_working_input.Attach(raw);
+  unlifted_working_width = work_width;
+  unlifted_working_height = work_height;
+  unlifted_working_format = desc.Format;
+  trace::NameResource(unlifted_working_input.Get(), "unlifted_working_input");
+  TRACE_CMD(this, "create unlifted_working_input res=%d %ux%u",
+            trace::ResourceId(unlifted_working_input.Get()),
+            work_width, work_height);
+  return true;
+}
+
 bool PassResources::EnsureScratch(
     ID3D12Device* device,
     const D3D12_RESOURCE_DESC& desc,
@@ -313,6 +346,7 @@ void PassResources::Shutdown() {
   gain_stats.Reset();
   working_input.Reset();
   working_output.Reset();
+  unlifted_working_input.Reset();
   effective_exposure_map.Reset();
 
   for (uint32_t i = 0; i < kScratchCount; ++i) {
@@ -335,6 +369,9 @@ void PassResources::Shutdown() {
   working_width = 0;
   working_height = 0;
   working_format = DXGI_FORMAT_UNKNOWN;
+  unlifted_working_width = 0;
+  unlifted_working_height = 0;
+  unlifted_working_format = DXGI_FORMAT_UNKNOWN;
 }
 
 }  // namespace reshade_dlssnr
