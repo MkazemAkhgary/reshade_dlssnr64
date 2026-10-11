@@ -39,7 +39,7 @@ struct ComputePassDef;
 constexpr uint32_t kMaxFramesInFlight = 16;  // DXGI's maximum swapchain buffers
 // The ring covers twelve per-pass dispatches (including the unlifted HDR
 // reference path), one game-exposure read, eight HDR histogram clear/build
-// dispatches, Release grading, and Structure Detection. It must cover the
+// dispatches, Release grading, and Importance Mask. It must cover the
 // worst case across in-flight frames.
 constexpr uint32_t kMaxDispatchesPerFrame = kMaxPasses * 12 + 10 + 3;
 constexpr uint32_t kDescriptorRingSize =

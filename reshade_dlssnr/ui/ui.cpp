@@ -231,9 +231,9 @@ void DrawOverlay(reshade::api::effect_runtime*) {
 
   SectionDivider();
 
-  // Structure Detection shares the frame-preparation stage with HDR and is
-  // unavailable when every enabled pass targets only the Backbuffer.
-  DrawStructureDetectSection(settings, hdr_relevant, changed);
+  // Importance Mask consumes the shared HDR frame snapshot and is unavailable
+  // when every enabled pass targets only the Backbuffer.
+  DrawImportanceMaskSection(settings, hdr_relevant, changed);
 
   SectionDivider();
 

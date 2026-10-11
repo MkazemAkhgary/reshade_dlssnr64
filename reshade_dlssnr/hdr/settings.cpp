@@ -37,7 +37,7 @@ void LoadFilter(const char* prefix, ExposureFilterSettings& f) {
     std::snprintf(key, sizeof(key), "%s.%s", prefix, suffix);
     LoadFloat(key, value);
   };
-  boolean("StructureMask", f.structure_mask);
+  boolean("ImportanceMask", f.importance_mask);
   boolean("Depth", f.depth);
   boolean("PercentileRange", f.percentile_range);
   number("DepthNear", f.depth_near);
@@ -65,7 +65,7 @@ void SaveFilter(const char* prefix, const ExposureFilterSettings& f) {
     std::snprintf(key, sizeof(key), "%s.%s", prefix, suffix);
     SaveFloat(key, value);
   };
-  boolean("StructureMask", f.structure_mask);
+  boolean("ImportanceMask", f.importance_mask);
   boolean("Depth", f.depth);
   boolean("PercentileRange", f.percentile_range);
   number("DepthNear", f.depth_near);

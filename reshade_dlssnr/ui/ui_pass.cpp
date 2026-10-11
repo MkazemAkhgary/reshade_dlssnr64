@@ -99,7 +99,7 @@ bool DrawSkinStructureRow(uint32_t pass_index, PassSettings& pass,
     }
   });
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Controls how strongly the model applies its skin-specific edits. Disabled when automatic skin masking is off or this value is inherited.");
+    Tip("Controls how strongly the model applies its skin-specific edits. Disabled when the model's automatic masking option is off or this value is inherited.");
   }
 
   ImGui::SameLine();

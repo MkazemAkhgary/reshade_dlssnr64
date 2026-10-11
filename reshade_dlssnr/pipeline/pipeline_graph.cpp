@@ -27,7 +27,7 @@ const char* const kNodeNames[] = {
     "SeedResourceStates",
     "SeedGuideStates",
     "EnsureHdr",
-    "SkinDetect",
+    "Reserved10",
     "HdrBeginFrame",
     "HistogramZero",
     "HistogramBuild",
@@ -43,6 +43,7 @@ const char* const kNodeNames[] = {
     "FillEvaluateParams",
     "EvaluateFeature",
     "ModelOutputBarrier",
+    "BuildImportanceMask",
     "ComposeModelOutput",
     "ComposeModelOutputHdr",
     "GradeModelOutput",
@@ -117,7 +118,7 @@ const PipelineStepDef* const* StepIndex() {
   const Source sources[] = {
       {"pass_session.cpp", &SessionStepFor},
       {"hdr_state.cpp", &HdrStepFor},
-      {"skin_detect.cpp", &SkinDetectStepFor},
+      {"importance_mask.cpp", &ImportanceMaskStepFor},
       {"debug_view.cpp", &DebugStepFor},
       {"addon_controller.cpp", &ControllerStepFor},
   };
@@ -232,8 +233,8 @@ constexpr PipelinePhaseDef kPresentPhases[] = {
 
 // -- Pre-DLSS stage ---------------------------------------------------------
 // Runs on the game's input Color resource before the original EvaluateFeature.
-// HDR metering and Structure Detection were already completed by the shared
-// frame-preparation stage before this pass group starts.
+// HDR metering uses the previous frame's Importance Mask. The current
+// frame mask is generated after the first successful Pre/Post model evaluation.
 constexpr PipelineNodeId kPreDlssSteps[] = {
     PipelineNodeId::ResolveDevice,
     PipelineNodeId::EnsureHdr,
@@ -253,6 +254,7 @@ constexpr PipelineNodeId kPreDlssSteps[] = {
     PipelineNodeId::FillEvaluateParams,
     PipelineNodeId::EvaluateFeature,
     PipelineNodeId::ModelOutputBarrier,
+    PipelineNodeId::BuildImportanceMask,
     PipelineNodeId::ComposeModelOutput,
     PipelineNodeId::GradeModelOutput,
     PipelineNodeId::RenderDebugView,
@@ -264,17 +266,17 @@ constexpr PipelinePhaseDef kPreDlssPhases[] = {
     {"resources", 3, 4, nullptr},
     {"feature", 7, 3, nullptr},
     {"prepare", 10, 6, nullptr},
-    {"evaluate", 16, 2, nullptr},
-    {"compose", 18, 2, nullptr},
-    {"output", 20, 2, nullptr},
+    {"evaluate", 16, 3, nullptr},
+    {"compose", 19, 2, nullptr},
+    {"output", 21, 2, nullptr},
 };
 
 // -- Post-DLSS stage --------------------------------------------------------
 // Was: PassSession::OnPostDlssEvaluate (pass_session.cpp)
 constexpr PipelineNodeId kPostDlssSteps[] = {
     PipelineNodeId::ResolveDevice,        // GetDevice + runtime.Initialize
-    // HDR measurement and Structure Detection were completed by the shared
-    // frame-preparation stage before the first active game-resource pass.
+    // HDR measurement is completed by the shared frame-preparation stage.
+    // The Importance Mask is built after this pass evaluates the model.
     PipelineNodeId::EnsureHdr,
     PipelineNodeId::EnsureComputeEngine,  // codec.Init + IsReady
     PipelineNodeId::ResolveWorkingScale,
@@ -292,6 +294,7 @@ constexpr PipelineNodeId kPostDlssSteps[] = {
     PipelineNodeId::FillEvaluateParams,
     PipelineNodeId::EvaluateFeature,
     PipelineNodeId::ModelOutputBarrier,
+    PipelineNodeId::BuildImportanceMask,
     PipelineNodeId::ComposeModelOutput,
     PipelineNodeId::GradeModelOutput,
     PipelineNodeId::RenderDebugView,
@@ -303,29 +306,29 @@ constexpr PipelinePhaseDef kPostDlssPhases[] = {
     {"resources", 3, 4, nullptr},
     {"feature", 7, 3, nullptr},
     {"prepare", 10, 5, nullptr},
-    {"evaluate", 15, 3, nullptr},
-    {"compose", 18, 2, nullptr},
-    {"output", 20, 2, nullptr},
+    {"evaluate", 15, 4, nullptr},
+    {"compose", 19, 2, nullptr},
+    {"output", 21, 2, nullptr},
 };
 
-constexpr PipelinePhaseDef kStructureDetectionPhases[] = {
-    {"prepare_and_detect", 0, 5, nullptr},
+constexpr PipelinePhaseDef kHdrPreparationPhases[] = {
+    {"prepare", 0, 4, nullptr},
 };
 
-constexpr size_t kStructureDetectionStepCount =
-    sizeof(kStructureDetectionStepNodes) / sizeof(kStructureDetectionStepNodes[0]);
-constexpr size_t kStructureDetectionPhaseCount =
-    sizeof(kStructureDetectionPhases) / sizeof(kStructureDetectionPhases[0]);
+constexpr size_t kHdrPreparationStepCount =
+    sizeof(kHdrPreparationStepNodes) / sizeof(kHdrPreparationStepNodes[0]);
+constexpr size_t kHdrPreparationPhaseCount =
+    sizeof(kHdrPreparationPhases) / sizeof(kHdrPreparationPhases[0]);
 
-const PipelineStageDef kStructureDetectionStage = {
-    /*name=*/"StructureDetection",
+const PipelineStageDef kHdrPreparationStage = {
+    /*name=*/"HdrPreparation",
     /*has_injection_stage=*/false,
     /*is_pre_dlss=*/false,
     /*is_post_dlss=*/true,
-    /*steps=*/kStructureDetectionStepNodes,
-    /*step_count=*/static_cast<uint32_t>(kStructureDetectionStepCount),
-    /*phases=*/kStructureDetectionPhases,
-    /*phase_count=*/static_cast<uint32_t>(kStructureDetectionPhaseCount),
+    /*steps=*/kHdrPreparationStepNodes,
+    /*step_count=*/static_cast<uint32_t>(kHdrPreparationStepCount),
+    /*phases=*/kHdrPreparationPhases,
+    /*phase_count=*/static_cast<uint32_t>(kHdrPreparationPhaseCount),
     /*default_failure=*/FailurePolicy::Transient,
     /*owns_submit=*/false,
     /*hdr_capable=*/true,
@@ -393,10 +396,10 @@ static_assert(PhasesCover(kPreDlssPhases, kPreDlssPhaseCount,
 static_assert(PhasesCover(kPostDlssPhases, kPostDlssPhaseCount,
                           kPostDlssStepCount),
               "PostDLSS phases must span kPostDlssSteps with no gap or overlap");
-static_assert(PhasesCover(kStructureDetectionPhases,
-                          kStructureDetectionPhaseCount,
-                          kStructureDetectionStepCount),
-              "StructureDetection phases must cover every step exactly once");
+static_assert(PhasesCover(kHdrPreparationPhases,
+                          kHdrPreparationPhaseCount,
+                          kHdrPreparationStepCount),
+              "HdrPreparation phases must cover every step exactly once");
 static_assert(PhasesCover(kReleasePhases, kReleasePhaseCount,
                           kReleaseStepCount),
               "Release phases must span kReleaseSteps with no gap or overlap");
@@ -531,8 +534,8 @@ const PipelineStageDef* FindPipelineStageForInjection(int injection_stage) {
   return nullptr;
 }
 
-const PipelineStageDef& PipelineStructureDetectionStage() {
-  return kStructureDetectionStage;
+const PipelineStageDef& PipelineHdrPreparationStage() {
+  return kHdrPreparationStage;
 }
 
 const PipelineStageDef& PipelineReleaseStage() {

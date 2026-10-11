@@ -42,7 +42,7 @@ class HdrState;
 class NgxRuntime;
 class PassResources;
 class PassSession;
-class SkinDetect;
+class ImportanceMask;
 struct FrameDebugContext;
 struct PassSettings;
 struct PipelineStageDef;
@@ -79,9 +79,7 @@ enum class PipelineNodeId : uint32_t {
   // PreDLSS/PostDLSS pass. Distinct from HdrBeginFrame because it runs once
   // per process and must succeed before BeginFrame touches the histogram.
   EnsureHdr = 9,
-  // Model-driven Structure Detection. The shared preparation stage runs it
-  // immediately after HdrBeginFrame and before any user pass.
-  SkinDetect = 10,
+  Reserved10 = 10,
   HdrBeginFrame = 11,
   HistogramZero = 12,      // dispatches "ZeroHistogram"
   HistogramBuild = 13,     // dispatches "BuildHistogram"
@@ -109,28 +107,29 @@ enum class PipelineNodeId : uint32_t {
   EvaluateFeature = 24,
   ModelOutputBarrier = 25, // UavBarrier on the model output
 
-  // -- composition ----------------------------------------------------------
-  ComposeModelOutput = 26,    // dispatches "ComposeModelOutput"
-  ComposeModelOutputHdr = 27, // dispatches "ComposeModelOutputHdr"
+  // -- post-evaluation analysis and composition -----------------------------
+  BuildImportanceMask = 26, // compares the actual model input with the first pass output
+  ComposeModelOutput = 27,    // dispatches "ComposeModelOutput"
+  ComposeModelOutputHdr = 28, // dispatches "ComposeModelOutputHdr"
   // Grades the model's own output, before anything publishes it.
-  GradeModelOutput = 28,
+  GradeModelOutput = 29,
 
   // -- output ---------------------------------------------------------------
-  RenderDebugView = 29,      // dispatches "DebugDisplay"
-  WriteToBackbuffer = 30,
-  WriteToGameResource = 31,
-  SubmitBackbuffer = 32,        // Backbuffer stage only
+  RenderDebugView = 30,      // dispatches "DebugDisplay"
+  WriteToBackbuffer = 31,
+  WriteToGameResource = 32,
+  SubmitBackbuffer = 33,        // Backbuffer stage only
 
   // -- release stage --------------------------------------------------------
   // Grades the final backbuffer. Listed first in the Release stage on purpose:
   // the debug-present override replaces the backbuffer wholesale, so grading
   // before it keeps a debug view showing the pipeline's own output rather than
   // a graded version of it.
-  GradeBackbuffer = 33,
-  WriteDebugToBackbuffer = 34, // dispatches "DebugDisplay"
-  SignalHdrAtPresent = 35,
+  GradeBackbuffer = 34,
+  WriteDebugToBackbuffer = 35, // dispatches "DebugDisplay"
+  SignalHdrAtPresent = 36,
 
-  Count
+  Count = 37
 };
 
 const char* PipelineNodeName(PipelineNodeId id);
@@ -184,7 +183,7 @@ struct PassRun {
   ComputeEngine* codec = nullptr;
   NgxRuntime* runtime = nullptr;
   HdrState* hdr = nullptr;                 // null in Backbuffer stage
-  SkinDetect* skin_detect = nullptr;       // null in Backbuffer stage
+  ImportanceMask* importance_mask = nullptr; // null in Backbuffer stage
   // Game-owned NGX ExposureTexture captured from the current DLSS evaluate.
   ID3D12Resource* game_exposure_texture = nullptr;
   // Scratch command context the HDR histogram records through. Owned by the
@@ -662,6 +661,7 @@ inline constexpr PipelineNodeId kPreDlssStepNodes[] = {
     PipelineNodeId::FillEvaluateParams,
     PipelineNodeId::EvaluateFeature,
     PipelineNodeId::ModelOutputBarrier,
+    PipelineNodeId::BuildImportanceMask,
     PipelineNodeId::ComposeModelOutput,
     PipelineNodeId::GradeModelOutput,
     PipelineNodeId::RenderDebugView,
@@ -687,21 +687,20 @@ inline constexpr PipelineNodeId kPostDlssStepNodes[] = {
     PipelineNodeId::FillEvaluateParams,
     PipelineNodeId::EvaluateFeature,
     PipelineNodeId::ModelOutputBarrier,
+    PipelineNodeId::BuildImportanceMask,
     PipelineNodeId::ComposeModelOutput,
     PipelineNodeId::GradeModelOutput,
     PipelineNodeId::RenderDebugView,
     PipelineNodeId::WriteToGameResource,
 };
 
-// Runs once immediately before the first active PreDLSS or PostDLSS pass.
-// The controller adjusts the stage metadata to match which source is current;
+// Runs HDR metering immediately before the first active PreDLSS or PostDLSS pass.
 // Backbuffer-only configurations never schedule this utility stage.
-inline constexpr PipelineNodeId kStructureDetectionStepNodes[] = {
+inline constexpr PipelineNodeId kHdrPreparationStepNodes[] = {
     PipelineNodeId::ResolveDevice,
     PipelineNodeId::EnsureHdr,
     PipelineNodeId::EnsureComputeEngine,
     PipelineNodeId::HdrBeginFrame,
-    PipelineNodeId::SkinDetect,
 };
 
 inline constexpr PipelineNodeId kReleaseStepNodes[] = {
@@ -715,7 +714,7 @@ inline constexpr PipelineNodeId kReleaseStepNodes[] = {
 // does not own is required. FindPipelineStep() consults them in order.
 const PipelineStepDef* SessionStepFor(PipelineNodeId id);
 const PipelineStepDef* HdrStepFor(PipelineNodeId id);
-const PipelineStepDef* SkinDetectStepFor(PipelineNodeId id);
+const PipelineStepDef* ImportanceMaskStepFor(PipelineNodeId id);
 const PipelineStepDef* DebugStepFor(PipelineNodeId id);
 const PipelineStepDef* ControllerStepFor(PipelineNodeId id);
 
@@ -728,9 +727,9 @@ extern const uint32_t kPipelineStageCount;
 // the requested injection point, in which case no pass runs.
 const PipelineStageDef* FindPipelineStageForInjection(int injection_stage);
 
-// A non-selectable utility stage that refreshes the shared structure mask from
-// the current evaluation's upscaled output before PostDLSS target passes.
-const PipelineStageDef& PipelineStructureDetectionStage();
+// A non-selectable utility stage that meters HDR from the current source before
+// the first Pre/Post-DLSS pass. Importance Mask generation happens after model evaluation.
+const PipelineStageDef& PipelineHdrPreparationStage();
 
 // The release stage: work that runs once per frame after every pass stage,
 // against the swapchain rather than the game's resources.

@@ -18,22 +18,23 @@ using RetireCallback = void (*)(ID3D12Resource* resource, void* user_data);
 // blend helpers, etc.). Slots are created lazily at whatever size/format
 // is requested and reused across frames until the requested size changes.
 //
-// Slot 0 holds the Post-DLSS multi-pass input snapshot. Slots 2 and 3 are the
-// grade's in-place scratch; slot 1 is free.
+// Slot 0 holds the Post-DLSS multi-pass input snapshot; slots 1 and 2 hold
+// grade scratch.
 //
 // The frame debug output is deliberately not here. It lives in the
 // controller's FrameDebugContext, because the Release stage copies it to the
 // backbuffer after every pass has finished, so it has to outlive the pass
 // session that rendered it.
-constexpr uint32_t kScratchCount = 4;
+constexpr uint32_t kScratchCount = 3;
 constexpr uint32_t kInputSnapshotSlot = 0;
-constexpr uint32_t kGradeScratchSlotA = 2;
-constexpr uint32_t kGradeScratchSlotB = 3;
+constexpr uint32_t kGradeScratchSlotA = 1;
+constexpr uint32_t kGradeScratchSlotB = 2;
 
 class PassResources {
  public:
   // The full-resolution auxiliary target. In HDR frames with Local Exposure,
-  // it holds the global-only carrier used to build the unlifted model reference.
+  // it holds the global-only carrier used to build the unlifted working-resolution
+  // reference for HDR composition.
   Microsoft::WRL::ComPtr<ID3D12Resource> output;
   unsigned int output_width = 0;
   unsigned int output_height = 0;

@@ -15,7 +15,7 @@ enum class HdrFormat : int {
 };
 
 struct ExposureFilterSettings {
-  bool structure_mask = false;
+  bool importance_mask = false;
   bool depth = false;
   bool percentile_range = false;
   float depth_near = 0.0f;

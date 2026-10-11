@@ -64,8 +64,8 @@ reshade_dlssnr/
     build_gain_map_stats.hlsl       Builds gain-map diagnostic statistics
   shaders/model/
     prepare_model_input.hlsl        Box-area resize into the model working buffer
-  shaders/skin/
-    skin_mask_diff.hlsl             Builds the temporal model-difference skin mask
+  shaders/importance_mask/
+    build_importance_mask.hlsl             Builds the per-frame Importance Mask from model input/output difference
 
   gpu/
     command_context.h               Command allocator/list/fence interface
@@ -138,11 +138,11 @@ reshade_dlssnr/
     pipeline_trace.h                Optional pipeline trace interface
     pipeline_trace.cpp              Trace writer and frame stream tracking
     status.h                        Runtime status snapshot definitions
-  skin/
-    settings.h                      Structure/skin detection settings
-    settings.cpp                    Structure/skin detection persistence
-    skin_detect.h                   Model-driven analysis mask interface
-    skin_detect.cpp                 Model evaluation, exposure preparation and temporal mask generation
+  importance_mask/
+    settings.h                      Importance Mask controls
+    settings.cpp                    Importance Mask persistence
+    importance_mask.h               Importance Mask resource and dispatch interface
+    importance_mask.cpp             Importance Mask generation and frame publication
   state/
     pass.h                          Pass status/runtime support
     pass.cpp                        Pass state implementation
@@ -159,7 +159,7 @@ reshade_dlssnr/
     ui_hdr.cpp                      HDR controls and diagnostics
     ui_pass.cpp                     Per-pass controls
     ui_sections.h                   Section-drawer declarations
-    ui_skin.cpp                     Structure/skin detection controls
+    ui_importance_mask.cpp          Importance Mask controls
     ui_status.cpp                   Status and retry controls
     ui_widgets.h                    Shared widget declarations
     ui_widgets.cpp                  Shared widget implementation
@@ -190,18 +190,18 @@ The NGX hook resolves the feature handle and identifies DLSS Super Sampling befo
 Game -> hooked NVSDK_NGX_D3D12_EvaluateFeature
   -> capture the current NGX ExposureTexture pointer and Color input resource
   -> AddonController::OnPreDlssEvaluate(native_list, color, exposure_texture)
-     -> shared HDR measurement + Structure Detection preparation on Color
+     -> shared HDR metering on Color using the published previous-frame Importance Mask
      -> one PassSession::RunStage(PreDLSS) per enabled Pre-DLSS pass
         -> write the composed result back to the NGX Color input
   -> restore the game's tracked command-list bindings
   -> real NGX EvaluateFeature (game upscales the modified input)
 ```
 
-Pre-DLSS records inline on the game's command list and never closes, submits, or waits on it. Its output resource is the game's input Color texture, and `WriteToGameResource` restores it to `NON_PIXEL_SHADER_RESOURCE` before NGX consumes it. At hook entry the game has already populated the current evaluation's depth and motion resources, so `CaptureGuides` publishes those exact guides before Pre-DLSS runs. With the shared advanced **Clone Game Resources** option off (default), the addon retains direct references and performs no guide copies; when on, it copies current depth/motion into reusable addon-owned textures. The option is latched at the next NGX evaluation and applies to all stages. When Pre-DLSS is the first active target, the shared preparation stage meters the current input Color and runs Structure Detection from that same current-frame source before any Pre-DLSS pass.
+Pre-DLSS records inline on the game's command list and never closes, submits, or waits on it. Its output resource is the game's input Color texture, and `WriteToGameResource` restores it to `NON_PIXEL_SHADER_RESOURCE` before NGX consumes it. At hook entry the game has already populated the current evaluation's depth and motion resources, so `CaptureGuides` publishes those exact guides before Pre-DLSS runs. With the shared advanced **Clone Game Resources** option off (default), the addon retains direct references and performs no guide copies; when on, it copies current depth/motion into reusable addon-owned textures. The option is latched at the next NGX evaluation and applies to all stages. When Pre-DLSS is the first active target, the shared preparation stage meters the current input Color using only the published previous-frame Importance Mask. The first successful model pass builds the new mask after model evaluation.
 
 ### Post-DLSS injection
 
-Depth and motion are captured before the real NGX evaluation so every stage sees current-frame guides. When a Pre-DLSS pass is active, a shared preparation stage runs on the current NGX Color input before any Pre-DLSS pass. Otherwise, when a Post-DLSS pass is active, the hook captures the current DLSS output and the same preparation stage runs before the first Post-DLSS pass. The stage performs HDR measurement first and Structure Detection second; every pass in the selected chain then sees that frame's measured HDR state and mask. Backbuffer-only configurations do not schedule it. With cloning off, Post-DLSS preparation reads the game's output resource directly; with cloning on, it uses the reusable output clone. Pre-DLSS preparation reads the current Color input rather than a stale prior DLSS output.
+Depth and motion are captured before the real NGX evaluation so every stage sees current-frame guides. When a Pre-DLSS pass is active, a shared preparation stage runs on the current NGX Color input before any Pre-DLSS pass. Otherwise, when a Post-DLSS pass is active, the hook captures the current DLSS output and metering runs before the first Post-DLSS pass. The new Importance Mask is not generated until that pass has evaluated, and the previous-frame mask remains the only mask visible during this frame. Backbuffer-only configurations do not schedule it. With cloning off, Post-DLSS preparation reads the game's output resource directly; with cloning on, it uses the reusable output clone. Pre-DLSS preparation reads the current Color input rather than a stale prior DLSS output.
 
 ```text
 Game -> NVSDK_NGX_D3D12_EvaluateFeature
@@ -210,8 +210,9 @@ Game -> NVSDK_NGX_D3D12_EvaluateFeature
      -> real NGX EvaluateFeature
      -> capture the DLSS output when a Post-DLSS pass needs it
      -> AddonController::OnPostDlssEvaluate(native_list, output_resource)
-        -> if no Pre-DLSS stage ran: shared HDR measurement + Structure Detection
+        -> if no Pre-DLSS stage ran: shared HDR measurement using previous-frame Importance Mask
         -> one PassSession::RunStage(PostDLSS) per enabled Post-DLSS pass
+           -> first successful pass builds the current frame Importance Mask after ModelOutputBarrier
 ```
 
 The hook gives NGX exactly the command list the game supplied. The addon uses the unwrapped native interface only for its own D3D12 work. D3D12 state tracking is disabled around addon recording and the real NGX call; tracked command-list bindings are restored before the real evaluation and again after Post-DLSS recording when an addon stage ran.
@@ -239,13 +240,14 @@ GradeModelInput
 FillEvaluateParams
 EvaluateFeature
 ModelOutputBarrier
+BuildImportanceMask
 ComposeModelOutput
 GradeModelOutput
 RenderDebugView
 WriteToGameResource
 ```
 
-`HdrBeginFrame` and `SkinDetect` run once in the shared preparation stage before the first active Pre-DLSS or Post-DLSS pass; they are not repeated by user pass sessions. Each exposure layer applies only its own selected filters: Adaptive Exposure filters the histogram population, while Local Exposure filters the spatial correction. HDR measurement runs first and therefore uses the latest completed mask; Structure Detection then updates the mask for all passes in the current frame.
+`HdrBeginFrame` runs once in the shared preparation stage before the first active Pre-DLSS or Post-DLSS pass. It consumes the published previous-frame Importance Mask snapshot. The first successful user pass generates a new mask after its model output barrier; that mask is promoted only at Present. All passes and exposure computations within one frame therefore observe the same mask. Each exposure layer applies only its own selected filters: Adaptive Exposure filters the histogram population, while Local Exposure filters the spatial correction.
 
 ### Backbuffer injection
 
@@ -280,6 +282,7 @@ GradeModelInput
 FillEvaluateParams
 EvaluateFeature
 ModelOutputBarrier
+BuildImportanceMask
 ComposeModelOutput
 GradeModelOutput
 RenderDebugView
@@ -431,13 +434,13 @@ The three current stages are:
 - The compiler cannot inspect arbitrary function bodies to discover missing `required_inputs`; a forgotten declaration remains the weak point of that safety mechanism.
 - The static checks validate coverage and prerequisites, not semantic ordering beyond declared prerequisites. Reordering a table still requires reading the resulting sequence as a whole.
 
-Pipeline step definitions can live in the file that owns their concern. `pass_session.cpp` owns most steps; `hdr_state.cpp`, `skin_detect.cpp`, and `addon_controller.cpp` contribute their own registrations. `FindPipelineStep` builds a node-indexed registry and detects duplicate ownership or a definition whose id does not match the lookup slot.
+Pipeline step definitions can live in the file that owns their concern. `pass_session.cpp` owns most steps; `hdr_state.cpp`, `importance_mask.cpp`, and `addon_controller.cpp` contribute their own registrations. `FindPipelineStep` builds a node-indexed registry and detects duplicate ownership or a definition whose id does not match the lookup slot.
 
 ## Pipeline invariants and hard-won rules
 
 ### D3D12 / GPU
 
-**Own every replaced resource until the GPU is finished with it.** `PassResources` transfers replaced resources into the retire callback rather than releasing them immediately; Structure Detection and resized backbuffer-grade scratch textures use the same deferred-release queues. Resources are tagged with a queue-ordered Release fence and released on a later Present only after that fence completes. Direct `ComPtr::Reset()` on an in-flight resource is unsafe.
+**Own every replaced resource until the GPU is finished with it.** `PassResources` transfers replaced resources into the retire callback rather than releasing them immediately; Importance Mask and resized backbuffer-grade scratch textures use the same deferred-release queues. Resources are tagged with a queue-ordered Release fence and released on a later Present only after that fence completes. Direct `ComPtr::Reset()` on an in-flight resource is unsafe.
 
 **Seed states for resources the addon owns.** `InferResourceState` is only a fallback for resources whose exact state is not otherwise known. Pass-owned resources are seeded at frame boundaries and cleaned back to their expected states before submission.
 
@@ -451,7 +454,7 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 **The descriptor/constant ring cannot be reused ahead of the GPU.** Descriptor views and the 256-byte constant slot are written by the CPU while commands are recorded but consumed later by the GPU. The ring depth therefore has to cover the maximum CPU lead and worst-case dispatch count.
 
-**Structure Detection resource generations are replaced atomically.** The three working textures and two mask textures for a new scale are all allocated before any active resource is detached. If any allocation fails, the prior generation and its cached dimensions remain consistent. The scale value is read and written through a synchronized accessor because the overlay can change it while NGX evaluation is running on another thread; non-finite persisted values fall back to the default scale.
+**Importance Mask keeps the published snapshot immutable across resolution changes.** The destination ping-pong texture is resized independently; the currently published texture is retained until Present. Temporal history samples the prior mask in normalized coordinates if its resolution differs. Resource replacement uses the deferred-retirement path, and a successful generated mask is promoted only at Present.
 
 **Always return the swapchain image to `PRESENT`.** `GradeBackbuffer` keeps that transition even when grading fails, because leaving the backbuffer in an intermediate state turns a grade error into a later present failure.
 
@@ -513,9 +516,9 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 **Game Exposure is one layer in the exposure stack.** When enabled, the addon captures the game's NGX `ExposureTexture` before `EvaluateFeature`. If it is a usable 1x1 texture, a compute pass samples its scalar and an asynchronous GPU readback updates HDR state without waiting on the CPU. Game Exposure remains the base when available; its optional bias and bounded tuning use that value as their anchor. Adaptive Exposure can add a bounded histogram-derived correction, and Local Exposure can apply a spatial correction afterward. If game exposure is unavailable, Adaptive Exposure can provide the global exposure on its own. The Status panel reports availability and the last sampled value; `Debug View -> Game Exposure` shows the sampled value in stops.
 
-**Histogram exposure uses the full-frame histogram with optional structure-mask priority.** The first frame has only the full-frame population. When a usable structure mask exists from the previous frame, measurement can also build a mask-conditioned histogram and blend that normalized population with the full-frame population using `Hdr.SkinPriority`, provided the masked fraction reaches `Hdr.SkinFractionThreshold`. The shared preparation stage always measures HDR first and updates Structure Detection second, then all passes in that frame consume the resulting exposure state and current-frame mask. The just-built mask can therefore affect later passes immediately; HDR metering that precedes it uses the latest completed mask.
+**Exposure filters use the previous frame's Importance Mask snapshot.** When enabled and valid, the mask constrains only those histogram or local-exposure computations whose filter options select it. The mask generated after the current frame's first successful Pre/Post-DLSS model evaluation is not exposed until Present, so it cannot affect metering or later passes in the same frame.
 
-**Adaptive and Local Exposure are independent layers.** Adaptive Exposure maps the filtered histogram to its midtone target and can provide global exposure by itself or a bounded correction on top of Game Exposure. Local Exposure computes a continuous per-pixel correction from a configurable block-sized low-frequency neighborhood while restoring high-frequency detail. Neighborhood diameter ranges from 4 to 512 source pixels, and the number of taps is configurable from 4 to 48. More taps fill spatial gaps within the same radius; they do not increase the radius and cost additional GPU time. Luma Edge Protection applies exponential weighting in log2 luminance so neighboring pixels that differ strongly in brightness contribute less to the local base, helping limit bleed across facial features and silhouettes. When enabled and a depth guide is available, depth-continuity weighting also excludes samples across depth discontinuities to reduce foreground/background halos. The separate Depth filter still controls where correction is allowed; Luma Edge Protection and Depth Continuity control which neighbors may influence the local base. Each exposure layer owns its own Structure Mask, Depth, and Percentile Range filters.
+**Adaptive and Local Exposure are independent layers.** Adaptive Exposure maps the filtered histogram to its midtone target and can provide global exposure by itself or a bounded correction on top of Game Exposure. Local Exposure computes a continuous per-pixel correction from a configurable block-sized low-frequency neighborhood while restoring high-frequency detail. Neighborhood diameter ranges from 4 to 512 source pixels, and the number of taps is configurable from 4 to 48. More taps fill spatial gaps within the same radius; they do not increase the radius and cost additional GPU time. Luma Edge Protection applies exponential weighting in log2 luminance so neighboring pixels that differ strongly in brightness contribute less to the local base, helping limit bleed across facial features and silhouettes. When enabled and a depth guide is available, depth-continuity weighting also excludes samples across depth discontinuities to reduce foreground/background halos. The separate Depth filter still controls where correction is allowed; Luma Edge Protection and Depth Continuity control which neighbors may influence the local base. Each exposure layer owns its own Importance Mask, Depth, and Percentile Range filters.
 
 **The HDR carrier and source have separate responsibilities.** `GainMapSplit` writes RGB linear SDR carrier plus a direct reciprocal of the RGB carrier scale to `R32G32B32A32_FLOAT`. The multiplier is stored linearly in alpha to avoid an unnecessary log2/exp2 precision cycle; gain statistics and the debug view convert it to stops. The paired pre-desaturation/inverse operations are reduced algebraically to a scalar RGB multiply so saturated super-whites do not suffer cancellation noise in near-zero channels. No additive offsets or fixed super-white ceiling are applied. HDR composition reads the untouched source resource and decodes it into float shader values, then transfers the model residual onto that source; it never reconstructs the original from the SDR carrier. The HDR model input/output and EASU/RCAS working textures use `R32G32B32A32_FLOAT` to reduce precision loss in the reversible highlight transform; SDR continues to use the source-compatible model format. The published composite remains in the game's native format, whose representable range still applies. The model-gamut mapping keeps valid source super-whites below model-domain white with a piecewise logarithmic mapping; its inverse also handles model-output overrange. This mapping is only for the model-facing carrier. The original source and its full carrier-to-HDR multiplier remain separate, so model-gamut fitting never caps the final HDR result.
 
@@ -543,9 +546,9 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 **HDR composition uses Gain-Map Residual exclusively.** HDR Pre-DLSS and Post-DLSS passes use the packed per-pixel carrier-to-HDR multiplier to transfer model edits back to the untouched full-resolution HDR source. The former HDR Ratio mode and selector are removed. SDR composition, including Present/backbuffer passes, retains its existing log-ratio residual path and settings.
 
-**HDR exposure is configured as a layer stack.** The HDR UI has separate `Game Exposure`, `Adaptive Exposure`, and `Local Exposure` tabs. The default stack order is Game Exposure base, Adaptive Exposure correction, then Local Exposure. Each layer is independently enabled and owns its own filter combination of Structure Mask, Depth, and Percentile Range. Local Exposure exposes neighborhood block size, a 4-48 sample count, Luma Edge Protection, and optional depth-continuity threshold controls; the correction remains continuous per pixel so it does not introduce tile-shaped boundaries. The exclusive Median and combined Auto Exposure + Local modes are removed; old settings are migrated to the closest layer configuration.
+**HDR exposure is configured as a layer stack.** The HDR UI has separate `Game Exposure`, `Adaptive Exposure`, and `Local Exposure` tabs. The default stack order is Game Exposure base, Adaptive Exposure correction, then Local Exposure. Each layer is independently enabled and owns its own filter combination of Importance Mask, Depth, and Percentile Range. Local Exposure exposes neighborhood block size, a 4-48 sample count, Luma Edge Protection, and optional depth-continuity threshold controls; the correction remains continuous per pixel so it does not introduce tile-shaped boundaries. The exclusive Median and combined Auto Exposure + Local modes are removed; old settings are migrated to the closest layer configuration.
 
-**Structure Detection uses the same resolved layer stack.** It uses the same Game Exposure and Adaptive Exposure result, Local Exposure configuration, and filter selections as the main HDR model input. During mask generation it uses the previous valid mask for temporal stability; it does not maintain a separate legacy exposure mode.
+**Importance Mask is derived from the pass result, not a separate model evaluation.** It compares the first successful Pre/Post-DLSS pass's raw model output with the same-resolution model input actually fed to NGX, including input grading and Local Exposure. The mask reads that input directly instead of making a separate ungraded/unlifted copy. The previous-frame mask is used for temporal filtering and exposure only; the new mask is published at Present.
 
 **Pass targets are independent per-pass settings.** Runtime execution groups enabled passes in frame order: all Pre-DLSS passes before the real NGX evaluation, all Post-DLSS passes after it, then all Backbuffer passes at ReShade Present. Within each target group, passes run in pass-tab order. Each pass target is persisted as `PassN.TargetStage`; the prior two-value `PassN.InjectionStage` key is read only for migration. This means a pass with a higher tab index can run in an earlier stage than a lower-index pass; chaining applies within each target group.
 
@@ -557,12 +560,12 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 The HDR path is gain-map based and runs on the Pre-DLSS and Post-DLSS targets. Backbuffer passes use the existing SDR composition path.
 
-1. `HdrState` detects the source format and resolves the enabled exposure layers. Game Exposure is the base when its game-provided value is valid; Adaptive Exposure contributes its filtered histogram correction or supplies global exposure when Game Exposure is unavailable. Local Exposure computes a continuous spatial scale from its configured neighborhood block size, 4-48 tap sample count, and luma-edge-aware base. Luma Edge Protection reduces contributions across luminance boundaries; Depth Continuity additionally prevents the base filter from blending across nearby pixels with incompatible depth when a depth guide is available. The same helper and controls are used by the gain-map split, effective-exposure diagnostic map, and Structure Detection's HDR input.
-2. `SkinDetect` (shown as `Structure Detection` in the UI), when enabled, prepares a working-scale model input using the same resolved exposure layers and filters as the main input, evaluates a dedicated model feature built at full output resolution, and builds a temporal mask from the input/output difference. The target can be skin-oriented or general model structure. The detection pass has three additional compute dispatches in its HDR worst case, and the descriptor/constant ring is sized for those dispatches in addition to the normal frame budget.
+1. `HdrState` detects the source format and resolves the enabled exposure layers. Game Exposure is the base when its game-provided value is valid; Adaptive Exposure contributes its filtered histogram correction or supplies global exposure when Game Exposure is unavailable. Local Exposure computes a continuous spatial scale from its configured neighborhood block size, 4-48 tap sample count, and luma-edge-aware base. Luma Edge Protection reduces contributions across luminance boundaries; Depth Continuity additionally prevents the base filter from blending across nearby pixels with incompatible depth when a depth guide is available. The same helper and controls are used by the gain-map split and effective-exposure diagnostic map. Importance Mask compares the actual model input after input grading and Local Exposure with the raw model output.
+2. `Importance Mask` is generated from the first successful Pre/Post-DLSS pass's actual model input (after input grading and Local Exposure, when enabled) and its raw model output. It reads the same model-input resource that NGX evaluated, so there is no separate ungraded/unlifted mask reference. The mask is not consumed by any stage until the next Present boundary; backbuffer passes are excluded. It does not evaluate a separate model feature.
 3. `GainMapSplit` converts the full-resolution HDR source into an RGBA32F carrier: RGB is the linear SDR base and A is the reciprocal of the complete carrier scale. BT.2446-C parameters and scene-white control the carrier; no additive gain offsets or gain ceiling are applied. If Local Exposure is enabled, a second invocation with Local Exposure disabled writes a global-only carrier for the residual reference.
-4. `PrepareModelInput` performs exact Box Area downsampling. For the HDR carrier path it applies the reversible model highlight/gamut fit and sRGB encoding. The global-only carrier uses this same path into a separate working-resolution reference texture; when input grading is enabled, the same grade is applied to both inputs.
+4. `PrepareModelInput` performs exact Box Area downsampling. For the HDR carrier path it applies the reversible model highlight/gamut fit and sRGB encoding. When Local Exposure is active, the global-only carrier uses this same path to create a separate unlifted working-resolution reference for HDR composition. Importance Mask instead reads the actual prepared model input after input grading; it never uses the composition reference.
 5. The model feature evaluates at the selected working scale while being built at full frame resolution.
-6. `ComposeModelOutputHdr` uses FSR EASU and optional RCAS to reconstruct the model output and its comparison input at full resolution. With Local Exposure enabled, the comparison input is the unlifted reference; otherwise it is the actual model input. HDR composition retains the original Gain-Map Residual math: the packed per-pixel carrier-to-HDR multiplier transfers the relative model edit onto the untouched full-resolution HDR source. It does not invert the nonlinear super-white fit to derive an absolute endpoint delta. Present/backbuffer passes continue to use the existing SDR log-ratio compose path.
+6. `ComposeModelOutputHdr` uses FSR EASU and optional RCAS to reconstruct model-domain images at full resolution. With Local Exposure enabled, the composition residual uses the unlifted reference; otherwise it uses the prepared model input. HDR composition retains the original Gain-Map Residual math: the packed per-pixel carrier-to-HDR multiplier transfers the relative model edit onto the untouched full-resolution HDR source. It does not invert the nonlinear super-white fit to derive an absolute endpoint delta. Present/backbuffer passes continue to use the existing SDR log-ratio compose path.
 7. `EncodeHdr` writes the reconstructed result back into scRGB or HDR10 as required by the source format. The gain-map residual compose path measures the model edit in the model domain, then uses the packed carrier-to-HDR multiplier to transfer that edit into the original source's scene-referred range without inverting the highlight/gamut fit.
 
 The SDR compose uses the same FSR path but does not reconstruct an HDR carrier; it applies the residual in the source SDR space and uses the shared grade/compose helpers.
@@ -627,7 +630,7 @@ The dynamic table is copied contiguously into `ShaderBlock.Params0/Params1`; `gp
 ### Add a pipeline step
 
 1. Add a `PipelineNodeId` entry in depth order.
-2. Add a step function in the owner (`PassSession`, `AddonController`, `HdrState`, `SkinDetect`, etc.).
+2. Add a step function in the owner (`PassSession`, `AddonController`, `HdrState`, `ImportanceMask`, etc.).
 3. Register a `PipelineStepDef` in that owner's registry.
 4. Add the node to the appropriate stage table and mirror list.
 5. Declare every prerequisite in `depends_on` and place the prerequisite earlier in the stage.

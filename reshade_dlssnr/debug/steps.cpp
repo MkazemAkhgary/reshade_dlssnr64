@@ -2,7 +2,7 @@
 
 #include "debug/debug_view.h"
 #include "pipeline/pipeline_graph.h"
-#include "skin/skin_detect.h"
+#include "importance_mask/importance_mask.h"
 
 namespace reshade_dlssnr {
 
@@ -53,15 +53,11 @@ PipelineStatus PassSession::StepRenderDebugView(PassRun& run) {
   debug.composed_output = self->resources_.GetCompositeOutput();
   debug.composed_output_width = run.width;
   debug.composed_output_height = run.height;
-  if (run.skin_detect != nullptr) {
-    const SkinDetect::Output& sd = run.skin_detect->GetOutput();
-    if (sd.valid) {
-      debug.skin_detect_input = sd.detect_input;
-      debug.skin_detect_output = sd.detect_output;
-      debug.skin_mask = sd.mask;
-      debug.skin_detect_width = sd.width;
-      debug.skin_detect_height = sd.height;
-    }
+  debug.importance_width = run.eval_width;
+  debug.importance_height = run.eval_height;
+  if (run.importance_mask != nullptr) {
+    const ImportanceMask::Output mask = run.importance_mask->GetGeneratedOutput();
+    if (mask.valid) debug.importance_mask = mask.mask;
   }
   if (run.guides_valid) {
     debug.motion = run.guides.motion;

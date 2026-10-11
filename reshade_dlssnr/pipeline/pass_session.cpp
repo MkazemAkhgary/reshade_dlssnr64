@@ -13,7 +13,7 @@
 #include "model/ngx_model_params.h"
 #include "pipeline_graph.h"
 #include "pipeline_trace.h"
-#include "skin/skin_detect.h"
+#include "importance_mask/importance_mask.h"
 #include "streamline_compat.h"
 
 namespace reshade_dlssnr {
@@ -50,8 +50,8 @@ void BindLocalExposureFilters(PassRun& run, ComputeConstants& constants,
   ID3D12Resource* depth = source;
 
   if ((flags & 1u) != 0u && run.settings != nullptr &&
-      run.settings->skin.enable && run.skin_detect != nullptr) {
-    const SkinDetect::Output& detection = run.skin_detect->GetOutput();
+      run.settings->importance_mask.enable && run.importance_mask != nullptr) {
+    const ImportanceMask::Output detection = run.importance_mask->GetFrameOutput();
     if (detection.valid && detection.mask != nullptr &&
         detection.width != 0 && detection.height != 0) {
       mask = detection.mask;
@@ -84,6 +84,10 @@ void BindLocalExposureFilters(PassRun& run, ComputeConstants& constants,
   srvs[2] = depth;
   srvs[3] = source;
   if (mask != source) {
+    // The shared snapshot is always left in SRV state, but each pass owns a
+    // separate state tracker. Seed that known state before asking for it.
+    command.SetResourceState(mask,
+                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     command.Transition(list, mask,
                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   }
@@ -511,7 +515,7 @@ void PassSession::PrepareRun(PassRun& run,
                              FrameDebugContext& frame_debug,
                              HdrState* hdr,
                              CommandContext* hdr_cmd,
-                             SkinDetect* skin_detect,
+                             ImportanceMask* importance_mask,
                              ID3D12Resource* game_exposure_texture,
                              ID3D12CommandQueue* command_queue,
                              IDXGISwapChain* swapchain) {
@@ -523,7 +527,7 @@ void PassSession::PrepareRun(PassRun& run,
   run.runtime = &runtime;
   run.hdr = hdr;
   run.hdr_cmd = hdr_cmd;
-  run.skin_detect = skin_detect;
+  run.importance_mask = importance_mask;
   run.game_exposure_texture = game_exposure_texture;
   run.frame_debug = &frame_debug;
 
@@ -551,7 +555,7 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
                                      FrameDebugContext& frame_debug,
                                      HdrState* hdr,
                                      CommandContext* hdr_cmd,
-                                     SkinDetect* skin_detect,
+                                     ImportanceMask* importance_mask,
                                      ID3D12Resource* game_exposure_texture,
                                      ID3D12CommandQueue* command_queue,
                                      IDXGISwapChain* swapchain) {
@@ -584,7 +588,7 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
 
   PassRun run;
   PrepareRun(run, settings, codec, runtime, command_list, output_resource,
-             is_first_pass, frame_debug, hdr, hdr_cmd, skin_detect,
+             is_first_pass, frame_debug, hdr, hdr_cmd, importance_mask,
              game_exposure_texture, command_queue, swapchain);
 
   const PipelineStatus status = PipelineRunner::RunStage(stage, run);
@@ -1196,7 +1200,7 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
         !self->resources_.EnsureUnliftedWorkingInput(
             run.device, self->resources_.GetWorkingInput()->GetDesc(),
             run.work_width, run.work_height)) {
-      self->FailForStep("failed to create unlifted HDR model-input reference");
+      self->FailForStep("failed to create unlifted HDR composition reference");
       return PipelineStatus::Fail;
     }
 
@@ -1219,7 +1223,7 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
     ID3D12Resource* reference_uavs[kUavCount] = {unlifted_input};
     if (!run.codec->Dispatch("PrepareModelInput", list, reference_constants,
                              reference_srvs, reference_uavs)) {
-      self->FailForStep("failed to prepare unlifted HDR model-input reference");
+      self->FailForStep("failed to prepare unlifted HDR composition reference");
       return PipelineStatus::Fail;
     }
     self->command_.UavBarrier(list, unlifted_input);
@@ -1445,8 +1449,9 @@ PipelineStatus PassSession::StepEvaluateFeature(PassRun& run) {
   self->eval_log_key_valid_ = true;
 
   if (run.stage != nullptr && !run.stage->owns_submit) {
-    run.runtime->EvaluateFeature(self->StageList(run, self->command_), self->feature_.FeatureHandle(),
-                                 run.runtime->Parameters().Get(), nullptr);
+    run.eval_result = run.runtime->EvaluateFeature(
+        self->StageList(run, self->command_), self->feature_.FeatureHandle(),
+        run.runtime->Parameters().Get(), nullptr);
     return PipelineStatus::Ok;
   }
 
@@ -1786,7 +1791,7 @@ static_assert(
 // kMaxFramesInFlight promises.
 static_assert(kMaxDispatchesPerFrame >= kMaxPasses * 9 + 4 + 3,
               "kMaxDispatchesPerFrame no longer covers a frame at kMaxPasses "
-              "with structure detection - raise it, and kDescriptorRingSize with it");
+              "with the extra Importance Mask build dispatch - raise it, and kDescriptorRingSize with it");
 
 const PipelineStepDef* SessionStepFor(PipelineNodeId id) {
   for (const PipelineStepDef& def : kSessionSteps) {

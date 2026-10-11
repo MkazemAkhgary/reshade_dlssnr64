@@ -87,7 +87,7 @@ void LoadSettings() {
 
   LoadHdrSettings(g_settings.hdr);
 
-  LoadSkinSettings(g_settings.skin);
+  LoadImportanceMaskSettings(g_settings.importance_mask);
 
   LoadGrade("Grade.Backbuffer.", g_settings.grade_backbuffer);
 
@@ -107,14 +107,10 @@ void LoadSettings() {
                             g_settings.ui_grade_open);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.HdrDiagnosticsOpen",
                             g_settings.ui_hdr_diagnostics_open);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.SkinDetectOpen",
-                            g_settings.ui_skin_detect_open);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            "UI.SkinDetectModelOpen",
-                            g_settings.ui_skin_detect_model_open);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                            "UI.SkinDetectMaskOpen",
-                            g_settings.ui_skin_detect_mask_open);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.ImportanceMaskOpen",
+                            g_settings.ui_importance_mask_open);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.ImportanceMaskSettingsOpen",
+                            g_settings.ui_importance_mask_settings_open);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.ModelOpen",
                             g_settings.ui_model_open);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", "UI.PassAdvancedOpen",
@@ -176,7 +172,7 @@ void SaveSettings() {
 
   SaveHdrSettings(g_settings.hdr);
 
-  SaveSkinSettings(g_settings.skin);
+  SaveImportanceMaskSettings(g_settings.importance_mask);
 
   SaveGrade("Grade.Backbuffer.", g_settings.grade_backbuffer);
 
@@ -196,14 +192,10 @@ void SaveSettings() {
                             g_settings.ui_grade_open);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.HdrDiagnosticsOpen",
                             g_settings.ui_hdr_diagnostics_open);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.SkinDetectOpen",
-                            g_settings.ui_skin_detect_open);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            "UI.SkinDetectModelOpen",
-                            g_settings.ui_skin_detect_model_open);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                            "UI.SkinDetectMaskOpen",
-                            g_settings.ui_skin_detect_mask_open);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.ImportanceMaskOpen",
+                            g_settings.ui_importance_mask_open);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.ImportanceMaskSettingsOpen",
+                            g_settings.ui_importance_mask_settings_open);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.ModelOpen",
                             g_settings.ui_model_open);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", "UI.PassAdvancedOpen",

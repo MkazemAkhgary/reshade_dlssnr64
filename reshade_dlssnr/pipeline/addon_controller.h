@@ -18,7 +18,7 @@
 #include "pipeline_graph.h"
 #include "model/runtime.h"
 #include "state/settings.h"
-#include "skin/skin_detect.h"
+#include "importance_mask/importance_mask.h"
 #include "status.h"
 
 namespace reshade_dlssnr {
@@ -117,13 +117,13 @@ class AddonController {
   bool HdrInitialized() const { return hdr_initialized_; }
   bool EnsureHdr(ID3D12Device* device);
 
-  // The model-driven skin detection pass. Owned here rather than per-pass
-  // because one mask per frame drives the shared HDR histogram.
-  SkinDetect& GetSkinDetect() { return skin_detect_; }
+  // Shared Importance Mask state. Its frame snapshot is used by HDR metering;
+  // generation happens after the first successful Pre/Post-DLSS evaluation.
+  ImportanceMask& GetImportanceMask() { return importance_mask_; }
 
  private:
   AddonController()
-      : structure_detection_session_(&DlssGuides::Get(), 0) {
+      : hdr_preparation_session_(&DlssGuides::Get(), 0) {
     passes_.reserve(kMaxPasses);
     for (uint32_t i = 0; i < kMaxPasses; ++i) {
       passes_.emplace_back(&DlssGuides::Get(), i);
@@ -140,9 +140,9 @@ class AddonController {
   // A failure to query leaves the cached value untouched.
   void RefreshBackbufferFormat(IDXGISwapChain* swapchain);
 
-  // Measures the current frame and refreshes Structure Detection immediately
-  // before the first enabled PreDLSS or PostDLSS pass. Backbuffer-only frames
-  // never call this helper. Caller holds g_direct_mutex.
+  // Measures the current frame with the published previous-frame Importance
+  // Mask before the first enabled PreDLSS or PostDLSS pass. Generation happens
+  // after model evaluation. Backbuffer-only frames never call this helper.
   void PrepareFrameForPass(
       ID3D12GraphicsCommandList* command_list,
       ID3D12Resource* source_resource,
@@ -182,13 +182,13 @@ class AddonController {
   std::vector<PassSession> passes_;
   // Internal session: detection is shared across passes and must not latch a
   // failure onto a user-configured pass.
-  PassSession structure_detection_session_;
+  PassSession hdr_preparation_session_;
   FrameDebugContext frame_debug_;
   // The current NGX EvaluateFeature call has already reset the debug target at
   // PreDLSS. PostDLSS must preserve it so a selected PreDLSS pass can display.
   bool pre_stage_seen_ = false;
   HdrState hdr_;
-  SkinDetect skin_detect_;
+  ImportanceMask importance_mask_;
 
   // The Release stage's command list, opened on demand by
   // BeginReleaseCommands and submitted by EndReleaseCommands.

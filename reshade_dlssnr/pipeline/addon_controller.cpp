@@ -68,7 +68,7 @@ PipelineStatus AddonController::RunPassStage(const PipelineStageDef& stage,
 
   return passes_[pass_index].RunStage(
       stage, settings, codec_, runtime_, command_list, output_resource,
-      is_first_pass, frame_debug_, &hdr_, &pass1_command_, &skin_detect_,
+      is_first_pass, frame_debug_, &hdr_, &pass1_command_, &importance_mask_,
       exposure_texture, command_queue, swapchain);
 }
 
@@ -265,6 +265,7 @@ void AddonController::OnPresent(
 
   const Settings& settings = GetSettings();
   if (!settings.enabled) {
+    importance_mask_.AdvanceFrame(false);
     // The effect can be disabled after a mode/resource change retired objects.
     // Submit an empty marker only; do not run grading/debug steps while the
     // master switch is off.
@@ -282,6 +283,8 @@ void AddonController::OnPresent(
     return;
   }
   if (command_queue == nullptr || swapchain == nullptr) {
+    importance_mask_.AdvanceFrame(settings.importance_mask.enable &&
+                                   settings.hdr.enable);
     frame_debug_.Reset();
     pre_stage_seen_ = false;
     return;
@@ -341,6 +344,8 @@ void AddonController::OnPresent(
   }
 
   RefreshStatus(settings);
+  importance_mask_.AdvanceFrame(settings.importance_mask.enable &&
+                                   settings.hdr.enable);
   frame_debug_.Reset();
   pre_stage_seen_ = false;
   TRACE_EVT(this, "controller_exit stage=Present");
@@ -377,9 +382,9 @@ void AddonController::OnPreDlssEvaluate(
   frame_debug_.preferred_format = backbuffer_format_;
   pre_stage_seen_ = true;
 
-  // HDR metering and Structure Detection are frame pre-work, not work owned
-  // by an individual pass. Run them against the current PreDLSS Color input
-  // before any configured pass can consume their results.
+  // HDR metering is shared frame pre-work and uses only the previously
+  // published Importance Mask. The current frame's mask is built after its
+  // first successful model evaluation and is not published until Present.
   PrepareFrameForPass(command_list, input_resource, exposure_texture,
                       /*pre_dlss=*/true);
 
@@ -426,8 +431,9 @@ void AddonController::OnPostDlssEvaluate(
   frame_debug_.preferred_format = backbuffer_format_;
 
   // If no PreDLSS pass ran in this NGX evaluation, PostDLSS is the first
-  // usable target. Prepare the frame from its current upscaled output before
-  // dispatching the first PostDLSS pass. A PreDLSS preparation is reused.
+  // usable target. Prepare metering from its current upscaled output before
+  // dispatching the first PostDLSS pass. The current Importance Mask is not
+  // published until Present.
   if (!pre_stage_seen_) {
     PrepareFrameForPass(command_list, output_resource, exposure_texture,
                         /*pre_dlss=*/false);
@@ -471,21 +477,21 @@ void AddonController::PrepareFrameForPass(
   // to match the earliest enabled stage, so HDR reads the same source color
   // that the first pass will see and detection uses that same current-frame
   // image instead of a stale DLSS output from the previous evaluation.
-  PipelineStageDef stage = PipelineStructureDetectionStage();
+  PipelineStageDef stage = PipelineHdrPreparationStage();
   stage.is_pre_dlss = pre_dlss;
   stage.is_post_dlss = !pre_dlss;
   stage.reads_dlss_output = !pre_dlss;
   stage.output_state_managed_externally = !pre_dlss;
 
   TRACE_EVT(this, "controller_prepare stage=%s", pre_dlss ? "PreDLSS" : "PostDLSS");
-  const PipelineStatus status = structure_detection_session_.RunStage(
+  const PipelineStatus status = hdr_preparation_session_.RunStage(
       stage, settings, codec_, runtime_, command_list, source_resource,
       /*is_first_pass=*/true, frame_debug_, &hdr_, &pass1_command_,
-      &skin_detect_, exposure_texture, nullptr, nullptr);
+      &importance_mask_, exposure_texture, nullptr, nullptr);
   // This helper session is not exposed as a user pass. A transient setup
   // failure must not permanently disable shared preparation on future frames.
   if (status == PipelineStatus::Fail) {
-    structure_detection_session_.Retry(runtime_);
+    hdr_preparation_session_.Retry(runtime_);
   }
 }
 
@@ -629,7 +635,7 @@ void AddonController::Shutdown() {
   for (auto& pass : passes_) {
     pass.Shutdown(runtime_);
   }
-  structure_detection_session_.Shutdown(runtime_);
+  hdr_preparation_session_.Shutdown(runtime_);
   release_command_.Shutdown();
   release_list_begun_ = false;
   grade_scratch_.Reset();
@@ -639,7 +645,7 @@ void AddonController::Shutdown() {
   grade_scratch_format_ = DXGI_FORMAT_UNKNOWN;
   pass1_command_.Shutdown();
   codec_.Destroy();
-  skin_detect_.Shutdown(runtime_);
+  importance_mask_.Shutdown();
   hdr_.Shutdown();
   hdr_initialized_ = false;
   frame_debug_.Release();

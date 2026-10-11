@@ -66,25 +66,11 @@ ID3D12Resource* SelectDepth(const DebugSnapshot& s,
   return s.depth;
 }
 
-ID3D12Resource* SelectSkinDetectInput(const DebugSnapshot& s,
-                                      unsigned int* w, unsigned int* h) {
-  *w = s.skin_detect_width;
-  *h = s.skin_detect_height;
-  return s.skin_detect_input;
-}
-
-ID3D12Resource* SelectSkinDetectOutput(const DebugSnapshot& s,
-                                       unsigned int* w, unsigned int* h) {
-  *w = s.skin_detect_width;
-  *h = s.skin_detect_height;
-  return s.skin_detect_output;
-}
-
-ID3D12Resource* SelectSkinMask(const DebugSnapshot& s,
-                               unsigned int* w, unsigned int* h) {
-  *w = s.skin_detect_width;
-  *h = s.skin_detect_height;
-  return s.skin_mask;
+ID3D12Resource* SelectImportanceMask(const DebugSnapshot& s,
+                                    unsigned int* w, unsigned int* h) {
+  *w = s.importance_width;
+  *h = s.importance_height;
+  return s.importance_mask;
 }
 
 }  // namespace
@@ -96,7 +82,7 @@ const DebugViewDef kDebugViews[] = {
      DebugDisplayMode::Color, SelectSource},
     {"Model Input (prepared)",
      "The image actually fed to the model, after resizing to the Working "
-     "Scale (and after HDR preparation, when enabled).",
+     "Scale, HDR preparation, and input grading when enabled.",
      DebugDisplayMode::Color, SelectPreparedInput},
     {"Model Output (raw)",
      "The model's output, before any of the pipeline's post-processing is "
@@ -113,17 +99,9 @@ const DebugViewDef kDebugViews[] = {
     {"Depth",
      "The depth buffer the game supplied to DLSS. Shown as grayscale.",
      DebugDisplayMode::Depth, SelectDepth},
-    {"Structure Detect Input",
-     "The image the structure-detection pass fed to the model (after HDR "
-     "normalization and resize).",
-     DebugDisplayMode::Color, SelectSkinDetectInput},
-    {"Structure Detect Output",
-     "The model's raw output from the structure-detection pass. The mask is "
-     "derived from the difference against the input.",
-     DebugDisplayMode::Color, SelectSkinDetectOutput},
-    {"Structure Mask",
-     "White = the model edit matched the selected detection target.",
-     DebugDisplayMode::Mask, SelectSkinMask},
+    {"Importance Mask",
+     "The current frame's mask from the actual model input (including input grading and Local Exposure) versus the raw model output. It is published for exposure use on the next frame.",
+     DebugDisplayMode::Mask, SelectImportanceMask},
     {"SDR Base (pre-model)",
      "Full-resolution linear SDR carrier produced by the BT.2446C split. "
      "This is the RGB payload the model is downsampled from.",

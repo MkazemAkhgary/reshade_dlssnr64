@@ -244,9 +244,10 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
 
       if (settings.enabled) {
         // Capture the current upscaled output only when PostDLSS passes need it.
-        // HDR measurement and Structure Detection run inside OnPreDlssEvaluate
-        // when a PreDLSS pass exists, otherwise inside OnPostDlssEvaluate just
-        // before the first PostDLSS pass. Backbuffer-only setups never enter it.
+        // HDR measurement runs before the first Pre/Post-DLSS pass, using the
+        // published previous-frame Importance Mask. The new mask is generated
+        // after the first successful model evaluation. Backbuffer-only setups
+        // never enter that path.
         ID3D12Resource* output = nullptr;
         if (any_post_dlss) {
           output = GetResourceParameter(parameters, NVSDK_NGX_Parameter_Output);

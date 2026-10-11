@@ -8,7 +8,7 @@
 #include "compose/settings.h"
 #include "grade/settings.h"
 #include "hdr/settings.h"
-#include "skin/settings.h"
+#include "importance_mask/settings.h"
 #include "project_constants.h"
 
 namespace reshade_dlssnr {
@@ -100,7 +100,7 @@ struct Settings {
   int active_pass = 0;
 
   HdrSettings hdr;
-  SkinSettings skin;
+  ImportanceMaskSettings importance_mask;
 
   // ---------------------------------------------------------------------
   // Final backbuffer grade. Runs once per frame, after every pass, on the
@@ -133,9 +133,8 @@ struct Settings {
   bool ui_hdr_open = true;
   bool ui_grade_open = true;
   bool ui_hdr_diagnostics_open = false;
-  bool ui_skin_detect_open = true;
-  bool ui_skin_detect_model_open = true;
-  bool ui_skin_detect_mask_open = true;
+  bool ui_importance_mask_open = true;
+  bool ui_importance_mask_settings_open = true;
 };
 
 Settings& GetSettings();

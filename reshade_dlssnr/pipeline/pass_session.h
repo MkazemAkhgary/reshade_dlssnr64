@@ -25,7 +25,7 @@
 
 namespace reshade_dlssnr {
 
-class SkinDetect;
+class ImportanceMask;
 
 class PassSession {
  public:
@@ -50,7 +50,7 @@ class PassSession {
                           FrameDebugContext& frame_debug,
                           HdrState* hdr,
                           CommandContext* hdr_cmd,
-                          SkinDetect* skin_detect,
+                          ImportanceMask* importance_mask,
                           ID3D12Resource* game_exposure_texture,
                           ID3D12CommandQueue* command_queue,
                           IDXGISwapChain* swapchain);
@@ -145,7 +145,7 @@ class PassSession {
                   FrameDebugContext& frame_debug,
                   HdrState* hdr,
                   CommandContext* hdr_cmd,
-                  SkinDetect* skin_detect,
+                  ImportanceMask* importance_mask,
                   ID3D12Resource* game_exposure_texture,
                   ID3D12CommandQueue* command_queue,
                   IDXGISwapChain* swapchain);

@@ -31,7 +31,7 @@ PipelineStatus PassSession::StepBuildHdrUniforms(PassRun& run) {
   run.hdr_uniforms.midtone = local.midtone;
   const bool local_active = local.enabled && local.strength > 0.0f;
   run.hdr_uniforms.local_filter_flags = local_active
-      ? ((local.filters.structure_mask ? 1u : 0u) |
+      ? ((local.filters.importance_mask ? 1u : 0u) |
          (local.filters.depth ? 2u : 0u) |
          (local.filters.percentile_range ? 4u : 0u) |
          (local.depth_continuity ? 8u : 0u))

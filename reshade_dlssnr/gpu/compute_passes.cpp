@@ -28,7 +28,7 @@ const ComputePassDef kComputePasses[] = {
     {"PrepareModelInput",     "model/prepare_model_input.hlsl", BytecodeData("model/prepare_model_input.hlsl"), BytecodeSize("model/prepare_model_input.hlsl")},
     {"ComposeModelOutput",    "compose/compose_model_output.hlsl", BytecodeData("compose/compose_model_output.hlsl"), BytecodeSize("compose/compose_model_output.hlsl")},
     {"ComposeModelOutputHdr", "compose/compose_model_output_hdr.hlsl", BytecodeData("compose/compose_model_output_hdr.hlsl"), BytecodeSize("compose/compose_model_output_hdr.hlsl")},
-    {"SkinMaskDiff",          "skin/skin_mask_diff.hlsl",      BytecodeData("skin/skin_mask_diff.hlsl"),      BytecodeSize("skin/skin_mask_diff.hlsl")},
+    {"BuildImportanceMask",          "importance_mask/build_importance_mask.hlsl",      BytecodeData("importance_mask/build_importance_mask.hlsl"),      BytecodeSize("importance_mask/build_importance_mask.hlsl")},
     {"DebugDisplay",          "debug/debug_display.hlsl",      BytecodeData("debug/debug_display.hlsl"),      BytecodeSize("debug/debug_display.hlsl")},
     {"DebugHdrRoundtrip",    "debug/debug_hdr_roundtrip.hlsl", BytecodeData("debug/debug_hdr_roundtrip.hlsl"), BytecodeSize("debug/debug_hdr_roundtrip.hlsl")},
     {"ApplyGrade",            "grade/apply_grade.hlsl",        BytecodeData("grade/apply_grade.hlsl"),        BytecodeSize("grade/apply_grade.hlsl")},

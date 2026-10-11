@@ -11,7 +11,7 @@
 #include "gpu/d3d12_utils.h"
 #include "pipeline/pipeline_graph.h"
 #include "state/settings.h"
-#include "skin/skin_detect.h"
+#include "importance_mask/importance_mask.h"
 #include "pipeline/pipeline_trace.h"
 
 namespace reshade_dlssnr {
@@ -456,7 +456,7 @@ void HdrState::BeginFrame(CommandContext& cmd,
   for (uint32_t layer = 0; layer < kHistogramLayerCount; ++layer) {
     const ExposureFilterSettings* filter = filters[layer];
     uint32_t flags = 0;
-    if (filter != nullptr && filter->structure_mask && have_mask) flags |= 1u;
+    if (filter != nullptr && filter->importance_mask && have_mask) flags |= 1u;
     if (filter != nullptr && filter->depth && have_depth) flags |= 2u;
     constants.shader.Params0.w = static_cast<float>(flags);
     constants.shader.Params1.x = filter != nullptr ? filter->depth_near : 0.0f;
@@ -610,7 +610,7 @@ void HdrState::UpdateExposure(const uint32_t* full_bins,
   if (adaptive_total != 0) {
     adaptive_.Update(adaptive_bins, adaptive_params, dt);
     const bool adaptive_uses_filters =
-        adaptive_settings.filters.structure_mask || adaptive_settings.filters.depth ||
+        adaptive_settings.filters.importance_mask || adaptive_settings.filters.depth ||
         adaptive_settings.filters.percentile_range;
     adaptive_.metering_source = adaptive_uses_filters
         ? MeteringSource::FilteredPopulation : MeteringSource::FullFrame;
@@ -719,8 +719,8 @@ PipelineStatus RunHdrBeginFrame(PassRun& run) {
   ID3D12Resource* exposure_mask = nullptr;
   unsigned int exposure_mask_width = 0;
   unsigned int exposure_mask_height = 0;
-  if (run.settings->skin.enable && run.skin_detect != nullptr) {
-    const SkinDetect::Output& detection = run.skin_detect->GetOutput();
+  if (run.settings->importance_mask.enable && run.importance_mask != nullptr) {
+    const ImportanceMask::Output detection = run.importance_mask->GetFrameOutput();
     if (detection.valid && detection.mask != nullptr && detection.width != 0 &&
         detection.height != 0) {
       exposure_mask = detection.mask;
@@ -761,10 +761,10 @@ constexpr PipelineStepDef kHdrSteps[] = {
 };
 
 static_assert(PrerequisitesPrecedeSteps(
-                  kStructureDetectionStepNodes,
-                  ArrayCount(kStructureDetectionStepNodes), kHdrSteps,
+                  kHdrPreparationStepNodes,
+                  ArrayCount(kHdrPreparationStepNodes), kHdrSteps,
                   ArrayCount(kHdrSteps)),
-              "an HDR step in StructureDetection declares a prerequisite "
+              "an HDR step in HdrPreparation declares a prerequisite "
               "that the stage lists after it");
 
 static_assert(
@@ -774,12 +774,12 @@ static_assert(
                               StageInput::Stage),
     "an HDR step in PreDLSS needs an input the stage call site does not supply");
 static_assert(
-    StageInputsCoverSteps(kStructureDetectionStepNodes,
-                          ArrayCount(kStructureDetectionStepNodes), kHdrSteps,
+    StageInputsCoverSteps(kHdrPreparationStepNodes,
+                          ArrayCount(kHdrPreparationStepNodes), kHdrSteps,
                           ArrayCount(kHdrSteps),
                           StageInput::CommandList | StageInput::OutputResource |
                               StageInput::Stage),
-    "an HDR step in StructureDetection needs an input the stage call site "
+    "an HDR step in HdrPreparation needs an input the stage call site "
     "does not supply");
 
 }  // namespace

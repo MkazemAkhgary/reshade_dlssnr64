@@ -57,9 +57,9 @@ void DrawFilterControls(const char* id, ExposureFilterSettings& filters,
         "When a mask or depth resource is unavailable, that filter is skipped.");
   }
 
-  changed |= ImGui::Checkbox("Structure Mask", &filters.structure_mask);
+  changed |= ImGui::Checkbox("Importance Mask", &filters.importance_mask);
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-    Tip("Meter or correct only pixels weighted by the persistent Structure Detection mask.");
+    Tip("Meter or correct only pixels weighted by the persistent Importance Mask mask.");
   ImGui::SameLine();
   changed |= ImGui::Checkbox("Depth", &filters.depth);
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))

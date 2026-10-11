@@ -74,7 +74,7 @@ void Append(Snapshot& snap, const std::string& name, std::string value) {
 
 void AppendExposureFilters(Snapshot& snap, const std::string& prefix,
                            const ExposureFilterSettings& filter) {
-  Append(snap, prefix + ".structure_mask", BoolText(filter.structure_mask));
+  Append(snap, prefix + ".importance_mask", BoolText(filter.importance_mask));
   Append(snap, prefix + ".depth", BoolText(filter.depth));
   Append(snap, prefix + ".percentile_range", BoolText(filter.percentile_range));
   Append(snap, prefix + ".depth_near", FloatText(filter.depth_near));
@@ -190,23 +190,13 @@ Snapshot BuildSnapshot(const Settings& settings,
   Append(snap, "hdr_bt2446_crosstalk", FloatText(settings.hdr.bt2446_crosstalk));
   Append(snap, "hdr_gain_min_log2", FloatText(settings.hdr.gain_min_log2));
   Append(snap, "hdr_gain_max_log2", FloatText(settings.hdr.gain_max_log2));
-  Append(snap, "structure_detect_enable", BoolText(settings.skin.enable));
-  Append(snap, "structure_detect_scale", FloatText(GetDetectionScale(settings.skin)));
-  Append(snap, "structure_detect_luma_threshold", FloatText(settings.skin.luma_threshold));
-  Append(snap, "structure_detect_luma_relative", FloatText(settings.skin.luma_relative));
-  Append(snap, "structure_detect_chroma_threshold", FloatText(settings.skin.chroma_threshold));
-  Append(snap, "structure_detect_clip_threshold", FloatText(settings.skin.clip_threshold));
-  Append(snap, "structure_detect_preset", std::to_string(settings.skin.preset));
-  Append(snap, "structure_detect_intensity", FloatText(settings.skin.intensity));
-  Append(snap, "structure_detect_local_tone", FloatText(settings.skin.local_tone));
-  Append(snap, "structure_detect_local_structure", FloatText(settings.skin.local_structure));
-  Append(snap, "structure_detect_skin_structure", FloatText(settings.skin.skin_structure));
-  Append(snap, "structure_detect_ui_correction", BoolText(settings.skin.ui_correction));
-  Append(snap, "structure_detect_edit_strength", FloatText(settings.skin.edit_strength));
-  Append(snap, "structure_detect_mask_smoothing", FloatText(settings.skin.mask_smoothing));
-  Append(snap, "structure_detect_mask_response", FloatText(settings.skin.mask_response));
-  Append(snap, "structure_detect_target_mode",
-         std::to_string(static_cast<int>(settings.skin.target_mode)));
+  Append(snap, "importance_mask.enable", BoolText(settings.importance_mask.enable));
+  Append(snap, "importance_mask.luma_threshold", FloatText(settings.importance_mask.luma_threshold));
+  Append(snap, "importance_mask.luma_relative", FloatText(settings.importance_mask.luma_relative));
+  Append(snap, "importance_mask.chroma_threshold", FloatText(settings.importance_mask.chroma_threshold));
+  Append(snap, "importance_mask.edit_strength", FloatText(settings.importance_mask.edit_strength));
+  Append(snap, "importance_mask.smoothing", FloatText(settings.importance_mask.mask_smoothing));
+  Append(snap, "importance_mask.response", FloatText(settings.importance_mask.mask_response));
   AppendGrade(snap, "grade_backbuffer", settings.grade_backbuffer);
 
   for (uint32_t i = 0; i < kMaxPasses; ++i) {

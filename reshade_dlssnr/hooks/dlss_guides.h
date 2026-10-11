@@ -17,7 +17,7 @@ struct DlssGuideState {
   ID3D12Resource* depth = nullptr;
   ID3D12Resource* motion = nullptr;
   // Current DLSS output resource or its optional clone. Used by Post-DLSS
-  // HDR/structure detection; nullptr unless captured for this evaluation.
+  // HDR metering/Importance Mask; nullptr unless captured for this evaluation.
   ID3D12Resource* dlss_output_color = nullptr;
   unsigned int guide_width = 0;
   unsigned int guide_height = 0;
