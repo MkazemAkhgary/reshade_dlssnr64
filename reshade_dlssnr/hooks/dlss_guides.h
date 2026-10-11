@@ -50,8 +50,9 @@ class DlssGuides {
       const NVSDK_NGX_Parameter* params,
       NVSDK_NGX_Feature feature_id);
 
-  // Called after a successful evaluation, only when Post-DLSS is enabled.
-  // The mode latched by CaptureGuides is used for the matching evaluation.
+  // Called after a successful evaluation when a Post-DLSS pass needs the
+  // just-produced output. The mode latched by CaptureGuides is used for the
+  // matching evaluation.
   void CaptureOutput(
       ID3D12GraphicsCommandList* command_list,
       const NVSDK_NGX_Parameter* params,

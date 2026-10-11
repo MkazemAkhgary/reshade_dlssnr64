@@ -579,13 +579,14 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
 
   const PipelineStatus status = PipelineRunner::RunStage(stage, run);
 
-  // Direct Post-DLSS mode transitions the game's output to SRV before HDR
-  // metering/Structure Detection. A stage can then skip before its normal
-  // WriteToGameResource restore (for example while shaders compile). Restore
-  // the output state on every such exit. In clone mode the original output is
-  // not touched unless writeback began, which is tracked by command_.
+  // Direct Post-DLSS mode transitions the game's output to SRV before model
+  // work. A stage can skip before its normal WriteToGameResource restore (for
+  // example while shaders compile). Restore the output state on every such
+  // exit. In clone mode the original output is not touched unless writeback
+  // began, which is tracked by command_.
   if (status != PipelineStatus::Ok && !stage.owns_submit && !stage.is_pre_dlss &&
-      output_resource != nullptr && run.guides.dlss_output_color != nullptr) {
+      !stage.output_state_managed_externally && output_resource != nullptr &&
+      run.guides.dlss_output_color != nullptr) {
     D3D12_RESOURCE_STATES tracked = command_.GetResourceState(output_resource);
     if (!run.guides.clone_resources &&
         tracked == D3D12_RESOURCE_STATE_COMMON) {

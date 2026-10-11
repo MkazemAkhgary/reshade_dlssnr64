@@ -105,21 +105,28 @@ void DrawMaskGroup(SkinSettings& detection, bool& mask_open, bool& changed) {
 
 }  // namespace
 
-void DrawStructureDetectSection(Settings& settings, bool& changed) {
+void DrawStructureDetectSection(Settings& settings, bool hdr_relevant, bool& changed) {
   if (!PersistentHeader(
           "Structure Detection", settings.ui_skin_detect_open, changed,
-          "Run a secondary model evaluation to build a persistent structure mask used by supported filters.")) {
+          "Run a secondary model evaluation before the first Pre-DLSS or Post-DLSS pass to build a current-frame structure mask.")) {
     return;
   }
 
   IndentScope section_indent;
   SkinSettings& detection = settings.skin;
 
+  if (!hdr_relevant) ImGui::BeginDisabled();
   changed |= ImGui::Checkbox("Enable Structure Detection", &detection.enable);
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip(
-        "Run the neural model at reduced resolution and build a persistent analysis mask from its edits."
+        "Run the neural model at reduced resolution before the first Pre/Post-DLSS pass and build an analysis mask from its edits."
         " The target can be skin-oriented or general structure.");
+  }
+
+  if (!hdr_relevant) ImGui::EndDisabled();
+  if (!hdr_relevant) {
+    ImGui::TextDisabled("Requires an enabled Pre-DLSS or Post-DLSS pass.");
+    return;
   }
 
   WithDisabled(!detection.enable, [&] {

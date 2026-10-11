@@ -702,25 +702,17 @@ PipelineStatus RunHdrBeginFrame(PassRun& run) {
     return PipelineStatus::Ok;
 
   const bool pre_dlss = run.stage != nullptr && run.stage->is_pre_dlss;
-  // When both game-resource targets are in use, PostDLSS remains the metering
-  // authority because it sees the game's upscaled frame. The pre pass uses
-  // the most recently measured exposure. If there is no PostDLSS pass, meter
-  // the pre-upscale Color resource so PreDLSS-only configurations still work.
-  if (pre_dlss) {
-    for (uint32_t i = 0; i < kMaxPasses; ++i) {
-      if (run.settings->pass_enabled[i] &&
-          run.settings->passes[i].injection_stage == InjectionStage::PostDLSS) {
-        return PipelineStatus::Ok;
-      }
-    }
-  }
-
   ID3D12Resource* source = pre_dlss ? run.output_resource
                                     : run.guides.dlss_output_color;
-  const unsigned int source_width = pre_dlss ? run.width : run.guides.output_width;
-  const unsigned int source_height = pre_dlss ? run.height : run.guides.output_height;
-  if (source == nullptr || source_width == 0 || source_height == 0) {
+  if (source == nullptr) {
     TRACE_EVT(run.session, "hdr_begin_frame SKIP (no source color)");
+    return PipelineStatus::Ok;
+  }
+  const D3D12_RESOURCE_DESC source_desc = source->GetDesc();
+  const unsigned int source_width = static_cast<unsigned int>(source_desc.Width);
+  const unsigned int source_height = source_desc.Height;
+  if (source_width == 0 || source_height == 0) {
+    TRACE_EVT(run.session, "hdr_begin_frame SKIP (empty source color)");
     return PipelineStatus::Ok;
   }
 
@@ -769,15 +761,11 @@ constexpr PipelineStepDef kHdrSteps[] = {
 };
 
 static_assert(PrerequisitesPrecedeSteps(
-                  kPreDlssStepNodes, ArrayCount(kPreDlssStepNodes), kHdrSteps,
+                  kStructureDetectionStepNodes,
+                  ArrayCount(kStructureDetectionStepNodes), kHdrSteps,
                   ArrayCount(kHdrSteps)),
-              "an HDR step declares a prerequisite that the PreDLSS stage "
-              "lists after it");
-static_assert(PrerequisitesPrecedeSteps(
-                  kPostDlssStepNodes, ArrayCount(kPostDlssStepNodes), kHdrSteps,
-                  ArrayCount(kHdrSteps)),
-              "an HDR step declares a prerequisite that the PostDLSS stage "
-              "lists after it - reorder kPostDlssStepNodes, not this");
+              "an HDR step in StructureDetection declares a prerequisite "
+              "that the stage lists after it");
 
 static_assert(
     StageInputsCoverSteps(kPreDlssStepNodes, ArrayCount(kPreDlssStepNodes),
@@ -786,11 +774,12 @@ static_assert(
                               StageInput::Stage),
     "an HDR step in PreDLSS needs an input the stage call site does not supply");
 static_assert(
-    StageInputsCoverSteps(kPostDlssStepNodes, ArrayCount(kPostDlssStepNodes),
-                          kHdrSteps, ArrayCount(kHdrSteps),
+    StageInputsCoverSteps(kStructureDetectionStepNodes,
+                          ArrayCount(kStructureDetectionStepNodes), kHdrSteps,
+                          ArrayCount(kHdrSteps),
                           StageInput::CommandList | StageInput::OutputResource |
                               StageInput::Stage),
-    "an HDR step in the PostDLSS stage needs an input the PostDLSS call site "
+    "an HDR step in StructureDetection needs an input the stage call site "
     "does not supply");
 
 }  // namespace

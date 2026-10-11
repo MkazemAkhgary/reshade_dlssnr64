@@ -232,13 +232,12 @@ constexpr PipelinePhaseDef kPresentPhases[] = {
 
 // -- Pre-DLSS stage ---------------------------------------------------------
 // Runs on the game's input Color resource before the original EvaluateFeature.
-// Structure Detection is intentionally omitted here: its output is produced
-// from the upscaled DLSS output and is not a current-frame pre-input mask.
+// HDR metering and Structure Detection were already completed by the shared
+// frame-preparation stage before this pass group starts.
 constexpr PipelineNodeId kPreDlssSteps[] = {
     PipelineNodeId::ResolveDevice,
     PipelineNodeId::EnsureHdr,
     PipelineNodeId::EnsureComputeEngine,
-    PipelineNodeId::HdrBeginFrame,
     PipelineNodeId::ResolveWorkingScale,
     PipelineNodeId::EnsureFrameResources,
     PipelineNodeId::SeedResourceStates,
@@ -261,31 +260,23 @@ constexpr PipelineNodeId kPreDlssSteps[] = {
 };
 
 constexpr PipelinePhaseDef kPreDlssPhases[] = {
-    {"setup", 0, 4, nullptr},
-    {"resources", 4, 4, nullptr},
-    {"feature", 8, 3, nullptr},
-    {"prepare", 11, 6, nullptr},
-    {"evaluate", 17, 2, nullptr},
-    {"compose", 19, 2, nullptr},
-    {"output", 21, 2, nullptr},
+    {"setup", 0, 3, nullptr},
+    {"resources", 3, 4, nullptr},
+    {"feature", 7, 3, nullptr},
+    {"prepare", 10, 6, nullptr},
+    {"evaluate", 16, 2, nullptr},
+    {"compose", 18, 2, nullptr},
+    {"output", 20, 2, nullptr},
 };
 
 // -- Post-DLSS stage --------------------------------------------------------
 // Was: PassSession::OnPostDlssEvaluate (pass_session.cpp)
 constexpr PipelineNodeId kPostDlssSteps[] = {
     PipelineNodeId::ResolveDevice,        // GetDevice + runtime.Initialize
-    // EnsureHdr runs once per process (lazy), HdrBeginFrame once per frame.
-    // Both gate themselves, so the per-pass loop below is harmless for them.
-    //
-    // Ordering here is load bearing, not cosmetic. EnsureComputeEngine must
-    // precede HdrBeginFrame: HdrBeginFrame dispatches the histogram through
-    // that engine, and it declares EnsureComputeEngine as a prerequisite, so
-    // listing it first would make the prerequisite permanently unsatisfiable
-    // and silently skip HDR measurement every frame.
+    // HDR measurement and Structure Detection were completed by the shared
+    // frame-preparation stage before the first active game-resource pass.
     PipelineNodeId::EnsureHdr,
     PipelineNodeId::EnsureComputeEngine,  // codec.Init + IsReady
-    PipelineNodeId::HdrBeginFrame,
-    PipelineNodeId::SkinDetect,
     PipelineNodeId::ResolveWorkingScale,
     PipelineNodeId::EnsureFrameResources, // includes SetRetireCallback
     PipelineNodeId::SeedResourceStates,   // ClearState + SeedFrameState + output
@@ -308,15 +299,41 @@ constexpr PipelineNodeId kPostDlssSteps[] = {
 };
 
 constexpr PipelinePhaseDef kPostDlssPhases[] = {
-    {"setup", 0, 5, nullptr},   // ResolveDevice, EnsureHdr,
-                                // EnsureComputeEngine, HdrBeginFrame,
-                                // SkinDetect
-    {"resources", 5, 4, nullptr},
-    {"feature", 9, 3, nullptr},
-    {"prepare", 12, 5, nullptr},
-    {"evaluate", 17, 3, nullptr},
-    {"compose", 20, 2, nullptr},
-    {"output", 22, 2, nullptr},
+    {"setup", 0, 3, nullptr},
+    {"resources", 3, 4, nullptr},
+    {"feature", 7, 3, nullptr},
+    {"prepare", 10, 5, nullptr},
+    {"evaluate", 15, 3, nullptr},
+    {"compose", 18, 2, nullptr},
+    {"output", 20, 2, nullptr},
+};
+
+constexpr PipelinePhaseDef kStructureDetectionPhases[] = {
+    {"prepare_and_detect", 0, 5, nullptr},
+};
+
+constexpr size_t kStructureDetectionStepCount =
+    sizeof(kStructureDetectionStepNodes) / sizeof(kStructureDetectionStepNodes[0]);
+constexpr size_t kStructureDetectionPhaseCount =
+    sizeof(kStructureDetectionPhases) / sizeof(kStructureDetectionPhases[0]);
+
+const PipelineStageDef kStructureDetectionStage = {
+    /*name=*/"StructureDetection",
+    /*has_injection_stage=*/false,
+    /*is_pre_dlss=*/false,
+    /*is_post_dlss=*/true,
+    /*steps=*/kStructureDetectionStepNodes,
+    /*step_count=*/static_cast<uint32_t>(kStructureDetectionStepCount),
+    /*phases=*/kStructureDetectionPhases,
+    /*phase_count=*/static_cast<uint32_t>(kStructureDetectionPhaseCount),
+    /*default_failure=*/FailurePolicy::Transient,
+    /*owns_submit=*/false,
+    /*hdr_capable=*/true,
+    /*reads_dlss_output=*/true,
+    /*max_passes=*/1,
+    /*required_inputs=*/StageInput::CommandList | StageInput::OutputResource |
+        StageInput::Stage,
+    /*output_state_managed_externally=*/true,
 };
 
 // -- Release stage ----------------------------------------------------------
@@ -376,6 +393,10 @@ static_assert(PhasesCover(kPreDlssPhases, kPreDlssPhaseCount,
 static_assert(PhasesCover(kPostDlssPhases, kPostDlssPhaseCount,
                           kPostDlssStepCount),
               "PostDLSS phases must span kPostDlssSteps with no gap or overlap");
+static_assert(PhasesCover(kStructureDetectionPhases,
+                          kStructureDetectionPhaseCount,
+                          kStructureDetectionStepCount),
+              "StructureDetection phases must cover every step exactly once");
 static_assert(PhasesCover(kReleasePhases, kReleasePhaseCount,
                           kReleaseStepCount),
               "Release phases must span kReleaseSteps with no gap or overlap");
@@ -508,6 +529,10 @@ const PipelineStageDef* FindPipelineStageForInjection(int injection_stage) {
     if (stage_value == injection_stage) return &stage;
   }
   return nullptr;
+}
+
+const PipelineStageDef& PipelineStructureDetectionStage() {
+  return kStructureDetectionStage;
 }
 
 const PipelineStageDef& PipelineReleaseStage() {

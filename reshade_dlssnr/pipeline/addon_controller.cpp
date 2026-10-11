@@ -377,6 +377,12 @@ void AddonController::OnPreDlssEvaluate(
   frame_debug_.preferred_format = backbuffer_format_;
   pre_stage_seen_ = true;
 
+  // HDR metering and Structure Detection are frame pre-work, not work owned
+  // by an individual pass. Run them against the current PreDLSS Color input
+  // before any configured pass can consume their results.
+  PrepareFrameForPass(command_list, input_resource, exposure_texture,
+                      /*pre_dlss=*/true);
+
   const PipelineStageDef* stage = FindPipelineStageForInjection(
       static_cast<int>(InjectionStage::PreDLSS));
   if (stage != nullptr) {
@@ -419,6 +425,14 @@ void AddonController::OnPostDlssEvaluate(
   if (!pre_stage_seen_) frame_debug_.Reset();
   frame_debug_.preferred_format = backbuffer_format_;
 
+  // If no PreDLSS pass ran in this NGX evaluation, PostDLSS is the first
+  // usable target. Prepare the frame from its current upscaled output before
+  // dispatching the first PostDLSS pass. A PreDLSS preparation is reused.
+  if (!pre_stage_seen_) {
+    PrepareFrameForPass(command_list, output_resource, exposure_texture,
+                        /*pre_dlss=*/false);
+  }
+
   const PipelineStageDef* stage = FindPipelineStageForInjection(
       static_cast<int>(InjectionStage::PostDLSS));
   if (stage != nullptr) {
@@ -441,6 +455,38 @@ void AddonController::OnPostDlssEvaluate(
   RefreshStatus(settings);
   TRACE_EVT(this, "controller_exit stage=PostDLSS");
   trace::EndFrame(trace::FrameStream::PostDlss);
+}
+
+void AddonController::PrepareFrameForPass(
+    ID3D12GraphicsCommandList* command_list,
+    ID3D12Resource* source_resource,
+    ID3D12Resource* exposure_texture,
+    bool pre_dlss) {
+  const Settings& settings = GetSettings();
+  if (!settings.enabled || command_list == nullptr || source_resource == nullptr)
+    return;
+
+  // This utility stage contains the one HDR measurement and one Structure
+  // Detection dispatch for the current frame. Its target metadata is switched
+  // to match the earliest enabled stage, so HDR reads the same source color
+  // that the first pass will see and detection uses that same current-frame
+  // image instead of a stale DLSS output from the previous evaluation.
+  PipelineStageDef stage = PipelineStructureDetectionStage();
+  stage.is_pre_dlss = pre_dlss;
+  stage.is_post_dlss = !pre_dlss;
+  stage.reads_dlss_output = !pre_dlss;
+  stage.output_state_managed_externally = !pre_dlss;
+
+  TRACE_EVT(this, "controller_prepare stage=%s", pre_dlss ? "PreDLSS" : "PostDLSS");
+  const PipelineStatus status = structure_detection_session_.RunStage(
+      stage, settings, codec_, runtime_, command_list, source_resource,
+      /*is_first_pass=*/true, frame_debug_, &hdr_, &pass1_command_,
+      &skin_detect_, exposure_texture, nullptr, nullptr);
+  // This helper session is not exposed as a user pass. A transient setup
+  // failure must not permanently disable shared preparation on future frames.
+  if (status == PipelineStatus::Fail) {
+    structure_detection_session_.Retry(runtime_);
+  }
 }
 
 void AddonController::PresentDebugOutput(
@@ -583,6 +629,7 @@ void AddonController::Shutdown() {
   for (auto& pass : passes_) {
     pass.Shutdown(runtime_);
   }
+  structure_detection_session_.Shutdown(runtime_);
   release_command_.Shutdown();
   release_list_begun_ = false;
   grade_scratch_.Reset();
@@ -610,8 +657,8 @@ void AddonController::Shutdown() {
 namespace {
 
 // Lazily creates the HDR histogram resources and initializes the compute
-// engine for them. Runs once, on the first Post-DLSS frame; after that both
-// are reused and BeginFrame does the per-frame work.
+// engine for them. The shared frame-preparation stage calls this before the
+// first PreDLSS or PostDLSS pass; later frames reuse the resources.
 //
 // This is controller state (hdr_initialized_ spans every pass and every
 // frame), which is why the step lives here rather than in hdr_state.cpp.

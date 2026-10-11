@@ -441,9 +441,9 @@ void DlssGuides::CaptureOutput(
       if (ID3D12Resource* retired = dlss_output_direct_.Detach()) retired_game_resources_.push_back({retired, 0});
       dlss_output_direct_ = output;
     }
-    // Direct mode still needs the game's just-produced output in an SRV state
-    // before HDR metering and the Post-DLSS model read it. Restore the game's
-    // expected state later when the pass publishes its composite.
+    // Direct mode needs the game's just-produced output in an SRV state before
+    // shared frame preparation and Post-DLSS passes read it. The Post-DLSS
+    // pass restores the game's expected state when it publishes its composite.
     const D3D12_RESOURCE_STATES output_state = InferResourceState(output);
     Barrier(command_list, output, output_state,
             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -459,6 +459,7 @@ void DlssGuides::CaptureOutput(
   state_.output_height = output_height;
   state_.clone_resources = clone_resources_;
 }
+
 
 void DlssGuides::RetireResource(Microsoft::WRL::ComPtr<ID3D12Resource>& resource) {
   if (resource == nullptr) return;

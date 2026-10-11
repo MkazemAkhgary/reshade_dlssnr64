@@ -122,7 +122,8 @@ class AddonController {
   SkinDetect& GetSkinDetect() { return skin_detect_; }
 
  private:
-  AddonController() {
+  AddonController()
+      : structure_detection_session_(&DlssGuides::Get(), 0) {
     passes_.reserve(kMaxPasses);
     for (uint32_t i = 0; i < kMaxPasses; ++i) {
       passes_.emplace_back(&DlssGuides::Get(), i);
@@ -138,6 +139,15 @@ class AddonController {
   // to render diagnostics at a copy-compatible size.
   // A failure to query leaves the cached value untouched.
   void RefreshBackbufferFormat(IDXGISwapChain* swapchain);
+
+  // Measures the current frame and refreshes Structure Detection immediately
+  // before the first enabled PreDLSS or PostDLSS pass. Backbuffer-only frames
+  // never call this helper. Caller holds g_direct_mutex.
+  void PrepareFrameForPass(
+      ID3D12GraphicsCommandList* command_list,
+      ID3D12Resource* source_resource,
+      ID3D12Resource* exposure_texture,
+      bool pre_dlss);
 
   // Builds the PassRun for one pass of `stage` and hands it to the session.
   //
@@ -170,6 +180,9 @@ class AddonController {
 
   NgxRuntime runtime_;
   std::vector<PassSession> passes_;
+  // Internal session: detection is shared across passes and must not latch a
+  // failure onto a user-configured pass.
+  PassSession structure_detection_session_;
   FrameDebugContext frame_debug_;
   // The current NGX EvaluateFeature call has already reset the debug target at
   // PreDLSS. PostDLSS must preserve it so a selected PreDLSS pass can display.

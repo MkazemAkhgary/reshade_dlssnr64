@@ -190,25 +190,27 @@ The NGX hook resolves the feature handle and identifies DLSS Super Sampling befo
 Game -> hooked NVSDK_NGX_D3D12_EvaluateFeature
   -> capture the current NGX ExposureTexture pointer and Color input resource
   -> AddonController::OnPreDlssEvaluate(native_list, color, exposure_texture)
+     -> shared HDR measurement + Structure Detection preparation on Color
      -> one PassSession::RunStage(PreDLSS) per enabled Pre-DLSS pass
         -> write the composed result back to the NGX Color input
   -> restore the game's tracked command-list bindings
   -> real NGX EvaluateFeature (game upscales the modified input)
 ```
 
-Pre-DLSS records inline on the game's command list and never closes, submits, or waits on it. Its output resource is the game's input Color texture, and `WriteToGameResource` restores it to `NON_PIXEL_SHADER_RESOURCE` before NGX consumes it. At hook entry the game has already populated the current evaluation's depth and motion resources, so `CaptureGuides` publishes those exact guides before Pre-DLSS runs. With the shared advanced **Clone Game Resources** option off (default), the addon retains direct references and performs no guide copies; when on, it copies current depth/motion into reusable addon-owned textures. The option is latched at the next NGX evaluation and applies to all stages. Structure Detection is not run in this stage because its current-frame mask is produced from the upscaled DLSS output.
+Pre-DLSS records inline on the game's command list and never closes, submits, or waits on it. Its output resource is the game's input Color texture, and `WriteToGameResource` restores it to `NON_PIXEL_SHADER_RESOURCE` before NGX consumes it. At hook entry the game has already populated the current evaluation's depth and motion resources, so `CaptureGuides` publishes those exact guides before Pre-DLSS runs. With the shared advanced **Clone Game Resources** option off (default), the addon retains direct references and performs no guide copies; when on, it copies current depth/motion into reusable addon-owned textures. The option is latched at the next NGX evaluation and applies to all stages. When Pre-DLSS is the first active target, the shared preparation stage meters the current input Color and runs Structure Detection from that same current-frame source before any Pre-DLSS pass.
 
 ### Post-DLSS injection
 
-Depth and motion are captured before the real NGX evaluation so every stage sees current-frame guides. After evaluation succeeds, the hook captures the DLSS output only when at least one enabled Post-DLSS pass needs it. With cloning off, Post-DLSS reads the game's output resource directly; with cloning on, it refreshes a reusable full-resolution output clone before running the target group.
+Depth and motion are captured before the real NGX evaluation so every stage sees current-frame guides. When a Pre-DLSS pass is active, a shared preparation stage runs on the current NGX Color input before any Pre-DLSS pass. Otherwise, when a Post-DLSS pass is active, the hook captures the current DLSS output and the same preparation stage runs before the first Post-DLSS pass. The stage performs HDR measurement first and Structure Detection second; every pass in the selected chain then sees that frame's measured HDR state and mask. Backbuffer-only configurations do not schedule it. With cloning off, Post-DLSS preparation reads the game's output resource directly; with cloning on, it uses the reusable output clone. Pre-DLSS preparation reads the current Color input rather than a stale prior DLSS output.
 
 ```text
 Game -> NVSDK_NGX_D3D12_EvaluateFeature
   -> hooked_NVSDK_NGX_D3D12_EvaluateFeature
      -> Pre-DLSS pass group (if configured)
      -> real NGX EvaluateFeature
-     -> capture the DLSS output only when Post-DLSS is enabled (clone only if requested)
+     -> capture the DLSS output when a Post-DLSS pass needs it
      -> AddonController::OnPostDlssEvaluate(native_list, output_resource)
+        -> if no Pre-DLSS stage ran: shared HDR measurement + Structure Detection
         -> one PassSession::RunStage(PostDLSS) per enabled Post-DLSS pass
 ```
 
@@ -222,8 +224,6 @@ The current Post-DLSS step order is:
 ResolveDevice
 EnsureHdr
 EnsureComputeEngine
-HdrBeginFrame
-SkinDetect
 ResolveWorkingScale
 EnsureFrameResources
 SeedResourceStates
@@ -245,7 +245,7 @@ RenderDebugView
 WriteToGameResource
 ```
 
-`HdrBeginFrame` and `SkinDetect` are effectively first-pass operations even though they are present in the stage table for every Post-DLSS pass. The controller marks only the first enabled Post-DLSS pass as `is_first_pass`; subsequent passes reuse HDR measurement state and the persistent structure mask. Each exposure layer applies only its own selected filters: Adaptive Exposure filters the histogram population, while Local Exposure filters the spatial correction. The previous valid structure mask is used for the current measurement because the new mask is produced later in the frame.
+`HdrBeginFrame` and `SkinDetect` run once in the shared preparation stage before the first active Pre-DLSS or Post-DLSS pass; they are not repeated by user pass sessions. Each exposure layer applies only its own selected filters: Adaptive Exposure filters the histogram population, while Local Exposure filters the spatial correction. HDR measurement runs first and therefore uses the latest completed mask; Structure Detection then updates the mask for all passes in the current frame.
 
 ### Backbuffer injection
 
@@ -513,7 +513,7 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 **Game Exposure is one layer in the exposure stack.** When enabled, the addon captures the game's NGX `ExposureTexture` before `EvaluateFeature`. If it is a usable 1x1 texture, a compute pass samples its scalar and an asynchronous GPU readback updates HDR state without waiting on the CPU. Game Exposure remains the base when available; its optional bias and bounded tuning use that value as their anchor. Adaptive Exposure can add a bounded histogram-derived correction, and Local Exposure can apply a spatial correction afterward. If game exposure is unavailable, Adaptive Exposure can provide the global exposure on its own. The Status panel reports availability and the last sampled value; `Debug View -> Game Exposure` shows the sampled value in stops.
 
-**Histogram exposure uses the full-frame histogram with optional structure-mask priority.** The first frame has only the full-frame population. Once a persistent structure mask exists, the measurement also builds a mask-conditioned histogram and blends the normalized masked population with the full-frame population using `Hdr.SkinPriority`, provided the masked fraction reaches `Hdr.SkinFractionThreshold`. The automatic method then adapts with separate brighten/darken speeds and takes the white point from that same effective metering population. The mask is intentionally one-frame-latched because it is produced after `HdrBeginFrame`; it therefore conditions the next HDR measurement and all following Post-DLSS passes rather than changing exposure halfway through the current pass chain.
+**Histogram exposure uses the full-frame histogram with optional structure-mask priority.** The first frame has only the full-frame population. When a usable structure mask exists from the previous frame, measurement can also build a mask-conditioned histogram and blend that normalized population with the full-frame population using `Hdr.SkinPriority`, provided the masked fraction reaches `Hdr.SkinFractionThreshold`. The shared preparation stage always measures HDR first and updates Structure Detection second, then all passes in that frame consume the resulting exposure state and current-frame mask. The just-built mask can therefore affect later passes immediately; HDR metering that precedes it uses the latest completed mask.
 
 **Adaptive and Local Exposure are independent layers.** Adaptive Exposure maps the filtered histogram to its midtone target and can provide global exposure by itself or a bounded correction on top of Game Exposure. Local Exposure computes a continuous per-pixel correction from a configurable block-sized low-frequency neighborhood while restoring high-frequency detail. Neighborhood diameter ranges from 4 to 512 source pixels; the shader uses a fixed 12 neighbor taps, so increasing the size mainly spreads those samples farther apart rather than increasing the sample count. The effective diameter is capped at half the shorter source dimension, and larger neighborhoods can slightly reduce texture-cache locality. When enabled and a depth guide is available, depth-continuity weighting excludes samples across depth discontinuities to reduce foreground/background halos. The separate Depth filter still controls where correction is allowed; Depth Continuity controls which neighbors may influence the local base. Each exposure layer owns its own Structure Mask, Depth, and Percentile Range filters.
 

@@ -371,19 +371,24 @@ void DrawHdrSection(Settings& settings, bool hdr_relevant, bool& changed) {
   }
 
   IndentScope indent;
+  if (!hdr_relevant) ImGui::BeginDisabled();
   changed |= ImGui::Checkbox("Enable HDR Handling", &settings.hdr.enable);
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-    Tip("Prepares HDR content for the model, which expects a display-referred SDR image. Affects Pre-DLSS and Post-DLSS passes; Backbuffer remains SDR.");
+    Tip("Prepares the current Pre-DLSS or Post-DLSS source before the first pass. Backbuffer-only configurations do not use HDR measurement.");
+  if (!hdr_relevant) ImGui::EndDisabled();
 
-  if (!hdr_relevant) ImGui::BeginDisabled();
   const bool hdr_on = settings.hdr.enable;
-  if (hdr_on) DrawStatus(AddonController::Get().GetHdrSnapshot(), hdr_relevant);
+  if (!hdr_relevant) {
+    DrawStatus(AddonController::Get().GetHdrSnapshot(), false);
+    ImGui::TextDisabled("Enable a Pre-DLSS or Post-DLSS pass to use HDR handling.");
+    return;
+  }
+  if (hdr_on) DrawStatus(AddonController::Get().GetHdrSnapshot(), true);
   WithDisabled(!hdr_on, [&] { DrawControls(settings.hdr, changed); });
   if (hdr_on) {
     DrawDiagnostics(AddonController::Get().GetHdrSnapshot(), settings.hdr,
                     settings.ui_hdr_diagnostics_open, changed);
   }
-  if (!hdr_relevant) ImGui::EndDisabled();
 }
 
 }  // namespace reshade_dlssnr

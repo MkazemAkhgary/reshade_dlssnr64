@@ -74,14 +74,13 @@ enum class PipelineNodeId : uint32_t {
   // Present seeds guides after the feature is built, PostDLSS before.
   SeedGuideStates = 8,
 
-  // -- HDR measurement (game-resource stages, first pass in the chain) -----
-  // Lazily creates the HDR histogram resources and starts the compute engine
-  // on the first Post-DLSS frame. Distinct from HdrBeginFrame because it runs
-  // once per process, not once per frame, and must succeed before BeginFrame
-  // can touch the histogram buffer.
+  // -- Shared frame preparation ---------------------------------------------
+  // Lazily creates the HDR histogram resources before the first active
+  // PreDLSS/PostDLSS pass. Distinct from HdrBeginFrame because it runs once
+  // per process and must succeed before BeginFrame touches the histogram.
   EnsureHdr = 9,
-  // Model-driven skin detection. Independent of HDR exposure metering.
-  // It runs after HdrBeginFrame so it sees the current exposure state.
+  // Model-driven Structure Detection. The shared preparation stage runs it
+  // immediately after HdrBeginFrame and before any user pass.
   SkinDetect = 10,
   HdrBeginFrame = 11,
   HistogramZero = 12,      // dispatches "ZeroHistogram"
@@ -414,6 +413,11 @@ struct PipelineStageDef {
   // Stage is listed wherever steps read `run.stage` (which the runner sets
   // itself, so it is always satisfied — it is listed to document intent).
   StageInput required_inputs = StageInput::None;
+
+  // PostDLSS preparation leaves the captured output in SRV state for the first
+  // user PostDLSS pass, which restores/publishes that output. Avoid a second
+  // generic restore during the helper stage.
+  bool output_state_managed_externally = false;
 };
 
 // ---------------------------------------------------------------------------
@@ -643,7 +647,6 @@ inline constexpr PipelineNodeId kPreDlssStepNodes[] = {
     PipelineNodeId::ResolveDevice,
     PipelineNodeId::EnsureHdr,
     PipelineNodeId::EnsureComputeEngine,
-    PipelineNodeId::HdrBeginFrame,
     PipelineNodeId::ResolveWorkingScale,
     PipelineNodeId::EnsureFrameResources,
     PipelineNodeId::SeedResourceStates,
@@ -669,8 +672,6 @@ inline constexpr PipelineNodeId kPostDlssStepNodes[] = {
     PipelineNodeId::ResolveDevice,
     PipelineNodeId::EnsureHdr,
     PipelineNodeId::EnsureComputeEngine,
-    PipelineNodeId::HdrBeginFrame,
-    PipelineNodeId::SkinDetect,
     PipelineNodeId::ResolveWorkingScale,
     PipelineNodeId::EnsureFrameResources,
     PipelineNodeId::SeedResourceStates,
@@ -690,6 +691,17 @@ inline constexpr PipelineNodeId kPostDlssStepNodes[] = {
     PipelineNodeId::GradeModelOutput,
     PipelineNodeId::RenderDebugView,
     PipelineNodeId::WriteToGameResource,
+};
+
+// Runs once immediately before the first active PreDLSS or PostDLSS pass.
+// The controller adjusts the stage metadata to match which source is current;
+// Backbuffer-only configurations never schedule this utility stage.
+inline constexpr PipelineNodeId kStructureDetectionStepNodes[] = {
+    PipelineNodeId::ResolveDevice,
+    PipelineNodeId::EnsureHdr,
+    PipelineNodeId::EnsureComputeEngine,
+    PipelineNodeId::HdrBeginFrame,
+    PipelineNodeId::SkinDetect,
 };
 
 inline constexpr PipelineNodeId kReleaseStepNodes[] = {
@@ -715,6 +727,10 @@ extern const uint32_t kPipelineStageCount;
 // Looks up a stage by injection stage. Returns nullptr when no stage serves
 // the requested injection point, in which case no pass runs.
 const PipelineStageDef* FindPipelineStageForInjection(int injection_stage);
+
+// A non-selectable utility stage that refreshes the shared structure mask from
+// the current evaluation's upscaled output before PostDLSS target passes.
+const PipelineStageDef& PipelineStructureDetectionStage();
 
 // The release stage: work that runs once per frame after every pass stage,
 // against the swapchain rather than the game's resources.

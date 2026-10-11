@@ -432,10 +432,26 @@ PipelineStatus RunSkinDetect(PassRun& run) {
   }
   if (!run.settings->skin.enable) return PipelineStatus::Ok;
   if (!run.hdr->Enabled()) return PipelineStatus::Ok;
-  if (run.guides.dlss_output_color == nullptr) return PipelineStatus::Ok;
+
+  // For a PreDLSS-first frame, the current source is NGX Color, not this
+  // evaluation's not-yet-produced upscaled output. For a PostDLSS-first frame,
+  // the captured DLSS output is current and is used as usual.
+  DlssGuideState detection_guides = run.guides;
+  if (run.stage != nullptr && run.stage->is_pre_dlss) {
+    detection_guides.dlss_output_color = run.output_resource;
+    if (run.output_resource != nullptr) {
+      const D3D12_RESOURCE_DESC desc = run.output_resource->GetDesc();
+      detection_guides.output_width = static_cast<unsigned int>(desc.Width);
+      detection_guides.output_height = desc.Height;
+    }
+  }
+  if (detection_guides.dlss_output_color == nullptr ||
+      detection_guides.output_width == 0 || detection_guides.output_height == 0) {
+    return PipelineStatus::Ok;
+  }
 
   if (!run.skin_detect->Run(*run.cmd, *run.runtime, *run.codec, run.list,
-                            run.guides, run.hdr, *run.settings)) {
+                            detection_guides, run.hdr, *run.settings)) {
     TRACE_EVT(run.session, "skin_detect SKIP");
   }
   return PipelineStatus::Ok;
@@ -452,16 +468,18 @@ constexpr PipelineStepDef kSkinDetectSteps[] = {
 };
 
 static_assert(
-    PrerequisitesPrecedeSteps(kPostDlssStepNodes, ArrayCount(kPostDlssStepNodes),
+    PrerequisitesPrecedeSteps(kStructureDetectionStepNodes,
+                              ArrayCount(kStructureDetectionStepNodes),
                               kSkinDetectSteps, ArrayCount(kSkinDetectSteps)),
-    "SkinDetect declares a prerequisite the PostDLSS stage lists after it");
+    "SkinDetect declares a prerequisite the StructureDetection stage lists after it");
 
 static_assert(
-    StageInputsCoverSteps(kPostDlssStepNodes, ArrayCount(kPostDlssStepNodes),
+    StageInputsCoverSteps(kStructureDetectionStepNodes,
+                          ArrayCount(kStructureDetectionStepNodes),
                           kSkinDetectSteps, ArrayCount(kSkinDetectSteps),
                           StageInput::CommandList | StageInput::OutputResource |
                               StageInput::Stage),
-    "SkinDetect needs an input the PostDLSS call site does not supply");
+    "SkinDetect needs an input the StructureDetection stage call site does not supply");
 
 }  // namespace
 

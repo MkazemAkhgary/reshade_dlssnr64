@@ -231,9 +231,9 @@ void DrawOverlay(reshade::api::effect_runtime*) {
 
   SectionDivider();
 
-  // Structure Detection is shared across passes and currently contributes to
-  // Post-DLSS/HDR analysis, so it follows the HDR controls.
-  DrawStructureDetectSection(settings, changed);
+  // Structure Detection shares the frame-preparation stage with HDR and is
+  // unavailable when every enabled pass targets only the Backbuffer.
+  DrawStructureDetectSection(settings, hdr_relevant, changed);
 
   SectionDivider();
 
