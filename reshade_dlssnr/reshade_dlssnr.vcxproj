@@ -10,32 +10,63 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+
   <PropertyGroup Label="Globals">
-    <VCProjectVersion>17.0</VCProjectVersion>
+    <VCProjectVersion>18.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{8F9A1C2D-4E5F-4A1B-9C2D-1234567890AB}</ProjectGuid>
     <RootNamespace>reshade_dlssnr</RootNamespace>
     <WindowsTargetPlatformVersion>$([Microsoft.Build.Utilities.ToolLocationHelper]::GetLatestSDKTargetPlatformVersion('Windows', '10.0'))</WindowsTargetPlatformVersion>
   </PropertyGroup>
+
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+
   <PropertyGroup>
     <DlssnrProjectDir>$(MSBuildProjectDirectory)</DlssnrProjectDir>
     <DlssnrGeneratedDir>$(MSBuildProjectDirectory)\generated</DlssnrGeneratedDir>
+    <DlssnrShaderStampDir>$(DlssnrGeneratedDir)\stamps</DlssnrShaderStampDir>
     <VerifyShaders Condition="'$(VerifyShaders)' == ''">true</VerifyShaders>
     <PrecompileShaders Condition="'$(PrecompileShaders)' == ''">false</PrecompileShaders>
   </PropertyGroup>
 
-  <Target Name="GenerateEmbeddedShaders" BeforeTargets="ClCompile">
+  <ItemGroup>
+    <ShaderSourceFiles Include="$(ProjectDir)shaders\**\*.*" />
+  </ItemGroup>
+
+  <Target Name="ValidateFxcPath"
+          Condition="('$(VerifyShaders)' == 'true' or '$(PrecompileShaders)' == 'true') and '$(FxcPath)' == ''">
+    <Error Text="FxcPath is not set. Set /p:FxcPath=... or ensure a Windows SDK is installed." />
+  </Target>
+
+  <Target Name="GenerateEmbeddedShadersTarget"
+          BeforeTargets="ClCompile"
+          Inputs="@(ShaderSourceFiles);$(ProjectDir)tools\generate_shaders.ps1;$(ProjectDir)tools\generate_shaders.py"
+          Outputs="$(DlssnrGeneratedDir)\shader_sources.cpp;$(DlssnrGeneratedDir)\shader_sources.h;$(DlssnrGeneratedDir)\shader_bytecode.cpp;$(DlssnrGeneratedDir)\shader_bytecode.h">
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\generate_shaders.ps1&quot; -ProjectDir &quot;$(DlssnrProjectDir)&quot; -GeneratedDir &quot;$(DlssnrGeneratedDir)&quot;" />
   </Target>
 
-  <Target Name="VerifyShaders" BeforeTargets="ClCompile" DependsOnTargets="GenerateEmbeddedShaders" Condition="'$(VerifyShaders)' == 'true'">
+  <Target Name="VerifyShadersTarget"
+          BeforeTargets="ClCompile"
+          DependsOnTargets="GenerateEmbeddedShadersTarget;ValidateFxcPath"
+          Condition="'$(VerifyShaders)' == 'true'"
+          Inputs="@(ShaderSourceFiles);$(ProjectDir)tools\verify_shaders.ps1"
+          Outputs="$(DlssnrShaderStampDir)\verify.stamp">
+    <MakeDir Directories="$(DlssnrShaderStampDir)" />
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\verify_shaders.ps1&quot; -ProjectDir &quot;$(DlssnrProjectDir)&quot; -FxcPath &quot;$(FxcPath)&quot;" />
+    <Touch Files="$(DlssnrShaderStampDir)\verify.stamp" AlwaysCreate="true" />
   </Target>
 
-  <Target Name="PrecompileShaders" BeforeTargets="ClCompile" DependsOnTargets="VerifyShaders" Condition="'$(PrecompileShaders)' == 'true'">
+  <Target Name="PrecompileShadersTarget"
+          BeforeTargets="ClCompile"
+          DependsOnTargets="GenerateEmbeddedShadersTarget;VerifyShadersTarget;ValidateFxcPath"
+          Condition="'$(PrecompileShaders)' == 'true'"
+          Inputs="@(ShaderSourceFiles);$(ProjectDir)tools\precompile_shaders.ps1"
+          Outputs="$(DlssnrShaderStampDir)\precompile.stamp">
+    <MakeDir Directories="$(DlssnrShaderStampDir)" />
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\precompile_shaders.ps1&quot; -ProjectDir &quot;$(DlssnrProjectDir)&quot; -GeneratedDir &quot;$(DlssnrGeneratedDir)&quot; -FxcPath &quot;$(FxcPath)&quot;" />
+    <Touch Files="$(DlssnrShaderStampDir)\precompile.stamp" AlwaysCreate="true" />
   </Target>
+
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
@@ -43,6 +74,7 @@
     <WholeProgramOptimization>false</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
+
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
@@ -50,21 +82,29 @@
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
+
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+
   <PropertyGroup>
     <FxcPath Condition="'$(FxcPath)' == '' and '$(WindowsSdkDir)' != '' and '$(WindowsTargetPlatformVersion)' != ''">$(WindowsSdkDir)bin\$(WindowsTargetPlatformVersion.TrimEnd('\'))\x64\fxc.exe</FxcPath>
   </PropertyGroup>
+
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>
+
   <ImportGroup Label="Shared">
   </ImportGroup>
+
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
+
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
+
   <PropertyGroup Label="UserMacros" />
+
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <OutDir>$(SolutionDir)build\$(Configuration)\</OutDir>
@@ -72,6 +112,7 @@
     <TargetName>reshade_dlssnr64</TargetName>
     <TargetExt>.addon64</TargetExt>
   </PropertyGroup>
+
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <OutDir>$(SolutionDir)build\$(Configuration)\</OutDir>
@@ -79,6 +120,7 @@
     <TargetName>reshade_dlssnr64</TargetName>
     <TargetExt>.addon64</TargetExt>
   </PropertyGroup>
+
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -89,7 +131,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <Optimization>Disabled</Optimization>
       <ObjectFileName>$(IntDir)%(RelativeDir)%(Filename).obj</ObjectFileName>
-<AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)generated;$(ProjectDir)third_party\reshade\include;$(ProjectDir)third_party\reshade;$(ProjectDir)third_party\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\FidelityFX-FSR\ffx-fsr;$(ProjectDir)third_party\nvngx_dlss_sdk;$(ProjectDir)third_party\d3dx;$(ProjectDir)third_party\detours;$(ProjectDir)gpu;$(ProjectDir)model;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)compose;$(ProjectDir)grade;$(ProjectDir)hdr;$(ProjectDir)importance_mask;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)generated;$(ProjectDir)third_party\reshade\include;$(ProjectDir)third_party\reshade;$(ProjectDir)third_party\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\FidelityFX-FSR\ffx-fsr;$(ProjectDir)third_party\nvngx_dlss_sdk;$(ProjectDir)third_party\d3dx;$(ProjectDir)third_party\detours;$(ProjectDir)gpu;$(ProjectDir)model;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)compose;$(ProjectDir)grade;$(ProjectDir)hdr;$(ProjectDir)importance_mask;$(ProjectDir)debug;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -98,6 +140,7 @@
       <AdditionalLibraryDirectories>$(ProjectDir)third_party\detours;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
+
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -109,9 +152,9 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <ErrorLog>$(IntDir)$(MSBuildProjectName).error.log;%(ErrorLog)</ErrorLog>
+      <ErrorLog>$(IntDir)$(MSBuildProjectName).error.log</ErrorLog>
       <ObjectFileName>$(IntDir)%(RelativeDir)%(Filename).obj</ObjectFileName>
-	  <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)generated;$(SolutionDir)..\..\reshade\include;$(SolutionDir)..\..\reshade;$(SolutionDir)..\..\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\nvngx_dlss_sdk;$(ProjectDir)third_party\d3dx;$(ProjectDir)third_party\detours;$(ProjectDir)gpu;$(ProjectDir)model;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)compose;$(ProjectDir)grade;$(ProjectDir)hdr;$(ProjectDir)importance_mask;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)generated;$(ProjectDir)third_party\reshade\include;$(ProjectDir)third_party\reshade;$(ProjectDir)third_party\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\FidelityFX-FSR\ffx-fsr;$(ProjectDir)third_party\nvngx_dlss_sdk;$(ProjectDir)third_party\d3dx;$(ProjectDir)third_party\detours;$(ProjectDir)gpu;$(ProjectDir)model;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)compose;$(ProjectDir)grade;$(ProjectDir)hdr;$(ProjectDir)importance_mask;$(ProjectDir)debug;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -122,6 +165,7 @@
       <AdditionalLibraryDirectories>$(ProjectDir)third_party\detours;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
+
   <ItemGroup>
     <ClInclude Include="project_constants.h" />
     <ClCompile Include="addon.cpp" />
@@ -168,6 +212,7 @@
     <ClCompile Include="ui\ui_status.cpp" />
     <ClCompile Include="ui\ui_widgets.cpp" />
   </ItemGroup>
+
   <ItemGroup>
     <ClInclude Include="gpu\compute_constants.h" />
     <ClInclude Include="generated\shader_sources.h" />
@@ -216,6 +261,7 @@
     <ClInclude Include="ui\ui_sections.h" />
     <ClInclude Include="ui\ui_widgets.h" />
   </ItemGroup>
+
   <ItemGroup>
     <None Include="shaders\common\color_constants.h" />
     <None Include="shaders\common\params.h" />
@@ -224,7 +270,9 @@
     <None Include="tools\verify_shaders.ps1" />
     <None Include="tools\precompile_shaders.ps1" />
   </ItemGroup>
+
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>
