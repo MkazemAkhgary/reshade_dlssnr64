@@ -68,6 +68,8 @@ void BindLocalExposureFilters(PassRun& run, ComputeConstants& constants,
     flags &= ~(2u | 8u);
   }
 
+  // Pack sample count into upper flag bits; low four bits remain the filter flags.
+  flags |= (std::min(run.hdr_uniforms.local_sample_count, 48u) & 0xFFu) << 8u;
   constants.shader.Params0.x = static_cast<float>(flags);
   constants.shader.Params0.y = run.hdr_uniforms.local_depth_near;
   constants.shader.Params0.z = run.hdr_uniforms.local_depth_far;
@@ -1074,6 +1076,7 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
   constants.hdr.LocalExposure.y = run.hdr_uniforms.local_max_brighten;
   constants.hdr.LocalExposure.z = run.hdr_uniforms.local_max_darken;
   constants.hdr.LocalExposure.w = run.hdr_uniforms.midtone;
+  constants.hdr.LocalExposureEdgeSharpness = run.hdr_uniforms.local_edge_sharpness;
 
   ID3D12Resource* srvs[kSrvCount] = {};
   BindLocalExposureFilters(run, constants, source, self->command_, run.list, srvs);
@@ -1200,6 +1203,7 @@ PipelineStatus PassSession::StepBuildEffectiveLocalExposure(PassRun& run) {
   constants.hdr.LocalExposure.y = run.hdr_uniforms.local_max_brighten;
   constants.hdr.LocalExposure.z = run.hdr_uniforms.local_max_darken;
   constants.hdr.LocalExposure.w = run.hdr_uniforms.midtone;
+  constants.hdr.LocalExposureEdgeSharpness = run.hdr_uniforms.local_edge_sharpness;
 
   ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
   ID3D12Resource* srvs[kSrvCount] = {};

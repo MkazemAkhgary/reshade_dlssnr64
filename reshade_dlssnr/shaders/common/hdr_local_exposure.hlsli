@@ -18,6 +18,8 @@
 #define kLocalLumaMax shader.Params1.y
 #define kLocalBlockSizePx shader.Params1.z
 #define kLocalDepthEdgeThreshold shader.Params1.w
+#define kLocalSampleCount ((kLocalFilterFlags >> 8u) & 0xFFu)
+#define kLocalEdgeSharpness hdr.LocalExposureEdgeSharpness
 
 float GlobalHdrLumaToSdr(float hdr_luma, float exposure)
 {
@@ -63,28 +65,44 @@ float LocalBaseLogLuma(float2 uv, float center_log2)
     const float center_depth = use_depth_continuity ? SampleLocalDepth(uv) : 0.0;
     const float depth_threshold = max(kLocalDepthEdgeThreshold, 1e-5);
 
-    const float2 offsets[12] = {
-        float2(-0.5, 0.0), float2(0.5, 0.0),
-        float2(0.0, -0.5), float2(0.0, 0.5),
-        float2(-1.0, 0.0), float2(1.0, 0.0),
-        float2(0.0, -1.0), float2(0.0, 1.0),
-        float2(-1.0, -1.0), float2(1.0, -1.0),
-        float2(-1.0, 1.0), float2(1.0, 1.0)};
+    // First 12 preserve the original low-cost cardinal/diagonal pattern. Three
+    // additional concentric rings (r=0.30, 0.60, 0.90) fill gaps up to 48 taps.
+    const float2 offsets[48] = {
+        float2(-0.5000, 0.0000), float2(0.5000, 0.0000), float2(0.0000, -0.5000),
+        float2(0.0000, 0.5000), float2(-1.0000, 0.0000), float2(1.0000, 0.0000),
+        float2(0.0000, -1.0000), float2(0.0000, 1.0000), float2(-1.0000, -1.0000),
+        float2(1.0000, -1.0000), float2(-1.0000, 1.0000), float2(1.0000, 1.0000),
+        float2(0.2898, 0.0776), float2(0.2121, 0.2121), float2(0.0776, 0.2898),
+        float2(-0.0776, 0.2898), float2(-0.2121, 0.2121), float2(-0.2898, 0.0776),
+        float2(-0.2898, -0.0776), float2(-0.2121, -0.2121), float2(-0.0776, -0.2898),
+        float2(0.0776, -0.2898), float2(0.2121, -0.2121), float2(0.2898, -0.0776),
+        float2(0.5796, 0.1553), float2(0.4243, 0.4243), float2(0.1553, 0.5796),
+        float2(-0.1553, 0.5796), float2(-0.4243, 0.4243), float2(-0.5796, 0.1553),
+        float2(-0.5796, -0.1553), float2(-0.4243, -0.4243), float2(-0.1553, -0.5796),
+        float2(0.1553, -0.5796), float2(0.4243, -0.4243), float2(0.5796, -0.1553),
+        float2(0.8693, 0.2329), float2(0.6364, 0.6364), float2(0.2329, 0.8693),
+        float2(-0.2329, 0.8693), float2(-0.6364, 0.6364), float2(-0.8693, 0.2329),
+        float2(-0.8693, -0.2329), float2(-0.6364, -0.6364), float2(-0.2329, -0.8693),
+        float2(0.2329, -0.8693), float2(0.6364, -0.6364), float2(0.8693, -0.2329)
+    };
+
+    // Keep the original spatial weights for the original 12 taps, then use
+    // distance falloff for the additional rings. The extra taps improve coverage
+    // without changing the legacy spatial balance at a sample count of 12.
     const float spatial_weights[12] = {
         1.25, 1.25, 1.25, 1.25,
         1.0, 1.0, 1.0, 1.0,
         0.75, 0.75, 0.75, 0.75};
-
-    // Inner and outer taps estimate a block-scale base; the detail component
-    // is restored below so the correction does not blur the source itself.
     float weighted = center_log2 * 3.0;
     float weight = 3.0;
-    [unroll]
-    for (uint i = 0; i < 12u; ++i) {
+    const uint sample_count = min(kLocalSampleCount, 48u);
+    const float edge_sharpness = max(kLocalEdgeSharpness, 0.0);
+    [loop]
+    for (uint i = 0u; i < sample_count; ++i) {
         const float2 sample_uv = saturate(uv + offsets[i] * radius_uv);
         const float local_luma = log2(SampleGlobalSdrLuma(sample_uv));
-        const float luminance_edge = 1.0 /
-            (1.0 + 4.0 * abs(local_luma - center_log2));
+        const float luma_delta = abs(local_luma - center_log2);
+        const float luminance_edge = exp2(-edge_sharpness * luma_delta);
         float depth_weight = 1.0;
         if (use_depth_continuity) {
             const float sample_depth = SampleLocalDepth(sample_uv);
@@ -92,7 +110,11 @@ float LocalBaseLogLuma(float2 uv, float center_log2)
             depth_weight = 1.0 - smoothstep(
                 depth_threshold * 0.5, depth_threshold, depth_delta);
         }
-        const float sample_weight = spatial_weights[i] * luminance_edge * depth_weight;
+        const float radius_sq = dot(offsets[i], offsets[i]);
+        const float spatial_weight = i < 12u
+            ? spatial_weights[i]
+            : exp2(-1.5 * radius_sq);
+        const float sample_weight = spatial_weight * luminance_edge * depth_weight;
         weighted += local_luma * sample_weight;
         weight += sample_weight;
     }

@@ -42,7 +42,9 @@ PipelineStatus PassSession::StepBuildHdrUniforms(PassRun& run) {
   run.hdr_uniforms.local_luma_min = snapshot.local_luma_min;
   run.hdr_uniforms.local_luma_max = snapshot.local_luma_max;
   run.hdr_uniforms.local_block_size_px = local.block_size_px;
+  run.hdr_uniforms.local_sample_count = static_cast<uint32_t>(local.sample_count);
   run.hdr_uniforms.local_depth_edge_threshold = local.depth_edge_threshold;
+  run.hdr_uniforms.local_edge_sharpness = local.edge_sharpness;
   run.hdr_uniforms_ready = true;
   return PipelineStatus::Ok;
 }

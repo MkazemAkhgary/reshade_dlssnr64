@@ -55,6 +55,12 @@ struct LocalExposureLayerSettings {
   float max_darken = 1.75f;
   float midtone = 0.18f;
   float block_size_px = 24.0f;
+  // Number of neighborhood taps used to estimate the local log-luminance base.
+  // More taps fill spatial gaps within the same radius, at additional GPU cost.
+  int sample_count = 24;
+  // Exponential edge-aware weighting in log2 luminance stops. Higher values
+  // reject neighbors with a different luminance more aggressively.
+  float edge_sharpness = 4.0f;
   bool depth_continuity = true;
   float depth_edge_threshold = 0.01f;
   ExposureFilterSettings filters = {};

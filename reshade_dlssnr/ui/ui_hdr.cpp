@@ -188,8 +188,14 @@ void DrawLocalLayer(LocalExposureLayerSettings& layer, bool& changed) {
                             "Reference luminance for the local base/detail operator.",
                             &layer.midtone, nullptr, 0.18f, 0.01f, 0.5f, 0.18f);
     changed |= DrawFloatRow(0, "local_block_size", "Neighborhood Block Size (px)",
-                            "Neighborhood diameter (4-512 px). The shader uses a fixed 12 neighbor taps, so larger sizes barely change shader work; they spread taps farther apart and can slightly reduce cache locality. Effective diameter is capped at half the shorter source dimension. The field stays continuous per pixel to avoid visible block boundaries.",
+                            "Neighborhood diameter (4-512 px). Larger sizes spread the local-base taps farther apart. Effective diameter is capped at half the shorter source dimension; the field stays continuous per pixel to avoid visible block boundaries.",
                             &layer.block_size_px, nullptr, 24.0f, 4.0f, 512.0f, 24.0f);
+    changed |= DrawIntRow("local_sample_count", "Neighborhood Samples",
+                          "Number of neighborhood taps (4-48). Higher counts fill gaps in the same neighborhood and cost more GPU time; this does not increase the block radius.",
+                          &layer.sample_count, 4, 48, 24);
+    changed |= DrawFloatRow(0, "local_edge_sharpness", "Luma Edge Protection",
+                            "Controls how strongly samples with different log-luminance are rejected. Higher values reduce correction bleed across facial features and silhouettes; 0 disables luminance-edge weighting. This is not a semantic face detector.",
+                            &layer.edge_sharpness, nullptr, 4.0f, 0.0f, 8.0f, 4.0f);
     changed |= ImGui::Checkbox("Depth Continuity##local_depth_continuity", &layer.depth_continuity);
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
       Tip("When a DLSS depth guide is available, exclude neighborhood samples across depth discontinuities. This is separate from the Depth filter, which restricts which pixels may receive the correction.");

@@ -69,8 +69,8 @@ DLSSNR_BLOCK(HdrBlock)
     float GainMaxLog2;
     // Absolute effective scene-white peak in nits.
     float EffectiveSceneWhiteNits;
-    // Reserved to preserve the shared cbuffer layout.
-    float ReservedCompose0;
+    // Edge-aware neighborhood weighting strength for Local Exposure.
+    float LocalExposureEdgeSharpness;
     // x = local exposure strength, y = max brighten stops, z = max darken
     // stops, w = model midtone target. Zero strength disables local exposure.
     float4 LocalExposure;

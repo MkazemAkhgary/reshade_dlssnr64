@@ -235,6 +235,7 @@ bool SkinDetect::Run(CommandContext& cmd,
     constants.hdr.LocalExposure.y = local.max_brighten;
     constants.hdr.LocalExposure.z = local.max_darken;
     constants.hdr.LocalExposure.w = local.midtone;
+    constants.hdr.LocalExposureEdgeSharpness = local.edge_sharpness;
 
     const bool local_active = local.enabled && local.strength > 0.0f;
     uint32_t filter_flags = local_active
@@ -247,6 +248,7 @@ bool SkinDetect::Run(CommandContext& cmd,
     if (mask_resource == nullptr) filter_flags &= ~1u;
     ID3D12Resource* depth_resource = guides.depth;
     if (depth_resource == nullptr) filter_flags &= ~(2u | 8u);
+    filter_flags |= (static_cast<uint32_t>(std::clamp(local.sample_count, 4, 48)) & 0xFFu) << 8u;
     constants.shader.Params0.x = static_cast<float>(filter_flags);
     constants.shader.Params0.y = local.filters.depth_near;
     constants.shader.Params0.z = local.filters.depth_far;
