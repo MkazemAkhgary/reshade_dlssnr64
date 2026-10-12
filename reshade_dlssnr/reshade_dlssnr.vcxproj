@@ -10,7 +10,6 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
-
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
@@ -18,9 +17,7 @@
     <RootNamespace>reshade_dlssnr</RootNamespace>
     <WindowsTargetPlatformVersion>$([Microsoft.Build.Utilities.ToolLocationHelper]::GetLatestSDKTargetPlatformVersion('Windows', '10.0'))</WindowsTargetPlatformVersion>
   </PropertyGroup>
-
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
-
   <PropertyGroup>
     <DlssnrProjectDir>$(MSBuildProjectDirectory)</DlssnrProjectDir>
     <DlssnrGeneratedDir>$(MSBuildProjectDirectory)\generated</DlssnrGeneratedDir>
@@ -29,7 +26,6 @@
     <VerifyShaders Condition="'$(VerifyShaders)' == ''">true</VerifyShaders>
     <PrecompileShaders Condition="'$(PrecompileShaders)' == ''">false</PrecompileShaders>
   </PropertyGroup>
-
   <ItemGroup>
     <ShaderSourceFiles Include="$(ProjectDir)shaders\**\*.*" />
   </ItemGroup>
@@ -40,12 +36,9 @@
     <UpToDateCheckOutput Include="$(DlssnrShaderStampDir)\verify.stamp" />
     <UpToDateCheckOutput Include="$(DlssnrShaderStampDir)\precompile.stamp" />
   </ItemGroup>
-
-  <Target Name="ValidateFxcPath"
-          Condition="('$(VerifyShaders)' == 'true' or '$(PrecompileShaders)' == 'true') and '$(FxcPath)' == ''">
+  <Target Name="ValidateFxcPath" Condition="('$(VerifyShaders)' == 'true' or '$(PrecompileShaders)' == 'true') and '$(FxcPath)' == ''">
     <Error Text="FxcPath is not set. Set /p:FxcPath=... or ensure a Windows SDK is installed." />
   </Target>
-
   <!--
     Incremental gating is on `generate.stamp`, not on the four generated C++
     files. generate_shaders.ps1 now writes those four files only when their
@@ -56,10 +49,7 @@
     FileWrites makes Clean (and therefore Rebuild) remove the generated files,
     the expanded FXC sources and the stamp.
   -->
-  <Target Name="GenerateEmbeddedShadersTarget"
-          BeforeTargets="ClCompile"
-          Inputs="@(ShaderSourceFiles);$(ProjectDir)tools\generate_shaders.ps1;$(ProjectDir)tools\generate_shaders.py"
-          Outputs="$(DlssnrShaderStampDir)\generate.stamp">
+  <Target Name="GenerateEmbeddedShadersTarget" BeforeTargets="ClCompile" Inputs="@(ShaderSourceFiles);$(ProjectDir)tools\generate_shaders.ps1;$(ProjectDir)tools\generate_shaders.py" Outputs="$(DlssnrShaderStampDir)\generate.stamp">
     <MakeDir Directories="$(DlssnrShaderStampDir)" />
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\generate_shaders.ps1&quot; -ProjectDir &quot;$(DlssnrProjectDir)&quot; -GeneratedDir &quot;$(DlssnrGeneratedDir)&quot;" />
     <Touch Files="$(DlssnrShaderStampDir)\generate.stamp" AlwaysCreate="true" />
@@ -69,13 +59,7 @@
       <FileWrites Include="$(DlssnrShaderStampDir)\generate.stamp" />
     </ItemGroup>
   </Target>
-
-  <Target Name="VerifyShadersTarget"
-          BeforeTargets="ClCompile"
-          DependsOnTargets="GenerateEmbeddedShadersTarget;ValidateFxcPath"
-          Condition="'$(VerifyShaders)' == 'true'"
-          Inputs="@(ShaderSourceFiles);$(ProjectDir)tools\verify_shaders.ps1"
-          Outputs="$(DlssnrShaderStampDir)\verify.stamp">
+  <Target Name="VerifyShadersTarget" BeforeTargets="ClCompile" DependsOnTargets="GenerateEmbeddedShadersTarget;ValidateFxcPath" Condition="'$(VerifyShaders)' == 'true'" Inputs="@(ShaderSourceFiles);$(ProjectDir)tools\verify_shaders.ps1" Outputs="$(DlssnrShaderStampDir)\verify.stamp">
     <MakeDir Directories="$(DlssnrShaderStampDir)" />
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\verify_shaders.ps1&quot; -ProjectDir &quot;$(DlssnrProjectDir)&quot; -FxcPath &quot;$(FxcPath)&quot;" />
     <Touch Files="$(DlssnrShaderStampDir)\verify.stamp" AlwaysCreate="true" />
@@ -83,13 +67,7 @@
       <FileWrites Include="$(DlssnrShaderStampDir)\verify.stamp" />
     </ItemGroup>
   </Target>
-
-  <Target Name="PrecompileShadersTarget"
-          BeforeTargets="ClCompile"
-          DependsOnTargets="GenerateEmbeddedShadersTarget;VerifyShadersTarget;ValidateFxcPath"
-          Condition="'$(PrecompileShaders)' == 'true'"
-          Inputs="@(ShaderSourceFiles);$(ProjectDir)tools\precompile_shaders.ps1"
-          Outputs="$(DlssnrShaderStampDir)\precompile.stamp">
+  <Target Name="PrecompileShadersTarget" BeforeTargets="ClCompile" DependsOnTargets="GenerateEmbeddedShadersTarget;VerifyShadersTarget;ValidateFxcPath" Condition="'$(PrecompileShaders)' == 'true'" Inputs="@(ShaderSourceFiles);$(ProjectDir)tools\precompile_shaders.ps1" Outputs="$(DlssnrShaderStampDir)\precompile.stamp">
     <MakeDir Directories="$(DlssnrShaderStampDir)" />
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\precompile_shaders.ps1&quot; -ProjectDir &quot;$(DlssnrProjectDir)&quot; -GeneratedDir &quot;$(DlssnrGeneratedDir)&quot; -FxcPath &quot;$(FxcPath)&quot;" />
     <Touch Files="$(DlssnrShaderStampDir)\precompile.stamp" AlwaysCreate="true" />
@@ -98,7 +76,6 @@
       <FileWrites Include="$(DlssnrGeneratedDir)\shader_cache\**\*.*" />
     </ItemGroup>
   </Target>
-
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
@@ -106,7 +83,6 @@
     <WholeProgramOptimization>false</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
-
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
@@ -114,29 +90,21 @@
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
-
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
-
   <PropertyGroup>
     <FxcPath Condition="'$(FxcPath)' == '' and '$(WindowsSdkDir)' != '' and '$(WindowsTargetPlatformVersion)' != ''">$(WindowsSdkDir)bin\$(WindowsTargetPlatformVersion.TrimEnd('\'))\x64\fxc.exe</FxcPath>
   </PropertyGroup>
-
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>
-
   <ImportGroup Label="Shared">
   </ImportGroup>
-
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
-
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
-
   <PropertyGroup Label="UserMacros" />
-
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <OutDir>$(SolutionDir)build\$(Configuration)\</OutDir>
@@ -144,7 +112,6 @@
     <TargetName>reshade_dlssnr64</TargetName>
     <TargetExt>.addon64</TargetExt>
   </PropertyGroup>
-
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <OutDir>$(SolutionDir)build\$(Configuration)\</OutDir>
@@ -152,7 +119,6 @@
     <TargetName>reshade_dlssnr64</TargetName>
     <TargetExt>.addon64</TargetExt>
   </PropertyGroup>
-
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -172,7 +138,6 @@
       <AdditionalLibraryDirectories>$(ProjectDir)third_party\detours;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
-
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -197,7 +162,6 @@
       <AdditionalLibraryDirectories>$(ProjectDir)third_party\detours;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
-
   <ItemGroup>
     <ClInclude Include="project_constants.h" />
     <ClCompile Include="addon.cpp" />
@@ -244,7 +208,6 @@
     <ClCompile Include="ui\ui_status.cpp" />
     <ClCompile Include="ui\ui_widgets.cpp" />
   </ItemGroup>
-
   <ItemGroup>
     <ClInclude Include="gpu\compute_constants.h" />
     <ClInclude Include="generated\shader_sources.h" />
@@ -293,7 +256,6 @@
     <ClInclude Include="ui\ui_sections.h" />
     <ClInclude Include="ui\ui_widgets.h" />
   </ItemGroup>
-
   <ItemGroup>
     <None Include="shaders\common\color_constants.h" />
     <None Include="shaders\common\params.h" />
@@ -302,9 +264,36 @@
     <None Include="tools\verify_shaders.ps1" />
     <None Include="tools\precompile_shaders.ps1" />
   </ItemGroup>
-
+  <ItemGroup>
+    <None Include="shaders\compose\compose_model_output.hlsl" />
+    <None Include="shaders\compose\compose_model_output_hdr.hlsl" />
+    <None Include="shaders\compose\compose_model_output_hdr_inverse.hlsl" />
+    <None Include="shaders\debug\debug_display.hlsl" />
+    <None Include="shaders\debug\debug_hdr_roundtrip.hlsl" />
+    <None Include="shaders\grade\apply_grade.hlsl" />
+    <None Include="shaders\hdr\build_effective_local_exposure.hlsl" />
+    <None Include="shaders\hdr\build_gain_map_stats.hlsl" />
+    <None Include="shaders\hdr\build_histogram.hlsl" />
+    <None Include="shaders\hdr\gain_map_split.hlsl" />
+    <None Include="shaders\hdr\read_game_exposure.hlsl" />
+    <None Include="shaders\hdr\zero_gain_map_stats.hlsl" />
+    <None Include="shaders\hdr\zero_histogram.hlsl" />
+    <None Include="shaders\importance_mask\build_importance_mask.hlsl" />
+    <None Include="shaders\model\prepare_model_input.hlsl" />
+    <None Include="shaders\common\bindings.hlsli" />
+    <None Include="shaders\common\box_filter.hlsli" />
+    <None Include="shaders\common\cbuffer.hlsli" />
+    <None Include="shaders\common\color.hlsli" />
+    <None Include="shaders\common\compose_common.hlsli" />
+    <None Include="shaders\common\fsr.hlsli" />
+    <None Include="shaders\common\grade.hlsli" />
+    <None Include="shaders\common\hdr_local_exposure.hlsli" />
+    <None Include="shaders\common\hdr_transfer.hlsli" />
+    <None Include="shaders\common\luma.hlsli" />
+    <None Include="shaders\common\math.hlsli" />
+    <None Include="shaders\common\registers.hlsli" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>
