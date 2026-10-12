@@ -119,11 +119,18 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
   IndentScope content_indent;
   SavedProfileInfo profiles[kMaxSavedProfiles] = {};
   const uint32_t profile_count = GetSavedProfiles(profiles, kMaxSavedProfiles);
-  static int pending_delete = -1;
+  enum class PendingProfileAction { None, Delete, Save, Load };
+  static PendingProfileAction pending_action = PendingProfileAction::None;
+  static int pending_index = -1;
   static bool profile_name_error = false;
   static int profile_feedback_index = -1;
   static char profile_feedback[160] = {};
   static char new_profile_name[kSavedProfileNameCapacity] = {};
+
+  auto clear_pending = []() {
+    pending_action = PendingProfileAction::None;
+    pending_index = -1;
+  };
 
   if (profile_count == 0) {
     ImGui::TextDisabled("No saved presets.");
@@ -138,54 +145,73 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
                                : "(unnamed preset)");
     ImGui::SameLine();
     if (ImGui::Button("Load")) {
-      if (LoadSavedProfile(i)) {
-        changed = true;
-        profile_feedback_index = static_cast<int>(i);
-        std::snprintf(profile_feedback, sizeof(profile_feedback),
-                      "Loaded preset: %s", profiles[i].name);
-      }
+      pending_action = PendingProfileAction::Load;
+      pending_index = static_cast<int>(i);
     }
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
       Tip("Load this preset into the active settings and save it as the current ReShade.ini configuration.");
     }
     ImGui::SameLine();
     if (ImGui::Button("Save")) {
-      if (SaveCurrentToProfile(i)) {
-        profile_feedback_index = static_cast<int>(i);
-        std::snprintf(profile_feedback, sizeof(profile_feedback),
-                      "Saved current settings to: %s", profiles[i].name);
-      }
+      pending_action = PendingProfileAction::Save;
+      pending_index = static_cast<int>(i);
     }
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
       Tip("Overwrite this saved preset with the current settings.");
     }
     ImGui::SameLine();
     if (ImGui::Button("x")) {
-      pending_delete = pending_delete == static_cast<int>(i)
-                           ? -1
-                           : static_cast<int>(i);
+      if (pending_action == PendingProfileAction::Delete &&
+          pending_index == static_cast<int>(i)) {
+        clear_pending();
+      } else {
+        pending_action = PendingProfileAction::Delete;
+        pending_index = static_cast<int>(i);
+      }
     }
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
       Tip("Remove this preset after confirming.");
     }
     ImGui::PopID();
 
-    if (pending_delete == static_cast<int>(i)) {
+    if (pending_index == static_cast<int>(i) &&
+        pending_action != PendingProfileAction::None) {
+      const char* prompt =
+          pending_action == PendingProfileAction::Delete
+              ? "Remove this preset?"
+          : pending_action == PendingProfileAction::Save
+              ? "Overwrite this preset?"
+              : "Load this preset?";
       ImGui::Indent();
-      ImGui::TextUnformatted("Remove this preset?");
+      ImGui::TextUnformatted(prompt);
       ImGui::SameLine();
       ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.65f, 0.12f, 0.12f, 1.0f));
       ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.78f, 0.16f, 0.16f, 1.0f));
       ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.52f, 0.08f, 0.08f, 1.0f));
       if (ImGui::Button("Yes")) {
-        DeleteSavedProfile(i);
-        pending_delete = -1;
-        deleted_this_frame = true;
+        if (pending_action == PendingProfileAction::Delete) {
+          DeleteSavedProfile(i);
+          deleted_this_frame = true;
+        } else if (pending_action == PendingProfileAction::Save) {
+          if (SaveCurrentToProfile(i)) {
+            profile_feedback_index = static_cast<int>(i);
+            std::snprintf(profile_feedback, sizeof(profile_feedback),
+                          "Saved current settings to: %s", profiles[i].name);
+          }
+        } else {
+          if (LoadSavedProfile(i)) {
+            changed = true;
+            profile_feedback_index = static_cast<int>(i);
+            std::snprintf(profile_feedback, sizeof(profile_feedback),
+                          "Loaded preset: %s", profiles[i].name);
+          }
+        }
+        clear_pending();
       }
       ImGui::PopStyleColor(3);
       if (!deleted_this_frame) {
         ImGui::SameLine();
-        if (ImGui::Button("No")) pending_delete = -1;
+        if (ImGui::Button("No")) clear_pending();
       }
       ImGui::Unindent();
     }
@@ -218,7 +244,7 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
                     "Saved new preset: %s", new_profile_name);
       profile_feedback_index = -2;
       new_profile_name[0] = '\0';
-      pending_delete = -1;
+      clear_pending();
       profile_name_error = false;
     } else {
       profile_feedback_index = -1;
