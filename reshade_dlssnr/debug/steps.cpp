@@ -47,6 +47,11 @@ PipelineStatus PassSession::StepRenderDebugView(PassRun& run) {
     debug.pre_grade_input_width = run.eval_width;
     debug.pre_grade_input_height = run.eval_height;
   }
+  if (self->resources_.GetScratch(kDebugPreGradeOutputSlot) != nullptr) {
+    debug.pre_grade_output = self->resources_.GetScratch(kDebugPreGradeOutputSlot);
+    debug.pre_grade_output_width = run.eval_width;
+    debug.pre_grade_output_height = run.eval_height;
+  }
   debug.model_output = run.model_output;
   debug.model_output_width = run.eval_width;
   debug.model_output_height = run.eval_height;

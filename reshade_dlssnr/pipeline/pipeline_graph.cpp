@@ -213,8 +213,8 @@ constexpr PipelineNodeId kPresentSteps[] = {
     PipelineNodeId::FillEvaluateParams,
     PipelineNodeId::EvaluateFeature,
     PipelineNodeId::ModelOutputBarrier,
-    PipelineNodeId::ComposeModelOutput,
     PipelineNodeId::GradeModelOutput,
+    PipelineNodeId::ComposeModelOutput,
     PipelineNodeId::RenderDebugView,
     PipelineNodeId::WriteToBackbuffer,
     PipelineNodeId::SubmitBackbuffer,        // includes CleanupFrameState
@@ -255,8 +255,8 @@ constexpr PipelineNodeId kPreDlssSteps[] = {
     PipelineNodeId::EvaluateFeature,
     PipelineNodeId::ModelOutputBarrier,
     PipelineNodeId::BuildImportanceMask,
-    PipelineNodeId::ComposeModelOutput,
     PipelineNodeId::GradeModelOutput,
+    PipelineNodeId::ComposeModelOutput,
     PipelineNodeId::RenderDebugView,
     PipelineNodeId::WriteToGameResource,
 };
@@ -295,8 +295,8 @@ constexpr PipelineNodeId kPostDlssSteps[] = {
     PipelineNodeId::EvaluateFeature,
     PipelineNodeId::ModelOutputBarrier,
     PipelineNodeId::BuildImportanceMask,
-    PipelineNodeId::ComposeModelOutput,
     PipelineNodeId::GradeModelOutput,
+    PipelineNodeId::ComposeModelOutput,
     PipelineNodeId::RenderDebugView,
     PipelineNodeId::WriteToGameResource,  // includes CleanupFrameState
 };

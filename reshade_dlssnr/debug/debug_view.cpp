@@ -45,15 +45,15 @@ ID3D12Resource* SelectPreGradeInput(const DebugSnapshot& s,
   return s.pre_grade_input;
 }
 
-ID3D12Resource* SelectPostGradeOutput(const DebugSnapshot& s,
-                                      unsigned int* w, unsigned int* h) {
-  *w = s.composed_output_width;
-  *h = s.composed_output_height;
-  return s.composed_output;
+ID3D12Resource* SelectPreGradeOutput(const DebugSnapshot& s,
+                                     unsigned int* w, unsigned int* h) {
+  *w = s.pre_grade_output_width;
+  *h = s.pre_grade_output_height;
+  return s.pre_grade_output;
 }
 
-ID3D12Resource* SelectModelOutput(const DebugSnapshot& s,
-                                  unsigned int* w, unsigned int* h) {
+ID3D12Resource* SelectPostGradeOutput(const DebugSnapshot& s,
+                                      unsigned int* w, unsigned int* h) {
   *w = s.model_output_width;
   *h = s.model_output_height;
   return s.model_output;
@@ -99,9 +99,11 @@ const DebugViewDef kDebugViews[] = {
      "Scale, HDR preparation, and input grading when enabled.",
      DebugDisplayMode::Color, SelectPreparedInput},
     {"Model Output (raw)",
-     "The model's output, before any of the pipeline's post-processing is "
-     "applied. Useful for seeing exactly what the model produced.",
-     DebugDisplayMode::Color, SelectModelOutput},
+     "The model's output exactly as NGX produced it, before the Output Grade "
+     "is applied. Snapshot taken by the pipeline because the grade runs in "
+     "place; with the Output Grade enabled, compare it against Model Output "
+     "(post-grade).",
+     DebugDisplayMode::Color, SelectPreGradeOutput, false, true},
     {"Model Output (composed)",
      "The final result of this pass, after the model's edit has been "
      "composed with the source. This is what gets written to the target.",
@@ -149,14 +151,13 @@ const DebugViewDef kDebugViews[] = {
      "The grade is applied in place, so the pipeline snapshots this texture "
      "for you when the view is selected; with the Input Grade enabled, "
      "compare it against Model Input (prepared).",
-     DebugDisplayMode::Color, SelectPreGradeInput, true},
+     DebugDisplayMode::Color, SelectPreGradeInput, true, false},
     {"Model Output (post-grade)",
-     "The composite after the Output Grade ran. Note the Output Grade is "
-     "applied to the final composed image, in the composite's own encoding "
-     "(sRGB for SDR, PQ or scRGB for HDR backbuffers) - not to the NGX "
-     "model output, which is never graded. Model Output (raw) stays in the "
-     "model's sRGB domain.",
-     DebugDisplayMode::Color, SelectPostGradeOutput},
+     "The model output after the Output Grade ran, in the model's own "
+     "sRGB-encoded SDR domain - symmetric to the Input Grade on the model "
+     "input. Everything downstream (compose, importance mask, writeback) "
+     "consumes this as if the model had produced it.",
+     DebugDisplayMode::Color, SelectPostGradeOutput, false, false},
     {nullptr, nullptr, DebugDisplayMode::Color, nullptr},
 };
 
@@ -171,6 +172,13 @@ bool DebugViewNeedsPreGradeInput(int debug_view) {
   const uint32_t index = static_cast<uint32_t>(debug_view) - 1;
   if (index >= CountDebugViews()) return false;
   return kDebugViews[index].needs_pre_grade_input;
+}
+
+bool DebugViewNeedsPreGradeOutput(int debug_view) {
+  if (debug_view <= 0) return false;
+  const uint32_t index = static_cast<uint32_t>(debug_view) - 1;
+  if (index >= CountDebugViews()) return false;
+  return kDebugViews[index].needs_pre_grade_output;
 }
 
 bool RenderDebugView(

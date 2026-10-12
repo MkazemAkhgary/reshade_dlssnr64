@@ -241,13 +241,15 @@ FillEvaluateParams
 EvaluateFeature
 ModelOutputBarrier
 BuildImportanceMask
-ComposeModelOutput
 GradeModelOutput
+ComposeModelOutput
 RenderDebugView
 WriteToGameResource
 ```
 
 `HdrBeginFrame` runs once in the shared preparation stage before the first active Pre-DLSS or Post-DLSS pass. It consumes the published previous-frame Importance Mask snapshot. The first successful user pass generates a new mask after its model output barrier; that mask is promoted only at Present. All passes and exposure computations within one frame therefore observe the same mask. Each exposure layer applies only its own selected filters: Adaptive Exposure filters the histogram population, while Local Exposure filters the spatial correction.
+
+The two grades are symmetric around the model: `GradeModelInput` grades the model input in place before evaluation, `GradeModelOutput` grades the model output in place before compose. Both operate in the model's sRGB-encoded SDR domain, so every later step consumes them as if the model had produced the graded SDR. Ordering constraint: `BuildImportanceMask` runs **before** `GradeModelOutput`, because the mask must compare the graded model input against the *ungraded* model output — it measures the model's own edits, never the pipeline's grading. No grade is applied to the composite or the backbuffer inside a pass; the separate `grade_backbuffer` setting still grades the swapchain image in the Release stage.
 
 ### Backbuffer injection
 
@@ -282,9 +284,8 @@ GradeModelInput
 FillEvaluateParams
 EvaluateFeature
 ModelOutputBarrier
-BuildImportanceMask
-ComposeModelOutput
 GradeModelOutput
+ComposeModelOutput
 RenderDebugView
 WriteToBackbuffer
 SubmitBackbuffer

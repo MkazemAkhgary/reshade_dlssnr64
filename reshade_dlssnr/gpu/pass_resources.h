@@ -19,17 +19,19 @@ using RetireCallback = void (*)(ID3D12Resource* resource, void* user_data);
 // is requested and reused across frames until the requested size changes.
 //
 // Slot 0 holds the Post-DLSS multi-pass input snapshot; slots 1 and 2 hold
-// grade scratch; slot 3 holds the pre-grade model-input debug snapshot.
+// grade scratch; slots 3 and 4 hold the pre-grade model input/output debug
+// snapshots.
 //
 // The frame debug output is deliberately not here. It lives in the
 // controller's FrameDebugContext, because the Release stage copies it to the
 // backbuffer after every pass has finished, so it has to outlive the pass
 // session that rendered it.
-constexpr uint32_t kScratchCount = 4;
+constexpr uint32_t kScratchCount = 5;
 constexpr uint32_t kInputSnapshotSlot = 0;
 constexpr uint32_t kGradeScratchSlotA = 1;
 constexpr uint32_t kGradeScratchSlotB = 2;
 constexpr uint32_t kDebugPreGradeInputSlot = 3;
+constexpr uint32_t kDebugPreGradeOutputSlot = 4;
 
 class PassResources {
  public:

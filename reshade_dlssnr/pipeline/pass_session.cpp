@@ -1685,8 +1685,8 @@ constexpr PipelineStepDef kSessionSteps[] = {
     // -- composition --------------------------------------------------------
     {PipelineNodeId::ComposeModelOutput, "ComposeModelOutput",
      &PassSession::StepComposeModelOutput, kNoDeps, StageInput::None, false},
-    // Grades the composite the compose step just wrote, in place, so the
-    // steps below that copy it out need no change.
+    // Grades the model output in place, in the model's sRGB-encoded SDR
+    // domain, before the compose step (and everything after it) reads it.
     {PipelineNodeId::GradeModelOutput, "GradeModelOutput",
      &PassSession::StepGradeModelOutput, kNoDeps, StageInput::None, false},
 
