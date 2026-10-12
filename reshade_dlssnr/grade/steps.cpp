@@ -59,6 +59,33 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
 
 PipelineStatus PassSession::StepGradeModelInput(PassRun& run) {
   if (run.pass == nullptr) return PipelineStatus::Ok;
+  PassSession* self = run.session;
+
+  // Observer-only: the Input Grade mutates the model input in place, so
+  // snapshot it first for the pre-grade debug view. Gated on the view being
+  // selected by the active pass; no cost otherwise.
+  if (self != nullptr && run.settings != nullptr && run.model_color != nullptr &&
+      DebugViewNeedsPreGradeInput(run.settings->debug_view) &&
+      static_cast<int>(self->pass_index_) == run.settings->active_pass) {
+    const D3D12_RESOURCE_DESC desc = run.model_color->GetDesc();
+    if (self->resources_.EnsureScratch(
+            run.device, desc, static_cast<unsigned int>(desc.Width),
+            static_cast<unsigned int>(desc.Height),
+            kDebugPreGradeInputSlot)) {
+      ID3D12Resource* snapshot =
+          self->resources_.GetScratch(kDebugPreGradeInputSlot);
+      ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
+      self->command_.Transition(list, run.model_color,
+                                D3D12_RESOURCE_STATE_COPY_SOURCE);
+      self->command_.Transition(list, snapshot, D3D12_RESOURCE_STATE_COPY_DEST);
+      list->CopyResource(snapshot, run.model_color);
+      self->command_.Transition(list, run.model_color,
+                                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+      self->command_.Transition(list, snapshot,
+                                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    }
+  }
+
   const GradeSettings& grade = run.pass->grade_input;
   if (!grade.enabled) return PipelineStatus::Ok;
 

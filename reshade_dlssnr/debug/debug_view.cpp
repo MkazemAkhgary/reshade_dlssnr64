@@ -38,6 +38,20 @@ ID3D12Resource* SelectPreparedInput(const DebugSnapshot& s,
   return s.prepared_input;
 }
 
+ID3D12Resource* SelectPreGradeInput(const DebugSnapshot& s,
+                                    unsigned int* w, unsigned int* h) {
+  *w = s.pre_grade_input_width;
+  *h = s.pre_grade_input_height;
+  return s.pre_grade_input;
+}
+
+ID3D12Resource* SelectPostGradeOutput(const DebugSnapshot& s,
+                                      unsigned int* w, unsigned int* h) {
+  *w = s.composed_output_width;
+  *h = s.composed_output_height;
+  return s.composed_output;
+}
+
 ID3D12Resource* SelectModelOutput(const DebugSnapshot& s,
                                   unsigned int* w, unsigned int* h) {
   *w = s.model_output_width;
@@ -130,6 +144,19 @@ const DebugViewDef kDebugViews[] = {
      "Game NGX exposure in stops: 1.0x (0 stops) is mid-gray; brighter/darker "
      "values move toward white/black. Magenta means no valid value was read.",
      DebugDisplayMode::GameExposure, SelectSource},
+    {"Model Input (pre-grade)",
+     "The model input color exactly as it was before the Input Grade ran. "
+     "The grade is applied in place, so the pipeline snapshots this texture "
+     "for you when the view is selected; with the Input Grade enabled, "
+     "compare it against Model Input (prepared).",
+     DebugDisplayMode::Color, SelectPreGradeInput, true},
+    {"Model Output (post-grade)",
+     "The composite after the Output Grade ran. Note the Output Grade is "
+     "applied to the final composed image, in the composite's own encoding "
+     "(sRGB for SDR, PQ or scRGB for HDR backbuffers) - not to the NGX "
+     "model output, which is never graded. Model Output (raw) stays in the "
+     "model's sRGB domain.",
+     DebugDisplayMode::Color, SelectPostGradeOutput},
     {nullptr, nullptr, DebugDisplayMode::Color, nullptr},
 };
 
@@ -137,6 +164,13 @@ const uint32_t CountDebugViews() {
   uint32_t count = 0;
   while (kDebugViews[count].name != nullptr) ++count;
   return count;
+}
+
+bool DebugViewNeedsPreGradeInput(int debug_view) {
+  if (debug_view <= 0) return false;
+  const uint32_t index = static_cast<uint32_t>(debug_view) - 1;
+  if (index >= CountDebugViews()) return false;
+  return kDebugViews[index].needs_pre_grade_input;
 }
 
 bool RenderDebugView(

@@ -50,6 +50,13 @@ struct DebugSnapshot {
   unsigned int effective_exposure_height = 0;
   unsigned int prepared_input_height = 0;
 
+  // Model input as it was right before the Input Grade was applied. The
+  // prepared input is graded in place, so this is a snapshot taken by the
+  // grade step; it is null when no snapshot was captured this frame.
+  ID3D12Resource* pre_grade_input = nullptr;
+  unsigned int pre_grade_input_width = 0;
+  unsigned int pre_grade_input_height = 0;
+
   // Model output as returned by NGX, before composition.
   ID3D12Resource* model_output = nullptr;
   unsigned int model_output_width = 0;
@@ -103,11 +110,19 @@ struct DebugViewDef {
   ID3D12Resource* (*select)(const DebugSnapshot& snapshot,
                             unsigned int* out_content_width,
                             unsigned int* out_content_height);
+  // Set on views that need the ungraded model input: the pipeline then
+  // snapshots the model input before the Input Grade runs. Views without it
+  // observe what the pipeline already produced.
+  bool needs_pre_grade_input = false;
 };
 
 // The debug view table. Terminated by an entry whose `name` is nullptr;
 // iterate until then. Adding or removing a view is a single-line edit here.
 extern const DebugViewDef kDebugViews[];
+
+// True when the selected debug view requires the pre-grade model-input
+// snapshot. Used by the grade step to know when to capture it.
+bool DebugViewNeedsPreGradeInput(int debug_view);
 
 // Renders the selected debug view into `target`, which the caller owns and
 // must have sized to `target_width × target_height`. `debug_view` follows
