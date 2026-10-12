@@ -8,6 +8,8 @@ import shutil
 INCLUDE_RE = re.compile(r'^\s*#\s*include\s*["<]([^">]+)[">]')
 PRAGMA_ONCE_RE = re.compile(r'^\s*#\s*pragma\s+once\b')
 
+UTF8_BOM = b"\xef\xbb\xbf"
+
 
 def normalize_lf(text: str) -> str:
     return text.replace("\r\n", "\n").replace("\r", "\n")
@@ -18,9 +20,49 @@ def normalize_crlf(text: str) -> str:
 
 
 def write_crlf(path: Path, text: str) -> None:
+    """Write text unconditionally, LF normalized to CRLF.
+
+    Reserved for expanded_shaders, which is FXC-only input and is regenerated
+    from scratch on every run regardless.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as f:
         f.write(normalize_crlf(text))
+
+
+def write_crlf_if_changed(path: Path, text: str) -> bool:
+    """Write text with LF normalized to CRLF, but only when the file changes.
+
+    The four files this is used for (shader_sources.h/.cpp and
+    shader_bytecode.h/.cpp) are C++ inputs; restamping them on every
+    regeneration cascades into a full ClCompile of their TUs and every TU that
+    includes their headers. Comparing content first means a shader edit that
+    produces byte-identical generated output leaves their mtimes alone, and
+    MSBuild's incremental state matches what is on disk.
+
+    A UTF-8 BOM is stripped before comparison so a file previously written by
+    a generator that emitted one still compares equal when its payload is
+    unchanged. The write path never emits a BOM.
+
+    Returns True when the file was written.
+    """
+    normalized = normalize_crlf(text)
+    try:
+        existing_bytes = path.read_bytes()
+    except OSError:
+        existing_bytes = None
+    if existing_bytes is not None:
+        if existing_bytes.startswith(UTF8_BOM):
+            existing_bytes = existing_bytes[len(UTF8_BOM):]
+        try:
+            if existing_bytes.decode("utf-8") == normalized:
+                return False
+        except UnicodeDecodeError:
+            pass
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as f:
+        f.write(normalized)
+    return True
 
 
 def raw_literal(text: str) -> str:
@@ -137,6 +179,9 @@ def main() -> None:
     )
     roots = [p for p in files if p.suffix.lower() == ".hlsl"]
 
+    written = 0
+    skipped = 0
+
     header = """#pragma once
 #include <cstddef>
 
@@ -152,7 +197,10 @@ extern const std::size_t kEmbeddedShaderCount;
 const EmbeddedShader* FindEmbeddedShader(const char* name);
 }
 """
-    write_crlf(generated / "shader_sources.h", header)
+    if write_crlf_if_changed(generated / "shader_sources.h", header):
+        written += 1
+    else:
+        skipped += 1
 
     fragment_ids: dict[str, int] = {}
     fragment_texts: list[str] = []
@@ -175,6 +223,10 @@ const EmbeddedShader* FindEmbeddedShader(const char* name);
 
         safe = re.sub(r"[^A-Za-z0-9_]", "_", rel)
         root_entries.append((rel, safe, recipe))
+
+        # Expanded root sources are FXC-only input for verify/precompile, so
+        # they are rewritten unconditionally along with the surrounding
+        # directory. Nothing in the C++ build reads them.
         prepared = expanded_root / rel
         write_crlf(prepared, "".join(pieces))
 
@@ -217,10 +269,18 @@ const EmbeddedShader* FindEmbeddedShader(const char* name);
         "}",
         "}",
     ]
-    write_crlf(generated / "shader_sources.cpp", "\n".join(out) + "\n")
+    # Line separator and trailing newline must match the PowerShell generator's
+    # WriteAllLines output byte-for-byte, so a project that regenerates on one
+    # side and compares on the other does not see spurious diffs.
+    if write_crlf_if_changed(
+        generated / "shader_sources.cpp", "\n".join(out) + "\n"
+    ):
+        written += 1
+    else:
+        skipped += 1
 
     # Runtime-default stub. The opt-in precompile target replaces this file.
-    write_crlf(generated / "shader_bytecode.h", """#pragma once
+    bytecode_header = """#pragma once
 #include <cstddef>
 
 namespace reshade_dlssnr {
@@ -229,7 +289,12 @@ extern const EmbeddedShaderBytecode kEmbeddedShaderBytecodes[];
 extern const std::size_t kEmbeddedShaderBytecodeCount;
 const EmbeddedShaderBytecode* FindEmbeddedShaderBytecode(const char* name);
 }
-""")
+"""
+    if write_crlf_if_changed(generated / "shader_bytecode.h", bytecode_header):
+        written += 1
+    else:
+        skipped += 1
+
     bytecode_stub = """#include "shader_bytecode.h"
 
 namespace reshade_dlssnr {
@@ -241,10 +306,16 @@ const std::size_t kEmbeddedShaderBytecodeCount = 0;
 const EmbeddedShaderBytecode* FindEmbeddedShaderBytecode(const char*) { return nullptr; }
 }
 """
-    write_crlf(generated / "shader_bytecode.cpp", bytecode_stub)
+    if write_crlf_if_changed(generated / "shader_bytecode.cpp", bytecode_stub):
+        written += 1
+    else:
+        skipped += 1
+
     print(
-        f"Embedded {len(fragment_texts)} unique source fragments from {len(files)} shader/header files; "
-        f"assembled {len(roots)} shader roots for verification/precompilation."
+        f"Embedded {len(fragment_texts)} unique source fragments from "
+        f"{len(files)} shader/header files; assembled {len(roots)} shader "
+        f"roots for verification/precompilation. Wrote {written}, skipped "
+        f"{skipped} unchanged."
     )
 
 

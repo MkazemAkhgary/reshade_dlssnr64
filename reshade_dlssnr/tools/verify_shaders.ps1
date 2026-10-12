@@ -10,6 +10,11 @@ if ([string]::IsNullOrWhiteSpace($GeneratedDir)) {
 }
 $GeneratedDir = [IO.Path]::GetFullPath($GeneratedDir)
 $expandedShaderRoot = Join-Path $GeneratedDir "expanded_shaders"
+
+# Under MSBuild the generate target runs first via DependsOnTargets, so this
+# fallback only fires when the script is invoked standalone. It regenerates the
+# expanded sources so verification does not have to be preceded by a manual
+# generate call.
 if (-not (Test-Path -LiteralPath $expandedShaderRoot -PathType Container)) {
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $ProjectDir "tools\generate_shaders.ps1") -ProjectDir $ProjectDir -GeneratedDir $GeneratedDir
   if ($LASTEXITCODE -ne 0) { throw "Failed to generate expanded shader sources for verification." }
@@ -36,6 +41,12 @@ if ([string]::IsNullOrWhiteSpace($FxcPath) -or -not (Test-Path $FxcPath)) {
 }
 
 $roots = Get-ChildItem -Path $expandedShaderRoot -Filter *.hlsl -Recurse -File | Sort-Object FullName
+
+# Verification is a pass/fail check, not a producer. Its only writes are the
+# .cso files inside a temp directory that is deleted before this script
+# returns, so there is no persistent C++ output to protect with the
+# write-if-changed pattern. What makes the MSBuild target incremental is the
+# verify.stamp it touches as its Outputs, not anything this script writes.
 $verifyTemp = Join-Path ([System.IO.Path]::GetTempPath()) ("reshade_dlssnr_fxc_" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path $verifyTemp | Out-Null
 $failedShaders = @()
@@ -46,7 +57,6 @@ try {
     $objectPath = Join-Path $verifyTemp ("shader_{0:D4}.cso" -f $index)
     Write-Host "============================================================"
     Write-Host ("VERIFYING [{0}/{1}] {2}" -f $index, $roots.Count, $shader.FullName)
-    Write-Host ("FXC OBJECT: {0}" -f $objectPath)
 
     # These sources have already had #pragma once processed during expansion;
     # FXC therefore sees neither the unsupported pragma nor duplicate includes.

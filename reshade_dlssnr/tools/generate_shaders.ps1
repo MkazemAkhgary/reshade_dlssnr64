@@ -10,6 +10,30 @@ if ([string]::IsNullOrWhiteSpace($GeneratedDir)) {
 New-Item -ItemType Directory -Force -Path $GeneratedDir | Out-Null
 $shaderRoot = Join-Path $ProjectDir "shaders"
 $script:ShaderRootFull = [IO.Path]::GetFullPath($shaderRoot).TrimEnd([char]'\')
+$script:Utf8NoBom = New-Object Text.UTF8Encoding($false)
+
+# Outputs that only matter to the C++ build are written through Write-IfChanged.
+# Skipping the write leaves the file's mtime alone, which is what stops a
+# regeneration from cascading into a full ClCompile when a shader edit
+# produced byte-identical output. The expanded_shaders directory below is
+# FXC-only input and is still regenerated unconditionally; nothing in the C++
+# build includes it.
+$script:WrittenCount = 0
+$script:SkippedCount = 0
+
+function Write-IfChanged([string]$Path, [string]$Text) {
+  if (Test-Path -LiteralPath $Path) {
+    try {
+      $existing = [IO.File]::ReadAllText($Path, $script:Utf8NoBom)
+      if ($existing -ceq $Text) {
+        $script:SkippedCount++
+        return
+      }
+    } catch { }
+  }
+  [IO.File]::WriteAllText($Path, $Text, $script:Utf8NoBom)
+  $script:WrittenCount++
+}
 
 function ConvertTo-RawLiteral([string]$Text) {
   $Text = [regex]::Replace($Text, "\r\n|\r|\n", "`r`n")
@@ -127,7 +151,7 @@ foreach ($root in $roots) {
 
   $preparedPath = Join-Path $expandedRootDir ($rel.Replace('/', '\'))
   New-Item -ItemType Directory -Force -Path (Split-Path $preparedPath -Parent) | Out-Null
-  [IO.File]::WriteAllText($preparedPath, ($pieces -join ''), (New-Object Text.UTF8Encoding($false)))
+  [IO.File]::WriteAllText($preparedPath, ($pieces -join ''), $script:Utf8NoBom)
 }
 
 $header = @'
@@ -146,7 +170,7 @@ extern const std::size_t kEmbeddedShaderCount;
 const EmbeddedShader* FindEmbeddedShader(const char* name);
 }
 '@
-[IO.File]::WriteAllText((Join-Path $GeneratedDir 'shader_sources.h'), $header, (New-Object Text.UTF8Encoding($false)))
+Write-IfChanged (Join-Path $GeneratedDir 'shader_sources.h') $header
 
 $lines = New-Object 'System.Collections.Generic.List[string]'
 $lines.Add('#include "shader_sources.h"')
@@ -181,7 +205,11 @@ $lines.Add('    if (std::strcmp(kEmbeddedShaders[i].name, name) == 0) return &kE
 $lines.Add('  return nullptr;')
 $lines.Add('}')
 $lines.Add('}')
-[IO.File]::WriteAllLines((Join-Path $GeneratedDir 'shader_sources.cpp'), $lines, (New-Object Text.UTF8Encoding($false)))
+# WriteAllLines wrote each line followed by Environment.NewLine (\r\n on
+# Windows), including a trailing one after the final line. Reproduce that
+# exactly so the byte-for-byte comparison in Write-IfChanged holds.
+$sourcesContent = ($lines.ToArray() -join "`r`n") + "`r`n"
+Write-IfChanged (Join-Path $GeneratedDir 'shader_sources.cpp') $sourcesContent
 
 $bytecodeHeader = @'
 #pragma once
@@ -194,7 +222,8 @@ extern const std::size_t kEmbeddedShaderBytecodeCount;
 const EmbeddedShaderBytecode* FindEmbeddedShaderBytecode(const char* name);
 }
 '@
-[IO.File]::WriteAllText((Join-Path $GeneratedDir 'shader_bytecode.h'), $bytecodeHeader, (New-Object Text.UTF8Encoding($false)))
+Write-IfChanged (Join-Path $GeneratedDir 'shader_bytecode.h') $bytecodeHeader
+
 $bytecodeStub = @'
 #include "shader_bytecode.h"
 
@@ -207,5 +236,6 @@ const std::size_t kEmbeddedShaderBytecodeCount = 0;
 const EmbeddedShaderBytecode* FindEmbeddedShaderBytecode(const char*) { return nullptr; }
 }
 '@
-[IO.File]::WriteAllText((Join-Path $GeneratedDir 'shader_bytecode.cpp'), $bytecodeStub, (New-Object Text.UTF8Encoding($false)))
-Write-Host ('Embedded {0} unique source fragments from {1} shader/header files; assembled {2} roots for verification/precompilation.' -f $fragmentTexts.Count, $files.Count, $roots.Count)
+Write-IfChanged (Join-Path $GeneratedDir 'shader_bytecode.cpp') $bytecodeStub
+
+Write-Host ('Embedded {0} unique source fragments from {1} shader/header files; assembled {2} roots for verification/precompilation. Wrote {3}, skipped {4} unchanged.' -f $fragmentTexts.Count, $files.Count, $roots.Count, $script:WrittenCount, $script:SkippedCount)

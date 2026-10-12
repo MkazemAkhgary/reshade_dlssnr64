@@ -48,4 +48,31 @@ $out += '    if (std::strcmp(kEmbeddedShaderBytecodes[i].name, name) == 0) retur
 $out += '  return nullptr;'
 $out += '}'
 $out += '}'
-Set-Content -Path (Join-Path $generated "shader_bytecode.cpp") -Value $out -Encoding UTF8
+
+# shader_bytecode.cpp is a C++ input, so restamping it cascades into a full
+# ClCompile of that TU and of every TU that includes shader_bytecode.h. The
+# previous Set-Content -Encoding UTF8 wrote a BOM and rewrote the file on every
+# precompile run regardless of whether the bytecode had changed; the
+# write-if-changed pattern below, matching generate_shaders.ps1, leaves the
+# mtime alone when the content is identical. The .cso files in shader_cache are
+# not treated the same way: they never feed the C++ compile, and the FXC call
+# that produces them is what this script exists to run.
+$utf8 = New-Object Text.UTF8Encoding($false)
+$bytecodePath = Join-Path $generated "shader_bytecode.cpp"
+$bytecodeText = ($out -join "`r`n") + "`r`n"
+
+$changed = $true
+if (Test-Path -LiteralPath $bytecodePath) {
+  try {
+    $existing = [IO.File]::ReadAllText($bytecodePath, $utf8)
+    if ($existing -ceq $bytecodeText) { $changed = $false }
+  } catch {
+    $changed = $true
+  }
+}
+if ($changed) {
+  [IO.File]::WriteAllText($bytecodePath, $bytecodeText, $utf8)
+  Write-Host ("Embedded {0} shader bytecode tables; shader_bytecode.cpp updated." -f $entries.Count)
+} else {
+  Write-Host ("Embedded {0} shader bytecode tables; shader_bytecode.cpp unchanged." -f $entries.Count)
+}

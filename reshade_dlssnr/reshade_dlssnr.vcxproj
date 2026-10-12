@@ -25,6 +25,7 @@
     <DlssnrProjectDir>$(MSBuildProjectDirectory)</DlssnrProjectDir>
     <DlssnrGeneratedDir>$(MSBuildProjectDirectory)\generated</DlssnrGeneratedDir>
     <DlssnrShaderStampDir>$(DlssnrGeneratedDir)\stamps</DlssnrShaderStampDir>
+    <DlssnrGeneratedFiles>$(DlssnrGeneratedDir)\shader_sources.cpp;$(DlssnrGeneratedDir)\shader_sources.h;$(DlssnrGeneratedDir)\shader_bytecode.cpp;$(DlssnrGeneratedDir)\shader_bytecode.h</DlssnrGeneratedFiles>
     <VerifyShaders Condition="'$(VerifyShaders)' == ''">true</VerifyShaders>
     <PrecompileShaders Condition="'$(PrecompileShaders)' == ''">false</PrecompileShaders>
   </PropertyGroup>
@@ -33,16 +34,40 @@
     <ShaderSourceFiles Include="$(ProjectDir)shaders\**\*.*" />
   </ItemGroup>
 
+  <ItemGroup>
+    <UpToDateCheckOutput Include="$(DlssnrGeneratedFiles)" />
+    <UpToDateCheckOutput Include="$(DlssnrShaderStampDir)\generate.stamp" />
+    <UpToDateCheckOutput Include="$(DlssnrShaderStampDir)\verify.stamp" />
+    <UpToDateCheckOutput Include="$(DlssnrShaderStampDir)\precompile.stamp" />
+  </ItemGroup>
+
   <Target Name="ValidateFxcPath"
           Condition="('$(VerifyShaders)' == 'true' or '$(PrecompileShaders)' == 'true') and '$(FxcPath)' == ''">
     <Error Text="FxcPath is not set. Set /p:FxcPath=... or ensure a Windows SDK is installed." />
   </Target>
 
+  <!--
+    Incremental gating is on `generate.stamp`, not on the four generated C++
+    files. generate_shaders.ps1 now writes those four files only when their
+    contents actually change, so their mtimes no longer advance on every run;
+    without a separate stamp, MSBuild would see inputs newer than unchanged
+    outputs and re-run the Exec forever. The stamp is touched after every
+    successful Exec, so the target runs exactly once per shader-source edit.
+    FileWrites makes Clean (and therefore Rebuild) remove the generated files,
+    the expanded FXC sources and the stamp.
+  -->
   <Target Name="GenerateEmbeddedShadersTarget"
           BeforeTargets="ClCompile"
           Inputs="@(ShaderSourceFiles);$(ProjectDir)tools\generate_shaders.ps1;$(ProjectDir)tools\generate_shaders.py"
-          Outputs="$(DlssnrGeneratedDir)\shader_sources.cpp;$(DlssnrGeneratedDir)\shader_sources.h;$(DlssnrGeneratedDir)\shader_bytecode.cpp;$(DlssnrGeneratedDir)\shader_bytecode.h">
+          Outputs="$(DlssnrShaderStampDir)\generate.stamp">
+    <MakeDir Directories="$(DlssnrShaderStampDir)" />
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\generate_shaders.ps1&quot; -ProjectDir &quot;$(DlssnrProjectDir)&quot; -GeneratedDir &quot;$(DlssnrGeneratedDir)&quot;" />
+    <Touch Files="$(DlssnrShaderStampDir)\generate.stamp" AlwaysCreate="true" />
+    <ItemGroup>
+      <FileWrites Include="$(DlssnrGeneratedFiles)" />
+      <FileWrites Include="$(DlssnrGeneratedDir)\expanded_shaders\**\*.*" />
+      <FileWrites Include="$(DlssnrShaderStampDir)\generate.stamp" />
+    </ItemGroup>
   </Target>
 
   <Target Name="VerifyShadersTarget"
@@ -54,6 +79,9 @@
     <MakeDir Directories="$(DlssnrShaderStampDir)" />
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\verify_shaders.ps1&quot; -ProjectDir &quot;$(DlssnrProjectDir)&quot; -FxcPath &quot;$(FxcPath)&quot;" />
     <Touch Files="$(DlssnrShaderStampDir)\verify.stamp" AlwaysCreate="true" />
+    <ItemGroup>
+      <FileWrites Include="$(DlssnrShaderStampDir)\verify.stamp" />
+    </ItemGroup>
   </Target>
 
   <Target Name="PrecompileShadersTarget"
@@ -65,6 +93,10 @@
     <MakeDir Directories="$(DlssnrShaderStampDir)" />
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\precompile_shaders.ps1&quot; -ProjectDir &quot;$(DlssnrProjectDir)&quot; -GeneratedDir &quot;$(DlssnrGeneratedDir)&quot; -FxcPath &quot;$(FxcPath)&quot;" />
     <Touch Files="$(DlssnrShaderStampDir)\precompile.stamp" AlwaysCreate="true" />
+    <ItemGroup>
+      <FileWrites Include="$(DlssnrShaderStampDir)\precompile.stamp" />
+      <FileWrites Include="$(DlssnrGeneratedDir)\shader_cache\**\*.*" />
+    </ItemGroup>
   </Target>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
