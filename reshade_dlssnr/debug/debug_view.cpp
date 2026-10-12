@@ -94,6 +94,12 @@ const DebugViewDef kDebugViews[] = {
      "The frame as captured, before any processing. This is the DLSS "
      "output the model will work from, at its native resolution.",
      DebugDisplayMode::Color, SelectSource},
+    {"Model Input (pre-grade)",
+     "The model input color exactly as it was before the Input Grade ran. "
+     "The grade is applied in place, so the pipeline snapshots this texture "
+     "for you when the view is selected; with the Input Grade enabled, "
+     "compare it against Model Input (prepared).",
+     DebugDisplayMode::Color, SelectPreGradeInput, true, false},
     {"Model Input (prepared)",
      "The image actually fed to the model, after resizing to the Working "
      "Scale, HDR preparation, and input grading when enabled.",
@@ -104,6 +110,12 @@ const DebugViewDef kDebugViews[] = {
      "place; with the Output Grade enabled, compare it against Model Output "
      "(post-grade).",
      DebugDisplayMode::Color, SelectPreGradeOutput, false, true},
+    {"Model Output (post-grade)",
+     "The model output after the Output Grade ran, in the model's own "
+     "sRGB-encoded SDR domain - symmetric to the Input Grade on the model "
+     "input. Everything downstream (compose, importance mask, writeback) "
+     "consumes this as if the model had produced it.",
+     DebugDisplayMode::Color, SelectPostGradeOutput, false, false},
     {"Model Output (composed)",
      "The final result of this pass, after the model's edit has been "
      "composed with the source. This is what gets written to the target.",
@@ -146,18 +158,6 @@ const DebugViewDef kDebugViews[] = {
      "Game NGX exposure in stops: 1.0x (0 stops) is mid-gray; brighter/darker "
      "values move toward white/black. Magenta means no valid value was read.",
      DebugDisplayMode::GameExposure, SelectSource},
-    {"Model Input (pre-grade)",
-     "The model input color exactly as it was before the Input Grade ran. "
-     "The grade is applied in place, so the pipeline snapshots this texture "
-     "for you when the view is selected; with the Input Grade enabled, "
-     "compare it against Model Input (prepared).",
-     DebugDisplayMode::Color, SelectPreGradeInput, true, false},
-    {"Model Output (post-grade)",
-     "The model output after the Output Grade ran, in the model's own "
-     "sRGB-encoded SDR domain - symmetric to the Input Grade on the model "
-     "input. Everything downstream (compose, importance mask, writeback) "
-     "consumes this as if the model had produced it.",
-     DebugDisplayMode::Color, SelectPostGradeOutput, false, false},
     {nullptr, nullptr, DebugDisplayMode::Color, nullptr},
 };
 
