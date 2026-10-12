@@ -8,24 +8,28 @@
 
 namespace reshade_dlssnr {
 
+namespace {
+
+void ResetImportanceMask(void* context) {
+  *static_cast<ImportanceMaskSettings*>(context) = ImportanceMaskSettings{};
+}
+
+}  // namespace
+
 void DrawImportanceMaskSection(Settings& settings, bool hdr_relevant,
                                bool& changed) {
+  ImportanceMaskSettings& mask = settings.importance_mask;
+  const bool available = hdr_relevant && settings.hdr.enable;
   if (!PersistentHeader(
           "Importance Mask", settings.ui_importance_mask_open, changed,
-          "Build a mask from the first Pre/Post-DLSS pass by comparing the actual model input, including input grading and Local Exposure, with its raw model output. The result is used for exposure on the next frame.")) {
+          "Build a mask from the first Pre/Post-DLSS pass by comparing the actual model input, including input grading and Local Exposure, with its raw model output. The result is used for exposure on the next frame.",
+          HeaderControls{&mask.enable,
+                         "The first Pre/Post-DLSS pass builds the mask after model evaluation. It never affects exposure or later passes until the next frame.",
+                         !available, ResetImportanceMask, &mask})) {
     return;
   }
 
   IndentScope section_indent;
-  ImportanceMaskSettings& mask = settings.importance_mask;
-
-  const bool available = hdr_relevant && settings.hdr.enable;
-  if (!available) ImGui::BeginDisabled();
-  changed |= ImGui::Checkbox("Enable Importance Mask", &mask.enable);
-  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("The first Pre/Post-DLSS pass builds the mask after model evaluation. It never affects exposure or later passes until the next frame.");
-  }
-  if (!available) ImGui::EndDisabled();
   if (!available) {
     ImGui::TextDisabled("Requires HDR and an enabled Pre-DLSS or Post-DLSS pass.");
     return;

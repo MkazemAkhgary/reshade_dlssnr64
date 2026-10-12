@@ -7,8 +7,8 @@
 
 namespace reshade_dlssnr {
 
-constexpr float kControlLabelWidth = 200.0f;
-constexpr float kSliderLabelWidth = 260.0f;
+constexpr float kControlLabelWidth = 330.0f;
+constexpr float kSliderLabelWidth = 330.0f;
 constexpr float kResetButtonWidth = 22.0f;
 
 // Set from settings at the top of each frame. Read by Tip().
@@ -24,8 +24,20 @@ void WithDisabled(bool disabled, Fn&& fn) {
   if (disabled) ImGui::EndDisabled();
 }
 
+using HeaderResetCallback = void (*)(void* context);
+
+struct HeaderControls {
+  bool* enabled = nullptr;
+  const char* enabled_tooltip = nullptr;
+  bool enabled_disabled = false;
+  HeaderResetCallback reset = nullptr;
+  void* reset_context = nullptr;
+  float* enabled_float = nullptr;
+};
+
 bool PersistentHeader(const char* label, bool& open_setting, bool& changed,
-                      const char* tooltip = nullptr);
+                      const char* tooltip = nullptr,
+                      HeaderControls controls = {});
 
 class IndentScope {
  public:
@@ -41,7 +53,8 @@ class IndentScope {
 };
 
 bool PersistentSubHeader(const char* label, bool& open_setting, bool& changed,
-                         const char* tooltip = nullptr);
+                         const char* tooltip = nullptr,
+                         HeaderControls controls = {});
 
 bool DrawFloatRow(uint32_t pass_index,
                   const char* id,

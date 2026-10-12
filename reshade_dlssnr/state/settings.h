@@ -123,7 +123,6 @@ struct Settings {
   bool ui_pass_advanced_open = false;
   bool ui_residual_open = false;
   bool ui_rcas_open = false;
-  bool ui_pass_grade_open = false;
   bool ui_grade_input_open = false;
   bool ui_grade_output_open = false;
   bool ui_status_open = true;
@@ -134,8 +133,8 @@ struct Settings {
   bool ui_hdr_open = true;
   bool ui_grade_open = true;
   bool ui_hdr_diagnostics_open = false;
+  bool ui_bounded_tuning_open = false;
   bool ui_importance_mask_open = true;
-  bool ui_importance_mask_settings_open = true;
 };
 
 constexpr uint32_t kMaxSavedProfiles = 16;

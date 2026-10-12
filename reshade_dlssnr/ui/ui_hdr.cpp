@@ -99,54 +99,89 @@ void DrawFilterControls(const char* id, ExposureFilterSettings& filters,
   ImGui::PopID();
 }
 
-void DrawGameLayer(GameExposureLayerSettings& layer, bool& changed) {
-  changed |= ImGui::Checkbox("Enabled##game_layer", &layer.enabled);
+void ResetHdrSettings(void* context) {
+  *static_cast<HdrSettings*>(context) = HdrSettings{};
+}
+
+void ResetBoundedTuning(void* context) {
+  auto& layer = *static_cast<GameExposureLayerSettings*>(context);
+  const GameExposureLayerSettings defaults{};
+  layer.bounded_tuning = defaults.bounded_tuning;
+  layer.tuning_strength = defaults.tuning_strength;
+  layer.max_tuning_stops = defaults.max_tuning_stops;
+  layer.tuning_midtone = defaults.tuning_midtone;
+  layer.tuning_speed_up = defaults.tuning_speed_up;
+  layer.tuning_speed_down = defaults.tuning_speed_down;
+  layer.filters = defaults.filters;
+}
+
+template <typename LayerSettings>
+void DrawLayerReset(const char* label, LayerSettings& layer, bool& changed) {
+  const float right = ImGui::GetCursorPosX() +
+                       ImGui::GetContentRegionAvail().x;
+  ImGui::SameLine(std::max(0.0f, right - kResetButtonWidth));
+  if (ImGui::Button("R", ImVec2(kResetButtonWidth, 0.0f))) {
+    layer = LayerSettings{};
+    changed = true;
+  }
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Reset all %s settings to their defaults.", label);
+  }
+}
+
+void DrawGameLayer(GameExposureLayerSettings& layer, bool& tuning_open,
+                   bool& changed) {
+  changed |= ImGui::Checkbox("##game_layer", &layer.enabled);
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("Use the game's NGX ExposureTexture as the base exposure for the stack.");
   }
   ImGui::SameLine();
   ImGui::TextDisabled("Base exposure from the game's NGX ExposureTexture");
+  DrawLayerReset("Game Exposure", layer, changed);
   WithDisabled(!layer.enabled, [&] {
     changed |= DrawFloatRow(0, "game_bias_stops", "Exposure Bias",
                             "Manual bias relative to the game's exposure, in stops. Zero leaves the game's value untouched.",
                             &layer.bias_stops, nullptr, 0.0f, -4.0f, 4.0f, 0.0f);
-    changed |= ImGui::Checkbox("Bounded Adaptive Tuning", &layer.bounded_tuning);
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-      Tip("Allow the adaptive measurement to suggest a small correction, clipped to Max Tuning Stops. The game remains the global exposure anchor.");
-    if (layer.bounded_tuning) {
-      changed |= DrawFloatRow(0, "game_tuning_strength", "Tuning Strength",
-                              "Blend toward the adaptive exposure suggestion.",
-                              &layer.tuning_strength, nullptr, 0.25f, 0.0f, 1.0f, 0.25f);
-      changed |= DrawFloatRow(0, "game_tuning_stops", "Max Tuning Stops",
-                              "Maximum absolute correction away from the game's value.",
-                              &layer.max_tuning_stops, nullptr, 0.5f, 0.0f, 2.0f, 0.5f);
-      changed |= DrawFloatRow(0, "game_tuning_midtone", "Tuning Midtone",
-                              "Target luminance used only to estimate the bounded correction.",
-                              &layer.tuning_midtone, nullptr, 0.18f, 0.01f, 0.5f, 0.18f);
-      changed |= DrawFloatRow(0, "game_tuning_speed_up", "Brighten Speed",
-                              "Maximum brighten correction change in stops per second.",
-                              &layer.tuning_speed_up, nullptr, 3.0f, 0.0f, 20.0f, 3.0f);
-      changed |= DrawFloatRow(0, "game_tuning_speed_down", "Darken Speed",
-                              "Maximum darken correction change in stops per second.",
-                              &layer.tuning_speed_down, nullptr, 1.0f, 0.0f, 20.0f, 1.0f);
+
+    const char* tuning_tip = "Allow the adaptive measurement to suggest a small correction, clipped to Max Tuning Stops. The game remains the global exposure anchor.";
+    if (PersistentSubHeader(
+            "Bounded Adaptive Tuning", tuning_open, changed, tuning_tip,
+            HeaderControls{&layer.bounded_tuning, tuning_tip, false,
+                           ResetBoundedTuning, &layer})) {
+      IndentScope tuning_content_indent;
+      WithDisabled(!layer.bounded_tuning, [&] {
+        changed |= DrawFloatRow(0, "game_tuning_strength", "Tuning Strength",
+                                "Blend toward the adaptive exposure suggestion.",
+                                &layer.tuning_strength, nullptr, 0.25f, 0.0f, 1.0f, 0.25f);
+        changed |= DrawFloatRow(0, "game_tuning_stops", "Max Tuning Stops",
+                                "Maximum absolute correction away from the game's value.",
+                                &layer.max_tuning_stops, nullptr, 0.5f, 0.0f, 2.0f, 0.5f);
+        changed |= DrawFloatRow(0, "game_tuning_midtone", "Tuning Midtone",
+                                "Target luminance used only to estimate the bounded correction.",
+                                &layer.tuning_midtone, nullptr, 0.18f, 0.01f, 0.5f, 0.18f);
+        changed |= DrawFloatRow(0, "game_tuning_speed_up", "Brighten Speed",
+                                "Maximum brighten correction change in stops per second.",
+                                &layer.tuning_speed_up, nullptr, 3.0f, 0.0f, 20.0f, 3.0f);
+        changed |= DrawFloatRow(0, "game_tuning_speed_down", "Darken Speed",
+                                "Maximum darken correction change in stops per second.",
+                                &layer.tuning_speed_down, nullptr, 1.0f, 0.0f, 20.0f, 1.0f);
+        ImGui::TextDisabled("These filters scope Bounded Adaptive Tuning only. The game value is a global scalar.");
+        DrawFilterControls(
+            "game_filters", layer.filters, changed,
+            "These filters select pixels for the optional bounded tuning estimate. NGX supplies one global exposure scalar, so filters cannot spatially edit it.");
+      });
     }
-    ImGui::TextDisabled("These filters scope Bounded Adaptive Tuning only. The game value is a global scalar.");
-    WithDisabled(!layer.bounded_tuning, [&] {
-      DrawFilterControls(
-          "game_filters", layer.filters, changed,
-          "These filters select pixels for the optional bounded tuning estimate. "
-          "NGX supplies one global exposure scalar, so filters cannot spatially edit it.");
-    });
   });
 }
 
 void DrawAdaptiveLayer(AdaptiveExposureLayerSettings& layer, bool& changed) {
-  changed |= ImGui::Checkbox("Enabled##adaptive_layer", &layer.enabled);
+  changed |= ImGui::Checkbox("##adaptive_layer", &layer.enabled);
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("Use histogram-derived global exposure or a bounded correction over Game Exposure.");
   }
   ImGui::SameLine();
   ImGui::TextDisabled("Histogram-driven exposure");
+  DrawLayerReset("Adaptive Exposure", layer, changed);
   WithDisabled(!layer.enabled, [&] {
     changed |= DrawFloatRow(0, "adaptive_midtone", "Midtone Target",
                             "Target luminance for the selected population.",
@@ -168,12 +203,13 @@ void DrawAdaptiveLayer(AdaptiveExposureLayerSettings& layer, bool& changed) {
 }
 
 void DrawLocalLayer(LocalExposureLayerSettings& layer, bool& changed) {
-  changed |= ImGui::Checkbox("Enabled##local_layer", &layer.enabled);
+  changed |= ImGui::Checkbox("##local_layer", &layer.enabled);
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("Apply spatially varying exposure correction after the global exposure layers.");
   }
   ImGui::SameLine();
   ImGui::TextDisabled("Spatial base/detail correction");
+  DrawLayerReset("Local Exposure", layer, changed);
   WithDisabled(!layer.enabled, [&] {
     changed |= DrawFloatRow(0, "local_strength", "Strength",
                             "Blend factor for the spatial exposure adjustment.",
@@ -208,7 +244,7 @@ void DrawLocalLayer(LocalExposureLayerSettings& layer, bool& changed) {
   });
 }
 
-void DrawControls(HdrSettings& hdr, bool& changed) {
+void DrawControls(HdrSettings& hdr, bool& tuning_open, bool& changed) {
   int fmt = static_cast<int>(hdr.format);
   changed |= DrawGroupRow(
       "hdr_format", "Format",
@@ -229,7 +265,8 @@ void DrawControls(HdrSettings& hdr, bool& changed) {
       Tip("Configure the game's exposure as the base layer.");
     }
     if (game_open) {
-      DrawGameLayer(hdr.game_exposure, changed);
+      IndentScope layer_content_indent;
+      DrawGameLayer(hdr.game_exposure, tuning_open, changed);
       ImGui::EndTabItem();
     }
 
@@ -238,6 +275,7 @@ void DrawControls(HdrSettings& hdr, bool& changed) {
       Tip("Configure histogram-based global exposure or a correction over Game Exposure.");
     }
     if (adaptive_open) {
+      IndentScope layer_content_indent;
       DrawAdaptiveLayer(hdr.adaptive_exposure, changed);
       ImGui::EndTabItem();
     }
@@ -247,6 +285,7 @@ void DrawControls(HdrSettings& hdr, bool& changed) {
       Tip("Configure local spatial exposure correction and its independent filters.");
     }
     if (local_open) {
+      IndentScope layer_content_indent;
       DrawLocalLayer(hdr.local_exposure, changed);
       ImGui::EndTabItem();
     }
@@ -279,7 +318,6 @@ void DrawControls(HdrSettings& hdr, bool& changed) {
 
 void DrawDiagnostics(const HdrSnapshot& snap, const HdrSettings& hdr,
                      bool& diagnostics_open, bool& changed) {
-  IndentScope indent;
   if (!PersistentSubHeader("Diagnostics", diagnostics_open, changed)) return;
   IndentScope content_indent;
 
@@ -371,18 +409,16 @@ void DrawDiagnostics(const HdrSnapshot& snap, const HdrSettings& hdr,
 }  // namespace
 
 void DrawHdrSection(Settings& settings, bool hdr_relevant, bool& changed) {
+  const char* hdr_enable_tip = "Prepares the current Pre-DLSS or Post-DLSS source before the first pass. Backbuffer-only configurations do not use HDR measurement.";
   if (!PersistentHeader(
           "HDR", settings.ui_hdr_open, changed,
-          "Prepare Pre-DLSS and Post-DLSS source images for the model's SDR input domain and configure the exposure layers.")) {
+          "Prepare Pre-DLSS and Post-DLSS source images for the model's SDR input domain and configure the exposure layers.",
+          HeaderControls{&settings.hdr.enable, hdr_enable_tip, !hdr_relevant,
+                         ResetHdrSettings, &settings.hdr})) {
     return;
   }
 
   IndentScope indent;
-  if (!hdr_relevant) ImGui::BeginDisabled();
-  changed |= ImGui::Checkbox("Enable HDR Handling", &settings.hdr.enable);
-  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-    Tip("Prepares the current Pre-DLSS or Post-DLSS source before the first pass. Backbuffer-only configurations do not use HDR measurement.");
-  if (!hdr_relevant) ImGui::EndDisabled();
 
   const bool hdr_on = settings.hdr.enable;
   if (!hdr_relevant) {
@@ -391,7 +427,9 @@ void DrawHdrSection(Settings& settings, bool hdr_relevant, bool& changed) {
     return;
   }
   if (hdr_on) DrawStatus(AddonController::Get().GetHdrSnapshot(), true);
-  WithDisabled(!hdr_on, [&] { DrawControls(settings.hdr, changed); });
+  WithDisabled(!hdr_on, [&] {
+    DrawControls(settings.hdr, settings.ui_bounded_tuning_open, changed);
+  });
   if (hdr_on) {
     DrawDiagnostics(AddonController::Get().GetHdrSnapshot(), settings.hdr,
                     settings.ui_hdr_diagnostics_open, changed);

@@ -28,23 +28,8 @@ const char* const kChromaModeTips[] = {
 
 }  // namespace
 
-void DrawGradeSection(const char* id,
-                      const char* label,
-                      const char* tooltip,
-                      GradeSettings& grade,
-                      bool& changed) {
+void DrawGradeSection(const char* id, GradeSettings& grade, bool& changed) {
   ImGui::PushID(id);
-
-  changed |= DrawCheckboxAtLabel("enabled", &grade.enabled);
-  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && tooltip != nullptr) {
-    Tip("%s", tooltip);
-  }
-
-  ImGui::SameLine();
-  ImGui::TextUnformatted(label);
-  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && tooltip != nullptr) {
-    Tip("%s", tooltip);
-  }
 
   WithDisabled(!grade.enabled, [&] {
     changed |= DrawFloatRow(0, "black_level", "Black Level",

@@ -16,15 +16,14 @@ enum class PendingMove { None, Left, Right };
 extern PendingMove g_pending_move;
 extern int g_pending_move_index;
 
+enum class PendingPassAction { None, Add, Remove };
+extern PendingPassAction g_pending_pass_action;
+
 void DrawSharedDebugView(Settings& settings, bool& changed);
 bool AnyPassUsesHdrInjection(const Settings& settings);
 void DrawStatusSection(Settings& settings, bool& changed);
 
-void DrawGradeSection(const char* id,
-                      const char* label,
-                      const char* tooltip,
-                      GradeSettings& grade,
-                      bool& changed);
+void DrawGradeSection(const char* id, GradeSettings& grade, bool& changed);
 
 // `hdr_relevant` gates the section: HDR affects Pre-DLSS and Post-DLSS passes.
 void DrawHdrSection(Settings& settings, bool hdr_relevant, bool& changed);
@@ -33,5 +32,7 @@ void DrawImportanceMaskSection(Settings& settings, bool hdr_relevant, bool& chan
 
 void DrawPassSettingsBody(uint32_t pass_index, Settings& settings,
                           bool& changed);
+void AddPass(Settings& settings, bool& changed);
+void RemoveActivePass(Settings& settings, bool& changed);
 
 }  // namespace reshade_dlssnr

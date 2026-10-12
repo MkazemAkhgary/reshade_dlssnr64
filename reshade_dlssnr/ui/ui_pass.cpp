@@ -1,6 +1,7 @@
 #include <imgui.h>
 #include <reshade.hpp>
 
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -15,8 +16,64 @@ namespace reshade_dlssnr {
 
 PendingMove g_pending_move = PendingMove::None;
 int g_pending_move_index = -1;
+PendingPassAction g_pending_pass_action = PendingPassAction::None;
 
 namespace {
+
+void ResetModelSection(void* context) {
+  auto& pass = *static_cast<PassSettings*>(context);
+  const PassSettings defaults{};
+  pass.preset = defaults.preset;
+  pass.intensity = defaults.intensity;
+  pass.local_tone = defaults.local_tone;
+  pass.ui_correction = defaults.ui_correction;
+  pass.local_structure = defaults.local_structure;
+  pass.auto_mask = defaults.auto_mask;
+  pass.skin_structure = defaults.skin_structure;
+  pass.inherit_intensity = false;
+  pass.inherit_local_tone = false;
+  pass.inherit_local_structure = false;
+  pass.inherit_skin_structure = false;
+}
+
+struct ShaderCategoryResetContext {
+  PassSettings* pass;
+  uint32_t first;
+  uint32_t end;
+};
+
+void ResetShaderCategory(void* context) {
+  const auto& reset = *static_cast<ShaderCategoryResetContext*>(context);
+  for (uint32_t j = reset.first; j < reset.end; ++j) {
+    reset.pass->params[j] = kShaderParams[j].default_value;
+    reset.pass->inherit_params[j] = false;
+  }
+}
+
+void ResetResidualSection(void* context) {
+  static_cast<PassSettings*>(context)->residual = ResidualSettings{};
+}
+
+void ResetRcasSection(void* context) {
+  auto& pass = *static_cast<PassSettings*>(context);
+  pass.rcas_enabled = false;
+  pass.rcas_strength = 0.5f;
+}
+
+void ResetAdvancedSection(void* context) {
+  auto& pass = *static_cast<PassSettings*>(context);
+  for (uint32_t j = 0; j < kShaderParamCount; ++j) {
+    pass.params[j] = kShaderParams[j].default_value;
+    pass.inherit_params[j] = false;
+  }
+  pass.residual = ResidualSettings{};
+  pass.rcas_enabled = false;
+  pass.rcas_strength = 0.5f;
+}
+
+void ResetGradeSettings(void* context) {
+  *static_cast<GradeSettings*>(context) = GradeSettings{};
+}
 
 void DrawTargetSection(Settings& settings, uint32_t pass_index,
                        bool& changed) {
@@ -142,8 +199,11 @@ void DrawModelSection(uint32_t pass_index, Settings& settings,
   PassSettings& pass = settings.passes[pass_index];
   const PassSettings& resolved = GetResolvedPass(pass_index);
 
-  IndentScope indent;
-  if (!PersistentSubHeader("Model", settings.ui_model_open, changed)) return;
+  if (!PersistentSubHeader(
+          "Model", settings.ui_model_open, changed, nullptr,
+          HeaderControls{nullptr, nullptr, false, ResetModelSection, &pass})) {
+    return;
+  }
   IndentScope content_indent;
 
   {
@@ -208,6 +268,21 @@ int FindShaderParamIndex(const char* name) {
   return -1;
 }
 
+std::string ShaderParamDisplayName(const char* name) {
+  std::string result;
+  if (name == nullptr) return result;
+  for (std::size_t i = 0; name[i] != '\0'; ++i) {
+    const unsigned char ch = static_cast<unsigned char>(name[i]);
+    if (i > 0 && std::isupper(ch) &&
+        (std::islower(static_cast<unsigned char>(name[i - 1])) ||
+         std::isdigit(static_cast<unsigned char>(name[i - 1])))) {
+      result.push_back(' ');
+    }
+    result.push_back(static_cast<char>(ch));
+  }
+  return result;
+}
+
 void DrawShaderParamSections(uint32_t pass_index, Settings& settings,
                              bool& changed) {
   PassSettings& pass = settings.passes[pass_index];
@@ -228,8 +303,15 @@ void DrawShaderParamSections(uint32_t pass_index, Settings& settings,
     bool& category_open =
         settings.ui_category_open[category_index < 16 ? category_index : 15];
 
-    IndentScope indent;
-    const bool open = PersistentSubHeader(category, category_open, changed);
+    ShaderCategoryResetContext reset_context{&pass, i, next};
+    float* category_enabled =
+        strcmp(category, "Soft Compression") == 0 ? &pass.params[i] : nullptr;
+    const char* category_enabled_tip =
+        category_enabled != nullptr ? kShaderParams[i].tooltip : nullptr;
+    const bool open = PersistentSubHeader(
+        category, category_open, changed, nullptr,
+        HeaderControls{nullptr, category_enabled_tip, false,
+                       ResetShaderCategory, &reset_context, category_enabled});
     category_index++;
 
     if (open) {
@@ -237,6 +319,13 @@ void DrawShaderParamSections(uint32_t pass_index, Settings& settings,
       for (uint32_t j = i; j < next; ++j) {
         const auto& param = kShaderParams[j];
         const std::string id = std::string(category) + "_" + param.name;
+        const std::string display_name = ShaderParamDisplayName(param.name);
+
+        // Soft Compression is the subsection's enabled toggle, rendered inline
+        // before its header rather than again as a content row.
+        if (category_enabled != nullptr && j == i && param.is_checkbox) {
+          continue;
+        }
 
         bool dependency_off = false;
         if (param.depends_on != nullptr) {
@@ -255,7 +344,7 @@ void DrawShaderParamSections(uint32_t pass_index, Settings& settings,
                               : "Toggle this shader parameter.");
             }
             ImGui::SameLine();
-            ImGui::TextUnformatted(param.name);
+            ImGui::TextUnformatted(display_name.c_str());
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
               Tip("%s", param.tooltip != nullptr
                               ? param.tooltip
@@ -264,7 +353,7 @@ void DrawShaderParamSections(uint32_t pass_index, Settings& settings,
             pass.params[j] = checked ? 1.0f : 0.0f;
           } else {
             changed |= DrawFloatRow(
-                pass_index, id.c_str(), param.name, param.tooltip,
+                pass_index, id.c_str(), display_name.c_str(), param.tooltip,
                 &pass.params[j], &pass.inherit_params[j], resolved.params[j],
                 param.min_value, param.max_value, param.default_value);
           }
@@ -280,9 +369,9 @@ void DrawResidualSection(uint32_t pass_index, Settings& settings,
                          bool& changed) {
   PassSettings& pass = settings.passes[pass_index];
 
-  IndentScope indent;
-  if (!PersistentSubHeader("Residual Edit", settings.ui_residual_open,
-                           changed)) {
+  if (!PersistentSubHeader(
+          "Residual Edit", settings.ui_residual_open, changed, nullptr,
+          HeaderControls{nullptr, nullptr, false, ResetResidualSection, &pass})) {
     return;
   }
   IndentScope content_indent;
@@ -353,22 +442,15 @@ void ResetPassProfile(uint32_t pass_index, Settings& settings) {
 void DrawRcasSection(uint32_t pass_index, Settings& settings, bool& changed) {
   PassSettings& pass = settings.passes[pass_index];
 
-  IndentScope indent;
-  if (!PersistentSubHeader("Sharpening", settings.ui_rcas_open, changed)) {
+  if (!PersistentSubHeader(
+          "Sharpening", settings.ui_rcas_open, changed,
+          "Sharpen the model's upsampled output with FSR RCAS.",
+          HeaderControls{&pass.rcas_enabled,
+                         "Sharpen the model's upsampled output with FSR RCAS.",
+                         false, ResetRcasSection, &pass})) {
     return;
   }
   IndentScope content_indent;
-
-  ImGui::AlignTextToFramePadding();
-  changed |= DrawCheckboxAtLabel("rcas_enabled", &pass.rcas_enabled);
-  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Sharpen the model's upsampled output with FSR RCAS.");
-  }
-  ImGui::SameLine();
-  ImGui::TextUnformatted("Enable RCAS");
-  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Sharpen the model's upsampled output with FSR RCAS.");
-  }
 
   WithDisabled(!pass.rcas_enabled, [&] {
     changed |= DrawFloatRow(
@@ -396,7 +478,7 @@ void DrawPassSettingsBody(uint32_t pass_index, Settings& settings,
   ImGui::SameLine();
   const bool can_move_left = pass_index > 0;
   WithDisabled(!can_move_left, [&] {
-    if (ImGui::Button("<", ImVec2(30, 0)) && can_move_left) {
+    if (ImGui::Button("<", ImVec2(kResetButtonWidth, 0)) && can_move_left) {
       g_pending_move = PendingMove::Left;
       g_pending_move_index = static_cast<int>(pass_index);
     }
@@ -408,7 +490,7 @@ void DrawPassSettingsBody(uint32_t pass_index, Settings& settings,
   ImGui::SameLine();
   const bool can_move_right = pass_index + 1 < settings.pass_count;
   WithDisabled(!can_move_right, [&] {
-    if (ImGui::Button(">", ImVec2(30, 0)) && can_move_right) {
+    if (ImGui::Button(">", ImVec2(kResetButtonWidth, 0)) && can_move_right) {
       g_pending_move = PendingMove::Right;
       g_pending_move_index = static_cast<int>(pass_index);
     }
@@ -418,7 +500,7 @@ void DrawPassSettingsBody(uint32_t pass_index, Settings& settings,
   }
 
   ImGui::SameLine();
-  if (ImGui::Button("Reset Pass")) {
+  if (ImGui::Button("R", ImVec2(kResetButtonWidth, 0))) {
     ResetPassProfile(pass_index, settings);
     changed = true;
   }
@@ -426,6 +508,32 @@ void DrawPassSettingsBody(uint32_t pass_index, Settings& settings,
     Tip("Reset this pass's model, residual, grade, sharpening, shader, and inheritance settings to defaults. Its name, target, and enabled state are preserved.");
   }
 
+  ImGui::SameLine();
+  const bool can_add_pass = settings.pass_count < kMaxPasses;
+  bool add_clicked = false;
+  WithDisabled(!can_add_pass, [&] {
+    add_clicked = ImGui::Button("+", ImVec2(kResetButtonWidth, 0));
+  });
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Add a new pass, up to the maximum of %u.", kMaxPasses);
+  }
+
+  ImGui::SameLine();
+  const bool can_remove_pass = settings.pass_count > 1;
+  bool remove_clicked = false;
+  WithDisabled(!can_remove_pass, [&] {
+    remove_clicked = ImGui::Button("x", ImVec2(kResetButtonWidth, 0));
+  });
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Remove the selected pass. At least one pass remains.");
+  }
+  if (add_clicked || remove_clicked) {
+    // Defer array mutation until the next frame, outside the active tab loop.
+    g_pending_pass_action = add_clicked ? PendingPassAction::Add
+                                         : PendingPassAction::Remove;
+    ImGui::PopID();
+    return;
+  }
   ImGui::Separator();
 
   {
@@ -465,44 +573,34 @@ void DrawPassSettingsBody(uint32_t pass_index, Settings& settings,
 
     DrawModelSection(pass_index, settings, changed);
 
-    {
-      IndentScope advanced_indent;
-      if (PersistentSubHeader(
-              "Advanced", settings.ui_pass_advanced_open, changed,
-              "Fine-tune shader parameters and how the model's residual edit is applied.")) {
-        IndentScope advanced_content_indent;
-        DrawShaderParamSections(pass_index, settings, changed);
-        DrawResidualSection(pass_index, settings, changed);
-      }
+    if (PersistentSubHeader(
+            "Advanced", settings.ui_pass_advanced_open, changed,
+            "Fine-tune shader parameters and how the model's residual edit is applied.",
+            HeaderControls{nullptr, nullptr, false, ResetAdvancedSection, &pass})) {
+      IndentScope advanced_content_indent;
+      DrawShaderParamSections(pass_index, settings, changed);
+      DrawResidualSection(pass_index, settings, changed);
+      DrawRcasSection(pass_index, settings, changed);
     }
 
-    DrawRcasSection(pass_index, settings, changed);
+    if (PersistentSubHeader(
+            "Grade Model Input", settings.ui_grade_input_open, changed,
+            "Grade the image before the model reads it. This is independent of the output and backbuffer grades.",
+            HeaderControls{&pass.grade_input.enabled,
+                           "Grade the image the model reads, before model evaluation.",
+                           false, ResetGradeSettings, &pass.grade_input})) {
+      IndentScope input_grade_content_indent;
+      DrawGradeSection("grade_input", pass.grade_input, changed);
+    }
 
-    {
-      IndentScope grade_indent;
-      if (PersistentSubHeader(
-              "Grade", settings.ui_pass_grade_open, changed,
-              "Optionally grade the model input and output independently.")) {
-        IndentScope grade_children_indent;
-        if (PersistentSubHeader(
-                "Model Input", settings.ui_grade_input_open, changed,
-                "Grade the image before the model reads it. This is independent of the output and backbuffer grades.")) {
-          IndentScope input_grade_content_indent;
-          DrawGradeSection(
-              "grade_input", "Enabled",
-              "Grade the image the model reads, before model evaluation.",
-              settings.passes[pass_index].grade_input, changed);
-        }
-        if (PersistentSubHeader(
-                "Model Output", settings.ui_grade_output_open, changed,
-                "Grade the model's output before it is composed and published. This is independent of the input and backbuffer grades.")) {
-          IndentScope output_grade_content_indent;
-          DrawGradeSection(
-              "grade_output", "Enabled",
-              "Grade the image the model produced, before it is published.",
-              settings.passes[pass_index].grade_output, changed);
-        }
-      }
+    if (PersistentSubHeader(
+            "Grade Model Output", settings.ui_grade_output_open, changed,
+            "Grade the model's output before it is composed and published. This is independent of the input and backbuffer grades.",
+            HeaderControls{&pass.grade_output.enabled,
+                           "Grade the model produced, before it is published.",
+                           false, ResetGradeSettings, &pass.grade_output})) {
+      IndentScope output_grade_content_indent;
+      DrawGradeSection("grade_output", pass.grade_output, changed);
     }
   });
   ImGui::PopID();

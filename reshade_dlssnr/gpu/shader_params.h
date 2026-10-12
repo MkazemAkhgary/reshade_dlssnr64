@@ -24,11 +24,11 @@ struct ShaderParamDef {
 constexpr ShaderParamDef kShaderParams[] = {
     {"LumaStrength",   "Strength",   "Blend between original and edited luminance.",          0.0f, 1.0f, 1.00f, false, nullptr},
     {"ChromaStrength", "Strength",   "Blend between original and edited chroma.",             0.0f, 1.0f, 1.00f, false, nullptr},
-    {"SoftCompression","Compression","Enable rational soft clamp of log residuals.",          0.0f, 1.0f, 0.00f, true,  nullptr},
-    {"SoftMaxBrighten","Compression","Maximum allowed log-luma brightening.",                 0.0f, 2.0f, 0.50f, false, "SoftCompression"},
-    {"SoftMaxDarken",  "Compression","Maximum allowed log-luma darkening.",                   0.0f, 2.0f, 0.50f, false, "SoftCompression"},
-    {"SoftMaxChroma",  "Compression","Maximum allowed log-chroma change per channel.",        0.0f, 2.0f, 0.50f, false, "SoftCompression"},
-    {"SoftKnee",       "Compression","Controls how early compression starts (linear range).", 0.0f, 4.0f, 1.00f, false, "SoftCompression"},
+    {"SoftCompression","Soft Compression","Enable rational soft clamp of log residuals.",          0.0f, 1.0f, 0.00f, true,  nullptr},
+    {"SoftMaxBrighten","Soft Compression","Maximum allowed log-luma brightening.",                 0.0f, 2.0f, 0.50f, false, "SoftCompression"},
+    {"SoftMaxDarken",  "Soft Compression","Maximum allowed log-luma darkening.",                   0.0f, 2.0f, 0.50f, false, "SoftCompression"},
+    {"SoftMaxChroma",  "Soft Compression","Maximum allowed log-chroma change per channel.",        0.0f, 2.0f, 0.50f, false, "SoftCompression"},
+    {"SoftKnee",       "Soft Compression","Controls how early compression starts (linear range).", 0.0f, 4.0f, 1.00f, false, "SoftCompression"},
 };
 
 constexpr uint32_t kShaderParamCount = sizeof(kShaderParams) / sizeof(kShaderParams[0]);

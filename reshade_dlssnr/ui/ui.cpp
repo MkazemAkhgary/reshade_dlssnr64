@@ -22,6 +22,10 @@ namespace reshade_dlssnr {
 // the tab that now holds the active pass to be selected instead.
 int g_force_select_tab = -1;
 
+void ResetBackbufferGrade(void* context) {
+  *static_cast<GradeSettings*>(context) = GradeSettings{};
+}
+
 // Permutes settings.passes, settings.pass_enabled and settings.active_pass so
 // position i holds the pass that was at order[i]. Pass targets remain attached
 // to their pass profiles; runtime execution groups them by target stage.
@@ -117,6 +121,8 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
   const uint32_t profile_count = GetSavedProfiles(profiles, kMaxSavedProfiles);
   static int pending_delete = -1;
   static bool profile_name_error = false;
+  static int profile_feedback_index = -1;
+  static char profile_feedback[160] = {};
   static char new_profile_name[kSavedProfileNameCapacity] = {};
 
   if (profile_count == 0) {
@@ -134,6 +140,9 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
     if (ImGui::Button("Load")) {
       if (LoadSavedProfile(i)) {
         changed = true;
+        profile_feedback_index = static_cast<int>(i);
+        std::snprintf(profile_feedback, sizeof(profile_feedback),
+                      "Loaded preset: %s", profiles[i].name);
       }
     }
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -141,7 +150,11 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
     }
     ImGui::SameLine();
     if (ImGui::Button("Save")) {
-      SaveCurrentToProfile(i);
+      if (SaveCurrentToProfile(i)) {
+        profile_feedback_index = static_cast<int>(i);
+        std::snprintf(profile_feedback, sizeof(profile_feedback),
+                      "Saved current settings to: %s", profiles[i].name);
+      }
     }
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
       Tip("Overwrite this saved preset with the current settings.");
@@ -176,7 +189,14 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
       }
       ImGui::Unindent();
     }
-    if (deleted_this_frame) break;
+    if (profile_feedback_index == static_cast<int>(i)) {
+      ImGui::TextDisabled("%s", profile_feedback);
+    }
+    if (deleted_this_frame) {
+      profile_feedback_index = -1;
+      profile_feedback[0] = '\0';
+      break;
+    }
   }
 
   if (profile_count >= kMaxSavedProfiles) ImGui::BeginDisabled();
@@ -188,22 +208,30 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
   if (ImGui::InputText("##new_profile_name", new_profile_name,
                        sizeof(new_profile_name))) {
     profile_name_error = false;
+    profile_feedback_index = -1;
+    profile_feedback[0] = '\0';
   }
   ImGui::SameLine();
   if (ImGui::Button("Save as New Preset") && new_profile_name[0] != '\0') {
     if (SaveCurrentAsProfile(new_profile_name)) {
+      std::snprintf(profile_feedback, sizeof(profile_feedback),
+                    "Saved new preset: %s", new_profile_name);
+      profile_feedback_index = -2;
       new_profile_name[0] = '\0';
       pending_delete = -1;
       profile_name_error = false;
     } else {
+      profile_feedback_index = -1;
+      profile_feedback[0] = '\0';
       profile_name_error = true;
     }
   }
-  if (profile_name_error) {
-    ImGui::TextDisabled("Preset name is blank, too long, or already in use.");
-  }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("Save all current DLSSNR settings under a new name. Up to %u presets can be stored in ReShade.ini.", kMaxSavedProfiles);
+  }
+  if (profile_feedback_index == -2) ImGui::TextDisabled("%s", profile_feedback);
+  if (profile_name_error) {
+    ImGui::TextDisabled("Preset name is blank, too long, or already in use.");
   }
   if (profile_count >= kMaxSavedProfiles) ImGui::EndDisabled();
 }
@@ -212,6 +240,22 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   Settings& settings = GetSettings();
   g_show_tooltips = settings.show_tooltips;
   bool changed = false;
+
+  // Pass-array mutations are deferred until outside the tab-bar iteration.
+  // This keeps ImGui's positional tab IDs and the pass array in sync.
+  if (g_pending_pass_action != PendingPassAction::None) {
+    const PendingPassAction action = g_pending_pass_action;
+    g_pending_pass_action = PendingPassAction::None;
+    g_pending_move = PendingMove::None;
+    g_pending_move_index = -1;
+    if (action == PendingPassAction::Add) {
+      AddPass(settings, changed);
+    } else if (action == PendingPassAction::Remove) {
+      RemoveActivePass(settings, changed);
+    }
+    SaveSettings();
+    changed = false;
+  }
 
   // A move queued by last frame's order buttons. Applied before anything is
   // drawn, so this frame sees the new order from its first widget.
@@ -307,21 +351,6 @@ void DrawOverlay(reshade::api::effect_runtime*) {
       Tip("Changing a pass target changes its execution group, not its position in the pass list. Status uses the same execution grouping.");
     }
 
-    const bool can_add_pass = settings.pass_count < kMaxPasses;
-    WithDisabled(!can_add_pass, [&] {
-      if (ImGui::Button("+ Add Pass")) AddPass(settings, changed);
-    });
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-      Tip("Add a new pass, up to the maximum of %u.", kMaxPasses);
-    }
-    ImGui::SameLine();
-    const bool can_remove_pass = settings.pass_count > 1;
-    WithDisabled(!can_remove_pass, [&] {
-      if (ImGui::Button("- Remove Pass")) RemoveActivePass(settings, changed);
-    });
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-      Tip("Remove the selected pass. At least one pass remains.");
-    }
 
     const StatusSnapshot tab_status = AddonController::Get().GetStatus();
     if (ImGui::BeginTabBar("PassTabs")) {
@@ -386,12 +415,12 @@ void DrawOverlay(reshade::api::effect_runtime*) {
 
   if (PersistentHeader(
           "Grade Backbuffer", settings.ui_grade_open, changed,
-          "Apply an optional final colour grade to the swapchain image after all passes. A debug view replaces the backbuffer and is not graded.")) {
+          "Apply an optional final colour grade to the swapchain image after all passes. A debug view replaces the backbuffer and is not graded.",
+          HeaderControls{&settings.grade_backbuffer.enabled,
+                         "Grade the final swapchain image after every pass, immediately before presentation. This is independent of each pass's model-input and model-output grades.",
+                         false, ResetBackbufferGrade, &settings.grade_backbuffer})) {
     IndentScope indent;
-    DrawGradeSection(
-        "grade_backbuffer", "Enabled",
-        "Grade the final swapchain image after every pass, immediately before presentation. This is independent of each pass's model-input and model-output grades.",
-        settings.grade_backbuffer, changed);
+    DrawGradeSection("grade_backbuffer", settings.grade_backbuffer, changed);
   }
 
   SectionDivider();

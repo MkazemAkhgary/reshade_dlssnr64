@@ -111,13 +111,12 @@ void LoadSettingsValues(Settings& settings, const std::string& key_prefix,
     ReadValue(key_prefix, "UI.HdrOpen", settings.ui_hdr_open);
     ReadValue(key_prefix, "UI.GradeOpen", settings.ui_grade_open);
     ReadValue(key_prefix, "UI.HdrDiagnosticsOpen", settings.ui_hdr_diagnostics_open);
+    ReadValue(key_prefix, "UI.BoundedTuningOpen", settings.ui_bounded_tuning_open);
     ReadValue(key_prefix, "UI.ImportanceMaskOpen", settings.ui_importance_mask_open);
-    ReadValue(key_prefix, "UI.ImportanceMaskSettingsOpen", settings.ui_importance_mask_settings_open);
     ReadValue(key_prefix, "UI.ModelOpen", settings.ui_model_open);
     ReadValue(key_prefix, "UI.PassAdvancedOpen", settings.ui_pass_advanced_open);
     ReadValue(key_prefix, "UI.ResidualOpen", settings.ui_residual_open);
     ReadValue(key_prefix, "UI.RcasOpen", settings.ui_rcas_open);
-    ReadValue(key_prefix, "UI.PassGradeOpen", settings.ui_pass_grade_open);
     ReadValue(key_prefix, "UI.GradeInputOpen", settings.ui_grade_input_open);
     ReadValue(key_prefix, "UI.GradeOutputOpen", settings.ui_grade_output_open);
     for (uint32_t j = 0; j < kShaderParamCount; ++j) {
@@ -172,13 +171,12 @@ void SaveSettingsValues(const Settings& settings, const std::string& key_prefix,
     WriteValue(key_prefix, "UI.HdrOpen", settings.ui_hdr_open);
     WriteValue(key_prefix, "UI.GradeOpen", settings.ui_grade_open);
     WriteValue(key_prefix, "UI.HdrDiagnosticsOpen", settings.ui_hdr_diagnostics_open);
+    WriteValue(key_prefix, "UI.BoundedTuningOpen", settings.ui_bounded_tuning_open);
     WriteValue(key_prefix, "UI.ImportanceMaskOpen", settings.ui_importance_mask_open);
-    WriteValue(key_prefix, "UI.ImportanceMaskSettingsOpen", settings.ui_importance_mask_settings_open);
     WriteValue(key_prefix, "UI.ModelOpen", settings.ui_model_open);
     WriteValue(key_prefix, "UI.PassAdvancedOpen", settings.ui_pass_advanced_open);
     WriteValue(key_prefix, "UI.ResidualOpen", settings.ui_residual_open);
     WriteValue(key_prefix, "UI.RcasOpen", settings.ui_rcas_open);
-    WriteValue(key_prefix, "UI.PassGradeOpen", settings.ui_pass_grade_open);
     WriteValue(key_prefix, "UI.GradeInputOpen", settings.ui_grade_input_open);
     WriteValue(key_prefix, "UI.GradeOutputOpen", settings.ui_grade_output_open);
     for (uint32_t j = 0; j < kShaderParamCount; ++j) {

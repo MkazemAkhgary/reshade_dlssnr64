@@ -28,33 +28,90 @@ void SectionDivider() {
   ImGui::Spacing();
 }
 
+namespace {
+
+void DrawHeaderToggle(const char* label, bool& changed,
+                      const HeaderControls& controls) {
+  if (controls.enabled == nullptr && controls.enabled_float == nullptr) return;
+  if (controls.enabled_disabled) ImGui::BeginDisabled();
+
+  bool float_value = controls.enabled_float != nullptr &&
+                     *controls.enabled_float >= 0.5f;
+  bool* checkbox_value = controls.enabled != nullptr
+                             ? controls.enabled
+                             : &float_value;
+  if (ImGui::Checkbox("##header_enabled", checkbox_value)) {
+    if (controls.enabled_float != nullptr) {
+      *controls.enabled_float = float_value ? 1.0f : 0.0f;
+    }
+    changed = true;
+  }
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    if (controls.enabled_tooltip != nullptr &&
+        controls.enabled_tooltip[0] != '\0') {
+      Tip("%s", controls.enabled_tooltip);
+    } else {
+      Tip("Enable or disable %s.", label);
+    }
+  }
+  if (controls.enabled_disabled) ImGui::EndDisabled();
+  ImGui::SameLine();
+}
+
+void DrawHeaderReset(const char* label, bool& changed,
+                     const HeaderControls& controls) {
+  if (controls.reset == nullptr) return;
+  const float right = ImGui::GetCursorPosX() +
+                       ImGui::GetContentRegionAvail().x;
+  ImGui::SameLine(std::max(0.0f, right - kResetButtonWidth));
+  if (ImGui::Button("R", ImVec2(kResetButtonWidth, 0.0f))) {
+    controls.reset(controls.reset_context);
+    changed = true;
+  }
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Reset all %s settings to their defaults.", label);
+  }
+}
+
+}  // namespace
+
 bool PersistentHeader(const char* label, bool& open_setting, bool& changed,
-                      const char* tooltip) {
+                      const char* tooltip, HeaderControls controls) {
+  ImGui::PushID(label);
+  DrawHeaderToggle(label, changed, controls);
   ImGui::SetNextItemOpen(open_setting, ImGuiCond_Always);
   const bool open =
-      ImGui::TreeNodeEx(label, ImGuiTreeNodeFlags_CollapsingHeader);
-  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      ImGui::TreeNodeEx(label, ImGuiTreeNodeFlags_CollapsingHeader |
+                                      ImGuiTreeNodeFlags_AllowOverlap);
+  const bool header_hovered =
+      ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
+  if (header_hovered) {
     if (tooltip != nullptr && tooltip[0] != '\0') {
       Tip("%s", tooltip);
     } else {
       Tip("Expand or collapse the %s section.", label);
     }
   }
+  DrawHeaderReset(label, changed, controls);
   if (open != open_setting) {
     open_setting = open;
     changed = true;
   }
+  ImGui::PopID();
   return open;
 }
 
 bool PersistentSubHeader(const char* label, bool& open_setting,
-                         bool& changed, const char* tooltip) {
+                         bool& changed, const char* tooltip,
+                         HeaderControls controls) {
   const ImVec4 base = ImGui::GetStyleColorVec4(ImGuiCol_Text);
   const ImVec4 tint(base.x * 0.82f, base.y * 0.82f, base.z * 0.92f, base.w);
 
   const ImVec4 hdr_hover = ImGui::GetStyleColorVec4(ImGuiCol_HeaderHovered);
   const ImVec4 hdr_active = ImGui::GetStyleColorVec4(ImGuiCol_HeaderActive);
 
+  ImGui::PushID(label);
+  DrawHeaderToggle(label, changed, controls);
   ImGui::PushStyleColor(ImGuiCol_Text, tint);
   ImGui::PushStyleColor(ImGuiCol_Header,
                         ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
@@ -67,10 +124,12 @@ bool PersistentSubHeader(const char* label, bool& open_setting,
 
   ImGui::SetNextItemOpen(open_setting, ImGuiCond_Always);
   const bool open =
-      ImGui::TreeNodeEx(label, ImGuiTreeNodeFlags_CollapsingHeader);
-
+      ImGui::TreeNodeEx(label, ImGuiTreeNodeFlags_CollapsingHeader |
+                                      ImGuiTreeNodeFlags_AllowOverlap);
+  const bool header_hovered =
+      ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
   ImGui::PopStyleColor(4);
-  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+  if (header_hovered) {
     if (tooltip != nullptr && tooltip[0] != '\0') {
       Tip("%s", tooltip);
     } else {
@@ -78,10 +137,12 @@ bool PersistentSubHeader(const char* label, bool& open_setting,
     }
   }
 
+  DrawHeaderReset(label, changed, controls);
   if (open != open_setting) {
     open_setting = open;
     changed = true;
   }
+  ImGui::PopID();
   return open;
 }
 
