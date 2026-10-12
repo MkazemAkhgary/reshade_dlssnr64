@@ -5,7 +5,7 @@
 #define kLumaAbs            shader.Params0.x
 #define kLumaRel            shader.Params0.y
 #define kChromaAbs          shader.Params0.z
-#define kEditStrength       shader.Params1.x
+#define kMaskEditStrength   shader.Params1.x
 #define kMaskSmoothing      shader.Params1.y
 #define kMaskAlpha          shader.Params1.z
 #define kHistoryValid       shader.Params1.w
@@ -34,7 +34,7 @@ bool PixelIsImportant(int2 xy, uint2 previous_size)
 
     const float a_luma = dot(a, kLuma709);
     const float b_luma = dot(b, kLuma709);
-    const float luma_diff = abs(b_luma - a_luma) * kEditStrength;
+    const float luma_diff = abs(b_luma - a_luma) * kMaskEditStrength;
     const float luma_ref = max(abs(a_luma), abs(b_luma));
 
     const float3 chroma_diff = (b - b_luma) - (a - a_luma);
@@ -42,7 +42,7 @@ bool PixelIsImportant(int2 xy, uint2 previous_size)
         luma_diff > (kLumaAbs * hysteresis) &&
         luma_diff > (kLumaRel * luma_ref * hysteresis);
     const bool chroma_edit =
-        length(chroma_diff) * kEditStrength > (kChromaAbs * hysteresis);
+        length(chroma_diff) * kMaskEditStrength > (kChromaAbs * hysteresis);
     return luma_edit || chroma_edit;
 }
 
