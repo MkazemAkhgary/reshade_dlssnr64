@@ -37,8 +37,6 @@ void LoadGrade(const std::string& p, GradeSettings& grade) {
   int chroma_mode = static_cast<int>(grade.chroma_mode);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             (p + "ChromaMode").c_str(), chroma_mode);
-  // Version-compatible migration: the removed Chroma Gain mode was
-  // mathematically identical to Saturation, so old value 2 maps to Saturation.
   if (chroma_mode < 0 ||
       chroma_mode > static_cast<int>(GradeChromaMode::Vibrance)) {
     chroma_mode = static_cast<int>(GradeChromaMode::Saturation);

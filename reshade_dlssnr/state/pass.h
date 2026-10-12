@@ -2,12 +2,13 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 #include "state/settings.h"
 
 namespace reshade_dlssnr {
 
-void LoadPassSettings(uint32_t index, PassSettings& pass);
-void SavePassSettings(uint32_t index, const PassSettings& pass);
+void LoadPassSettings(uint32_t index, PassSettings& pass, const std::string& key_prefix = {});
+void SavePassSettings(uint32_t index, const PassSettings& pass, const std::string& key_prefix = {});
 
 }  // namespace reshade_dlssnr

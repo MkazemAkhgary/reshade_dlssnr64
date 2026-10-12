@@ -76,7 +76,7 @@ bool DrawSkinStructureRow(uint32_t pass_index, PassSettings& pass,
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("Lets the model detect character skin and apply its edits to it separately.");
   }
-  ImGui::SameLine(kControlLabelWidth);
+  ImGui::SameLine(kSliderLabelWidth);
 
   const bool has_inherit = pass_index > 0;
   float trailing_width = kResetButtonWidth;
@@ -144,6 +144,7 @@ void DrawModelSection(uint32_t pass_index, Settings& settings,
 
   IndentScope indent;
   if (!PersistentSubHeader("Model", settings.ui_model_open, changed)) return;
+  IndentScope content_indent;
 
   {
     static const char* kPresetNames[] = {"A", "B", "C"};
@@ -160,8 +161,7 @@ void DrawModelSection(uint32_t pass_index, Settings& settings,
     ImGui::SameLine(kControlLabelWidth);
 
     const int clicked = DrawGroupButtons(
-        "preset", kPresetNames, kPresetTooltips, 3, pass.preset, nullptr,
-        60.0f);
+        "preset", kPresetNames, kPresetTooltips, 3, pass.preset, nullptr);
     if (clicked >= 0) {
       pass.preset = clicked;
       changed = true;
@@ -233,6 +233,7 @@ void DrawShaderParamSections(uint32_t pass_index, Settings& settings,
     category_index++;
 
     if (open) {
+      IndentScope content_indent;
       for (uint32_t j = i; j < next; ++j) {
         const auto& param = kShaderParams[j];
         const std::string id = std::string(category) + "_" + param.name;
@@ -284,6 +285,7 @@ void DrawResidualSection(uint32_t pass_index, Settings& settings,
                            changed)) {
     return;
   }
+  IndentScope content_indent;
 
   changed |= DrawFloatRow(
       pass_index, "edit_strength", "Edit Strength",
@@ -310,21 +312,25 @@ void DrawResidualSection(uint32_t pass_index, Settings& settings,
       "Fades the edit out below mid-to-low brightness.",
       &pass.residual.shadow_protect, nullptr, 0.0f, 0.0f, 1.0f, 0.0f);
 
-  changed |= DrawFloatRow(
-      pass_index, "residual_ratio_eps", "Ratio Eps",
-      "Denominator floor for the per-channel ratio. Ignored by Gain-Map Residual mode.",
-      &pass.residual.ratio_eps, nullptr, 1e-2f, 1e-6f, 0.5f, 1e-2f);
+  const bool ratio_controls_disabled =
+      pass.injection_stage != InjectionStage::Backbuffer;
+  WithDisabled(ratio_controls_disabled, [&] {
+    changed |= DrawFloatRow(
+        pass_index, "residual_ratio_eps", "Ratio Eps",
+        "Backbuffer passes only: denominator floor for the per-channel ratio. This has no effect on Pre-DLSS or Post-DLSS passes.",
+        &pass.residual.ratio_eps, nullptr, 1e-2f, 1e-6f, 0.5f, 1e-2f);
 
-  changed |= DrawFloatRow(
-      pass_index, "residual_ratio_brighten", "Ratio Brighten",
-      "Upper bound on ratio brightening. Soft-clipped; ignored by Gain-Map Residual mode.",
-      &pass.residual.ratio_brighten, nullptr, 64.0f, 1.0f, 256.0f, 64.0f);
+    changed |= DrawFloatRow(
+        pass_index, "residual_ratio_brighten", "Ratio Brighten",
+        "Backbuffer passes only: upper bound on per-channel ratio brightening. This has no effect on Pre-DLSS or Post-DLSS passes.",
+        &pass.residual.ratio_brighten, nullptr, 64.0f, 1.0f, 256.0f, 64.0f);
 
-  changed |= DrawFloatRow(
-      pass_index, "residual_ratio_darken", "Ratio Darken",
-      "Lower bound on ratio darkening. Soft-clipped; ignored by Gain-Map Residual mode.",
-      &pass.residual.ratio_darken, nullptr, 1.0f / 16.0f,
-      1.0f / 256.0f, 1.0f, 1.0f / 16.0f);
+    changed |= DrawFloatRow(
+        pass_index, "residual_ratio_darken", "Ratio Darken",
+        "Backbuffer passes only: lower bound on per-channel ratio darkening. This has no effect on Pre-DLSS or Post-DLSS passes.",
+        &pass.residual.ratio_darken, nullptr, 1.0f / 16.0f,
+        1.0f / 256.0f, 1.0f, 1.0f / 16.0f);
+  });
 }
 
 void ResetPassProfile(uint32_t pass_index, Settings& settings) {
@@ -351,6 +357,7 @@ void DrawRcasSection(uint32_t pass_index, Settings& settings, bool& changed) {
   if (!PersistentSubHeader("Sharpening", settings.ui_rcas_open, changed)) {
     return;
   }
+  IndentScope content_indent;
 
   ImGui::AlignTextToFramePadding();
   changed |= DrawCheckboxAtLabel("rcas_enabled", &pass.rcas_enabled);
@@ -399,7 +406,7 @@ void DrawPassSettingsBody(uint32_t pass_index, Settings& settings,
   }
 
   ImGui::SameLine();
-  const bool can_move_right = pass_index + 1 < kMaxPasses;
+  const bool can_move_right = pass_index + 1 < settings.pass_count;
   WithDisabled(!can_move_right, [&] {
     if (ImGui::Button(">", ImVec2(30, 0)) && can_move_right) {
       g_pending_move = PendingMove::Right;
@@ -463,6 +470,7 @@ void DrawPassSettingsBody(uint32_t pass_index, Settings& settings,
       if (PersistentSubHeader(
               "Advanced", settings.ui_pass_advanced_open, changed,
               "Fine-tune shader parameters and how the model's residual edit is applied.")) {
+        IndentScope advanced_content_indent;
         DrawShaderParamSections(pass_index, settings, changed);
         DrawResidualSection(pass_index, settings, changed);
       }
@@ -479,6 +487,7 @@ void DrawPassSettingsBody(uint32_t pass_index, Settings& settings,
         if (PersistentSubHeader(
                 "Model Input", settings.ui_grade_input_open, changed,
                 "Grade the image before the model reads it. This is independent of the output and backbuffer grades.")) {
+          IndentScope input_grade_content_indent;
           DrawGradeSection(
               "grade_input", "Enabled",
               "Grade the image the model reads, before model evaluation.",
@@ -487,6 +496,7 @@ void DrawPassSettingsBody(uint32_t pass_index, Settings& settings,
         if (PersistentSubHeader(
                 "Model Output", settings.ui_grade_output_open, changed,
                 "Grade the model's output before it is composed and published. This is independent of the input and backbuffer grades.")) {
+          IndentScope output_grade_content_indent;
           DrawGradeSection(
               "grade_output", "Enabled",
               "Grade the image the model produced, before it is published.",

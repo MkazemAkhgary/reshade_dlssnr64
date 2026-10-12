@@ -281,6 +281,7 @@ void DrawDiagnostics(const HdrSnapshot& snap, const HdrSettings& hdr,
                      bool& diagnostics_open, bool& changed) {
   IndentScope indent;
   if (!PersistentSubHeader("Diagnostics", diagnostics_open, changed)) return;
+  IndentScope content_indent;
 
   const bool game_enabled = hdr.game_exposure.enabled;
   const bool any_layer = game_enabled || hdr.adaptive_exposure.enabled || hdr.local_exposure.enabled;

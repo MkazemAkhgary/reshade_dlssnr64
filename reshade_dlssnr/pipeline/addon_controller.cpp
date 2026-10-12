@@ -618,7 +618,7 @@ void AddonController::RefreshStatus(const Settings& settings) {
   status_.gain_map_sdr_excursion_pixels = hdr.gain_sdr_excursion_pixels;
   status_.gain_map_out_of_range_pixels = hdr.gain_out_of_range_pixels;
 
-  status_.pass_count = kMaxPasses;
+  status_.pass_count = settings.pass_count;
   for (uint32_t i = 0; i < kMaxPasses; ++i) {
     // Take the runtime-owned part of the status from the session, then fill
     // in the setting-owned part. The injection stage is not stored here —

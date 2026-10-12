@@ -8,6 +8,7 @@
 namespace reshade_dlssnr {
 
 constexpr float kControlLabelWidth = 200.0f;
+constexpr float kSliderLabelWidth = 260.0f;
 constexpr float kResetButtonWidth = 22.0f;
 
 // Set from settings at the top of each frame. Read by Tip().

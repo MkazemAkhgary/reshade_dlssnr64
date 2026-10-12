@@ -2,6 +2,7 @@
 #pragma once
 
 #include <algorithm>
+#include <string>
 
 #include "shaders/common/color_constants.h"
 
@@ -98,8 +99,8 @@ struct HdrSettings {
   float gain_max_log2 = 6.0f;
 };
 
-void LoadHdrSettings(HdrSettings& hdr);
-void SaveHdrSettings(const HdrSettings& hdr);
+void LoadHdrSettings(HdrSettings& hdr, const std::string& key_prefix = {});
+void SaveHdrSettings(const HdrSettings& hdr, const std::string& key_prefix = {});
 
 inline float CalcEffectiveSceneWhite(float scene_white, const HdrSettings& hdr) {
   return scene_white * std::max(hdr.highlight_headroom, 0.01f);

@@ -5,6 +5,6 @@
 
 namespace reshade_dlssnr {
 
-constexpr uint32_t kMaxPasses = 3;
+constexpr uint32_t kMaxPasses = 8;
 
 }  // namespace reshade_dlssnr

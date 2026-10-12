@@ -2,7 +2,9 @@
 
 #include "ui.h"
 
+#include <algorithm>
 #include <cstdio>
+#include <cstring>
 
 #include "gpu/shader_params.h"
 #include "hooks/dlss_guides.h"
@@ -23,38 +25,187 @@ int g_force_select_tab = -1;
 // Permutes settings.passes, settings.pass_enabled and settings.active_pass so
 // position i holds the pass that was at order[i]. Pass targets remain attached
 // to their pass profiles; runtime execution groups them by target stage.
+void ClearPassInheritanceRoot(PassSettings& pass) {
+  pass.inherit_working_scale = false;
+  pass.inherit_intensity = false;
+  pass.inherit_local_tone = false;
+  pass.inherit_local_structure = false;
+  pass.inherit_skin_structure = false;
+  for (uint32_t i = 0; i < kShaderParamCount; ++i) {
+    pass.inherit_params[i] = false;
+  }
+}
+
+void InitializePassDefaults(PassSettings& pass, InjectionStage stage) {
+  pass = PassSettings{};
+  pass.injection_stage = stage;
+  for (uint32_t i = 0; i < kShaderParamCount; ++i) {
+    pass.params[i] = kShaderParams[i].default_value;
+  }
+}
+
+// Permutes only the active pass profiles. Array slots beyond pass_count remain
+// inactive and are not part of the user's visible order.
 void ApplyPassReorder(Settings& settings, const int* order, bool& changed) {
   PassSettings new_passes[kMaxPasses];
-  bool new_enabled[kMaxPasses];
-  for (uint32_t i = 0; i < kMaxPasses; ++i) {
+  bool new_enabled[kMaxPasses] = {};
+  for (uint32_t i = 0; i < settings.pass_count; ++i) {
     new_passes[i] = settings.passes[order[i]];
     new_enabled[i] = settings.pass_enabled[order[i]];
   }
-  for (uint32_t i = 0; i < kMaxPasses; ++i) {
+  for (uint32_t i = 0; i < settings.pass_count; ++i) {
     settings.passes[i] = new_passes[i];
     settings.pass_enabled[i] = new_enabled[i];
   }
 
-  // active_pass names a pass, not a position, so it follows its data.
   const int old_active = settings.active_pass;
-  for (uint32_t i = 0; i < kMaxPasses; ++i) {
+  for (uint32_t i = 0; i < settings.pass_count; ++i) {
     if (order[i] == old_active) {
       settings.active_pass = static_cast<int>(i);
       break;
     }
   }
 
-  settings.passes[0].inherit_working_scale = false;
-  settings.passes[0].inherit_intensity = false;
-  settings.passes[0].inherit_local_tone = false;
-  settings.passes[0].inherit_local_structure = false;
-  settings.passes[0].inherit_skin_structure = false;
-  for (uint32_t i = 0; i < kShaderParamCount; ++i) {
-    settings.passes[0].inherit_params[i] = false;
-  }
-
+  ClearPassInheritanceRoot(settings.passes[0]);
   g_force_select_tab = settings.active_pass;
   changed = true;
+}
+
+void AddPass(Settings& settings, bool& changed) {
+  if (settings.pass_count >= kMaxPasses) return;
+  const uint32_t new_index = settings.pass_count;
+  const uint32_t source_index = static_cast<uint32_t>(std::clamp(
+      settings.active_pass, 0, static_cast<int>(settings.pass_count) - 1));
+  InitializePassDefaults(settings.passes[new_index],
+                         settings.passes[source_index].injection_stage);
+  settings.pass_enabled[new_index] = true;
+  ++settings.pass_count;
+  settings.active_pass = static_cast<int>(new_index);
+  g_force_select_tab = settings.active_pass;
+  changed = true;
+}
+
+void RemoveActivePass(Settings& settings, bool& changed) {
+  if (settings.pass_count <= 1) return;
+  const uint32_t remove_index = static_cast<uint32_t>(std::clamp(
+      settings.active_pass, 0, static_cast<int>(settings.pass_count) - 1));
+  for (uint32_t i = remove_index; i + 1 < settings.pass_count; ++i) {
+    settings.passes[i] = settings.passes[i + 1];
+    settings.pass_enabled[i] = settings.pass_enabled[i + 1];
+  }
+
+  --settings.pass_count;
+  InitializePassDefaults(settings.passes[settings.pass_count],
+                         InjectionStage::Backbuffer);
+  settings.pass_enabled[settings.pass_count] = false;
+  ClearPassInheritanceRoot(settings.passes[0]);
+  settings.active_pass = static_cast<int>(std::min(
+      remove_index, settings.pass_count - 1));
+  g_force_select_tab = settings.active_pass;
+  changed = true;
+}
+
+void DrawSavedProfilesSection(Settings& settings, bool& changed) {
+  if (!PersistentHeader(
+          "Presets", settings.ui_presets_open, changed,
+          "Save and restore named profiles of the current DLSSNR settings in ReShade.ini.")) {
+    return;
+  }
+
+  IndentScope content_indent;
+  SavedProfileInfo profiles[kMaxSavedProfiles] = {};
+  const uint32_t profile_count = GetSavedProfiles(profiles, kMaxSavedProfiles);
+  static int pending_delete = -1;
+  static bool profile_name_error = false;
+  static char new_profile_name[kSavedProfileNameCapacity] = {};
+
+  if (profile_count == 0) {
+    ImGui::TextDisabled("No saved presets.");
+  }
+
+  for (uint32_t i = 0; i < profile_count && i < kMaxSavedProfiles; ++i) {
+    bool deleted_this_frame = false;
+    ImGui::PushID(static_cast<int>(i));
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(profiles[i].name[0] != '\0'
+                               ? profiles[i].name
+                               : "(unnamed preset)");
+    ImGui::SameLine();
+    if (ImGui::Button("Load")) {
+      if (LoadSavedProfile(i)) {
+        changed = true;
+      }
+    }
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      Tip("Load this preset into the active settings and save it as the current ReShade.ini configuration.");
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Save")) {
+      SaveCurrentToProfile(i);
+    }
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      Tip("Overwrite this saved preset with the current settings.");
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("x")) {
+      pending_delete = pending_delete == static_cast<int>(i)
+                           ? -1
+                           : static_cast<int>(i);
+    }
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      Tip("Remove this preset after confirming.");
+    }
+    ImGui::PopID();
+
+    if (pending_delete == static_cast<int>(i)) {
+      ImGui::Indent();
+      ImGui::TextUnformatted("Remove this preset?");
+      ImGui::SameLine();
+      ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.65f, 0.12f, 0.12f, 1.0f));
+      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.78f, 0.16f, 0.16f, 1.0f));
+      ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.52f, 0.08f, 0.08f, 1.0f));
+      if (ImGui::Button("Yes")) {
+        DeleteSavedProfile(i);
+        pending_delete = -1;
+        deleted_this_frame = true;
+      }
+      ImGui::PopStyleColor(3);
+      if (!deleted_this_frame) {
+        ImGui::SameLine();
+        if (ImGui::Button("No")) pending_delete = -1;
+      }
+      ImGui::Unindent();
+    }
+    if (deleted_this_frame) break;
+  }
+
+  if (profile_count >= kMaxSavedProfiles) ImGui::BeginDisabled();
+  const float save_button_width = ImGui::CalcTextSize("Save as New Preset").x +
+                                  ImGui::GetStyle().FramePadding.x * 2.0f;
+  ImGui::SetNextItemWidth(std::max(
+      80.0f, ImGui::GetContentRegionAvail().x - save_button_width -
+                 ImGui::GetStyle().ItemSpacing.x));
+  if (ImGui::InputText("##new_profile_name", new_profile_name,
+                       sizeof(new_profile_name))) {
+    profile_name_error = false;
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Save as New Preset") && new_profile_name[0] != '\0') {
+    if (SaveCurrentAsProfile(new_profile_name)) {
+      new_profile_name[0] = '\0';
+      pending_delete = -1;
+      profile_name_error = false;
+    } else {
+      profile_name_error = true;
+    }
+  }
+  if (profile_name_error) {
+    ImGui::TextDisabled("Preset name is blank, too long, or already in use.");
+  }
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Save all current DLSSNR settings under a new name. Up to %u presets can be stored in ReShade.ini.", kMaxSavedProfiles);
+  }
+  if (profile_count >= kMaxSavedProfiles) ImGui::EndDisabled();
 }
 
 void DrawOverlay(reshade::api::effect_runtime*) {
@@ -65,14 +216,14 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   // A move queued by last frame's order buttons. Applied before anything is
   // drawn, so this frame sees the new order from its first widget.
   if (g_pending_move != PendingMove::None && g_pending_move_index >= 0 &&
-      g_pending_move_index < static_cast<int>(kMaxPasses)) {
+      g_pending_move_index < static_cast<int>(settings.pass_count)) {
     const int idx = g_pending_move_index;
     int order[kMaxPasses];
-    for (uint32_t i = 0; i < kMaxPasses; ++i) order[i] = static_cast<int>(i);
+    for (uint32_t i = 0; i < settings.pass_count; ++i) order[i] = static_cast<int>(i);
     if (g_pending_move == PendingMove::Left && idx > 0) {
       std::swap(order[idx - 1], order[idx]);
     } else if (g_pending_move == PendingMove::Right &&
-               idx + 1 < static_cast<int>(kMaxPasses)) {
+               idx + 1 < static_cast<int>(settings.pass_count)) {
       std::swap(order[idx], order[idx + 1]);
     }
     g_pending_move = PendingMove::None;
@@ -119,16 +270,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
       Tip("Only run when the game is actively using DLSS Super Sampling. Turning this off also allows evaluation on frames without DLSS, which is rarely useful because the model expects a DLSS-path image.");
     }
-  }
 
-  SectionDivider();
-
-  // Cloning stays a shared advanced option and is applied through the guide
-  // manager's frame-safe request path, not by swapping resources mid-pass.
-  if (PersistentHeader(
-          "Advanced Resource Options", settings.ui_advanced_open, changed,
-          "Advanced resource handling options shared by every pass.")) {
-    IndentScope indent;
     if (ImGui::Checkbox("Clone Game Resources", &settings.clone_resources)) {
       DlssGuides::Get().RequestCloneResources(settings.clone_resources);
       changed = true;
@@ -140,21 +282,50 @@ void DrawOverlay(reshade::api::effect_runtime*) {
 
   SectionDivider();
 
-  // The tab bar represents the user's fixed pass profiles. The target tag is
+  DrawSavedProfilesSection(settings, changed);
+
+  SectionDivider();
+
+  if (PersistentHeader(
+          "Debug", settings.ui_debug_open, changed,
+          "Select an internal buffer to replace the final image for diagnosis. The selected pass renders the view.")) {
+    IndentScope indent;
+    DrawSharedDebugView(settings, changed);
+  }
+
+  SectionDivider();
+
+  // The tab bar represents the active pass profiles. The target tag is
   // informational: execution groups Pre, Post, then Backbuffer while keeping
-  // the original pass order inside each group.
+  // the pass order inside each group.
   if (PersistentHeader(
           "Passes", settings.ui_passes_open, changed,
           "Configure each pass profile. Execution order is grouped by target stage, then follows this tab order within each stage.")) {
     IndentScope indent;
-    ImGui::TextDisabled("Execution: Pre-DLSS → Post-DLSS → Backbuffer; pass order is preserved within each stage.");
+    ImGui::TextDisabled("Execution: Pre-DLSS -> Post-DLSS -> Backbuffer; pass order is preserved within each stage.");
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
       Tip("Changing a pass target changes its execution group, not its position in the pass list. Status uses the same execution grouping.");
     }
 
+    const bool can_add_pass = settings.pass_count < kMaxPasses;
+    WithDisabled(!can_add_pass, [&] {
+      if (ImGui::Button("+ Add Pass")) AddPass(settings, changed);
+    });
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      Tip("Add a new pass, up to the maximum of %u.", kMaxPasses);
+    }
+    ImGui::SameLine();
+    const bool can_remove_pass = settings.pass_count > 1;
+    WithDisabled(!can_remove_pass, [&] {
+      if (ImGui::Button("- Remove Pass")) RemoveActivePass(settings, changed);
+    });
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      Tip("Remove the selected pass. At least one pass remains.");
+    }
+
     const StatusSnapshot tab_status = AddonController::Get().GetStatus();
     if (ImGui::BeginTabBar("PassTabs")) {
-      for (uint32_t i = 0; i < kMaxPasses; ++i) {
+      for (uint32_t i = 0; i < settings.pass_count; ++i) {
         const PassSettings& pass = settings.passes[i];
         const char* stage_name =
             pass.injection_stage == InjectionStage::PreDLSS ? "Pre-DLSS" :
@@ -205,7 +376,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
     }
 
     if (settings.active_pass >= 0 &&
-        settings.active_pass < static_cast<int>(kMaxPasses)) {
+        settings.active_pass < static_cast<int>(settings.pass_count)) {
       DrawPassSettingsBody(static_cast<uint32_t>(settings.active_pass),
                            settings, changed);
     }
@@ -236,13 +407,6 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   DrawImportanceMaskSection(settings, hdr_relevant, changed);
 
   SectionDivider();
-
-  if (PersistentHeader(
-          "Debug", settings.ui_debug_open, changed,
-          "Select an internal buffer to replace the final image for diagnosis. The selected pass renders the view.")) {
-    IndentScope indent;
-    DrawSharedDebugView(settings, changed);
-  }
 
   if (changed) {
     SaveSettings();

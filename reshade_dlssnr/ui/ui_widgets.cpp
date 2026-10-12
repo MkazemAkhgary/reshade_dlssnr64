@@ -111,7 +111,7 @@ bool DrawFloatRow(uint32_t pass_index,
     Tip("%s", tooltip);
   }
 
-  ImGui::SameLine(kControlLabelWidth);
+  ImGui::SameLine(kSliderLabelWidth);
 
   const bool has_inherit = (pass_index > 0) && (inherit_flag != nullptr);
   float trailing_width = kResetButtonWidth;
@@ -196,7 +196,7 @@ bool DrawIntRow(const char* id,
     Tip("%s", tooltip);
   }
 
-  ImGui::SameLine(kControlLabelWidth);
+  ImGui::SameLine(kSliderLabelWidth);
   const float slider_width = std::max(
       60.0f, ImGui::GetContentRegionAvail().x - kResetButtonWidth -
                  ImGui::GetStyle().ItemSpacing.x);

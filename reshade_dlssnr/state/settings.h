@@ -92,6 +92,7 @@ struct Settings {
   // renders the selected view; switching tabs keeps the selection.
   int debug_view = 0;
 
+  uint32_t pass_count = 3;
   bool pass_enabled[kMaxPasses] = {true, false, false};
   PassSettings passes[kMaxPasses];
 
@@ -127,14 +128,21 @@ struct Settings {
   bool ui_grade_output_open = false;
   bool ui_status_open = true;
   bool ui_preferences_open = false;
+  bool ui_presets_open = false;
   bool ui_passes_open = true;
   bool ui_debug_open = false;
-  bool ui_advanced_open = false;
   bool ui_hdr_open = true;
   bool ui_grade_open = true;
   bool ui_hdr_diagnostics_open = false;
   bool ui_importance_mask_open = true;
   bool ui_importance_mask_settings_open = true;
+};
+
+constexpr uint32_t kMaxSavedProfiles = 16;
+constexpr uint32_t kSavedProfileNameCapacity = 64;
+
+struct SavedProfileInfo {
+  char name[kSavedProfileNameCapacity] = {};
 };
 
 Settings& GetSettings();
@@ -151,5 +159,11 @@ const PassSettings& GetResolvedPass(uint32_t index);
 
 void LoadSettings();
 void SaveSettings();
+
+uint32_t GetSavedProfiles(SavedProfileInfo* profiles, uint32_t capacity);
+bool SaveCurrentAsProfile(const char* name);
+bool SaveCurrentToProfile(uint32_t index);
+bool LoadSavedProfile(uint32_t index);
+bool DeleteSavedProfile(uint32_t index);
 
 }  // namespace reshade_dlssnr

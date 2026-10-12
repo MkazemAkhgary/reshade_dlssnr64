@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 namespace reshade_dlssnr {
 
 struct ImportanceMaskSettings {
@@ -12,7 +14,7 @@ struct ImportanceMaskSettings {
   float mask_response = 0.15f;
 };
 
-void LoadImportanceMaskSettings(ImportanceMaskSettings& settings);
-void SaveImportanceMaskSettings(const ImportanceMaskSettings& settings);
+void LoadImportanceMaskSettings(ImportanceMaskSettings& settings, const std::string& key_prefix = {});
+void SaveImportanceMaskSettings(const ImportanceMaskSettings& settings, const std::string& key_prefix = {});
 
 }  // namespace reshade_dlssnr
