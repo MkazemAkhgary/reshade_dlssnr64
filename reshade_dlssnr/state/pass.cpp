@@ -4,7 +4,6 @@
 
 #include <reshade.hpp>
 
-#include "gpu/shader_params.h"
 #include "compose/settings.h"
 #include "grade/settings.h"
 
@@ -48,6 +47,8 @@ void LoadPassSettings(uint32_t index, PassSettings& pass, const std::string& key
   }
 
   LoadResidual(pref + "Residual.", pass.residual);
+  LoadStrength(pref, pass.strength);
+  LoadSoftCompression(pref, pass.soft_compression);
 
   size_t custom_name_size = sizeof(pass.custom_name);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
@@ -84,18 +85,25 @@ void LoadPassSettings(uint32_t index, PassSettings& pass, const std::string& key
                               pass.inherit_skin_structure);
   }
 
-  for (uint32_t i = 0; i < kShaderParamCount; ++i) {
-    float v = kShaderParams[i].default_value;
+  if (inherit_capable) {
     reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
-                              (pref + kShaderParams[i].name).c_str(), v);
-    pass.params[i] = v;
-
-    if (inherit_capable) {
-      reshade::get_config_value(
-          nullptr, "RESHADE_DLSSNR",
-          (pref + "Inherit." + kShaderParams[i].name).c_str(),
-          pass.inherit_params[i]);
-    }
+                              (pref + "Inherit.LumaStrength").c_str(),
+                              pass.inherit_luma_strength);
+    reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                              (pref + "Inherit.ChromaStrength").c_str(),
+                              pass.inherit_chroma_strength);
+    reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                              (pref + "Inherit.SoftMaxBrighten").c_str(),
+                              pass.inherit_soft_max_brighten);
+    reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                              (pref + "Inherit.SoftMaxDarken").c_str(),
+                              pass.inherit_soft_max_darken);
+    reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                              (pref + "Inherit.SoftMaxChroma").c_str(),
+                              pass.inherit_soft_max_chroma);
+    reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                              (pref + "Inherit.SoftKnee").c_str(),
+                              pass.inherit_soft_knee);
   }
 }
 
@@ -125,6 +133,8 @@ void SavePassSettings(uint32_t index, const PassSettings& pass, const std::strin
                             static_cast<int>(pass.injection_stage));
 
   SaveResidual(pref + "Residual.", pass.residual);
+  SaveStrength(pref, pass.strength);
+  SaveSoftCompression(pref, pass.soft_compression);
 
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             (pref + "CustomName").c_str(),
@@ -158,17 +168,25 @@ void SavePassSettings(uint32_t index, const PassSettings& pass, const std::strin
                               pass.inherit_skin_structure);
   }
 
-  for (uint32_t i = 0; i < kShaderParamCount; ++i) {
+  if (inherit_capable) {
     reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
-                              (pref + kShaderParams[i].name).c_str(),
-                              pass.params[i]);
-
-    if (inherit_capable) {
-      reshade::set_config_value(
-          nullptr, "RESHADE_DLSSNR",
-          (pref + "Inherit." + kShaderParams[i].name).c_str(),
-          pass.inherit_params[i]);
-    }
+                              (pref + "Inherit.LumaStrength").c_str(),
+                              pass.inherit_luma_strength);
+    reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                              (pref + "Inherit.ChromaStrength").c_str(),
+                              pass.inherit_chroma_strength);
+    reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                              (pref + "Inherit.SoftMaxBrighten").c_str(),
+                              pass.inherit_soft_max_brighten);
+    reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                              (pref + "Inherit.SoftMaxDarken").c_str(),
+                              pass.inherit_soft_max_darken);
+    reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                              (pref + "Inherit.SoftMaxChroma").c_str(),
+                              pass.inherit_soft_max_chroma);
+    reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                              (pref + "Inherit.SoftKnee").c_str(),
+                              pass.inherit_soft_knee);
   }
 }
 

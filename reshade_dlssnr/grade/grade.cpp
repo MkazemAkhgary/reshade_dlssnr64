@@ -1,7 +1,6 @@
 #include "grade/grade.h"
 
 #include "hdr/settings.h"
-#include "shader_params.h"
 
 namespace reshade_dlssnr::model_pipeline {
 

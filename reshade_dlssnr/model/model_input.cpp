@@ -1,7 +1,5 @@
 #include "model/model_input.h"
 
-#include "shader_params.h"
-
 namespace reshade_dlssnr::model_pipeline {
 
 bool PrepareInput(

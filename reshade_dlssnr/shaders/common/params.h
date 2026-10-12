@@ -22,8 +22,8 @@
 
 DLSSNR_BLOCK(ShaderBlock)
 {
-    float4 Params0;   // kShaderParams[0..3]
-    float4 Params1;   // kShaderParams[4..7]
+    float4 Params0;   // LumaStrength, ChromaStrength, SoftCompression, SoftMaxBrighten
+    float4 Params1;   // SoftMaxDarken, SoftMaxChroma, SoftKnee, unused
 };
 
 DLSSNR_BLOCK(GradeBlock)

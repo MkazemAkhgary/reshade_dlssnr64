@@ -18,7 +18,30 @@ struct ResidualSettings {
 
 };
 
+// Strength section: blends of the model's luma and chroma edits applied
+// when the model output is composed back onto the source.
+struct StrengthSettings {
+  float luma_strength = 1.0f;
+  float chroma_strength = 1.0f;
+};
+
+// Soft compression of the residual delta before it is blended onto the
+// source. Sliders are gated on `enabled`.
+struct SoftCompressionSettings {
+  bool enabled = false;
+  float max_brighten = 0.5f;
+  float max_darken = 0.5f;
+  float max_chroma = 0.5f;
+  float knee = 1.0f;
+};
+
 void LoadResidual(const std::string& prefix, ResidualSettings& residual);
 void SaveResidual(const std::string& prefix, const ResidualSettings& residual);
+void LoadStrength(const std::string& prefix, StrengthSettings& strength);
+void SaveStrength(const std::string& prefix, const StrengthSettings& strength);
+void LoadSoftCompression(const std::string& prefix,
+                         SoftCompressionSettings& soft_compression);
+void SaveSoftCompression(const std::string& prefix,
+                         const SoftCompressionSettings& soft_compression);
 
 }  // namespace reshade_dlssnr

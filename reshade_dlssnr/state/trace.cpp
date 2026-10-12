@@ -1,14 +1,15 @@
 #include "state/trace.h"
 
-#include <reshade.hpp>
+#include <string>
+
+#include "pipeline_trace.h"
 
 #include <cstdio>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "gpu/shader_params.h"
-#include "pipeline_trace.h"
+#include "compose/settings.h"
 
 namespace reshade_dlssnr {
 
@@ -126,6 +127,20 @@ void AppendPass(Snapshot& snap, const std::string& prefix,
          FloatText(pass.residual.ratio_darken));
   AppendGrade(snap, prefix + ".grade_input", pass.grade_input);
   AppendGrade(snap, prefix + ".grade_output", pass.grade_output);
+  Append(snap, prefix + ".strength.luma_strength",
+         FloatText(pass.strength.luma_strength));
+  Append(snap, prefix + ".strength.chroma_strength",
+         FloatText(pass.strength.chroma_strength));
+  Append(snap, prefix + ".soft_compression.enabled",
+         BoolText(pass.soft_compression.enabled));
+  Append(snap, prefix + ".soft_compression.max_brighten",
+         FloatText(pass.soft_compression.max_brighten));
+  Append(snap, prefix + ".soft_compression.max_darken",
+         FloatText(pass.soft_compression.max_darken));
+  Append(snap, prefix + ".soft_compression.max_chroma",
+         FloatText(pass.soft_compression.max_chroma));
+  Append(snap, prefix + ".soft_compression.knee",
+         FloatText(pass.soft_compression.knee));
   Append(snap, prefix + ".inherit.working_scale",
          BoolText(pass.inherit_working_scale));
   Append(snap, prefix + ".inherit.intensity", BoolText(pass.inherit_intensity));
@@ -135,12 +150,18 @@ void AppendPass(Snapshot& snap, const std::string& prefix,
          BoolText(pass.inherit_local_structure));
   Append(snap, prefix + ".inherit.skin_structure",
          BoolText(pass.inherit_skin_structure));
-  for (uint32_t i = 0; i < kShaderParamCount; ++i) {
-    const std::string name = kShaderParams[i].name;
-    Append(snap, prefix + ".params." + name, FloatText(pass.params[i]));
-    Append(snap, prefix + ".inherit_params." + name,
-           BoolText(pass.inherit_params[i]));
-  }
+  Append(snap, prefix + ".inherit.luma_strength",
+         BoolText(pass.inherit_luma_strength));
+  Append(snap, prefix + ".inherit.chroma_strength",
+         BoolText(pass.inherit_chroma_strength));
+  Append(snap, prefix + ".inherit.soft_max_brighten",
+         BoolText(pass.inherit_soft_max_brighten));
+  Append(snap, prefix + ".inherit.soft_max_darken",
+         BoolText(pass.inherit_soft_max_darken));
+  Append(snap, prefix + ".inherit.soft_max_chroma",
+         BoolText(pass.inherit_soft_max_chroma));
+  Append(snap, prefix + ".inherit.soft_knee",
+         BoolText(pass.inherit_soft_knee));
 }
 
 Snapshot BuildSnapshot(const Settings& settings,

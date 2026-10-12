@@ -1,7 +1,5 @@
 #include "compose/compose.h"
 
-#include "shader_params.h"
-
 namespace reshade_dlssnr::model_pipeline {
 
 bool ComposeOutput(
@@ -15,25 +13,28 @@ bool ComposeOutput(
     ID3D12Resource* low_enhanced,
     unsigned int full_width,
     unsigned int full_height,
-    const float* params,
+    const StrengthSettings& strength,
+    const SoftCompressionSettings& soft_compression,
     const ResidualSettings& residual,
     bool rcas_enabled,
     float rcas_strength,
     const GradeSettings* grade_input,
     const HdrUniforms* hdr) {
   if (codec == nullptr || command_list == nullptr || packed_source == nullptr ||
-      hdr_source == nullptr || low_input == nullptr || low_enhanced == nullptr ||
-      params == nullptr) {
+      hdr_source == nullptr || low_input == nullptr || low_enhanced == nullptr) {
     return false;
   }
 
   ComputeConstants constants = {};
   constants.Width = full_width;
   constants.Height = full_height;
-  float* shader_params = &constants.shader.Params0.x;
-  for (uint32_t i = 0; i < kShaderParamCount; ++i) {
-    shader_params[i] = params[i];
-  }
+  constants.shader.Params0.x = strength.luma_strength;
+  constants.shader.Params0.y = strength.chroma_strength;
+  constants.shader.Params0.z = soft_compression.enabled ? 1.0f : 0.0f;
+  constants.shader.Params0.w = soft_compression.max_brighten;
+  constants.shader.Params1.x = soft_compression.max_darken;
+  constants.shader.Params1.y = soft_compression.max_chroma;
+  constants.shader.Params1.z = soft_compression.knee;
   constants.residual.EditStrength = residual.edit_strength;
   constants.residual.ChromaStrength = residual.chroma_strength;
   constants.residual.EditGamma = residual.edit_gamma;

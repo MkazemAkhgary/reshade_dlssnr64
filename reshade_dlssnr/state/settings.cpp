@@ -8,17 +8,12 @@
 #include <cstdio>
 #include <string>
 
-#include "gpu/shader_params.h"
 #include "compose/settings.h"
 #include "grade/settings.h"
 #include "state/pass.h"
 #include "state/trace.h"
 
 namespace reshade_dlssnr {
-
-static_assert(kShaderParamCount <= kShaderParamCapacity,
-              "kShaderParams has outgrown PassSettings storage - raise "
-              "kShaderParamCapacity in settings.h");
 
 namespace {
 Settings g_settings;
@@ -35,9 +30,12 @@ void RecomputeResolved() {
     if (r.inherit_local_tone) r.local_tone = prev.local_tone;
     if (r.inherit_local_structure) r.local_structure = prev.local_structure;
     if (r.inherit_skin_structure) r.skin_structure = prev.skin_structure;
-    for (uint32_t j = 0; j < kShaderParamCount; ++j) {
-      if (r.inherit_params[j]) r.params[j] = prev.params[j];
-    }
+    if (r.inherit_luma_strength) r.strength.luma_strength = prev.strength.luma_strength;
+    if (r.inherit_chroma_strength) r.strength.chroma_strength = prev.strength.chroma_strength;
+    if (r.inherit_soft_max_brighten) r.soft_compression.max_brighten = prev.soft_compression.max_brighten;
+    if (r.inherit_soft_max_darken) r.soft_compression.max_darken = prev.soft_compression.max_darken;
+    if (r.inherit_soft_max_chroma) r.soft_compression.max_chroma = prev.soft_compression.max_chroma;
+    if (r.inherit_soft_knee) r.soft_compression.knee = prev.soft_compression.knee;
     g_resolved[i] = r;
   }
 }
@@ -114,15 +112,13 @@ void LoadSettingsValues(Settings& settings, const std::string& key_prefix,
     ReadValue(key_prefix, "UI.BoundedTuningOpen", settings.ui_bounded_tuning_open);
     ReadValue(key_prefix, "UI.ImportanceMaskOpen", settings.ui_importance_mask_open);
     ReadValue(key_prefix, "UI.ModelOpen", settings.ui_model_open);
+    ReadValue(key_prefix, "UI.StrengthOpen", settings.ui_strength_open);
+    ReadValue(key_prefix, "UI.SoftCompressionOpen", settings.ui_soft_compression_open);
     ReadValue(key_prefix, "UI.PassAdvancedOpen", settings.ui_pass_advanced_open);
     ReadValue(key_prefix, "UI.ResidualOpen", settings.ui_residual_open);
     ReadValue(key_prefix, "UI.RcasOpen", settings.ui_rcas_open);
     ReadValue(key_prefix, "UI.GradeInputOpen", settings.ui_grade_input_open);
     ReadValue(key_prefix, "UI.GradeOutputOpen", settings.ui_grade_output_open);
-    for (uint32_t j = 0; j < kShaderParamCount; ++j) {
-      const std::string key = "UI.CategoryOpen" + std::to_string(j);
-      ReadValue(key_prefix, key.c_str(), settings.ui_category_open[j]);
-    }
   }
 
   int pass_count = static_cast<int>(settings.pass_count);
@@ -145,9 +141,12 @@ void LoadSettingsValues(Settings& settings, const std::string& key_prefix,
   settings.passes[0].inherit_local_tone = false;
   settings.passes[0].inherit_local_structure = false;
   settings.passes[0].inherit_skin_structure = false;
-  for (uint32_t i = 0; i < kShaderParamCount; ++i) {
-    settings.passes[0].inherit_params[i] = false;
-  }
+  settings.passes[0].inherit_luma_strength = false;
+  settings.passes[0].inherit_chroma_strength = false;
+  settings.passes[0].inherit_soft_max_brighten = false;
+  settings.passes[0].inherit_soft_max_darken = false;
+  settings.passes[0].inherit_soft_max_chroma = false;
+  settings.passes[0].inherit_soft_knee = false;
 }
 
 void SaveSettingsValues(const Settings& settings, const std::string& key_prefix,
@@ -174,15 +173,13 @@ void SaveSettingsValues(const Settings& settings, const std::string& key_prefix,
     WriteValue(key_prefix, "UI.BoundedTuningOpen", settings.ui_bounded_tuning_open);
     WriteValue(key_prefix, "UI.ImportanceMaskOpen", settings.ui_importance_mask_open);
     WriteValue(key_prefix, "UI.ModelOpen", settings.ui_model_open);
+    WriteValue(key_prefix, "UI.StrengthOpen", settings.ui_strength_open);
+    WriteValue(key_prefix, "UI.SoftCompressionOpen", settings.ui_soft_compression_open);
     WriteValue(key_prefix, "UI.PassAdvancedOpen", settings.ui_pass_advanced_open);
     WriteValue(key_prefix, "UI.ResidualOpen", settings.ui_residual_open);
     WriteValue(key_prefix, "UI.RcasOpen", settings.ui_rcas_open);
     WriteValue(key_prefix, "UI.GradeInputOpen", settings.ui_grade_input_open);
     WriteValue(key_prefix, "UI.GradeOutputOpen", settings.ui_grade_output_open);
-    for (uint32_t j = 0; j < kShaderParamCount; ++j) {
-      const std::string key = "UI.CategoryOpen" + std::to_string(j);
-      WriteValue(key_prefix, key.c_str(), settings.ui_category_open[j]);
-    }
   }
 
   WriteValue(key_prefix, "PassCount", static_cast<int>(settings.pass_count));

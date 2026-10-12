@@ -13,11 +13,6 @@
 
 namespace reshade_dlssnr {
 
-// Storage capacity for PassSettings::params and ::inherit_params. Kept
-// larger than the current table on purpose; settings.cpp static_asserts
-// the two stay in step.
-constexpr uint32_t kShaderParamCapacity = 32;
-
 enum class InjectionStage : int {
   PreDLSS = 0,
   PostDLSS = 1,
@@ -52,6 +47,19 @@ struct PassSettings {
   // How this pass's model edit is carried back. Not inheritable.
   ResidualSettings residual;
 
+  // Strength section: luma/chroma blend of the model edit. Inheritable.
+  StrengthSettings strength;
+  bool inherit_luma_strength = false;
+  bool inherit_chroma_strength = false;
+
+  // Soft compression of the residual delta. Sliders are inheritable; the
+  // enabled toggle is per-pass.
+  SoftCompressionSettings soft_compression;
+  bool inherit_soft_max_brighten = false;
+  bool inherit_soft_max_darken = false;
+  bool inherit_soft_max_chroma = false;
+  bool inherit_soft_knee = false;
+
   // FSR RCAS on the EASU-upsampled working images. Not inheritable.
   bool rcas_enabled = false;
   float rcas_strength = 0.5f;  // [0, 1]
@@ -63,10 +71,6 @@ struct PassSettings {
   bool inherit_local_tone = false;
   bool inherit_local_structure = false;
   bool inherit_skin_structure = false;
-  bool inherit_params[kShaderParamCapacity] = {};
-
-  // Dynamic shader parameter values, indexed by kShaderParams order.
-  float params[kShaderParamCapacity] = {};
 
   // Display name for the pass tab. Purely cosmetic; empty means use the
   // positional default ("Pass N").
@@ -112,14 +116,11 @@ struct Settings {
 
   // UI state: which collapsible sections are open. Persisted, and shared
   // across passes — collapsing a section in one tab collapses it in every
-  // tab, so the panel keeps a single, consistent shape. `ui_category_open`
-  // is indexed by the order categories appear in kShaderParams (0, 1, ...);
-  // entries past the current category count are unused. Model and each
-  // category default to open.
+  // tab, so the panel keeps a single, consistent shape. Model, Strength,
+  // and each sub-section default to open except Advanced.
   bool ui_model_open = true;
-  bool ui_category_open[16] = {
-      true, true, true, true, true, true, true, true,
-      true, true, true, true, true, true, true, true};
+  bool ui_strength_open = true;
+  bool ui_soft_compression_open = true;
   bool ui_pass_advanced_open = false;
   bool ui_residual_open = false;
   bool ui_rcas_open = false;

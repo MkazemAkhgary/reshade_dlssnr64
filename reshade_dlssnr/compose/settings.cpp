@@ -77,4 +77,72 @@ void SaveResidual(const std::string& prefix, const ResidualSettings& residual) {
                             residual.ratio_darken);
 }
 
+void LoadStrength(const std::string& prefix, StrengthSettings& strength) {
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "LumaStrength").c_str(),
+                            strength.luma_strength);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "ChromaStrength").c_str(),
+                            strength.chroma_strength);
+  if (strength.luma_strength < 0.0f) strength.luma_strength = 0.0f;
+  if (strength.luma_strength > 1.0f) strength.luma_strength = 1.0f;
+  if (strength.chroma_strength < 0.0f) strength.chroma_strength = 0.0f;
+  if (strength.chroma_strength > 1.0f) strength.chroma_strength = 1.0f;
+}
+
+void SaveStrength(const std::string& prefix, const StrengthSettings& strength) {
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "LumaStrength").c_str(),
+                            strength.luma_strength);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "ChromaStrength").c_str(),
+                            strength.chroma_strength);
+}
+
+void LoadSoftCompression(const std::string& prefix,
+                         SoftCompressionSettings& soft_compression) {
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "SoftCompression").c_str(),
+                            soft_compression.enabled);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "SoftMaxBrighten").c_str(),
+                            soft_compression.max_brighten);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "SoftMaxDarken").c_str(),
+                            soft_compression.max_darken);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "SoftMaxChroma").c_str(),
+                            soft_compression.max_chroma);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "SoftKnee").c_str(),
+                            soft_compression.knee);
+  if (soft_compression.max_brighten < 0.0f) soft_compression.max_brighten = 0.0f;
+  if (soft_compression.max_brighten > 2.0f) soft_compression.max_brighten = 2.0f;
+  if (soft_compression.max_darken < 0.0f) soft_compression.max_darken = 0.0f;
+  if (soft_compression.max_darken > 2.0f) soft_compression.max_darken = 2.0f;
+  if (soft_compression.max_chroma < 0.0f) soft_compression.max_chroma = 0.0f;
+  if (soft_compression.max_chroma > 2.0f) soft_compression.max_chroma = 2.0f;
+  if (soft_compression.knee < 0.0f) soft_compression.knee = 0.0f;
+  if (soft_compression.knee > 4.0f) soft_compression.knee = 4.0f;
+}
+
+void SaveSoftCompression(const std::string& prefix,
+                         const SoftCompressionSettings& soft_compression) {
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "SoftCompression").c_str(),
+                            soft_compression.enabled);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "SoftMaxBrighten").c_str(),
+                            soft_compression.max_brighten);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "SoftMaxDarken").c_str(),
+                            soft_compression.max_darken);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "SoftMaxChroma").c_str(),
+                            soft_compression.max_chroma);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "SoftKnee").c_str(),
+                            soft_compression.knee);
+}
+
 }  // namespace reshade_dlssnr

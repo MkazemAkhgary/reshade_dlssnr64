@@ -218,7 +218,6 @@
     <ClInclude Include="gpu\d3d12_utils.h" />
     <ClInclude Include="gpu\gpu_readback.h" />
     <ClInclude Include="gpu\pass_resources.h" />
-    <ClInclude Include="gpu\shader_params.h" />
     <ClInclude Include="hooks\d3d12_hooks.h" />
     <ClInclude Include="hooks\d3d12_state.h" />
     <ClInclude Include="hooks\dlss_guides.h" />

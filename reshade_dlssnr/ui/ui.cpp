@@ -6,7 +6,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "gpu/shader_params.h"
 #include "hooks/dlss_guides.h"
 #include "pipeline/addon_controller.h"
 #include "state/settings.h"
@@ -35,17 +34,17 @@ void ClearPassInheritanceRoot(PassSettings& pass) {
   pass.inherit_local_tone = false;
   pass.inherit_local_structure = false;
   pass.inherit_skin_structure = false;
-  for (uint32_t i = 0; i < kShaderParamCount; ++i) {
-    pass.inherit_params[i] = false;
-  }
+  pass.inherit_luma_strength = false;
+  pass.inherit_chroma_strength = false;
+  pass.inherit_soft_max_brighten = false;
+  pass.inherit_soft_max_darken = false;
+  pass.inherit_soft_max_chroma = false;
+  pass.inherit_soft_knee = false;
 }
 
 void InitializePassDefaults(PassSettings& pass, InjectionStage stage) {
   pass = PassSettings{};
   pass.injection_stage = stage;
-  for (uint32_t i = 0; i < kShaderParamCount; ++i) {
-    pass.params[i] = kShaderParams[i].default_value;
-  }
 }
 
 // Permutes only the active pass profiles. Array slots beyond pass_count remain

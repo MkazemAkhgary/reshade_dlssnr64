@@ -1,12 +1,9 @@
 #include <imgui.h>
 #include <reshade.hpp>
 
-#include <cctype>
 #include <cstdio>
 #include <cstring>
-#include <string>
 
-#include "gpu/shader_params.h"
 #include "state/settings.h"
 #include "grade/settings.h"
 #include "ui/ui_sections.h"
@@ -36,18 +33,22 @@ void ResetModelSection(void* context) {
   pass.inherit_skin_structure = false;
 }
 
-struct ShaderCategoryResetContext {
-  PassSettings* pass;
-  uint32_t first;
-  uint32_t end;
-};
+void ResetStrengthSection(void* context) {
+  auto& pass = *static_cast<PassSettings*>(context);
+  const PassSettings defaults{};
+  pass.strength = defaults.strength;
+  pass.inherit_luma_strength = false;
+  pass.inherit_chroma_strength = false;
+}
 
-void ResetShaderCategory(void* context) {
-  const auto& reset = *static_cast<ShaderCategoryResetContext*>(context);
-  for (uint32_t j = reset.first; j < reset.end; ++j) {
-    reset.pass->params[j] = kShaderParams[j].default_value;
-    reset.pass->inherit_params[j] = false;
-  }
+void ResetSoftCompressionSection(void* context) {
+  auto& pass = *static_cast<PassSettings*>(context);
+  const PassSettings defaults{};
+  pass.soft_compression = defaults.soft_compression;
+  pass.inherit_soft_max_brighten = false;
+  pass.inherit_soft_max_darken = false;
+  pass.inherit_soft_max_chroma = false;
+  pass.inherit_soft_knee = false;
 }
 
 void ResetResidualSection(void* context) {
@@ -62,10 +63,7 @@ void ResetRcasSection(void* context) {
 
 void ResetAdvancedSection(void* context) {
   auto& pass = *static_cast<PassSettings*>(context);
-  for (uint32_t j = 0; j < kShaderParamCount; ++j) {
-    pass.params[j] = kShaderParams[j].default_value;
-    pass.inherit_params[j] = false;
-  }
+  ResetSoftCompressionSection(context);
   pass.residual = ResidualSettings{};
   pass.rcas_enabled = false;
   pass.rcas_strength = 0.5f;
@@ -261,108 +259,75 @@ void DrawModelSection(uint32_t pass_index, Settings& settings,
   }
 }
 
-int FindShaderParamIndex(const char* name) {
-  for (uint32_t i = 0; i < kShaderParamCount; ++i) {
-    if (strcmp(kShaderParams[i].name, name) == 0) return static_cast<int>(i);
-  }
-  return -1;
-}
-
-std::string ShaderParamDisplayName(const char* name) {
-  std::string result;
-  if (name == nullptr) return result;
-  for (std::size_t i = 0; name[i] != '\0'; ++i) {
-    const unsigned char ch = static_cast<unsigned char>(name[i]);
-    if (i > 0 && std::isupper(ch) &&
-        (std::islower(static_cast<unsigned char>(name[i - 1])) ||
-         std::isdigit(static_cast<unsigned char>(name[i - 1])))) {
-      result.push_back(' ');
-    }
-    result.push_back(static_cast<char>(ch));
-  }
-  return result;
-}
-
-void DrawShaderParamSections(uint32_t pass_index, Settings& settings,
-                             bool& changed) {
+void DrawStrengthSection(uint32_t pass_index, Settings& settings,
+                        bool& changed) {
   PassSettings& pass = settings.passes[pass_index];
   const PassSettings& resolved = GetResolvedPass(pass_index);
 
-  uint32_t i = 0;
-  uint32_t category_index = 0;
-  while (i < kShaderParamCount) {
-    const char* category = kShaderParams[i].category;
-
-    uint32_t next = i;
-    while (next < kShaderParamCount &&
-           strcmp(kShaderParams[next].category, category) == 0) {
-      ++next;
-    }
-
-    ImGui::Separator();
-    bool& category_open =
-        settings.ui_category_open[category_index < 16 ? category_index : 15];
-
-    ShaderCategoryResetContext reset_context{&pass, i, next};
-    float* category_enabled =
-        strcmp(category, "Soft Compression") == 0 ? &pass.params[i] : nullptr;
-    const char* category_enabled_tip =
-        category_enabled != nullptr ? kShaderParams[i].tooltip : nullptr;
-    const bool open = PersistentSubHeader(
-        category, category_open, changed, nullptr,
-        HeaderControls{nullptr, category_enabled_tip, false,
-                       ResetShaderCategory, &reset_context, category_enabled});
-    category_index++;
-
-    if (open) {
-      IndentScope content_indent;
-      for (uint32_t j = i; j < next; ++j) {
-        const auto& param = kShaderParams[j];
-        const std::string id = std::string(category) + "_" + param.name;
-        const std::string display_name = ShaderParamDisplayName(param.name);
-
-        // Soft Compression is the subsection's enabled toggle, rendered inline
-        // before its header rather than again as a content row.
-        if (category_enabled != nullptr && j == i && param.is_checkbox) {
-          continue;
-        }
-
-        bool dependency_off = false;
-        if (param.depends_on != nullptr) {
-          const int gate = FindShaderParamIndex(param.depends_on);
-          if (gate >= 0 && pass.params[gate] < 0.5f) dependency_off = true;
-        }
-
-        WithDisabled(dependency_off, [&] {
-          if (param.is_checkbox) {
-            bool checked = pass.params[j] > 0.5f;
-            ImGui::AlignTextToFramePadding();
-            changed |= DrawCheckboxAtLabel(id.c_str(), &checked);
-            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-              Tip("%s", param.tooltip != nullptr
-                              ? param.tooltip
-                              : "Toggle this shader parameter.");
-            }
-            ImGui::SameLine();
-            ImGui::TextUnformatted(display_name.c_str());
-            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-              Tip("%s", param.tooltip != nullptr
-                              ? param.tooltip
-                              : "Toggle this shader parameter.");
-            }
-            pass.params[j] = checked ? 1.0f : 0.0f;
-          } else {
-            changed |= DrawFloatRow(
-                pass_index, id.c_str(), display_name.c_str(), param.tooltip,
-                &pass.params[j], &pass.inherit_params[j], resolved.params[j],
-                param.min_value, param.max_value, param.default_value);
-          }
-        });
-      }
-    }
-
-    i = next;
+  if (!PersistentSubHeader(
+          "Strength", settings.ui_strength_open, changed,
+          "Blend of the model's luminance and chroma edits into the source when the model output is composed back.",
+          HeaderControls{nullptr, nullptr, false, ResetStrengthSection, &pass})) {
+    return;
   }
+  IndentScope content_indent;
+
+  changed |= DrawFloatRow(
+      pass_index, "luma_strength", "Luma Strength",
+      "Blend between original and edited luminance.",
+      &pass.strength.luma_strength, &pass.inherit_luma_strength,
+      resolved.strength.luma_strength, 0.0f, 1.0f, 1.0f);
+
+  changed |= DrawFloatRow(
+      pass_index, "chroma_strength", "Chroma Strength",
+      "Blend between original and edited chroma.",
+      &pass.strength.chroma_strength, &pass.inherit_chroma_strength,
+      resolved.strength.chroma_strength, 0.0f, 1.0f, 1.0f);
+}
+
+void DrawSoftCompressionSection(uint32_t pass_index, Settings& settings,
+                               bool& changed) {
+  PassSettings& pass = settings.passes[pass_index];
+  const PassSettings& resolved = GetResolvedPass(pass_index);
+
+  if (!PersistentSubHeader(
+          "Soft Compression", settings.ui_soft_compression_open, changed,
+          "Enable rational soft clamp of log residuals.",
+          HeaderControls{&pass.soft_compression.enabled,
+                         "Enable rational soft clamp of log residuals.",
+                         false, ResetSoftCompressionSection, &pass})) {
+    return;
+  }
+  IndentScope content_indent;
+
+  WithDisabled(!pass.soft_compression.enabled, [&] {
+    changed |= DrawFloatRow(
+        pass_index, "soft_max_brighten", "Max Brighten",
+        "Maximum allowed log-luma brightening.",
+        &pass.soft_compression.max_brighten,
+        &pass.inherit_soft_max_brighten,
+        resolved.soft_compression.max_brighten, 0.0f, 2.0f, 0.5f);
+
+    changed |= DrawFloatRow(
+        pass_index, "soft_max_darken", "Max Darken",
+        "Maximum allowed log-luma darkening.",
+        &pass.soft_compression.max_darken,
+        &pass.inherit_soft_max_darken,
+        resolved.soft_compression.max_darken, 0.0f, 2.0f, 0.5f);
+
+    changed |= DrawFloatRow(
+        pass_index, "soft_max_chroma", "Max Chroma",
+        "Maximum allowed log-chroma change per channel.",
+        &pass.soft_compression.max_chroma,
+        &pass.inherit_soft_max_chroma,
+        resolved.soft_compression.max_chroma, 0.0f, 2.0f, 0.5f);
+
+    changed |= DrawFloatRow(
+        pass_index, "soft_knee", "Knee",
+        "Controls how early compression starts (linear range).",
+        &pass.soft_compression.knee, &pass.inherit_soft_knee,
+        resolved.soft_compression.knee, 0.0f, 4.0f, 1.0f);
+  });
 }
 
 void DrawResidualSection(uint32_t pass_index, Settings& settings,
@@ -433,9 +398,6 @@ void ResetPassProfile(uint32_t pass_index, Settings& settings) {
   PassSettings defaults{};
   defaults.injection_stage = target;
   std::snprintf(defaults.custom_name, sizeof(defaults.custom_name), "%s", name);
-  for (uint32_t i = 0; i < kShaderParamCount; ++i) {
-    defaults.params[i] = kShaderParams[i].default_value;
-  }
   pass = defaults;
 }
 
@@ -573,12 +535,14 @@ void DrawPassSettingsBody(uint32_t pass_index, Settings& settings,
 
     DrawModelSection(pass_index, settings, changed);
 
+    DrawStrengthSection(pass_index, settings, changed);
+
     if (PersistentSubHeader(
             "Advanced", settings.ui_pass_advanced_open, changed,
             "Fine-tune shader parameters and how the model's residual edit is applied.",
             HeaderControls{nullptr, nullptr, false, ResetAdvancedSection, &pass})) {
       IndentScope advanced_content_indent;
-      DrawShaderParamSections(pass_index, settings, changed);
+      DrawSoftCompressionSection(pass_index, settings, changed);
       DrawResidualSection(pass_index, settings, changed);
       DrawRcasSection(pass_index, settings, changed);
     }

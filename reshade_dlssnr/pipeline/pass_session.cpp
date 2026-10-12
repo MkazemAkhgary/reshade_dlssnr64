@@ -1515,7 +1515,7 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
           self->command_, self->StageList(run, self->command_),
           self->resources_, run.codec, original, run.model_input,
           compose_input, enhanced_for_compose, run.width, run.height,
-          run.pass->params,
+          run.pass->strength, run.pass->soft_compression,
           run.pass->residual, run.pass->rcas_enabled,
           run.pass->rcas_strength, &run.pass->grade_input, hdr_ptr)) {
     self->FailForStep("failed to compose model output");

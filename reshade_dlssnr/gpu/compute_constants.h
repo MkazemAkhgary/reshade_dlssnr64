@@ -2,7 +2,6 @@
 
 #include <cstddef>
 
-#include "gpu/shader_params.h"
 #include "shaders/common/params.h"
 
 static_assert(sizeof(ShaderBlock) == 32);
@@ -11,9 +10,6 @@ static_assert(sizeof(ResidualBlock) == 32);
 static_assert(sizeof(HdrBlock) == 64);
 static_assert(sizeof(EasuBlock) == 48);
 static_assert(sizeof(RcasBlock) == 16);
-
-static_assert(reshade_dlssnr::kShaderParamCount <= 8,
-              "ShaderBlock is two float4s; raise it and update params.h");
 
 constexpr size_t kHeaderSize = 16;
 constexpr size_t kShaderOffset = kHeaderSize;

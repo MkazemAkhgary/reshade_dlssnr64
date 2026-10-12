@@ -80,7 +80,6 @@ reshade_dlssnr/
     gpu_readback.cpp                Fence-delayed GPU-to-CPU readback implementation
     pass_resources.h                Per-pass resources and scratch ownership
     pass_resources.cpp              Per-pass resource creation and retirement
-    shader_params.h                 Dynamic UI shader parameter table
 
   compose/
     compose.h                       Model residual composition interface
@@ -386,7 +385,7 @@ The 256-byte CBV is:
 
 The resulting `ComputeConstants` size is exactly 256 bytes, matching the CBV stride hardcoded by `BindAndDispatch`.
 
-The shader-side aliases in `bindings.hlsli` turn fields such as `hdr.Exposure` and `easu.Con0` into the existing semantic names used by shader code (`kExposure`, `kEasuCon0`, and so on). The dynamic UI shader parameters remain defined by `gpu/shader_params.h`; the table is copied into `ShaderBlock.Params0` and `Params1`.
+The shader-side aliases in `bindings.hlsli` turn fields such as `hdr.Exposure` and `easu.Con0` into the existing semantic names used by shader code (`kExposure`, `kEasuCon0`, and so on). The Strength/Soft-Compression settings (`PassSettings::strength` / `::soft_compression`, compose/settings.h) are written field-by-field into `ShaderBlock.Params0` and `Params1` by `ComposeOutput` in compose/compose.cpp.
 
 The layout intentionally avoids `float2`, `float3`, `packoffset`, platform headers and HLSL-only utility code in `params.h`. Every nested block is explicitly 16-byte aligned and padded.
 
@@ -614,13 +613,12 @@ The build automatically embeds the new shader and the verification target compil
 
 ### Add a shader parameter
 
-1. Add an entry to `gpu/shader_params.h`.
+1. Add the field to the owning settings struct in `compose/settings.h` (Strength or Soft Compression) or its module counterpart, with load/save in that module's `settings.cpp`.
 2. Add or reuse the corresponding field in `ShaderBlock` in `shaders/common/params.h` only when the parameter belongs to the shared cbuffer rather than a pass-specific constant convention.
 3. Write the value through the typed cbuffer field instead of a numeric slot offset.
 4. Add the HLSL alias in `shaders/common/bindings.hlsli` if the shader-facing semantic name is not already present.
-5. Keep the persistent `kShaderParamCapacity` limit in `state/settings.h` large enough for the UI/settings arrays.
 
-The dynamic table is copied contiguously into `ShaderBlock.Params0/Params1`; `gpu/compute_constants.h` asserts that the table fits in those eight floats.
+`ShaderBlock.Params0` and `Params1` hold the Strength/Soft-Compression parameters; the cbuffer layout is asserted in `gpu/compute_constants.h`.
 
 ### Add a debug view
 
