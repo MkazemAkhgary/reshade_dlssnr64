@@ -20,6 +20,15 @@ void LoadResidual(const std::string& prefix, ResidualSettings& residual) {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             (prefix + "ShadowProtect").c_str(),
                             residual.shadow_protect);
+  int upsample_mode = static_cast<int>(residual.upsample_mode);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "UpsampleMode").c_str(),
+                            upsample_mode);
+  if (upsample_mode < static_cast<int>(UpsampleMode::Easu) ||
+      upsample_mode > static_cast<int>(UpsampleMode::JointBilateral)) {
+    upsample_mode = static_cast<int>(UpsampleMode::JointBilateral);
+  }
+  residual.upsample_mode = static_cast<UpsampleMode>(upsample_mode);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             (prefix + "UpsampleSharpness").c_str(),
                             residual.upsample_sharpness);
@@ -71,6 +80,9 @@ void SaveResidual(const std::string& prefix, const ResidualSettings& residual) {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             (prefix + "ShadowProtect").c_str(),
                             residual.shadow_protect);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "UpsampleMode").c_str(),
+                            static_cast<int>(residual.upsample_mode));
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             (prefix + "UpsampleSharpness").c_str(),
                             residual.upsample_sharpness);

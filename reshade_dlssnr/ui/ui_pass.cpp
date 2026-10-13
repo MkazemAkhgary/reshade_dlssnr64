@@ -366,15 +366,42 @@ void DrawResidualSection(uint32_t pass_index, Settings& settings,
       "Fades the edit out below mid-to-low brightness.",
       &pass.residual.shadow_protect, nullptr, 0.0f, 0.0f, 1.0f, 0.0f);
 
-  changed |= DrawFloatRow(
-      pass_index, "residual_upsample_sharpness", "Upsample Sharpness",
-      "Edge-preservation exponent for the guided upsample of the "
-      "model's input and output. Higher values track the "
-      "full-resolution image's edges more sharply; lower values "
-      "blend more smoothly across the low-resolution neighborhood. "
-      "This is an edge-preservation exponent, not a strength "
-      "multiplier: it does not amplify or attenuate the model's edit.",
-      &pass.residual.upsample_sharpness, nullptr, 8.0f, 0.5f, 32.0f, 8.0f);
+  {
+    static const char* kUpsampleLabels[] = {"EASU", "Joint Bilateral"};
+    static const char* kUpsampleTips[] = {
+        "FSR 1.0 EASU upsampling. The original upsampler, designed for "
+        "roughly 2x reconstruction. At working scales far from that it "
+        "has less source detail to work with and the composed image "
+        "can look blocky.",
+        "Joint bilateral upsampling guided by the full-resolution "
+        "original. Each output pixel is a weighted average of the "
+        "nearby low-resolution samples, weighted by guide-luma "
+        "similarity. Preserves the model's per-channel edit at any "
+        "working scale."};
+    int upsample_mode = static_cast<int>(pass.residual.upsample_mode);
+    if (DrawComboRow("residual_upsample_mode", "Upsample Mode",
+                     "Which algorithm reconstructs full resolution from "
+                     "the working-scale model input and output. EASU is "
+                     "the original FSR 1.0 path; Joint Bilateral uses "
+                     "the full-resolution original as an edge guide.",
+                     &upsample_mode, kUpsampleLabels, kUpsampleTips, 2)) {
+      pass.residual.upsample_mode = static_cast<UpsampleMode>(upsample_mode);
+      changed = true;
+    }
+  }
+
+  WithDisabled(pass.residual.upsample_mode !=
+                   UpsampleMode::JointBilateral, [&] {
+    changed |= DrawFloatRow(
+        pass_index, "residual_upsample_sharpness", "Upsample Sharpness",
+        "Edge-preservation exponent for the guided upsample of the "
+        "model's input and output. Higher values track the "
+        "full-resolution image's edges more sharply; lower values "
+        "blend more smoothly across the low-resolution neighborhood. "
+        "This is an edge-preservation exponent, not a strength "
+        "multiplier: it does not amplify or attenuate the model's edit.",
+        &pass.residual.upsample_sharpness, nullptr, 8.0f, 0.5f, 32.0f, 8.0f);
+  });
 
   const bool ratio_controls_disabled =
       pass.injection_stage != InjectionStage::Backbuffer;

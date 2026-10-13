@@ -5,12 +5,26 @@
 
 namespace reshade_dlssnr {
 
+// Which algorithm reconstructs full resolution from the working-scale
+// model input and output. EASU is the original FSR 1.0 upsampler;
+// joint bilateral uses the full-resolution original as an edge guide.
+enum class UpsampleMode : int {
+  Easu = 0,
+  JointBilateral = 1,
+};
+
 struct ResidualSettings {
   float edit_strength = 1.0f;
   float chroma_strength = 1.0f;
   float edit_gamma = 1.0f;
   float highlight_protect = 0.0f;
   float shadow_protect = 0.0f;
+
+  // Which upsampler reconstructs full resolution from the working-scale
+  // model input and output. Default is the joint-bilateral path, which
+  // preserves detail better at low working scales; EASU is retained for
+  // comparison.
+  UpsampleMode upsample_mode = UpsampleMode::JointBilateral;
 
   // Edge-preservation exponent for the joint-bilateral upsample of the
   // model's input and output. Higher values follow the full-resolution

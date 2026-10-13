@@ -161,7 +161,8 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         // so read them directly.
         in_rgb = gLowInput.Load(int3(id.xy, 0)).rgb;
         out_rgb = gLowEnhanced.Load(int3(id.xy, 0)).rgb;
-    } else {
+    } else if (kUpsampleMode >= 0.5) {
+
         // Joint bilateral upsample the model input and output separately,
         // guided by the full-resolution original. This replaces the EASU
         // reconstruction, which produces a blocky pattern when the working
@@ -174,6 +175,15 @@ void CSMain(uint3 id : SV_DispatchThreadID)
             full_xy, full_size_int, gLowInput,  gOriginal, 8.0);
         out_rgb = JointBilateralUpsample(
             full_xy, full_size_int, gLowEnhanced, gOriginal, kUpsampleSharpness);
+    } else {
+        // FSR 1.0 EASU. The original upsampler. Designed for roughly
+        // 2x reconstruction; at working scales far from that the
+        // source footprint shrinks and the result can look blocky.
+        const float2 easu_con3 = float2(0.0, 4.0 * kEasuCon1.y);
+        in_rgb = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
+                          easu_con3, 0);
+        out_rgb = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
+                           easu_con3, 1);
     }
 
     if (kRcasEnabled > 0.5) {

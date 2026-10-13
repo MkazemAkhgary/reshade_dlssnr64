@@ -44,10 +44,14 @@ bool ComposeOutput(
   constants.residual.RatioBrighten = residual.ratio_brighten;
   constants.residual.RatioDarken = residual.ratio_darken;
 
-  // Edge-preservation exponent for the joint-bilateral upsample of
-  // the model's low-resolution input and output. Lives in the unused
-  // shader.Params1.w slot, so the CBV layout is unchanged.
-  constants.shader.Params1.w = residual.upsample_sharpness;
+  // Compose upsampler selection, shared by the SDR and HDR paths.
+  // Both fields live in the HdrBlock's two previously reserved slots;
+  // they must be written here, before the HDR-only branch below, so
+  // the SDR dispatch also sees them.
+  constants.hdr.UpsampleMode =
+      static_cast<float>(static_cast<int>(residual.upsample_mode));
+  constants.hdr.UpsampleSharpness = residual.upsample_sharpness;
+
 
   const char* pass_name = "ComposeModelOutput";
 

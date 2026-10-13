@@ -61,6 +61,14 @@ const char* LumaModeText(GradeLumaMode mode) {
   }
 }
 
+const char* UpsampleModeText(UpsampleMode mode) {
+  switch (mode) {
+    case UpsampleMode::Easu: return "Easu";
+    case UpsampleMode::JointBilateral: return "JointBilateral";
+    default: return "JointBilateral";
+  }
+}
+
 const char* ChromaModeText(GradeChromaMode mode) {
   switch (mode) {
     case GradeChromaMode::Saturation: return "Saturation";
@@ -121,6 +129,8 @@ void AppendPass(Snapshot& snap, const std::string& prefix,
          FloatText(pass.residual.shadow_protect));
   Append(snap, prefix + ".residual.upsample_sharpness",
          FloatText(pass.residual.upsample_sharpness));
+  Append(snap, prefix + ".residual.upsample_mode",
+         UpsampleModeText(pass.residual.upsample_mode));
   Append(snap, prefix + ".residual.ratio_eps",
          FloatText(pass.residual.ratio_eps));
   Append(snap, prefix + ".residual.ratio_brighten",
