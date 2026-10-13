@@ -19,6 +19,13 @@ extern int g_pending_move_index;
 enum class PendingPassAction { None, Add, Remove };
 extern PendingPassAction g_pending_pass_action;
 
+// Pass-management toolbar drawn on the tab-bar row, to the right of the tabs.
+// It acts on the selected pass and lives outside the tab items so tab
+// hit-testing can never swallow the controls. `PassToolbarWidth()` reports the
+// horizontal space the caller must reserve before laying out the tab bar.
+void DrawPassToolbar(Settings& settings, bool& changed);
+float PassToolbarWidth();
+
 void DrawSharedDebugView(Settings& settings, bool& changed);
 bool AnyPassUsesHdrInjection(const Settings& settings);
 void DrawStatusSection(Settings& settings, bool& changed);

@@ -1,6 +1,7 @@
 #include <imgui.h>
 #include <reshade.hpp>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 
@@ -497,66 +498,6 @@ void DrawPassSettingsBody(uint32_t pass_index, Settings& settings,
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("Enable or disable this pass profile. Disabled passes do not evaluate the model.");
   }
-
-  ImGui::SameLine();
-  const bool can_move_left = pass_index > 0;
-  WithDisabled(!can_move_left, [&] {
-    if (ImGui::Button("<", ImVec2(kResetButtonWidth, 0)) && can_move_left) {
-      g_pending_move = PendingMove::Left;
-      g_pending_move_index = static_cast<int>(pass_index);
-    }
-  });
-  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Move this pass one position earlier. Execution still groups by target stage.");
-  }
-
-  ImGui::SameLine();
-  const bool can_move_right = pass_index + 1 < settings.pass_count;
-  WithDisabled(!can_move_right, [&] {
-    if (ImGui::Button(">", ImVec2(kResetButtonWidth, 0)) && can_move_right) {
-      g_pending_move = PendingMove::Right;
-      g_pending_move_index = static_cast<int>(pass_index);
-    }
-  });
-  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Move this pass one position later. Execution still groups by target stage.");
-  }
-
-  ImGui::SameLine();
-  if (ImGui::Button("R", ImVec2(kResetButtonWidth, 0))) {
-    ResetPassProfile(pass_index, settings);
-    changed = true;
-  }
-  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Reset this pass's model, residual, grade, sharpening, shader, and inheritance settings to defaults. Its name, target, and enabled state are preserved.");
-  }
-
-  ImGui::SameLine();
-  const bool can_add_pass = settings.pass_count < kMaxPasses;
-  bool add_clicked = false;
-  WithDisabled(!can_add_pass, [&] {
-    add_clicked = ImGui::Button("+", ImVec2(kResetButtonWidth, 0));
-  });
-  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Add a new pass, up to the maximum of %u.", kMaxPasses);
-  }
-
-  ImGui::SameLine();
-  const bool can_remove_pass = settings.pass_count > 1;
-  bool remove_clicked = false;
-  WithDisabled(!can_remove_pass, [&] {
-    remove_clicked = ImGui::Button("x", ImVec2(kResetButtonWidth, 0));
-  });
-  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Remove the selected pass. At least one pass remains.");
-  }
-  if (add_clicked || remove_clicked) {
-    // Defer array mutation until the next frame, outside the active tab loop.
-    g_pending_pass_action = add_clicked ? PendingPassAction::Add
-                                         : PendingPassAction::Remove;
-    ImGui::PopID();
-    return;
-  }
   ImGui::Separator();
 
   {
@@ -629,6 +570,83 @@ void DrawPassSettingsBody(uint32_t pass_index, Settings& settings,
     }
   });
   ImGui::PopID();
+}
+
+float PassToolbarWidth() {
+  return kResetButtonWidth * 5.0f + ImGui::GetStyle().ItemSpacing.x * 4.0f;
+}
+
+void DrawPassToolbar(Settings& settings, bool& changed) {
+  const uint32_t pass_index = static_cast<uint32_t>(
+      std::clamp(settings.active_pass, 0, static_cast<int>(settings.pass_count) - 1));
+
+  // The caller has already reserved PassToolbarWidth() on this row and placed
+  // the cursor here, so the controls simply flow left to right.
+
+  // Stable ids via "##": the visible glyph stays fixed while the label text
+  // (which never changes here) cannot disturb widget identity.
+  const bool can_move_left = pass_index > 0;
+  WithDisabled(!can_move_left, [&] {
+    if (ImGui::Button("<##pass_move_left", ImVec2(kResetButtonWidth, 0)) &&
+        can_move_left) {
+      g_pending_move = PendingMove::Left;
+      g_pending_move_index = static_cast<int>(pass_index);
+    }
+  });
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Move pass %u one position earlier. Execution still groups by target stage.",
+        pass_index + 1);
+  }
+
+  ImGui::SameLine();
+  const bool can_move_right = pass_index + 1 < settings.pass_count;
+  WithDisabled(!can_move_right, [&] {
+    if (ImGui::Button(">##pass_move_right", ImVec2(kResetButtonWidth, 0)) &&
+        can_move_right) {
+      g_pending_move = PendingMove::Right;
+      g_pending_move_index = static_cast<int>(pass_index);
+    }
+  });
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Move pass %u one position later. Execution still groups by target stage.",
+        pass_index + 1);
+  }
+
+  ImGui::SameLine();
+  if (ImGui::Button("R##pass_reset", ImVec2(kResetButtonWidth, 0))) {
+    ResetPassProfile(pass_index, settings);
+    changed = true;
+  }
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Reset pass %u's model, residual, grade, sharpening, shader, and inheritance settings to defaults. Its name, target, and enabled state are preserved.",
+        pass_index + 1);
+  }
+
+  ImGui::SameLine();
+  const bool can_add_pass = settings.pass_count < kMaxPasses;
+  WithDisabled(!can_add_pass, [&] {
+    if (ImGui::Button("+##pass_add", ImVec2(kResetButtonWidth, 0)) &&
+        can_add_pass) {
+      // Defer the array mutation to the next frame; the tab bar is mid-layout.
+      g_pending_pass_action = PendingPassAction::Add;
+    }
+  });
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Add a new pass after pass %u, up to the maximum of %u.", pass_index + 1,
+        kMaxPasses);
+  }
+
+  ImGui::SameLine();
+  const bool can_remove_pass = settings.pass_count > 1;
+  WithDisabled(!can_remove_pass, [&] {
+    if (ImGui::Button("x##pass_remove", ImVec2(kResetButtonWidth, 0)) &&
+        can_remove_pass) {
+      g_pending_pass_action = PendingPassAction::Remove;
+    }
+  });
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Remove pass %u. At least one pass remains.", pass_index + 1);
+  }
 }
 
 }  // namespace reshade_dlssnr

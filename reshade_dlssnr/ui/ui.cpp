@@ -76,9 +76,15 @@ void ApplyPassReorder(Settings& settings, const int* order, bool& changed) {
 
 void AddPass(Settings& settings, bool& changed) {
   if (settings.pass_count >= kMaxPasses) return;
-  const uint32_t new_index = settings.pass_count;
   const uint32_t source_index = static_cast<uint32_t>(std::clamp(
       settings.active_pass, 0, static_cast<int>(settings.pass_count) - 1));
+  // Insert directly after the selected pass so the new tab appears next to the
+  // one the user was looking at, rather than at the far end of the list.
+  const uint32_t new_index = source_index + 1;
+  for (uint32_t i = settings.pass_count; i > new_index; --i) {
+    settings.passes[i] = settings.passes[i - 1];
+    settings.pass_enabled[i] = settings.pass_enabled[i - 1];
+  }
   InitializePassDefaults(settings.passes[new_index],
                          settings.passes[source_index].injection_stage);
   settings.pass_enabled[new_index] = true;
@@ -378,56 +384,89 @@ void DrawOverlay(reshade::api::effect_runtime*) {
 
 
     const StatusSnapshot tab_status = AddonController::Get().GetStatus();
-    if (ImGui::BeginTabBar("PassTabs")) {
-      for (uint32_t i = 0; i < settings.pass_count; ++i) {
-        const PassSettings& pass = settings.passes[i];
-        const char* stage_name =
-            pass.injection_stage == InjectionStage::PreDLSS ? "Pre-DLSS" :
-            pass.injection_stage == InjectionStage::PostDLSS ? "Post-DLSS" :
-                                                              "Backbuffer";
-        const char* stage_short =
-            pass.injection_stage == InjectionStage::PreDLSS ? "Pre" :
-            pass.injection_stage == InjectionStage::PostDLSS ? "Post" : "BB";
-        const bool pass_failed = tab_status.passes[i].failed;
-        const char* state_tag = pass_failed ? "FAIL" :
-                                settings.pass_enabled[i] ? "on" : "off";
-        const char* state_description = pass_failed ? "failed" :
-                                        settings.pass_enabled[i] ? "enabled" :
-                                                                   "disabled";
-        const char* display_name = pass.custom_name[0] != '\0'
-                                       ? pass.custom_name
-                                       : nullptr;
-        char default_name[24];
-        std::snprintf(default_name, sizeof(default_name), "Pass %u", i + 1);
-        const char* tab_name = display_name != nullptr ? display_name : default_name;
 
-        char label[128];
-        if (display_name != nullptr) {
-          std::snprintf(label, sizeof(label), "%s [%s] %s###PassTab%u",
-                        display_name, state_tag, stage_short, i);
-        } else {
-          std::snprintf(label, sizeof(label), "Pass %u [%s] %s###PassTab%u",
-                        i + 1, state_tag, stage_short, i);
-        }
+    // Give the controls a column of their own on the right of this row. The tab
+    // bar only spans the remaining width, so tabs are clipped inside their own
+    // column and can neither render nor be clicked underneath the buttons.
+    const float toolbar_width = PassToolbarWidth();
+    const float row_width = ImGui::GetContentRegionAvail().x;
+    const float tabs_column_width = std::max(120.0f, row_width - toolbar_width);
+    const ImVec2 tabs_row_pos = ImGui::GetCursorScreenPos();
+    const float tabs_row_height =
+        ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.y;
 
-        const bool force_this = (g_force_select_tab == static_cast<int>(i));
-        const ImGuiTabItemFlags tab_flags =
-            force_this ? ImGuiTabItemFlags_SetSelected : 0;
-        const bool tab_open = ImGui::BeginTabItem(label, nullptr, tab_flags);
-        if (ImGui::IsItemClicked()) {
-          settings.active_pass = static_cast<int>(i);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    if (ImGui::BeginChild("##pass_tabs_column",
+                          ImVec2(tabs_column_width, tabs_row_height), false,
+                          ImGuiWindowFlags_NoScrollbar |
+                              ImGuiWindowFlags_NoScrollWithMouse)) {
+      if (ImGui::BeginTabBar("PassTabs",
+                             ImGuiTabBarFlags_FittingPolicyScroll)) {
+        for (uint32_t i = 0; i < settings.pass_count; ++i) {
+          const PassSettings& pass = settings.passes[i];
+          const char* stage_name =
+              pass.injection_stage == InjectionStage::PreDLSS ? "Pre-DLSS" :
+              pass.injection_stage == InjectionStage::PostDLSS ? "Post-DLSS" :
+                                                                "Backbuffer";
+          const char* stage_short =
+              pass.injection_stage == InjectionStage::PreDLSS ? "Pre" :
+              pass.injection_stage == InjectionStage::PostDLSS ? "Post" : "BB";
+          const bool pass_failed = tab_status.passes[i].failed;
+          const char* state_tag = pass_failed ? "FAIL" :
+                                  settings.pass_enabled[i] ? "on" : "off";
+          const char* state_description = pass_failed ? "failed" :
+                                          settings.pass_enabled[i] ? "enabled" :
+                                                                     "disabled";
+          const char* display_name = pass.custom_name[0] != '\0'
+                                         ? pass.custom_name
+                                         : nullptr;
+          char default_name[24];
+          std::snprintf(default_name, sizeof(default_name), "Pass %u", i + 1);
+          const char* tab_name =
+              display_name != nullptr ? display_name : default_name;
+
+          char label[128];
+          if (display_name != nullptr) {
+            std::snprintf(label, sizeof(label), "%s [%s] %s###PassTab%u",
+                          display_name, state_tag, stage_short, i);
+          } else {
+            std::snprintf(label, sizeof(label), "Pass %u [%s] %s###PassTab%u",
+                          i + 1, state_tag, stage_short, i);
+          }
+
+          const bool force_this = (g_force_select_tab == static_cast<int>(i));
+          const ImGuiTabItemFlags tab_flags =
+              force_this ? ImGuiTabItemFlags_SetSelected : 0;
+          const bool tab_open = ImGui::BeginTabItem(label, nullptr, tab_flags);
+          if (ImGui::IsItemClicked()) {
+            settings.active_pass = static_cast<int>(i);
+          }
+          if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            Tip("Select Pass %u · %s · target: %s · %s. The pass remains in its original tab position; runtime groups passes by target stage.",
+                i + 1, tab_name, stage_name, state_description);
+          }
+          if (tab_open) {
+            ImGui::EndTabItem();
+          }
         }
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-          Tip("Select Pass %u · %s · target: %s · %s. The pass remains in its original tab position; runtime groups passes by target stage.",
-              i + 1, tab_name, stage_name, state_description);
-        }
-        if (tab_open) {
-          ImGui::EndTabItem();
-        }
+        g_force_select_tab = -1;
+        ImGui::EndTabBar();
       }
-      g_force_select_tab = -1;
-      ImGui::EndTabBar();
     }
+    ImGui::EndChild();
+    ImGui::PopStyleVar();
+
+    // Controls occupy the reserved column to the right of the tabs, on the same
+    // row. They live outside every tab item, so no tab hit rect can swallow a
+    // press and no tab can be drawn underneath them.
+    ImGui::SetCursorScreenPos(ImVec2(tabs_row_pos.x + tabs_column_width +
+                                         ImGui::GetStyle().ItemSpacing.x,
+                                     tabs_row_pos.y));
+    DrawPassToolbar(settings, changed);
+
+    // Drop below the tabs row before the selected pass's body.
+    ImGui::SetCursorScreenPos(
+        ImVec2(tabs_row_pos.x, tabs_row_pos.y + tabs_row_height));
 
     if (settings.active_pass >= 0 &&
         settings.active_pass < static_cast<int>(settings.pass_count)) {
