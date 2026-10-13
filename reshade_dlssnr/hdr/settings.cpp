@@ -123,6 +123,7 @@ void LoadHdrSettings(HdrSettings& hdr, const std::string& key_prefix) {
   LoadFloat(key_prefix, "Hdr.Layer.Local.EdgeSharpness", hdr.local_exposure.edge_sharpness);
   LoadBool(key_prefix, "Hdr.Layer.Local.DepthContinuity", hdr.local_exposure.depth_continuity);
   LoadFloat(key_prefix, "Hdr.Layer.Local.DepthEdgeThreshold", hdr.local_exposure.depth_edge_threshold);
+  LoadBool(key_prefix, "Hdr.Layer.Local.UnexposeOnModelOutput", hdr.local_exposure.unexpose_on_model_output);
   LoadFilter(key_prefix, "Hdr.Layer.Local.Filter", hdr.local_exposure.filters);
 
   hdr.game_exposure.bias_stops = std::clamp(hdr.game_exposure.bias_stops, -4.0f, 4.0f);
@@ -199,6 +200,7 @@ void SaveHdrSettings(const HdrSettings& hdr, const std::string& key_prefix) {
   SaveFloat(key_prefix, "Hdr.Layer.Local.EdgeSharpness", hdr.local_exposure.edge_sharpness);
   SaveBool(key_prefix, "Hdr.Layer.Local.DepthContinuity", hdr.local_exposure.depth_continuity);
   SaveFloat(key_prefix, "Hdr.Layer.Local.DepthEdgeThreshold", hdr.local_exposure.depth_edge_threshold);
+  SaveBool(key_prefix, "Hdr.Layer.Local.UnexposeOnModelOutput", hdr.local_exposure.unexpose_on_model_output);
   SaveFilter(key_prefix, "Hdr.Layer.Local.Filter", hdr.local_exposure.filters);
 
   SaveFloat(key_prefix, "Hdr.HighlightHeadroom", hdr.highlight_headroom);

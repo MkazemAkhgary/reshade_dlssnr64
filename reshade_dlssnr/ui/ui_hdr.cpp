@@ -240,6 +240,10 @@ void DrawLocalLayer(LocalExposureLayerSettings& layer, bool& changed) {
                               "Maximum normalized depth difference allowed between neighborhood samples. Lower values separate foreground/background more aggressively; ignored when depth is unavailable.",
                               &layer.depth_edge_threshold, nullptr, 0.01f, 0.001f, 0.1f, 0.01f);
     }
+    changed |= ImGui::Checkbox("Unexpose on Model Output##local_unexpose_on_model_output",
+                               &layer.unexpose_on_model_output);
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+      Tip("Divide the model output by the local exposure scale before the output grade, removing the lift this layer applied to the model input. Runs at the same step as the Output Grade, whether or not that grade is enabled.");
     DrawFilterControls("local_filters", layer.filters, changed);
   });
 }

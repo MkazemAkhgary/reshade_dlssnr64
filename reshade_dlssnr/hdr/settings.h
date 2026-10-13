@@ -64,6 +64,8 @@ struct LocalExposureLayerSettings {
   float edge_sharpness = 4.0f;
   bool depth_continuity = true;
   float depth_edge_threshold = 0.01f;
+  // Removes the local exposure lift from the model output before the grade.
+  bool unexpose_on_model_output = false;
   ExposureFilterSettings filters = {};
 };
 

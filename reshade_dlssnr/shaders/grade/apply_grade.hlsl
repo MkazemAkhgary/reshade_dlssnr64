@@ -7,6 +7,9 @@
 #include "common/grade.hlsli"
 
 Texture2D<float4> gSource : register(t0);
+// Only sampled when kUnexposeFlag is set. The caller binds gSource otherwise
+// so the fixed kSrvCount descriptor contract still holds.
+Texture2D<float>  gExposure : register(t1);
 RWTexture2D<float4> gOutput : register(u0);
 SamplerState s0 : register(s0);
 
@@ -64,6 +67,15 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         gSource.SampleLevel(s0, uv, 0);
 
     float3 lin = DecodeSource(src.rgb);
+
+    // Unexpose before the grade: grading is nonlinear, so divide-then-grade
+    // is not equivalent to grade-then-divide.
+    if (kUnexposeFlag > 0.5) {
+        const float local_scale =
+            max(gExposure.SampleLevel(s0, uv, 0), 1e-6);
+        lin = lin / local_scale;
+    }
+
     float3 graded = GradeLinearFwd(lin);
 
     gOutput[id.xy] =

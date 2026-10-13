@@ -16,6 +16,8 @@ namespace reshade_dlssnr::model_pipeline {
 // in UNORDERED_ACCESS.
 //
 // A disabled grade is a no-op that returns true.
+// exposure_map is optional; when set, the decoded source is divided by the
+// local exposure scale before grading, regardless of grade.enabled.
 bool ApplyGrade(CommandContext& state,
                 ID3D12GraphicsCommandList* command_list,
                 ComputeEngine* codec,
@@ -24,6 +26,7 @@ bool ApplyGrade(CommandContext& state,
                 unsigned int width,
                 unsigned int height,
                 int format_code,
-                const GradeSettings& grade);
+                const GradeSettings& grade,
+                ID3D12Resource* exposure_map = nullptr);
 
 }  // namespace reshade_dlssnr::model_pipeline

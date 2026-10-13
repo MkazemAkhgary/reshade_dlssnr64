@@ -12,8 +12,10 @@ bool ApplyGrade(CommandContext& state,
                 unsigned int width,
                 unsigned int height,
                 int format_code,
-                const GradeSettings& grade) {
-  if (!grade.enabled) return true;
+                const GradeSettings& grade,
+                ID3D12Resource* exposure_map) {
+  const bool unexpose = exposure_map != nullptr;
+  if (!grade.enabled && !unexpose) return true;
 
   if (codec == nullptr || command_list == nullptr || target == nullptr ||
       scratch == nullptr) {
@@ -23,7 +25,8 @@ bool ApplyGrade(CommandContext& state,
   ComputeConstants constants = {};
   constants.Width = width;
   constants.Height = height;
-  constants.grade.Enabled = 1.0f;
+  // Set from the flag, not 1.0f: this path also runs for unexpose-only.
+  constants.grade.Enabled = grade.enabled ? 1.0f : 0.0f;
   constants.grade.Luma = grade.luma;
   constants.grade.Chroma = grade.chroma;
   constants.grade.LumaMode =
@@ -37,6 +40,7 @@ bool ApplyGrade(CommandContext& state,
   constants.grade.Highlights = grade.highlights;
   constants.grade.Format =
       static_cast<float>(format_code);
+  constants.grade.Unexpose = unexpose ? 1.0f : 0.0f;
 
   state.Transition(command_list, target, D3D12_RESOURCE_STATE_COPY_SOURCE);
   state.Transition(command_list, scratch, D3D12_RESOURCE_STATE_COPY_DEST);
@@ -45,7 +49,15 @@ bool ApplyGrade(CommandContext& state,
                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   state.Transition(command_list, target, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-  ID3D12Resource* srvs[kSrvCount] = {scratch, scratch, scratch, scratch};
+  if (unexpose) {
+    state.Transition(command_list, exposure_map,
+                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
+  // Every slot must hold a valid resource; the source stands in for the
+  // unused exposure slot when the flag is off.
+  ID3D12Resource* exposure_srv = unexpose ? exposure_map : scratch;
+
+  ID3D12Resource* srvs[kSrvCount] = {scratch, exposure_srv, scratch, scratch};
   ID3D12Resource* uavs[kUavCount] = {target};
 
   return codec->Dispatch("ApplyGrade", command_list, constants, srvs, uavs);

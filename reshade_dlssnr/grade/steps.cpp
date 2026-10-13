@@ -29,10 +29,13 @@ int GradeFormatCode(const PassRun& run, ID3D12Resource* target,
 PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
                                          const GradeSettings& grade,
                                          uint32_t scratch_slot,
-                                         bool model_sdr_domain) {
+                                         bool model_sdr_domain,
+                                         ID3D12Resource* exposure_map) {
   PassSession* self = run.session;
   if (self == nullptr) return PipelineStatus::Ok;
-  if (!grade.enabled || target == nullptr) return PipelineStatus::Ok;
+  if (target == nullptr) return PipelineStatus::Ok;
+  // Runs even when the grade is disabled; unexpose is a separate transform.
+  if (!grade.enabled && exposure_map == nullptr) return PipelineStatus::Ok;
   if (run.device == nullptr || run.codec == nullptr) return PipelineStatus::Ok;
 
   const D3D12_RESOURCE_DESC desc = target->GetDesc();
@@ -49,7 +52,8 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
   if (!model_pipeline::ApplyGrade(
           self->command_, list, run.codec, target,
           self->resources_.GetScratch(scratch_slot), width, height,
-          GradeFormatCode(run, target, model_sdr_domain), grade)) {
+          GradeFormatCode(run, target, model_sdr_domain), grade,
+          exposure_map)) {
     self->FailForStep("failed to apply the grade");
     return PipelineStatus::Fail;
   }
@@ -146,11 +150,32 @@ PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
   }
 
   const GradeSettings& grade = run.pass->grade_output;
-  if (!grade.enabled) return PipelineStatus::Ok;
 
-  TRACE_EVT(run.session, "grade_model_output pass=%u luma=%.3f chroma=%.3f",
-            run.pass_index, grade.luma, grade.chroma);
-  return GradeInPlace(run, run.model_output, grade, kGradeScratchSlotB, true);
+  // Unexpose is gated on the local exposure layer having produced a map this
+  // frame, and runs whether or not the grade itself is enabled.
+  ID3D12Resource* exposure_map = nullptr;
+  if (run.settings != nullptr &&
+      run.settings->hdr.enable &&
+      run.settings->hdr.local_exposure.enabled &&
+      run.settings->hdr.local_exposure.unexpose_on_model_output &&
+      run.hdr_uniforms_ready && run.hdr != nullptr &&
+      run.hdr->ResolvedFormat() != HdrFormat::Sdr &&
+      run.hdr_uniforms.local_exposure_strength > 0.0f &&
+      self->resources_.GetEffectiveExposureMap() != nullptr) {
+    exposure_map = self->resources_.GetEffectiveExposureMap();
+  }
+
+  if (!grade.enabled && exposure_map == nullptr) return PipelineStatus::Ok;
+
+  if (grade.enabled) {
+    TRACE_EVT(run.session, "grade_model_output pass=%u luma=%.3f chroma=%.3f",
+              run.pass_index, grade.luma, grade.chroma);
+  }
+  if (exposure_map != nullptr) {
+    TRACE_EVT(run.session, "unexpose_model_output pass=%u", run.pass_index);
+  }
+  return GradeInPlace(run, run.model_output, grade, kGradeScratchSlotB, true,
+                      exposure_map);
 }
 
 }  // namespace reshade_dlssnr

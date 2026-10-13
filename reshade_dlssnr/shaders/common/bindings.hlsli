@@ -15,6 +15,7 @@
 #define kGradeShadows    grade.Shadows
 #define kGradeHighlights grade.Highlights
 #define kGradeFormat     grade.Format
+#define kUnexposeFlag    grade.Unexpose
 
 // Residual edit
 #define kEditStrength     residual.EditStrength

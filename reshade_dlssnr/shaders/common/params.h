@@ -39,7 +39,7 @@ DLSSNR_BLOCK(GradeBlock)
     float Shadows;
     float Highlights;
     float Format;
-    float pad0;
+    float Unexpose;
 };
 
 DLSSNR_BLOCK(ResidualBlock)
