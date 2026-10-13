@@ -13,7 +13,9 @@ bool ApplyGrade(CommandContext& state,
                 unsigned int height,
                 int format_code,
                 const GradeSettings& grade,
-                ID3D12Resource* exposure_map) {
+                ID3D12Resource* exposure_map,
+                float unexpose_naturalness,
+                float unexpose_reference_l) {
   const bool unexpose = exposure_map != nullptr;
   if (!grade.enabled && !unexpose) return true;
 
@@ -41,6 +43,11 @@ bool ApplyGrade(CommandContext& state,
   constants.grade.Format =
       static_cast<float>(format_code);
   constants.grade.Unexpose = unexpose ? 1.0f : 0.0f;
+  // Unexpose Hunt-effect controls, consumed by UnexposeNatural in
+  // common/color.hlsli. They occupy RcasBlock's two previously
+  // unused pad slots, so the cbuffer layout is unchanged.
+  constants.rcas.UnexposeNaturalness = unexpose_naturalness;
+  constants.rcas.UnexposeReferenceL = unexpose_reference_l;
 
   state.Transition(command_list, target, D3D12_RESOURCE_STATE_COPY_SOURCE);
   state.Transition(command_list, scratch, D3D12_RESOURCE_STATE_COPY_DEST);

@@ -124,6 +124,8 @@ void LoadHdrSettings(HdrSettings& hdr, const std::string& key_prefix) {
   LoadBool(key_prefix, "Hdr.Layer.Local.DepthContinuity", hdr.local_exposure.depth_continuity);
   LoadFloat(key_prefix, "Hdr.Layer.Local.DepthEdgeThreshold", hdr.local_exposure.depth_edge_threshold);
   LoadBool(key_prefix, "Hdr.Layer.Local.UnexposeOnModelOutput", hdr.local_exposure.unexpose_on_model_output);
+  LoadFloat(key_prefix, "Hdr.Layer.Local.UnexposeNaturalness", hdr.local_exposure.unexpose_naturalness);
+  LoadFloat(key_prefix, "Hdr.Layer.Local.UnexposeReferenceL", hdr.local_exposure.unexpose_reference_l);
   LoadFilter(key_prefix, "Hdr.Layer.Local.Filter", hdr.local_exposure.filters);
 
   hdr.game_exposure.bias_stops = std::clamp(hdr.game_exposure.bias_stops, -4.0f, 4.0f);
@@ -145,6 +147,8 @@ void LoadHdrSettings(HdrSettings& hdr, const std::string& key_prefix) {
   hdr.local_exposure.sample_count = std::clamp(hdr.local_exposure.sample_count, 4, 48);
   hdr.local_exposure.edge_sharpness = std::clamp(hdr.local_exposure.edge_sharpness, 0.0f, 8.0f);
   hdr.local_exposure.depth_edge_threshold = std::clamp(hdr.local_exposure.depth_edge_threshold, 0.001f, 0.1f);
+  hdr.local_exposure.unexpose_naturalness = std::clamp(hdr.local_exposure.unexpose_naturalness, 0.0f, 1.0f);
+  hdr.local_exposure.unexpose_reference_l = std::clamp(hdr.local_exposure.unexpose_reference_l, 0.1f, 1.0f);
 
   LoadFloat(key_prefix, "Hdr.BT2446.K1", hdr.bt2446_k1);
   LoadFloat(key_prefix, "Hdr.BT2446.K2", hdr.bt2446_k2);
@@ -201,6 +205,8 @@ void SaveHdrSettings(const HdrSettings& hdr, const std::string& key_prefix) {
   SaveBool(key_prefix, "Hdr.Layer.Local.DepthContinuity", hdr.local_exposure.depth_continuity);
   SaveFloat(key_prefix, "Hdr.Layer.Local.DepthEdgeThreshold", hdr.local_exposure.depth_edge_threshold);
   SaveBool(key_prefix, "Hdr.Layer.Local.UnexposeOnModelOutput", hdr.local_exposure.unexpose_on_model_output);
+  SaveFloat(key_prefix, "Hdr.Layer.Local.UnexposeNaturalness", hdr.local_exposure.unexpose_naturalness);
+  SaveFloat(key_prefix, "Hdr.Layer.Local.UnexposeReferenceL", hdr.local_exposure.unexpose_reference_l);
   SaveFilter(key_prefix, "Hdr.Layer.Local.Filter", hdr.local_exposure.filters);
 
   SaveFloat(key_prefix, "Hdr.HighlightHeadroom", hdr.highlight_headroom);

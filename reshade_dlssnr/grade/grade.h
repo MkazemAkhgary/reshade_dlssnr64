@@ -27,6 +27,8 @@ bool ApplyGrade(CommandContext& state,
                 unsigned int height,
                 int format_code,
                 const GradeSettings& grade,
-                ID3D12Resource* exposure_map = nullptr);
+                ID3D12Resource* exposure_map = nullptr,
+                float unexpose_naturalness = 0.2f,
+                float unexpose_reference_l = 0.5f);
 
 }  // namespace reshade_dlssnr::model_pipeline

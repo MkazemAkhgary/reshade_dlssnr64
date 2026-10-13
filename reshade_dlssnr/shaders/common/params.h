@@ -94,8 +94,12 @@ DLSSNR_BLOCK(RcasBlock)
 {
     float Enabled;
     float Strength;
-    float pad0;
-    float pad1;
+    // Unexpose color response. These occupy the two slots previously
+    // named pad0/pad1; the byte layout of the block is unchanged, so the
+    // 256-byte ComputeConstants contract still holds. Used by
+    // UnexposeNatural in common/color.hlsli.
+    float UnexposeNaturalness;
+    float UnexposeReferenceL;
 };
 
 DLSSNR_CBUFFER(ComputeConstants)

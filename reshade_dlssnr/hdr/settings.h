@@ -66,6 +66,15 @@ struct LocalExposureLayerSettings {
   float depth_edge_threshold = 0.01f;
   // Removes the local exposure lift from the model output before the grade.
   bool unexpose_on_model_output = false;
+  // Unexpose color response. Only used when unexpose_on_model_output is on.
+  // See UnexposeNatural in shaders/common/color.hlsli.
+  //
+  // naturalness: how much extra chroma reduction per unit of lightness
+  //   below reference_l. 0 reproduces the plain linear divide exactly.
+  // reference_l: OKLab lightness where the compensation is exactly 1.
+  //   Below it chroma is reduced, above it is boosted slightly.
+  float unexpose_naturalness = 0.2f;
+  float unexpose_reference_l = 0.5f;
   ExposureFilterSettings filters = {};
 };
 

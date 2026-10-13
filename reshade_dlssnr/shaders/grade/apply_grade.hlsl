@@ -69,11 +69,16 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float3 lin = DecodeSource(src.rgb);
 
     // Unexpose before the grade: grading is nonlinear, so divide-then-grade
-    // is not equivalent to grade-then-divide.
+    // is not equivalent to grade-then-divide. The unexpose itself is done in
+    // OKLab so the Hunt effect (perceived saturation falls with luminance)
+    // is reproduced, and the unlifted image reads as a naturally darker
+    // scene rather than the same scene with a linear brightness knob turned
+    // down. See UnexposeNatural in common/color.hlsli.
     if (kUnexposeFlag > 0.5) {
         const float local_scale =
             max(gExposure.SampleLevel(s0, uv, 0), 1e-6);
-        lin = lin / local_scale;
+        lin = UnexposeNatural(lin, local_scale,
+                            kUnexposeNaturalness, kUnexposeReferenceL);
     }
 
     float3 graded = GradeLinearFwd(lin);

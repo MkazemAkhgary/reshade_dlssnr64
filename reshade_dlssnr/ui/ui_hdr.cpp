@@ -244,6 +244,18 @@ void DrawLocalLayer(LocalExposureLayerSettings& layer, bool& changed) {
                                &layer.unexpose_on_model_output);
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
       Tip("Divide the model output by the local exposure scale before the output grade, removing the lift this layer applied to the model input. Runs at the same step as the Output Grade, whether or not that grade is enabled.");
+    WithDisabled(!layer.unexpose_on_model_output, [&] {
+      changed |= DrawFloatRow(0, "local_unexpose_naturalness",
+                              "Unexpose Naturalness",
+                              "How strongly the unexpose desaturates as the image darkens, reproducing the Hunt effect (perceived saturation falls with luminance). 0 restores the plain linear divide; 0.2 is subtle; 0.5 is a strong, film-like look.",
+                              &layer.unexpose_naturalness, nullptr, 0.2f,
+                              0.0f, 1.0f, 0.2f);
+      changed |= DrawFloatRow(0, "local_unexpose_reference_l",
+                              "Unexpose Reference Lightness",
+                              "OKLab lightness at which the unexpose is neutral (matches the plain divide exactly). Below it chroma is reduced, above it is boosted slightly. ~0.5 sits just below perceptual mid-grey; raise it to affect more of the frame, lower it to affect only the darkest pixels.",
+                              &layer.unexpose_reference_l, nullptr, 0.5f,
+                              0.1f, 1.0f, 0.5f);
+    });
     DrawFilterControls("local_filters", layer.filters, changed);
   });
 }

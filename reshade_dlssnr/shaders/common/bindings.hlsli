@@ -44,6 +44,8 @@
 #define kEasuCon2     easu.Con2
 #define kRcasEnabled  rcas.Enabled
 #define kRcasStrength rcas.Strength
+#define kUnexposeNaturalness  rcas.UnexposeNaturalness
+#define kUnexposeReferenceL   rcas.UnexposeReferenceL
 
 // Dynamic shader parameter table
 #define kLumaStrength    shader.Params0.x

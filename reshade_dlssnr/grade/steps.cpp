@@ -38,6 +38,15 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
   if (!grade.enabled && exposure_map == nullptr) return PipelineStatus::Ok;
   if (run.device == nullptr || run.codec == nullptr) return PipelineStatus::Ok;
 
+  // Unexpose Hunt-effect controls. They only affect the unexpose path,
+  // which is part of Local Exposure, so the values live with that
+  // layer. Defaults match the shader's own defaults when the settings
+  // pointer is unavailable.
+  const float unexpose_naturalness = run.settings != nullptr
+      ? run.settings->hdr.local_exposure.unexpose_naturalness : 0.2f;
+  const float unexpose_reference_l = run.settings != nullptr
+      ? run.settings->hdr.local_exposure.unexpose_reference_l : 0.5f;
+
   const D3D12_RESOURCE_DESC desc = target->GetDesc();
   const unsigned int width = static_cast<unsigned int>(desc.Width);
   const unsigned int height = desc.Height;
@@ -53,7 +62,7 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
           self->command_, list, run.codec, target,
           self->resources_.GetScratch(scratch_slot), width, height,
           GradeFormatCode(run, target, model_sdr_domain), grade,
-          exposure_map)) {
+          exposure_map, unexpose_naturalness, unexpose_reference_l)) {
     self->FailForStep("failed to apply the grade");
     return PipelineStatus::Fail;
   }
