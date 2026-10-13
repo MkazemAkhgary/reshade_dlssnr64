@@ -15,6 +15,99 @@ SamplerState        s0           : register(s0);
 
 #include "common/fsr.hlsli"
 
+// ---------------------------------------------------------------------------
+// Joint bilateral upsampling, guided by a full-resolution image.
+//
+// Each full-resolution output pixel is the weighted average of the 3x3
+// low-resolution samples nearest its projected low-res coordinate. The
+// weight of a low-res sample is exp(-|dG| * sharpness), where dG is the
+// difference between the guide luma at that sample's corresponding
+// full-resolution position and the guide luma at the output pixel.
+//
+// At working scale 1.0 the caller reads the low-res texture directly, so
+// this helper is only reached when the projection spans multiple source
+// pixels.
+// ---------------------------------------------------------------------------
+float3 JointBilateralUpsample(
+    int2 full_xy,
+    int2 full_size,
+    Texture2D<float4> low_tex,
+    Texture2D<float4> guide_tex,
+    float sharpness)
+{
+    uint low_w_u = 0u;
+    uint low_h_u = 0u;
+    low_tex.GetDimensions(low_w_u, low_h_u);
+    const int low_w = max((int)low_w_u, 1);
+    const int low_h = max((int)low_h_u, 1);
+    if (full_size.x <= 0 || full_size.y <= 0) return float3(0.0, 0.0, 0.0);
+
+    const float2 full_sz = float2((float)full_size.x, (float)full_size.y);
+    const float2 low_sz  = float2((float)low_w, (float)low_h);
+
+    // Pixel-center projection from full-res to low-res space. At 1:1 this
+    // lands exactly on the source pixel; at other scales it interpolates.
+    const float2 full_center = float2((float)full_xy.x + 0.5,
+                                      (float)full_xy.y + 0.5);
+    const float2 low_pix = full_center * (low_sz / full_sz);
+    const int2 low_center = int2((int)floor(low_pix.x),
+                                 (int)floor(low_pix.y));
+
+    const float3 guide_center = guide_tex.Load(int3(full_xy, 0)).rgb;
+    const float guide_luma_center =
+        dot(guide_center, float3(0.2126, 0.7152, 0.0722));
+
+    float3 accum = float3(0.0, 0.0, 0.0);
+    float  weight_sum = 0.0;
+
+    [unroll]
+    for (int dy = -1; dy <= 1; ++dy) {
+        [unroll]
+        for (int dx = -1; dx <= 1; ++dx) {
+            const int2 low_xy = int2(low_center.x + dx, low_center.y + dy);
+            if (low_xy.x < 0 || low_xy.y < 0 ||
+                low_xy.x >= low_w || low_xy.y >= low_h) {
+                continue;
+            }
+
+            // Full-res position of this low-res sample's center, so the
+            // guide is read at the same feature the sample represents.
+            const float2 low_neighbor_uv = float2(
+                ((float)low_xy.x + 0.5) / (float)low_w,
+                ((float)low_xy.y + 0.5) / (float)low_h);
+            int2 full_neighbor_xy = int2(
+                (int)floor(low_neighbor_uv.x * full_sz.x),
+                (int)floor(low_neighbor_uv.y * full_sz.y));
+            full_neighbor_xy.x =
+                clamp(full_neighbor_xy.x, 0, full_size.x - 1);
+            full_neighbor_xy.y =
+                clamp(full_neighbor_xy.y, 0, full_size.y - 1);
+
+            const float3 guide_neighbor =
+                guide_tex.Load(int3(full_neighbor_xy, 0)).rgb;
+            const float guide_luma_neighbor =
+                dot(guide_neighbor, float3(0.2126, 0.7152, 0.0722));
+
+            const float luma_diff =
+                abs(guide_luma_neighbor - guide_luma_center);
+            const float weight = exp(-luma_diff * sharpness);
+
+            const float3 low_val = low_tex.Load(int3(low_xy, 0)).rgb;
+            accum += low_val * weight;
+            weight_sum += weight;
+        }
+    }
+
+    if (weight_sum > 0.0) return accum / weight_sum;
+
+    // Degenerate weight sum: fall back to the projected sample directly.
+    const int2 clamped_center = int2(
+        clamp(low_center.x, 0, low_w - 1),
+        clamp(low_center.y, 0, low_h - 1));
+    return low_tex.Load(int3(clamped_center, 0)).rgb;
+}
+
+
 // Shared shader state is declared by the common cbuffer/bindings includes.
 
 // Same shaping as ShapeResidual in the HDR compose, but on the SDR path's
@@ -61,20 +154,26 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     // FSR 1.0 EASU upsample from the actual model working resolution back to
     // full SDR resolution. Both HDR and SDR compose use the same reconstruction.
-    const float2 easu_con3 = float2(0.0, 4.0 * kEasuCon1.y);
     float3 in_rgb;
     float3 out_rgb;
     if (kEasuCon0.x == 1.0 && kEasuCon0.y == 1.0) {
-        // Working scale 1:1 needs no EASU reconstruction. Keep the compose
-        // dispatch (and optional RCAS below), but replace neighbourhood gathers
-        // with direct loads from the two already full-resolution textures.
+        // Working scale 1:1: the low-res buffers are already full resolution,
+        // so read them directly.
         in_rgb = gLowInput.Load(int3(id.xy, 0)).rgb;
         out_rgb = gLowEnhanced.Load(int3(id.xy, 0)).rgb;
     } else {
-        in_rgb = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
-                          easu_con3, 0);
-        out_rgb = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
-                           easu_con3, 1);
+        // Joint bilateral upsample the model input and output separately,
+        // guided by the full-resolution original. This replaces the EASU
+        // reconstruction, which produces a blocky pattern when the working
+        // scale is far from EASU's design point (~2x). The residual math
+        // below is unchanged: it still operates on in_rgb and out_rgb, so
+        // the model's per-channel edit — chroma included — is preserved.
+        const int2 full_size_int = int2((int)Width, (int)Height);
+        const int2 full_xy = int2((int)id.x, (int)id.y);
+        in_rgb  = JointBilateralUpsample(
+            full_xy, full_size_int, gLowInput,  gOriginal, 8.0);
+        out_rgb = JointBilateralUpsample(
+            full_xy, full_size_int, gLowEnhanced, gOriginal, 8.0);
     }
 
     if (kRcasEnabled > 0.5) {
