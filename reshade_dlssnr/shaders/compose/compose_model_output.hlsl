@@ -57,6 +57,20 @@ float3 JointBilateralUpsample(
     const float guide_luma_center =
         dot(guide_center, float3(0.2126, 0.7152, 0.0722));
 
+    // Bilateral weighting. The spatial term is essential: with range-only
+    // weighting every full-res pixel inside one low-res cell reads the same
+    // 3x3 neighborhood with the same weights, so the cell collapses to a
+    // constant and the output shows a fixed grid at low working scales.
+    // Adding the distance from the continuous projected position low_pix
+    // makes each full-res pixel's weights unique and continuous, so the
+    // reconstruction varies smoothly across each cell and agrees at cell
+    // boundaries.
+    //
+    // Spatial sigma is fixed at 1.0 low-res pixels. That matches the sample
+    // spacing, so the nearest sample dominates and the outer ring fades to
+    // roughly 10% at the diagonal.
+    const float spatial_sigma_inv2 = 1.0;
+
     float3 accum = float3(0.0, 0.0, 0.0);
     float  weight_sum = 0.0;
 
@@ -70,11 +84,17 @@ float3 JointBilateralUpsample(
                 continue;
             }
 
+            // Spatial distance from the continuous projected position to
+            // this sample's center, in low-res pixel units.
+            const float2 sample_center = float2((float)low_xy.x + 0.5,
+                                                (float)low_xy.y + 0.5);
+            const float2 offset = sample_center - low_pix;
+            const float spatial_weight =
+                exp(-dot(offset, offset) * spatial_sigma_inv2);
+
             // Full-res position of this low-res sample's center, so the
             // guide is read at the same feature the sample represents.
-            const float2 low_neighbor_uv = float2(
-                ((float)low_xy.x + 0.5) / (float)low_w,
-                ((float)low_xy.y + 0.5) / (float)low_h);
+            const float2 low_neighbor_uv = sample_center / low_sz;
             int2 full_neighbor_xy = int2(
                 (int)floor(low_neighbor_uv.x * full_sz.x),
                 (int)floor(low_neighbor_uv.y * full_sz.y));
@@ -90,8 +110,9 @@ float3 JointBilateralUpsample(
 
             const float luma_diff =
                 abs(guide_luma_neighbor - guide_luma_center);
-            const float weight = exp(-luma_diff * sharpness);
+            const float range_weight = exp(-luma_diff * sharpness);
 
+            const float weight = spatial_weight * range_weight;
             const float3 low_val = low_tex.Load(int3(low_xy, 0)).rgb;
             accum += low_val * weight;
             weight_sum += weight;
