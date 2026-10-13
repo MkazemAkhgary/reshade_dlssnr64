@@ -6,6 +6,9 @@
 # Generated shaders
 reshade_dlssnr/generated/
 
+# diff script
+apply_diff.py
+
 # User-specific files
 *.rsuser
 *.suo
