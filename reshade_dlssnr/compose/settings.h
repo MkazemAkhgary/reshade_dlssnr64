@@ -13,6 +13,18 @@ enum class UpsampleMode : int {
   JointBilateral = 1,
 };
 
+// Spatial extent of the joint-bilateral kernel. Larger kernels spread
+// the reconstruction across more low-resolution samples, smoothing
+// curves and diagonals and reducing sample-grid modulation at very low
+// working scales, at proportionally higher texture-load cost. The
+// spatial sigma is derived from the kernel half-size (sigma = half) so
+// the outer diagonal tap is weighted the same at every size.
+enum class UpsampleKernel : int {
+  Kernel3x3 = 0,
+  Kernel5x5 = 1,
+  Kernel7x7 = 2,
+};
+
 struct ResidualSettings {
   float edit_strength = 1.0f;
   float chroma_strength = 1.0f;
@@ -31,6 +43,11 @@ struct ResidualSettings {
   // image's edges more sharply; lower values blend more across the
   // low-resolution neighborhood. It does not scale the residual itself.
   float upsample_sharpness = 8.0f;
+  // Joint-bilateral kernel size. 3x3 is the default and lowest-cost;
+  // 5x5 and 7x7 widen the spatial support. The kernel and the spatial
+  // sigma are coupled: sigma = half-size, so the falloff shape is the
+  // same across sizes and only the number of contributing taps changes.
+  UpsampleKernel upsample_kernel = UpsampleKernel::Kernel3x3;
 
   float ratio_eps = 1e-2f;
   float ratio_brighten = 64.0f;

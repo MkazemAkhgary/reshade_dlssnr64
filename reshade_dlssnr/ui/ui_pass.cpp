@@ -401,6 +401,30 @@ void DrawResidualSection(uint32_t pass_index, Settings& settings,
         "This is an edge-preservation exponent, not a strength "
         "multiplier: it does not amplify or attenuate the model's edit.",
         &pass.residual.upsample_sharpness, nullptr, 8.0f, 0.5f, 32.0f, 8.0f);
+    {
+      static const char* kKernelLabels[] = {"3x3", "5x5", "7x7"};
+      static const char* kKernelTips[] = {
+          "3x3 kernel. Nine samples per output pixel. Lowest cost, "
+          "good for typical working scales.",
+          "5x5 kernel. Twenty-five samples. Wider spatial support, "
+          "smoother reconstruction across curves and diagonals, and "
+          "weaker sample-grid modulation at very low working scales.",
+          "7x7 kernel. Forty-nine samples. Further smoothing at "
+          "increasing cost; the outer ring contributes little unless "
+          "the scene has large, softly-varying low-resolution "
+          "features."};
+      int kernel = static_cast<int>(pass.residual.upsample_kernel);
+      if (DrawComboRow("residual_upsample_kernel", "Upsample Kernel",
+                       "Spatial extent of the joint-bilateral kernel. "
+                       "The spatial sigma is derived from the kernel "
+                       "size, so the falloff shape is the same across "
+                       "sizes and only the number of contributing taps "
+                       "changes.",
+                       &kernel, kKernelLabels, kKernelTips, 3)) {
+        pass.residual.upsample_kernel = static_cast<UpsampleKernel>(kernel);
+        changed = true;
+      }
+    }
   });
 
   const bool ratio_controls_disabled =

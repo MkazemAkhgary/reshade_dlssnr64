@@ -32,6 +32,15 @@ void LoadResidual(const std::string& prefix, ResidualSettings& residual) {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             (prefix + "UpsampleSharpness").c_str(),
                             residual.upsample_sharpness);
+  int upsample_kernel = static_cast<int>(residual.upsample_kernel);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "UpsampleKernel").c_str(),
+                            upsample_kernel);
+  if (upsample_kernel < static_cast<int>(UpsampleKernel::Kernel3x3) ||
+      upsample_kernel > static_cast<int>(UpsampleKernel::Kernel7x7)) {
+    upsample_kernel = static_cast<int>(UpsampleKernel::Kernel3x3);
+  }
+  residual.upsample_kernel = static_cast<UpsampleKernel>(upsample_kernel);
   if (residual.upsample_sharpness < 0.5f) residual.upsample_sharpness = 0.5f;
   if (residual.upsample_sharpness > 32.0f) residual.upsample_sharpness = 32.0f;
   if (residual.edit_strength < 0.0f) residual.edit_strength = 0.0f;
@@ -86,6 +95,9 @@ void SaveResidual(const std::string& prefix, const ResidualSettings& residual) {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             (prefix + "UpsampleSharpness").c_str(),
                             residual.upsample_sharpness);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "UpsampleKernel").c_str(),
+                            static_cast<int>(residual.upsample_kernel));
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             (prefix + "RatioEps").c_str(),
                             residual.ratio_eps);

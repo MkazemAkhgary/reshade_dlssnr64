@@ -52,6 +52,13 @@ bool ComposeOutput(
       static_cast<float>(static_cast<int>(residual.upsample_mode));
   constants.hdr.UpsampleSharpness = residual.upsample_sharpness;
 
+  // Joint-bilateral kernel half-size, derived from the enum and packed
+  // into shader.Params1.w. The slot was freed when the sigma slider was
+  // reverted; the shader derives sigma from this value, so there is no
+  // separate sigma uniform and the CBV layout is unchanged.
+  constants.shader.Params1.w =
+      static_cast<float>(static_cast<int>(residual.upsample_kernel) + 1);
+
 
   const char* pass_name = "ComposeModelOutput";
 

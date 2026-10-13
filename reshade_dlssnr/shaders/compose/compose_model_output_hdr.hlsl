@@ -70,18 +70,25 @@ float3 JointBilateralUpsample(
     // reconstruction varies smoothly across each cell and agrees at cell
     // boundaries.
     //
-    // Spatial sigma is fixed at 1.0 low-res pixels. That matches the sample
-    // spacing, so the nearest sample dominates and the outer ring fades to
-    // roughly 10% at the diagonal.
-    const float spatial_sigma_inv2 = 1.0;
+    // Kernel half-size from the pass's Upsample Kernel setting:
+    //   3x3 -> half = 1, 5x5 -> half = 2, 7x7 -> half = 3
+    //
+    // Sigma is derived from the half-size, sigma = half. That puts the
+    // spatial weight at the outermost diagonal tap at exp(-2) for every
+    // kernel size, so the shape of the falloff is identical and only the
+    // number of contributing taps changes. There is no separate sigma
+    // uniform: the kernel size is the only control.
+    const int kernel_half = max((int)(kUpsampleKernelHalf + 0.5), 1);
+    const float spatial_sigma = (float)kernel_half;
+    const float spatial_sigma_inv2 = 1.0 / (spatial_sigma * spatial_sigma);
 
     float3 accum = float3(0.0, 0.0, 0.0);
     float  weight_sum = 0.0;
 
-    [unroll]
-    for (int dy = -1; dy <= 1; ++dy) {
-        [unroll]
-        for (int dx = -1; dx <= 1; ++dx) {
+    [loop]
+    for (int dy = -kernel_half; dy <= kernel_half; ++dy) {
+        [loop]
+        for (int dx = -kernel_half; dx <= kernel_half; ++dx) {
             const int2 low_xy = int2(low_center.x + dx, low_center.y + dy);
             if (low_xy.x < 0 || low_xy.y < 0 ||
                 low_xy.x >= low_w || low_xy.y >= low_h) {

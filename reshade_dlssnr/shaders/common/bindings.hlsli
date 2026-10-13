@@ -55,3 +55,4 @@
 #define kSoftKnee        shader.Params1.z
 #define kUpsampleMode      hdr.UpsampleMode
 #define kUpsampleSharpness hdr.UpsampleSharpness
+#define kUpsampleKernelHalf shader.Params1.w

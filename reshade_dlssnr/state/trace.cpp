@@ -68,6 +68,15 @@ const char* UpsampleModeText(UpsampleMode mode) {
     default: return "JointBilateral";
   }
 }
+const char* UpsampleKernelText(UpsampleKernel kernel) {
+  switch (kernel) {
+    case UpsampleKernel::Kernel3x3: return "3x3";
+    case UpsampleKernel::Kernel5x5: return "5x5";
+    case UpsampleKernel::Kernel7x7: return "7x7";
+    default: return "3x3";
+  }
+}
+
 
 const char* ChromaModeText(GradeChromaMode mode) {
   switch (mode) {
@@ -129,6 +138,8 @@ void AppendPass(Snapshot& snap, const std::string& prefix,
          FloatText(pass.residual.shadow_protect));
   Append(snap, prefix + ".residual.upsample_sharpness",
          FloatText(pass.residual.upsample_sharpness));
+  Append(snap, prefix + ".residual.upsample_kernel",
+         UpsampleKernelText(pass.residual.upsample_kernel));
   Append(snap, prefix + ".residual.upsample_mode",
          UpsampleModeText(pass.residual.upsample_mode));
   Append(snap, prefix + ".residual.ratio_eps",
