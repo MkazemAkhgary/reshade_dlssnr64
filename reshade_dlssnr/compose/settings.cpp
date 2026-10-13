@@ -20,6 +20,11 @@ void LoadResidual(const std::string& prefix, ResidualSettings& residual) {
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
                             (prefix + "ShadowProtect").c_str(),
                             residual.shadow_protect);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "UpsampleSharpness").c_str(),
+                            residual.upsample_sharpness);
+  if (residual.upsample_sharpness < 0.5f) residual.upsample_sharpness = 0.5f;
+  if (residual.upsample_sharpness > 32.0f) residual.upsample_sharpness = 32.0f;
   if (residual.edit_strength < 0.0f) residual.edit_strength = 0.0f;
   if (residual.edit_strength > 2.0f) residual.edit_strength = 2.0f;
   if (residual.chroma_strength < 0.0f) residual.chroma_strength = 0.0f;
@@ -66,6 +71,9 @@ void SaveResidual(const std::string& prefix, const ResidualSettings& residual) {
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             (prefix + "ShadowProtect").c_str(),
                             residual.shadow_protect);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
+                            (prefix + "UpsampleSharpness").c_str(),
+                            residual.upsample_sharpness);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR",
                             (prefix + "RatioEps").c_str(),
                             residual.ratio_eps);

@@ -44,6 +44,11 @@ bool ComposeOutput(
   constants.residual.RatioBrighten = residual.ratio_brighten;
   constants.residual.RatioDarken = residual.ratio_darken;
 
+  // Edge-preservation exponent for the joint-bilateral upsample of
+  // the model's low-resolution input and output. Lives in the unused
+  // shader.Params1.w slot, so the CBV layout is unchanged.
+  constants.shader.Params1.w = residual.upsample_sharpness;
+
   const char* pass_name = "ComposeModelOutput";
 
   // FSR 1.0 EASU + optional RCAS is shared by both SDR and HDR compose.

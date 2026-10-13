@@ -198,7 +198,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         low_in  = JointBilateralUpsample(
             full_xy, full_size_int, gLowInput,  gOriginal, 8.0);
         low_out = JointBilateralUpsample(
-            full_xy, full_size_int, gLowEnhanced, gOriginal, 8.0);
+            full_xy, full_size_int, gLowEnhanced, gOriginal, kUpsampleSharpness);
     }
 
     if (kRcasEnabled > 0.5) {

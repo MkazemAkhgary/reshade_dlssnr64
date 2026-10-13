@@ -119,6 +119,8 @@ void AppendPass(Snapshot& snap, const std::string& prefix,
          FloatText(pass.residual.highlight_protect));
   Append(snap, prefix + ".residual.shadow_protect",
          FloatText(pass.residual.shadow_protect));
+  Append(snap, prefix + ".residual.upsample_sharpness",
+         FloatText(pass.residual.upsample_sharpness));
   Append(snap, prefix + ".residual.ratio_eps",
          FloatText(pass.residual.ratio_eps));
   Append(snap, prefix + ".residual.ratio_brighten",

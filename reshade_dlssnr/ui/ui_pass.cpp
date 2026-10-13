@@ -366,6 +366,16 @@ void DrawResidualSection(uint32_t pass_index, Settings& settings,
       "Fades the edit out below mid-to-low brightness.",
       &pass.residual.shadow_protect, nullptr, 0.0f, 0.0f, 1.0f, 0.0f);
 
+  changed |= DrawFloatRow(
+      pass_index, "residual_upsample_sharpness", "Upsample Sharpness",
+      "Edge-preservation exponent for the guided upsample of the "
+      "model's input and output. Higher values track the "
+      "full-resolution image's edges more sharply; lower values "
+      "blend more smoothly across the low-resolution neighborhood. "
+      "This is an edge-preservation exponent, not a strength "
+      "multiplier: it does not amplify or attenuate the model's edit.",
+      &pass.residual.upsample_sharpness, nullptr, 8.0f, 0.5f, 32.0f, 8.0f);
+
   const bool ratio_controls_disabled =
       pass.injection_stage != InjectionStage::Backbuffer;
   WithDisabled(ratio_controls_disabled, [&] {

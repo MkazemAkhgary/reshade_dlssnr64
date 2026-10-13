@@ -12,6 +12,12 @@ struct ResidualSettings {
   float highlight_protect = 0.0f;
   float shadow_protect = 0.0f;
 
+  // Edge-preservation exponent for the joint-bilateral upsample of the
+  // model's input and output. Higher values follow the full-resolution
+  // image's edges more sharply; lower values blend more across the
+  // low-resolution neighborhood. It does not scale the residual itself.
+  float upsample_sharpness = 8.0f;
+
   float ratio_eps = 1e-2f;
   float ratio_brighten = 64.0f;
   float ratio_darken = 1.0f / 16.0f;
