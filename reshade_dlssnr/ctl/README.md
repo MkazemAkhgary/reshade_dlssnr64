@@ -1,0 +1,383 @@
+# ctl — the control settings framework
+
+A declarative settings system. Settings are *declared* in code, one expression
+each; the framework owns storage, UI rendering, inheritance, and persistence.
+Nothing in this directory knows what a "pass", "layer", "camera", or "preset"
+is — those are the application's words, expressed through sections, instance
+keys and parent links.
+
+```
+ctl/
+  ctl.h                 umbrella header
+  types.h/.cpp          Value, SettingMeta, Setting, SettingContext
+  schema.h/.cpp         Section, Hook, Schema         (declaration)
+  registry.h/.cpp       type registry                 (extensibility)
+  values.h/.cpp         InstanceKey, Instance, InstanceSet, ValueStore (storage + inheritance)
+  serialize.h/.cpp      KeyValueWriter/Reader, Save/Load (persistence)
+  draw.h/.cpp           DrawSection                  (rendering)
+  builtin_settings.h/.cpp  FloatSetting, IntSetting, BoolSetting, EnumSetting, StringSetting
+  ctl_acceptance.cpp    acceptance harness
+  build_ctl_acceptance.sh / build_ctl_check.sh  dev scripts
+  test_row_stubs.cpp / test_imgui_stubs.cpp      harness-only link stubs
+```
+
+## Quick start
+
+```cpp
+using namespace reshade_dlssnr::ctl;
+
+Schema schema;
+
+// Single-instance section: exactly one value set.
+Section& prefs = schema.AddSection("Preferences", SectionKind::Single);
+prefs.Add<BoolSetting>("tooltips", "Show tooltips", true);
+prefs.Add<EnumSetting>("preset", "Preset", 1)
+     .Items(kPresetNames, kPresetTooltips, 3);
+
+// Instanced section: one value set per key. Declared identically.
+Section& model = schema.AddSection("Model", SectionKind::Instanced);
+model.Add<FloatSetting>("intensity", "Intensity", 1.0f)
+     .Range(0.0f, 2.0f)
+     .Tooltip("How strongly the model edits the image.")
+     .Inheritable();
+model.Add<EnumSetting>("upsample", "Upsample mode", 1)
+     .Items(kUpsampleNames, nullptr, 2);   // not inheritable
+
+model.AddHookBefore("upsample", "PresetRow",
+                    [](const void*, ValueStore&, const DrawOptions&,
+                       const std::string&, const InstanceKey&, bool&) {
+                      return DrawPresetRow();
+                    });
+
+std::string error;
+if (!schema.Build(&error)) { /* name collision or bad hook anchor */ }
+
+ValueStore store(schema);      // live state
+```
+
+Then, each frame, enumerate the sections the page shows:
+
+```cpp
+bool changed = false;
+DrawSection(store, "Preferences", InstanceKey::FromInt(0), changed);
+DrawSection(store, "Model", InstanceKey::FromInt(active_pass), changed);
+if (changed) SaveSettings();
+```
+
+There is deliberately no "draw every section" entry point. Which sections
+appear, and in what order, is a property of the page drawing them, and a page
+that folds some sections into a tab bar (HDR's exposure layers) must not also
+let them fall out of a blanket iteration. The caller enumerates.
+
+## The pieces
+
+### Settings are declarations
+
+`Section::Add<T>` returns `T&`, so a setting is configured with fluent setters
+and the whole declaration stays one expression. Declaration order is render
+order — `Schema::Build` records it and the drawer replays it.
+
+`SettingMeta` carries `name`, `label`, `tooltip`, `category`, `persist`
+(default true) and `inheritable` (default **false**, opt-in). Adding a metadata
+field never breaks an existing setting because every field has a default.
+
+### Hooks
+
+A hook is an insertion point for UI the settings model cannot express — a tab
+bar, a live readout, a histogram. **Identity is data; only the rendering is
+code.** Where a hook sits (its anchor, placement and name) is declared as plain
+values, which is the whole of what the framework knows about it. The rendering
+is a lambda at that same declaration site:
+
+```cpp
+hdr.AddHookBefore("format", "HdrStatus",
+                  [](const void*, ValueStore&, const DrawOptions&,
+                     const std::string&, const InstanceKey&, bool&) {
+                    return DrawHdrStatus();
+                  });
+hdr.AddHookAfter("highlight_headroom", "ExposureTabs", &DrawExposureTabs);
+hdr.AddHookAppend("Footer",
+                  [](const void*, ValueStore&, const DrawOptions&,
+                     const std::string&, const InstanceKey&, bool& changed) {
+                    return DrawFooter(changed);
+                  });
+```
+
+The lambda must be captureless, so it converts to a plain function pointer:
+the `Hook` stays trivially copyable and the schema needs no per-hook
+allocation or `std::function`. A lambda that captures is a compile error, and
+that is the point — a hook's position is data, so the code it runs must not
+smuggle in per-instance state. Anything a hook needs at run time comes from the
+context it was handed: the store and the instance key.
+
+The callback signature is
+`bool(const void* context, ValueStore&, const DrawOptions&, const std::string& section, const InstanceKey& key, bool& changed)`.
+A hook is handed the store, the options, the section it sits in, and the
+instance key it is running for — the key whole, never a hash or an index
+derived from it. A hook that draws another section's body for the same
+instance (HDR's layer tabs) gives that key straight back to `DrawSection`, and
+it can only do that if it was given the key. An integer surrogate would work
+for a numeric key and silently collapse two distinct string keys. A hook draws
+from the store and reports whether it changed anything, exactly like a setting
+row.
+
+`Schema::Build` resolves each anchor and splices the hook into the section's row
+list, so a hook participates in ordering exactly like a setting. Within a
+category sub-group a hook obeys the group's collapse state, so a tab bar or
+readout cannot leak out of a collapsed sub-section.
+
+### Types are one class plus one registration line
+
+To add `ColorSetting`:
+
+1. Write the class — derive from `Setting`, implement `DefaultValue`, `Clamp`,
+   `Assign`, `ToString`, `FromString`, `Draw`.
+2. Register it — `registry.Register("color", [] { return std::make_unique<ColorSetting>("", ""); });`
+
+Nothing else changes: not the other types, not the manager, not any call site.
+The acceptance harness proves this with its `ColorSetting` (test 27).
+
+### Keys are opaque
+
+```cpp
+InstanceKey::FromInt(pass_index)
+InstanceKey::FromString("camera.main")
+```
+
+The framework assigns them no meaning. They are not required to be indices,
+monotonic, or contiguous. `InstanceKey::ToText()` writes an int key as `i<digits>`
+and a string key as `s<text>` so the two flavours can never collide in config.
+Instances are created lazily on first access, so declaring a key that nothing
+ever touches costs nothing.
+
+### Inheritance is opt-in per setting
+
+A parent link lives on the *instance*, but only settings flagged `inheritable`
+consult it:
+
+```cpp
+store.SetParent("Model", child_key, parent_key);   // rejects cycle-closing links
+store.Revert("Model", child_key, "intensity");     // drop one override
+store.RevertAll("Model", child_key);               // drop all inheritable overrides
+```
+
+Reading resolves by walking the parent chain to the first override, then
+falling back to the schema default. The walk is bounded, missing parents simply
+end the chain, and a cycle can never be created in the first place.
+
+A **non-inheritable** setting in the same section ignores the chain entirely:
+it reads its own value or its declared default, and it renders with no dimming,
+no source tag and no revert affordance even when the instance has a parent.
+
+Writing through either the UI or the programmatic API marks an override and
+invalidates every non-overriding descendant, so propagation is visible in the
+same frame.
+
+### Persistence
+
+```cpp
+using InstanceKeySource =
+    std::vector<InstanceKey> (*)(const void* context, const std::string& section);
+
+void Save(ValueStore&, KeyValueWriter&, const std::string& prefix = {},
+          const InstanceKeySource& source = nullptr,
+          const void* context = nullptr);
+void Delete(ValueStore&, KeyValueWriter&,
+            const InstanceKeySource& source = nullptr,
+            const void* context = nullptr, const std::string& prefix = {});
+void Load(ValueStore&, KeyValueReader&, const InstanceKeySource& source = nullptr,
+          const void* context = nullptr, const std::string& prefix = {});
+```
+
+Both key-value interfaces are abstract, so the framework never depends on
+ReShade's config API. Keys are laid out as:
+
+```
+<prefix>.Version
+<prefix>.S.<Section>.<setting>              single-instance section
+<prefix>.S.<Section>.K.<keytext>.<setting>  instanced section
+```
+
+When `prefix` is empty, the leading dot is omitted. `Delete` uses the same
+schema traversal and supplied instance keys to erase every persistable setting
+key in the block, regardless of whether the setting is overridden in the live
+store. It also erases the version key. Missing keys are a silent no-op.
+
+Guarantees: only `persist` settings are written; a non-inheritable setting is
+written unconditionally; an inheritable one is written only when overridden;
+unknown keys and unknown settings are skipped rather than failing; an instanced
+setting left unset stays at its declared default.
+
+**Who knows the instance keys.** `Load` and `Delete` need them, and `Save` can
+take them when it should write only a selected instance set. The reader and
+writer cannot enumerate keys because the backend behind them (ReShade's config
+API) cannot. This is a deliberate limit, not a shortage: a key-value interface
+that *could* enumerate would be promising more than a config file delivers.
+
+So the consumer supplies them. `source` is called once per instanced section and
+returns the keys to load, which the loader then creates if they are not there
+yet:
+
+```cpp
+// The application owns pass_count; ctl does not.
+std::vector<InstanceKey> PassKeys(const void* context, const std::string& section) {
+  if (section != kPassSection) return {};
+  const int count = *static_cast<const int*>(context);
+  std::vector<InstanceKey> keys;
+  for (int i = 0; i < count; ++i) keys.push_back(InstanceKey::FromInt(i));
+  return keys;
+}
+```
+
+**NON-GOAL: ctl does not track instance count.** How many instances exist is
+application state — it is what the UI edits, what the schema is built for, and
+what a saved file describes. ctl will not infer it from the config (it cannot)
+and will not own it in a counter of its own; the consumer passes it in as a key
+range. Exactly one place therefore knows how many instances there are, and it is
+the place that already did.
+
+**`ReshadeConfigWriter` / `ReshadeConfigReader`** (`ctl/usage/config.{h,cpp}`)
+are the production implementations over `reshade::get_config_value` /
+`set_config_value`. The writer erases a key by passing a null value to
+ReShade's config API. Neither adapter can enumerate keys, so the consumer must
+still supply instance keys to `Load` and `Delete`.
+
+
+## Worked example: per-pass settings
+
+The application has N effect passes, arranged in a chain where pass 0 is the
+root and each later pass may either define its own value or follow its
+predecessor. That is *entirely* the application's vocabulary — the framework
+only sees one instanced section, integer keys, and parent links.
+
+```cpp
+// --- Declaration, once at startup -----------------------------------------
+
+Schema schema;
+
+Section& pass = schema.AddSection("Pass", SectionKind::Instanced);
+
+pass.Add<BoolSetting>("enabled", "Enabled", true);
+
+pass.Add<FloatSetting>("intensity", "Intensity", 1.0f)
+    .Range(0.0f, 2.0f)
+    .Tooltip("Blend weight for this pass.")
+    .Inheritable();
+
+pass.Add<FloatSetting>("working_scale", "Working scale", 1.0f)
+    .Range(0.1f, 1.0f)
+    .Inheritable();
+
+// Deliberately NOT inheritable: the upsample kernel is a per-pass property
+// that must be chosen explicitly, never silently copied from the previous
+// pass.
+pass.Add<EnumSetting>("upsample", "Upsample kernel", 0)
+    .Items(kUpsampleNames, kUpsampleTooltips, kUpsampleCount);
+
+// A hook that draws a "follow previous pass" toggle right above `intensity`.
+pass.AddHookBefore("intensity", "FollowRow", &DrawFollowRow);
+
+std::string error;
+schema.Build(&error);
+// (error is non-empty on a duplicate name or an anchor that does not resolve)
+
+ValueStore store(schema);
+```
+
+```cpp
+// --- Parent links ---------------------------------------------------------
+
+// Pass 0 is the root: no parent. Passes 1..N-1 follow their predecessor.
+for (int i = 1; i < pass_count; ++i) {
+  store.SetParent("Pass", InstanceKey::FromInt(i), InstanceKey::FromInt(i - 1));
+}
+```
+
+```cpp
+// --- The "follow previous pass" toggle, drawn by the hook -----------------
+
+bool DrawFollowRow(void* ctx, const InstanceKey& key, bool& changed) {
+  auto* app = static_cast<App*>(ctx);
+
+  bool follows = app->store.ParentOf("Pass", key, nullptr);
+  if (key == InstanceKey::FromInt(0)) {
+    ImGui::TextDisabled("(root pass)");
+    return false;
+  }
+  if (ImGui::Checkbox("Follow previous pass", &follows)) {
+    if (follows) {
+      app->store.SetParent("Pass", key, ctl::InstanceKey::FromInt(
+                                            key.int_value() - 1));
+    } else {
+      app->store.ClearParent("Pass", key);
+    }
+    changed = true;
+  }
+  return changed;
+}
+```
+
+```cpp
+// --- Per frame ------------------------------------------------------------
+
+void DrawPassSection(App& app, int pass_index) {
+  const InstanceKey key = InstanceKey::FromInt(pass_index);
+
+  // The hook above owns the parent link, so the drawer does not need to.
+  bool changed = false;
+  DrawSection(app.store, "Pass", key, changed);
+  if (changed) app.MarkDirty();
+}
+```
+
+```cpp
+// --- Reading, in the pipeline --------------------------------------------
+
+const float intensity =
+    app.store.Read("Pass", InstanceKey::FromInt(pass_index), "intensity").as_float;
+// If pass 3 follows pass 2, and pass 2 follows pass 1, and only pass 1 set
+// `intensity`, all three read pass 1's value. If the user ticks pass 3 off
+// "follow", pass 3 keeps whatever it was showing until it is edited.
+
+// Programmatic write, e.g. from a sampler that auto-tunes:
+app.store.Write("Pass", InstanceKey::FromInt(pass_index), "intensity",
+                Value::Float(measured), /*from_user=*/false);
+// Only this one setting is now marked overridden on this instance; the
+// non-inheritable `upsample` is untouched, and descendants that do not
+// override `intensity` see the new value on their next read.
+```
+
+What the user sees, for an inheriting pass:
+
+* `intensity` and `working_scale` are dimmed and show the inherited value; no
+  revert button appears until the user overrides them, after which the row
+  gains a small revert affordance.
+* `upsample` and `enabled` render exactly as they would in a section with no
+  inheritance at all.
+* The `Follow previous pass` checkbox sits between the header and `intensity`,
+  because that is where it was declared.
+
+Every one of those behaviours comes from the `inheritable` flag on the
+declaration. There is no per-pass code, and no notion of "pass" anywhere in
+`ctl/`.
+
+## Extending
+
+| To add… | Do this |
+| --- | --- |
+| a new setting type | one class + one `registry.Register(...)` line |
+| a new metadata field | add it to `SettingMeta` with a default |
+| a hook | `AddHookBefore` / `AddHookAfter` / `AddHookAppend` |
+| a new scope (layer, camera, preset, material) | an instanced section with a key of that flavour — no framework change |
+| a new config backend | implement `KeyValueReader` / `KeyValueWriter` |
+
+## Tests
+
+```bash
+bash ctl/build_ctl_acceptance.sh   # build + run the ctl acceptance harness
+bash ctl/build_ctl_check.sh ctl/*.cpp   # type-check (PROJ_ROOT must be set)
+```
+
+The acceptance harness links the real `ctl` sources and the real row code,
+substituting only inert ImGui entry points, so every criterion is exercised
+against the shipped implementation rather than a mock.

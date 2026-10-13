@@ -1,0 +1,233 @@
+// ctl built-in setting types: float, int, bool, enum.
+//
+// Each is a dedicated class that owns its own storage, validation, text
+// form, and UI row. They share the row layout helpers in ui/ui_widgets.h so
+// a declarative row looks identical to a hand-written one.
+
+#pragma once
+
+#include <string>
+#include <vector>
+
+#include "ctl/types.h"
+
+namespace reshade_dlssnr {
+namespace ctl {
+
+// ---------------------------------------------------------------------------
+// FloatSetting
+// ---------------------------------------------------------------------------
+
+class FloatSetting : public Setting {
+ public:
+  FloatSetting(const char* name, const char* label);
+  FloatSetting(const char* name, const char* label, float default_value);
+
+  FloatSetting& Tooltip(const char* text) { meta_.tooltip = CStrToString(text); return *this; }
+  FloatSetting& Category(const char* text) { meta_.category = CStrToString(text); return *this; }
+  FloatSetting& EnableWhen(EnablePredicate enabled, const void* context = nullptr) {
+    SetEnabled(enabled, context);
+    return *this;
+  }
+  FloatSetting& VisibleWhen(VisibilityPredicate visible, const void* context = nullptr) {
+    SetVisible(visible, context);
+    return *this;
+  }
+  FloatSetting& Range(float lo, float hi) { lo_ = lo; hi_ = hi; return *this; }
+  FloatSetting& Format(const char* fmt) { format_ = CStrToString(fmt); return *this; }
+  FloatSetting& NoSave() { meta_.persist = false; return *this; }
+  FloatSetting& NoPersist() { meta_.persist = false; return *this; }
+
+  Value DefaultValue() const override;
+  void Clamp(Value& value) const override;
+  bool Assign(Value& out, const Value& in) const override;
+  std::string ToString(const Value& value) const override;
+  bool FromString(const std::string& text, Value& out) const override;
+  bool Draw(const SettingContext& ctx, const Value& resolved,
+            Value& out) const override;
+
+ private:
+  float default_ = 0.0f;
+  float lo_ = 0.0f;
+  float hi_ = 1.0f;
+  std::string format_ = "%.3f";
+};
+
+// ---------------------------------------------------------------------------
+// IntSetting
+// ---------------------------------------------------------------------------
+
+class IntSetting : public Setting {
+ public:
+  IntSetting(const char* name, const char* label);
+  IntSetting(const char* name, const char* label, int default_value);
+
+  IntSetting& Tooltip(const char* text) { meta_.tooltip = CStrToString(text); return *this; }
+  IntSetting& Category(const char* text) { meta_.category = CStrToString(text); return *this; }
+  IntSetting& EnableWhen(EnablePredicate enabled, const void* context = nullptr) {
+    SetEnabled(enabled, context);
+    return *this;
+  }
+  IntSetting& VisibleWhen(VisibilityPredicate visible, const void* context = nullptr) {
+    SetVisible(visible, context);
+    return *this;
+  }
+  IntSetting& Range(int lo, int hi) { lo_ = lo; hi_ = hi; return *this; }
+  IntSetting& NoSave() { meta_.persist = false; return *this; }
+
+  Value DefaultValue() const override;
+  void Clamp(Value& value) const override;
+  bool Assign(Value& out, const Value& in) const override;
+  std::string ToString(const Value& value) const override;
+  bool FromString(const std::string& text, Value& out) const override;
+  bool Draw(const SettingContext& ctx, const Value& resolved,
+            Value& out) const override;
+
+ private:
+  int default_ = 0;
+  int lo_ = 0;
+  int hi_ = 100;
+};
+
+// ---------------------------------------------------------------------------
+// BoolSetting
+// ---------------------------------------------------------------------------
+
+class BoolSetting : public Setting {
+ public:
+  BoolSetting(const char* name, const char* label);
+  BoolSetting(const char* name, const char* label, bool default_value);
+
+  BoolSetting& Tooltip(const char* text) { meta_.tooltip = CStrToString(text); return *this; }
+  BoolSetting& Category(const char* text) { meta_.category = CStrToString(text); return *this; }
+  BoolSetting& EnableWhen(EnablePredicate enabled, const void* context = nullptr) {
+    SetEnabled(enabled, context);
+    return *this;
+  }
+  BoolSetting& VisibleWhen(VisibilityPredicate visible, const void* context = nullptr) {
+    SetVisible(visible, context);
+    return *this;
+  }
+  BoolSetting& CategoryToggle(bool on = true) { meta_.category_toggle = on; return *this; }
+  BoolSetting& NoSave() { meta_.persist = false; return *this; }
+
+  Value DefaultValue() const override;
+  void Clamp(Value& value) const override;
+  bool Assign(Value& out, const Value& in) const override;
+  std::string ToString(const Value& value) const override;
+  bool FromString(const std::string& text, Value& out) const override;
+  bool Draw(const SettingContext& ctx, const Value& resolved,
+            Value& out) const override;
+
+ private:
+  bool default_ = false;
+};
+
+// ---------------------------------------------------------------------------
+// StringSetting
+// ---------------------------------------------------------------------------
+
+// A free-text setting. The value is a std::string owned by the framework's
+// Value, so it copies and compares by content -- which is what an override
+// check needs ("did the user type something different from the default?").
+//
+// `MaxLength` is a length cap, not a validation rule: the row truncates on
+// edit, and the clamp on load truncates too, so a hand-edited config cannot
+// install a longer value than the UI would have accepted.
+class StringSetting : public Setting {
+ public:
+  StringSetting(const char* name, const char* label);
+  StringSetting(const char* name, const char* label, std::string default_value);
+
+  StringSetting& Tooltip(const char* text) { meta_.tooltip = CStrToString(text); return *this; }
+  StringSetting& Category(const char* text) { meta_.category = CStrToString(text); return *this; }
+  StringSetting& EnableWhen(EnablePredicate enabled, const void* context = nullptr) {
+    SetEnabled(enabled, context);
+    return *this;
+  }
+  StringSetting& VisibleWhen(VisibilityPredicate visible, const void* context = nullptr) {
+    SetVisible(visible, context);
+    return *this;
+  }
+  StringSetting& NoSave() { meta_.persist = false; return *this; }
+  StringSetting& MaxLength(size_t length) { max_length_ = length; return *this; }
+
+  Value DefaultValue() const override;
+  void Clamp(Value& value) const override;
+  bool Assign(Value& out, const Value& in) const override;
+  std::string ToString(const Value& value) const override;
+  bool FromString(const std::string& text, Value& out) const override;
+  bool Draw(const SettingContext& ctx, const Value& resolved,
+            Value& out) const override;
+
+ private:
+  std::string default_;
+  size_t max_length_ = 0;  // 0 = no cap
+};
+
+// ---------------------------------------------------------------------------
+// EnumSetting
+// ---------------------------------------------------------------------------
+
+class EnumSetting : public Setting {
+ public:
+  // An item: the text shown, and an optional tooltip.
+  struct Item {
+    const char* name = nullptr;
+    const char* tip = nullptr;
+  };
+
+  // Where a setting's items come from. Called at most once, on first use, so
+  // a table that lives in another translation unit (or is computed) can be
+  // supplied at declaration time just as easily as a literal array.
+  using ItemProvider = std::vector<Item> (*)();
+
+  EnumSetting(const char* name, const char* label);
+  EnumSetting(const char* name, const char* label, int default_value);
+
+  // Items are displayed in the order given; the value is the item index.
+  // Either form may be used, whichever reads better at the declaration site.
+  EnumSetting& Items(const char* const* names, const char* const* tips,
+                     int count);
+  EnumSetting& Items(ItemProvider provider);
+
+  EnumSetting& AsGroup(bool on = true) {
+    meta_.enum_presentation = on ? EnumPresentation::GroupButtons
+                                 : EnumPresentation::Combo;
+    return *this;
+  }
+  EnumSetting& Tooltip(const char* text) { meta_.tooltip = CStrToString(text); return *this; }
+  EnumSetting& Category(const char* text) { meta_.category = CStrToString(text); return *this; }
+  EnumSetting& EnableWhen(EnablePredicate enabled, const void* context = nullptr) {
+    SetEnabled(enabled, context);
+    return *this;
+  }
+  EnumSetting& VisibleWhen(VisibilityPredicate visible, const void* context = nullptr) {
+    SetVisible(visible, context);
+    return *this;
+  }
+  EnumSetting& NoSave() { meta_.persist = false; return *this; }
+
+  Value DefaultValue() const override;
+  void Clamp(Value& value) const override;
+  bool Assign(Value& out, const Value& in) const override;
+  std::string ToString(const Value& value) const override;
+  bool FromString(const std::string& text, Value& out) const override;
+  bool Draw(const SettingContext& ctx, const Value& resolved,
+            Value& out) const override;
+
+ private:
+  // Resolve the provider, if any, exactly once. All item lookups go through
+  // this, so an enum declared with a provider behaves identically to one
+  // declared with a literal array.
+  void EnsureItems() const;
+
+  int default_ = 0;
+  ItemProvider provider_ = nullptr;
+  mutable bool resolved_ = false;
+  mutable std::vector<std::string> names_;
+  mutable std::vector<std::string> tips_;
+};
+
+}  // namespace ctl
+}  // namespace reshade_dlssnr

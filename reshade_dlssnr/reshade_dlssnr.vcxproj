@@ -207,6 +207,16 @@
     <ClCompile Include="ui\ui_importance_mask.cpp" />
     <ClCompile Include="ui\ui_status.cpp" />
     <ClCompile Include="ui\ui_widgets.cpp" />
+    <ClCompile Include="ctl\builtin_settings.cpp" />
+    <ClCompile Include="ctl\draw.cpp" />
+    <ClCompile Include="ctl\registry.cpp" />
+    <ClCompile Include="ctl\schema.cpp" />
+    <ClCompile Include="ctl\serialize.cpp" />
+    <ClCompile Include="ctl\types.cpp" />
+    <ClCompile Include="ctl\usage\config.cpp" />
+    <ClCompile Include="ctl\usage\ui_schema.cpp" />
+    <ClCompile Include="ctl\usage\ui_store.cpp" />
+    <ClCompile Include="ctl\values.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="gpu\compute_constants.h" />
@@ -254,6 +264,17 @@
     <ClInclude Include="ui\ui.h" />
     <ClInclude Include="ui\ui_sections.h" />
     <ClInclude Include="ui\ui_widgets.h" />
+    <ClInclude Include="ctl\builtin_settings.h" />
+    <ClInclude Include="ctl\ctl.h" />
+    <ClInclude Include="ctl\draw.h" />
+    <ClInclude Include="ctl\registry.h" />
+    <ClInclude Include="ctl\schema.h" />
+    <ClInclude Include="ctl\serialize.h" />
+    <ClInclude Include="ctl\types.h" />
+    <ClInclude Include="ctl\usage\config.h" />
+    <ClInclude Include="ctl\usage\ui_schema.h" />
+    <ClInclude Include="ctl\usage\ui_store.h" />
+    <ClInclude Include="ctl\values.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\common\color_constants.h" />
