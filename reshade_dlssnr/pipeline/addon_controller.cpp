@@ -3,7 +3,15 @@
 #include <cstdio>
 #include <mutex>
 
+#include "ctl/usage/ui_store.h"
+#include "ctl/values.h"
 #include "dlss_guides.h"
+#include "feature/debug_log/view.h"
+#include "feature/grade/view.h"
+#include "feature/hdr/view.h"
+#include "feature/importance_mask/view.h"
+#include "feature/pass/settings.h"
+#include "feature/pass/view.h"
 #include "pipeline_graph.h"
 #include "pipeline_trace.h"
 #include "state/settings.h"
@@ -12,6 +20,18 @@ namespace reshade_dlssnr {
 
 namespace {
 std::mutex g_direct_mutex;
+
+
+// True when the mask should be allowed to build this frame: both layers have
+// to be on, because the mask feeds the HDR local-exposure path. Reads the
+// store -- the source of truth -- rather than a copy in Settings, so this
+// stays correct once Settings stops carrying the values.
+bool ImportanceMaskActive() {
+  const ctl::ValueStore& store = ctl::Store();
+  const ctl::InstanceKey key = ctl::InstanceKey::FromInt(0);
+  return feature::importance_mask::Read(store, key).enable &&
+         feature::hdr::Read(store, key).enable;
+}
 
 // Creates a UAV-capable texture matching `desc`.
 //
@@ -56,7 +76,8 @@ void AddonController::RefreshBackbufferFormat(IDXGISwapChain* swapchain) {
 }
 
 PipelineStatus AddonController::RunPassStage(const PipelineStageDef& stage,
-                                             uint32_t pass_index,
+                                             uint32_t pass_position,
+                                             feature::pass::PassId pass_id,
                                              ID3D12GraphicsCommandList* command_list,
                                              ID3D12Resource* output_resource,
                                              bool is_first_pass,
@@ -64,12 +85,12 @@ PipelineStatus AddonController::RunPassStage(const PipelineStageDef& stage,
                                              IDXGISwapChain* swapchain,
                                              ID3D12Resource* exposure_texture) {
   const Settings& settings = GetSettings();
-  if (pass_index >= kMaxPasses) return PipelineStatus::SkipFrame;
+  if (pass_position >= kMaxPasses) return PipelineStatus::SkipFrame;
 
-  return passes_[pass_index].RunStage(
+  return passes_[pass_position].RunStage(
       stage, settings, codec_, runtime_, command_list, output_resource,
       is_first_pass, frame_debug_, &hdr_, &pass1_command_, &importance_mask_,
-      exposure_texture, command_queue, swapchain);
+      exposure_texture, command_queue, swapchain, pass_id);
 }
 
 PipelineStatus AddonController::RunSingleStage(
@@ -86,6 +107,18 @@ PipelineStatus AddonController::RunSingleStage(
   run.settings = &settings;
   run.command_queue = command_queue;
   run.swapchain = swapchain;
+
+  // The Release stage does not go through a PassSession, so the single-instance
+  // snapshots it might read are filled here. Its steps read the backbuffer
+  // grade directly (RunGradeBackbuffer), but hdr_state / mask_state are cheap
+  // and keep the run self-consistent for any step later added to this stage.
+  {
+    const ctl::ValueStore& store = ctl::Store();
+    const ctl::InstanceKey shared = ctl::InstanceKey::FromInt(0);
+    run.debug_view = feature::debug_log::Read(store, shared);
+    run.hdr_state = feature::hdr::Read(store, shared);
+    run.mask_state = feature::importance_mask::Read(store, shared);
+  }
 
   const PipelineStatus status = PipelineRunner::RunStage(stage, run);
 
@@ -283,8 +316,7 @@ void AddonController::OnPresent(
     return;
   }
   if (command_queue == nullptr || swapchain == nullptr) {
-    importance_mask_.AdvanceFrame(settings.importance_mask.enable &&
-                                   settings.hdr.enable);
+    importance_mask_.AdvanceFrame(ImportanceMaskActive());
     frame_debug_.Reset();
     pre_stage_seen_ = false;
     return;
@@ -307,11 +339,12 @@ void AddonController::OnPresent(
   const PipelineStageDef* stage =
       FindPipelineStageForInjection(static_cast<int>(InjectionStage::Backbuffer));
   if (stage != nullptr) {
-    for (uint32_t i = 0; i < kMaxPasses; ++i) {
-      if (!settings.pass_enabled[i]) continue;
-      if (settings.passes[i].injection_stage != InjectionStage::Backbuffer) continue;
-      TRACE_EVT(this, "controller_dispatch stage=Present pass=%u", i);
-      RunPassStage(*stage, i, nullptr, nullptr, false, command_queue, swapchain);
+    for (const EnabledPass& pass : EnabledPasses(settings)) {
+      if (pass.target != static_cast<int>(InjectionStage::Backbuffer)) continue;
+      TRACE_EVT(this, "controller_dispatch stage=Present pass=%u",
+                pass.position);
+      RunPassStage(*stage, pass.position, pass.id, nullptr, nullptr, false,
+                   command_queue, swapchain, nullptr);
     }
   }
 
@@ -344,8 +377,7 @@ void AddonController::OnPresent(
   }
 
   RefreshStatus(settings);
-  importance_mask_.AdvanceFrame(settings.importance_mask.enable &&
-                                   settings.hdr.enable);
+  importance_mask_.AdvanceFrame(ImportanceMaskActive());
   frame_debug_.Reset();
   pre_stage_seen_ = false;
   TRACE_EVT(this, "controller_exit stage=Present");
@@ -363,9 +395,8 @@ void AddonController::OnPreDlssEvaluate(
     return;
 
   bool any_pre_dlss = false;
-  for (uint32_t i = 0; i < kMaxPasses; ++i) {
-    if (settings.pass_enabled[i] &&
-        settings.passes[i].injection_stage == InjectionStage::PreDLSS) {
+  for (const EnabledPass& pass : EnabledPasses(settings)) {
+    if (pass.target == static_cast<int>(InjectionStage::PreDLSS)) {
       any_pre_dlss = true;
       break;
     }
@@ -391,16 +422,16 @@ void AddonController::OnPreDlssEvaluate(
   const PipelineStageDef* stage = FindPipelineStageForInjection(
       static_cast<int>(InjectionStage::PreDLSS));
   if (stage != nullptr) {
+    // One debug image per evaluate call. If PostDLSS follows, it preserves this
+    // one, so the debug view stays stable across the whole evaluation.
     bool is_first = true;
-    for (uint32_t i = 0; i < kMaxPasses; ++i) {
-      if (!settings.pass_enabled[i] ||
-          settings.passes[i].injection_stage != InjectionStage::PreDLSS) {
-        continue;
-      }
+    for (const EnabledPass& pass : EnabledPasses(settings)) {
+      if (pass.target != static_cast<int>(InjectionStage::PreDLSS)) continue;
       TRACE_EVT(this, "controller_dispatch stage=PreDLSS pass=%u is_first=%d",
-                i, is_first ? 1 : 0);
-      RunPassStage(*stage, i, command_list, input_resource, is_first, nullptr,
-                   nullptr, exposure_texture);
+                pass.position, is_first ? 1 : 0);
+      RunPassStage(*stage, pass.position, pass.id, command_list,
+                   input_resource, is_first, nullptr, nullptr,
+                   exposure_texture);
       is_first = false;
     }
   }
@@ -447,13 +478,13 @@ void AddonController::OnPostDlssEvaluate(
     // and it stays the first even if earlier passes are disabled or set to
     // the Release stage.
     bool is_first = true;
-    for (uint32_t i = 0; i < kMaxPasses; ++i) {
-      if (!settings.pass_enabled[i]) continue;
-      if (settings.passes[i].injection_stage != InjectionStage::PostDLSS) continue;
-      TRACE_EVT(this, "controller_dispatch stage=PostDLSS pass=%u is_first=%d", i,
-                is_first ? 1 : 0);
-      RunPassStage(*stage, i, command_list, output_resource, is_first, nullptr,
-                   nullptr, exposure_texture);
+    for (const EnabledPass& pass : EnabledPasses(settings)) {
+      if (pass.target != static_cast<int>(InjectionStage::PostDLSS)) continue;
+      TRACE_EVT(this, "controller_dispatch stage=PostDLSS pass=%u is_first=%d",
+                pass.position, is_first ? 1 : 0);
+      RunPassStage(*stage, pass.position, pass.id, command_list,
+                   output_resource, is_first, nullptr, nullptr,
+                   exposure_texture);
       is_first = false;
     }
   }
@@ -618,13 +649,20 @@ void AddonController::RefreshStatus(const Settings& settings) {
   status_.gain_map_sdr_excursion_pixels = hdr.gain_sdr_excursion_pixels;
   status_.gain_map_out_of_range_pixels = hdr.gain_out_of_range_pixels;
 
-  status_.pass_count = settings.pass_count;
-  for (uint32_t i = 0; i < kMaxPasses; ++i) {
+  status_.pass_count = static_cast<uint32_t>(settings.pass_order.size());
+  ctl::ValueStore& store = ctl::Store();
+  for (uint32_t position = 0; position < kMaxPasses; ++position) {
     // Take the runtime-owned part of the status from the session, then fill
-    // in the setting-owned part. The injection stage is not stored here —
-    // it is a setting, and the UI reads it directly from Settings.
-    status_.passes[i] = passes_[i].GetStatus();
-    status_.passes[i].enabled = settings.pass_enabled[i];
+    // in the setting-owned part. The session array is positional -- one
+    // session per tab slot -- so the enabled flag comes from whichever pass
+    // currently sits in that slot.
+    status_.passes[position] = passes_[position].GetStatus();
+    status_.passes[position].enabled =
+        position < settings.pass_order.size() &&
+        store.Read(feature::pass::kSection,
+                   feature::pass::PassKey(settings.pass_order[position]),
+                   feature::pass::kPassEnabled)
+            .as_bool;
   }
 }
 
@@ -696,7 +734,10 @@ PipelineStatus RunGradeBackbuffer(PassRun& run) {
   if (run.settings == nullptr || run.codec == nullptr) return PipelineStatus::Ok;
   if (!run.settings->enabled) return PipelineStatus::Ok;
 
-  const GradeSettings& grade = run.settings->grade_backbuffer;
+  // Read the grade from the store -- the source of truth -- rather than from
+  // a copy kept in Settings. The backbuffer grade is single-instance, so its
+  // key is the same fixed key its section draws with.
+  const GradeSettings grade = feature::grade::ReadBackbuffer(ctl::Store());
   if (!grade.enabled) return PipelineStatus::Ok;
 
   TRACE_EVT(run.session, "grade_backbuffer luma=%.3f chroma=%.3f", grade.luma,

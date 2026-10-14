@@ -4,8 +4,8 @@
 #include <d3d12.h>
 #include <nvsdk_ngx.h>
 
+#include "feature/pass/view.h"
 #include "model/runtime.h"
-#include "state/settings.h"
 
 namespace reshade_dlssnr {
 
@@ -13,7 +13,7 @@ class FeatureLifecycle {
  public:
   bool EnsureFeature(
       NgxRuntime& runtime,
-      const PassSettings& pass,
+      const feature::pass::PassSnapshot& pass,
       ID3D12GraphicsCommandList* command_list,
       unsigned int width,
       unsigned int height);

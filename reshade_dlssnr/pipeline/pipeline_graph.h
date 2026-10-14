@@ -31,6 +31,10 @@
 
 #include "debug/debug_view.h"
 #include "dlss_guides.h"
+#include "feature/pass/ui.h"
+#include "feature/pass/view.h"
+#include "hdr/settings.h"
+#include "importance_mask/settings.h"
 #include "model/model_pipeline.h"
 
 namespace reshade_dlssnr {
@@ -44,7 +48,41 @@ class PassResources;
 class PassSession;
 class ImportanceMask;
 struct FrameDebugContext;
-struct PassSettings;
+struct PipelineStageDef;
+struct Settings;
+
+// ---------------------------------------------------------------------------
+// Enabled passes
+// ---------------------------------------------------------------------------
+
+// One enabled pass, as the render path wants it.
+//
+// `position` is the index into PassSession's array and into StatusSnapshot's
+// rows -- the runtime's bookkeeping, which is positional. `id` is the pass's
+// stable identity, which is what keys its settings in the store. The two are
+// deliberately separate: the runtime owns a slot per tab, the setting values
+// belong to the pass and survive any rearrangement of the tabs.
+//
+// `target` is the raw int, not an InjectionStage: the enum lives in
+// state/settings.h, which this header cannot include without a cycle, and the
+// callers that care already narrow it themselves (as PassSnapshot::target does).
+struct EnabledPass {
+  uint32_t position = 0;
+  feature::pass::PassId id = 0;
+  int target = 2;  // InjectionStage; 2 == Backbuffer
+};
+
+// Every enabled pass, in tab order.
+//
+// Enabled-ness and target are settings, so they are read from the store by
+// stable id rather than from Settings; only the tab order comes from Settings,
+// because that is application state the store does not hold.
+//
+// Declared here rather than in an anonymous namespace because two translation
+// units walk it: the controller, which dispatches, and the NGX hook, which
+// decides whether any pass will run at all.
+std::vector<EnabledPass> EnabledPasses(const Settings& settings);
+
 struct PipelineStageDef;
 struct Settings;
 
@@ -192,8 +230,15 @@ struct PassRun {
   FrameDebugContext* frame_debug = nullptr;
 
   // -- settings -------------------------------------------------------------
+  // `settings` is the whole Settings struct, still read by the trace
+  // diagnostic and by the few steps that have not moved to a snapshot. What
+  // the render path reads about the pass comes from `pass_state` / `grade_*`,
+  // about HDR from `hdr_state`, about the mask from `mask_state`, and
+  // `pass_bound` says whether a pass instance was bound at all, which is what
+  // the old `pass != nullptr` test meant.
   const Settings* settings = nullptr;
-  const PassSettings* pass = nullptr;
+  int debug_view = 0;
+  bool pass_bound = false;
   uint32_t pass_index = 0;
 
   // -- frame inputs ---------------------------------------------------------
@@ -257,6 +302,24 @@ struct PassRun {
 
   // Filled from the pass's live resources before the debug step runs.
   DebugSnapshot debug = {};
+
+  // -- per-consumer snapshots ----------------------------------------------
+  // The pass's settings, read from the store once at bind time and then
+  // carried down the render path by value. A step reads these; it never
+  // reaches for the store, the instance key, or a setting name. That is the
+  // whole point of the snapshot: the render path deals in what to draw with,
+  // not in where the setting lives.
+  //
+  // HDR and the importance mask are single-instance sections, so their
+  // snapshots are plain values on the run rather than something looked up per
+  // pass. They are filled wherever the store is reachable for that stage --
+  // BindRun for the pass stages, the stage entry points for HDR preparation
+  // and Release.
+  feature::pass::PassSnapshot pass_state = {};
+  GradeSettings grade_input = {};
+  GradeSettings grade_output = {};
+  HdrSettings hdr_state = {};
+  ImportanceMaskSettings mask_state = {};
 
   // -- bookkeeping ----------------------------------------------------------
   // Bitmask over PipelineNodeId, set by the runner after each successful step.

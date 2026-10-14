@@ -4,101 +4,197 @@
 #include <reshade.hpp>
 
 #include <algorithm>
-#include <cctype>
-#include <cstdio>
+#include <cstdlib>
+#include <limits>
 #include <string>
 
 #include "compose/settings.h"
+#include "ctl/usage/config.h"
+#include "ctl/usage/ui_store.h"
+#include "ctl/values.h"
+#include "feature/debug_log/settings.h"
+#include "feature/hdr/settings.h"
+#include "feature/importance_mask/settings.h"
+#include "feature/pass/settings.h"
+#include "feature/pass/order.h"
+#include "feature/preferences/settings.h"
 #include "grade/settings.h"
-#include "state/pass.h"
 #include "state/trace.h"
 
 namespace reshade_dlssnr {
 
 namespace {
 Settings g_settings;
-PassSettings g_resolved[kMaxPasses];
 
-void RecomputeResolved() {
-  g_resolved[0] = g_settings.passes[0];
-  for (uint32_t i = 1; i < kMaxPasses; ++i) {
-    PassSettings r = g_settings.passes[i];
-    const PassSettings& prev = g_resolved[i - 1];
+template <typename T>
+void ReadValue(const std::string& root, const char* key, T& value) {
+  const std::string full_key = root + CStrToString(key);
+  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", full_key.c_str(), value);
+}
 
-    if (r.inherit_working_scale) r.working_scale = prev.working_scale;
-    if (r.inherit_intensity) r.intensity = prev.intensity;
-    if (r.inherit_local_tone) r.local_tone = prev.local_tone;
-    if (r.inherit_local_structure) r.local_structure = prev.local_structure;
-    if (r.inherit_skin_structure) r.skin_structure = prev.skin_structure;
-    if (r.inherit_luma_strength) r.strength.luma_strength = prev.strength.luma_strength;
-    if (r.inherit_chroma_strength) r.strength.chroma_strength = prev.strength.chroma_strength;
-    if (r.inherit_soft_max_brighten) r.soft_compression.max_brighten = prev.soft_compression.max_brighten;
-    if (r.inherit_soft_max_darken) r.soft_compression.max_darken = prev.soft_compression.max_darken;
-    if (r.inherit_soft_max_chroma) r.soft_compression.max_chroma = prev.soft_compression.max_chroma;
-    if (r.inherit_soft_knee) r.soft_compression.knee = prev.soft_compression.knee;
-    g_resolved[i] = r;
+// A string needs the char* overload: ReShade's scalar template goes through
+// std::from_chars, which has no std::string form (it fails to compile), and a
+// name is worth more than a 31-character buffer anyway.
+inline void ReadValue(const std::string& root, const char* key,
+                      std::string& value) {
+  const std::string full_key = root + CStrToString(key);
+  char buffer[256] = "";
+  size_t size = sizeof(buffer);
+  if (reshade::get_config_value(nullptr, "RESHADE_DLSSNR", full_key.c_str(),
+                                buffer, &size)) {
+    value.assign(buffer);
   }
 }
 
 template <typename T>
-void ReadValue(const std::string& root, const char* key, T& value) {
-  const std::string full_key = root + key;
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", full_key.c_str(), value);
+bool TryReadValue(const std::string& root, const char* key, T& value) {
+  const std::string full_key = root + CStrToString(key);
+  return reshade::get_config_value(nullptr, "RESHADE_DLSSNR", full_key.c_str(),
+                                   value);
 }
 
 template <typename T>
 void WriteValue(const std::string& root, const char* key, const T& value) {
-  const std::string full_key = root + key;
+  const std::string full_key = root + CStrToString(key);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", full_key.c_str(), value);
 }
 
-std::string PassEnabledKey(uint32_t index) {
-  return "Pass" + std::to_string(index + 1) + "Enabled";
+// A string needs the char* overload: ReShade's scalar template goes through
+// std::to_chars, which has no std::string form (it fails to compile).
+inline void WriteValue(const std::string& root, const char* key,
+                       const std::string& value) {
+  const std::string full_key = root + CStrToString(key);
+  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", full_key.c_str(),
+                            value.c_str());
 }
 
-std::string ProfileNameKey(uint32_t index) {
-  return "UserPreset." + std::to_string(index) + ".Name";
+constexpr ProfileId kFirstProfileId = 1;
+constexpr const char* kProfileOrderKey = "UserPresetOrder";
+constexpr const char* kNextProfileIdKey = "UserPresetNextId";
+
+std::string ProfilePrefix(ProfileId id) {
+  return "UserPreset." + std::to_string(id);
 }
 
-std::string ProfileDataPrefix(uint32_t index) {
-  return "UserPreset." + std::to_string(index) + ".Data.";
+std::string ProfileValuePrefix(ProfileId id) {
+  return ProfilePrefix(id) + ".";
 }
 
-uint32_t ReadProfileCount() {
-  int count = 0;
-  ReadValue("", "UserPresetCount", count);
-  return static_cast<uint32_t>(std::clamp(
-      count, 0, static_cast<int>(kMaxSavedProfiles)));
+std::string ProfileDataPrefix(ProfileId id) {
+  return ProfilePrefix(id) + ".Data";
 }
 
-void ReadProfileName(uint32_t index, char* name, size_t capacity) {
+std::string ProfileNameKey(ProfileId id) {
+  return ProfileValuePrefix(id) + "Name";
+}
+
+std::vector<ProfileId> ParseProfileOrder(const std::string& text) {
+  std::vector<ProfileId> order;
+  size_t begin = 0;
+  while (begin <= text.size() && order.size() < kMaxSavedProfiles) {
+    const size_t comma = text.find(',', begin);
+    const std::string token = text.substr(
+        begin, comma == std::string::npos ? std::string::npos : comma - begin);
+    if (!token.empty()) {
+      char* end = nullptr;
+      const unsigned long long parsed = std::strtoull(token.c_str(), &end, 10);
+      if (end != token.c_str() && *end == '\0' &&
+          parsed >= kFirstProfileId &&
+          parsed <= std::numeric_limits<ProfileId>::max()) {
+        const ProfileId id = static_cast<ProfileId>(parsed);
+        if (std::find(order.begin(), order.end(), id) == order.end()) {
+          order.push_back(id);
+        }
+      }
+    }
+    if (comma == std::string::npos) break;
+    begin = comma + 1;
+  }
+  return order;
+}
+
+std::vector<ProfileId> ReadProfileOrder() {
+  std::string text;
+  ReadValue("", kProfileOrderKey, text);
+  return ParseProfileOrder(text);
+}
+
+void WriteProfileOrder(const std::vector<ProfileId>& order) {
+  std::string text;
+  for (ProfileId id : order) {
+    if (!text.empty()) text += ',';
+    text += std::to_string(id);
+  }
+  WriteValue("", kProfileOrderKey, text);
+}
+
+void ReadProfileName(ProfileId id, char* name, size_t capacity) {
   if (name == nullptr || capacity == 0) return;
   name[0] = '\0';
   size_t size = capacity;
-  const std::string key = ProfileNameKey(index);
+  const std::string key = ProfileNameKey(id);
   reshade::get_config_value(nullptr, "RESHADE_DLSSNR", key.c_str(), name,
                             &size);
   name[capacity - 1] = '\0';
 }
 
-void WriteProfileName(uint32_t index, const char* name) {
-  const std::string key = ProfileNameKey(index);
+void WriteProfileName(ProfileId id, const char* name) {
+  const std::string key = ProfileNameKey(id);
+  const std::string safe_name = CStrToString(name);
   reshade::set_config_value(nullptr, "RESHADE_DLSSNR", key.c_str(),
-                            name != nullptr ? name : "");
+                            safe_name.c_str());
+}
+
+bool ValidProfileId(ProfileId id) {
+  const std::vector<ProfileId> order = ReadProfileOrder();
+  return std::find(order.begin(), order.end(), id) != order.end();
+}
+
+// The pass order is one config value: a comma-separated list of stable pass
+// ids. Position is not recorded, because the vector IS the order.
+constexpr const char* kPassOrderKey = "PassOrder";
+
+std::string PassOrderText(const std::vector<feature::pass::PassId>& order) {
+  std::string text;
+  for (feature::pass::PassId id : order) {
+    if (!text.empty()) text += ',';
+    text += std::to_string(id);
+  }
+  return text;
+}
+
+std::vector<feature::pass::PassId> ParsePassOrder(const std::string& text,
+                                                  bool ensure_nonempty = true) {
+  std::vector<feature::pass::PassId> order;
+  size_t begin = 0;
+  while (begin <= text.size()) {
+    const size_t comma = text.find(',', begin);
+    const std::string token =
+        text.substr(begin, comma == std::string::npos ? std::string::npos
+                                                      : comma - begin);
+    if (!token.empty()) {
+      const long long id = std::strtoll(token.c_str(), nullptr, 10);
+      if (id > 0) order.push_back(static_cast<feature::pass::PassId>(id));
+    }
+    if (comma == std::string::npos) break;
+    begin = comma + 1;
+  }
+  if (order.size() > kMaxPasses || (ensure_nonempty && order.empty())) {
+    order.clear();
+    if (ensure_nonempty) order.push_back(feature::pass::NewPassId());
+  }
+  return order;
+}
+
+std::vector<feature::pass::PassId> ReadProfilePassOrder(ProfileId id) {
+  std::string text;
+  ReadValue(ProfileValuePrefix(id), kPassOrderKey, text);
+  return ParsePassOrder(text, false);
 }
 
 void LoadSettingsValues(Settings& settings, const std::string& key_prefix,
                         bool load_ui_state) {
   ReadValue(key_prefix, "Enabled", settings.enabled);
-  ReadValue(key_prefix, "OnlySuperSampling", settings.only_super_sampling);
-  ReadValue(key_prefix, "ShowTooltips", settings.show_tooltips);
-  ReadValue(key_prefix, "CloneResources", settings.clone_resources);
-  ReadValue(key_prefix, "DebugView", settings.debug_view);
-  if (settings.debug_view < 0) settings.debug_view = 0;
-
-  LoadHdrSettings(settings.hdr, key_prefix);
-  LoadImportanceMaskSettings(settings.importance_mask, key_prefix);
-  LoadGrade(key_prefix + "Grade.Backbuffer.", settings.grade_backbuffer);
 
   if (load_ui_state) {
     ReadValue(key_prefix, "UI.StatusOpen", settings.ui_status_open);
@@ -121,45 +217,19 @@ void LoadSettingsValues(Settings& settings, const std::string& key_prefix,
     ReadValue(key_prefix, "UI.GradeOutputOpen", settings.ui_grade_output_open);
   }
 
-  int pass_count = static_cast<int>(settings.pass_count);
-  ReadValue(key_prefix, "PassCount", pass_count);
-  settings.pass_count = static_cast<uint32_t>(std::clamp(
-      pass_count, 1, static_cast<int>(kMaxPasses)));
-  for (uint32_t i = 0; i < kMaxPasses; ++i) {
-    if (i < settings.pass_count) {
-      const std::string key = PassEnabledKey(i);
-      ReadValue(key_prefix, key.c_str(), settings.pass_enabled[i]);
-      LoadPassSettings(i, settings.passes[i], key_prefix);
-    } else {
-      settings.pass_enabled[i] = false;
-    }
-  }
-
-  // Pass zero is the inheritance root; it cannot inherit from another pass.
-  settings.passes[0].inherit_working_scale = false;
-  settings.passes[0].inherit_intensity = false;
-  settings.passes[0].inherit_local_tone = false;
-  settings.passes[0].inherit_local_structure = false;
-  settings.passes[0].inherit_skin_structure = false;
-  settings.passes[0].inherit_luma_strength = false;
-  settings.passes[0].inherit_chroma_strength = false;
-  settings.passes[0].inherit_soft_max_brighten = false;
-  settings.passes[0].inherit_soft_max_darken = false;
-  settings.passes[0].inherit_soft_max_chroma = false;
-  settings.passes[0].inherit_soft_knee = false;
+  // Pass order first: the store's key source needs it, because it is what
+  // decides which instances exist.
+  std::string order_text;
+  ReadValue(key_prefix, kPassOrderKey, order_text);
+  settings.pass_order = ParsePassOrder(order_text);
+  feature::pass::ApplyOrder(ctl::Store(), settings.pass_order);
 }
 
 void SaveSettingsValues(const Settings& settings, const std::string& key_prefix,
                         bool save_ui_state) {
   WriteValue(key_prefix, "Enabled", settings.enabled);
-  WriteValue(key_prefix, "OnlySuperSampling", settings.only_super_sampling);
-  WriteValue(key_prefix, "ShowTooltips", settings.show_tooltips);
-  WriteValue(key_prefix, "CloneResources", settings.clone_resources);
-  WriteValue(key_prefix, "DebugView", settings.debug_view);
-
-  SaveHdrSettings(settings.hdr, key_prefix);
-  SaveImportanceMaskSettings(settings.importance_mask, key_prefix);
-  SaveGrade(key_prefix + "Grade.Backbuffer.", settings.grade_backbuffer);
+  WriteValue(key_prefix, kPassOrderKey,
+             PassOrderText(settings.pass_order));
 
   if (save_ui_state) {
     WriteValue(key_prefix, "UI.StatusOpen", settings.ui_status_open);
@@ -181,17 +251,98 @@ void SaveSettingsValues(const Settings& settings, const std::string& key_prefix,
     WriteValue(key_prefix, "UI.GradeInputOpen", settings.ui_grade_input_open);
     WriteValue(key_prefix, "UI.GradeOutputOpen", settings.ui_grade_output_open);
   }
+}
 
-  WriteValue(key_prefix, "PassCount", static_cast<int>(settings.pass_count));
-  for (uint32_t i = 0; i < kMaxPasses; ++i) {
-    const std::string key = PassEnabledKey(i);
-    WriteValue(key_prefix, key.c_str(), settings.pass_enabled[i]);
-    SavePassSettings(i, settings.passes[i], key_prefix);
+// Instance keys for the instanced sections, supplied to ctl::Load.
+//
+// ctl does not track instance count -- see the non-goal in ctl/serialize.h.
+// How many passes exist is application state, and it is already here in
+// Settings, so it is this function's job to hand the keys over rather than
+// have the loader guess them from a config file it cannot enumerate.
+std::vector<ctl::InstanceKey> InstanceKeysForSections(
+    const void* context, const std::string& section) {
+  const Settings& settings = *static_cast<const Settings*>(context);
+  // Pass and its two grade sections are all indexed by pass.
+  const bool pass_indexed = section == feature::pass::kSection ||
+                            section == feature::pass::kGradeInputSection ||
+                            section == feature::pass::kGradeOutputSection;
+  if (!pass_indexed) return {};
+
+  // The order IS the key list: one instance per pass in pass_order, each under
+  // its own stable id. Position never enters a key, which is what makes a
+  // reorder free.
+  std::vector<ctl::InstanceKey> keys;
+  keys.reserve(settings.pass_order.size());
+  for (feature::pass::PassId id : settings.pass_order) {
+    keys.push_back(feature::pass::PassKey(id));
+  }
+  return keys;
+}
+
+std::string CtlConfigKey(const std::string& prefix, const char* key) {
+  const std::string safe_key = CStrToString(key);
+  return prefix.empty() ? safe_key : prefix + "." + safe_key;
+}
+
+void MigrateLegacySettings(ctl::ValueStore& store,
+                           ctl::ReshadeConfigReader& reader,
+                           const std::string& prefix) {
+  // The ctl keys are authoritative. Import an older key only when its new
+  // counterpart is absent, including when loading a saved profile.
+  const ctl::InstanceKey shared = ctl::InstanceKey::FromInt(0);
+  bool stored_bool = false;
+  bool legacy_bool = false;
+
+  if (!reader.ReadBool(CtlConfigKey(prefix, "S.Preferences.show_tooltips"),
+                       &stored_bool) &&
+      TryReadValue(prefix, "ShowTooltips", legacy_bool)) {
+    store.Write(feature::preferences::kSection, shared,
+                feature::preferences::kShowTooltips,
+                ctl::Value::Bool(legacy_bool), false);
+  }
+  if (!reader.ReadBool(CtlConfigKey(prefix, "S.Preferences.require_dlss"),
+                       &stored_bool) &&
+      TryReadValue(prefix, "OnlySuperSampling", legacy_bool)) {
+    store.Write(feature::preferences::kSection, shared,
+                feature::preferences::kRequireDlss,
+                ctl::Value::Bool(legacy_bool), false);
+  }
+  if (!reader.ReadBool(CtlConfigKey(prefix, "S.Preferences.clone_resources"),
+                       &stored_bool) &&
+      TryReadValue(prefix, "CloneResources", legacy_bool)) {
+    store.Write(feature::preferences::kSection, shared,
+                feature::preferences::kCloneResources,
+                ctl::Value::Bool(legacy_bool), false);
+  }
+
+  int stored_int = 0;
+  int legacy_int = 0;
+  if (!reader.ReadInt(CtlConfigKey(prefix, "S.Debug.debug_view"),
+                      &stored_int) &&
+      TryReadValue(prefix, "DebugView", legacy_int)) {
+    store.Write(feature::debug_log::kSection, shared,
+                feature::debug_log::kDebugView,
+                ctl::Value::Enum(legacy_int), false);
   }
 }
 
-bool ValidProfileIndex(uint32_t index) {
-  return index < ReadProfileCount();
+// Load the store from `prefix`, replacing whatever it holds. Replacing
+// matters: a profile load must produce exactly the profile's state, not the
+// current state merged with the profile's overrides.
+void LoadStore(const Settings& settings, const std::string& prefix,
+               bool import_legacy_settings = true) {
+  ctl::ValueStore& store = ctl::Store();
+  store.ResetToDefaults();
+  ctl::ReshadeConfigReader reader;
+  ctl::Load(store, reader, prefix, &InstanceKeysForSections, &settings);
+  if (import_legacy_settings) MigrateLegacySettings(store, reader, prefix);
+}
+
+void SaveStore(const Settings& settings, const std::string& prefix) {
+  ctl::ValueStore& store = ctl::Store();
+  ctl::ReshadeConfigWriter writer;
+  // The Pass section is scoped to pass_order on purpose, excluding stale live instances.
+  ctl::Save(store, writer, prefix, &InstanceKeysForSections, &settings);
 }
 
 }  // namespace
@@ -200,96 +351,210 @@ Settings& GetSettings() {
   return g_settings;
 }
 
-const PassSettings& GetResolvedPass(uint32_t index) {
-  if (index >= kMaxPasses) {
-    static const PassSettings kEmpty;
-    return kEmpty;
+ProfileId NewProfileId() {
+  uint64_t next = kFirstProfileId;
+  std::string next_text;
+  ReadValue("", kNextProfileIdKey, next_text);
+  if (!next_text.empty()) {
+    char* end = nullptr;
+    const unsigned long long parsed = std::strtoull(next_text.c_str(), &end, 10);
+    if (end != next_text.c_str() && *end == '\0' && parsed >= kFirstProfileId) {
+      next = parsed;
+    }
   }
-  return g_resolved[index];
+
+  // The persisted high-water mark includes deleted profiles. The order list
+  // also protects against a stale/missing counter when profiles still exist.
+  for (ProfileId id : ReadProfileOrder()) {
+    if (static_cast<uint64_t>(id) >= next) {
+      next = static_cast<uint64_t>(id) + 1;
+    }
+  }
+  if (next > std::numeric_limits<ProfileId>::max()) return 0;
+
+  const ProfileId id = static_cast<ProfileId>(next);
+  WriteValue("", kNextProfileIdKey, std::to_string(next + 1));
+  return id;
 }
 
 void LoadSettings() {
+  // Read the stable pass order first, because it determines which instance
+  // keys the store loads.
   LoadSettingsValues(g_settings, "", true);
-  DlssGuides::Get().RequestCloneResources(g_settings.clone_resources);
-  RecomputeResolved();
-  TraceSettings(g_settings, g_resolved);
+  LoadStore(g_settings, "");
+  {
+    const ctl::InstanceKey shared = ctl::InstanceKey::FromInt(0);
+    const bool clone_resources = ctl::Store().Read(
+        feature::preferences::kSection, shared,
+        feature::preferences::kCloneResources).as_bool;
+    DlssGuides::Get().RequestCloneResources(clone_resources);
+  }
+  TraceSettings(g_settings);
 }
 
 void SaveSettings() {
-  RecomputeResolved();
-  TraceSettings(g_settings, g_resolved);
+  TraceSettings(g_settings);
   SaveSettingsValues(g_settings, "", true);
+  SaveStore(g_settings, "");
+}
+
+void ErasePassKeys(feature::pass::PassId id) {
+  // The Pass section and its two hosted grade sections are all keyed by pass.
+  // Their persisted layout is documented in ctl/serialize.h:
+  //   <prefix>.S.<Section>.K.<keytext>.<setting>
+  // With an empty prefix this becomes "S.<Section>.K.<keytext>.<setting>".
+  // Only settings marked persist are written by Save, so only those need
+  // erasing here.
+  ctl::ValueStore& store = ctl::Store();
+  const ctl::Schema& schema = store.schema();
+  ctl::ReshadeConfigWriter writer;
+  const ctl::InstanceKey key = feature::pass::PassKey(id);
+  const std::string key_text = key.ToText();
+
+  const char* pass_sections[] = {
+      feature::pass::kSection,
+      feature::pass::kGradeInputSection,
+      feature::pass::kGradeOutputSection,
+  };
+  for (const char* section_name : pass_sections) {
+    const ctl::Section* section = schema.FindSection(section_name);
+    if (section == nullptr) continue;
+    const std::string base =
+        std::string("S.") + section_name + ".K." + key_text;
+    for (const auto& setting : section->settings()) {
+      if (!setting->meta().persist) continue;
+      writer.Erase(base + "." + setting->meta().name);
+    }
+  }
 }
 
 uint32_t GetSavedProfiles(SavedProfileInfo* profiles, uint32_t capacity) {
-  const uint32_t count = ReadProfileCount();
+  const std::vector<ProfileId> order = ReadProfileOrder();
+  const uint32_t count = static_cast<uint32_t>(order.size());
   if (profiles != nullptr) {
     const uint32_t available = std::min(count, capacity);
     for (uint32_t i = 0; i < available; ++i) {
-      ReadProfileName(i, profiles[i].name, sizeof(profiles[i].name));
+      profiles[i].id = order[i];
+      ReadProfileName(profiles[i].id, profiles[i].name,
+                      sizeof(profiles[i].name));
     }
   }
   return count;
 }
 
 bool SaveCurrentAsProfile(const char* name) {
-  if (name == nullptr) return false;
-  std::string clean_name(name);
+  std::string clean_name = CStrToString(name);
   const auto first = clean_name.find_first_not_of(" \t\r\n");
   if (first == std::string::npos) return false;
   const auto last = clean_name.find_last_not_of(" \t\r\n");
   clean_name = clean_name.substr(first, last - first + 1);
   if (clean_name.size() >= kSavedProfileNameCapacity) return false;
 
-  const uint32_t count = ReadProfileCount();
-  if (count >= kMaxSavedProfiles) return false;
-  for (uint32_t i = 0; i < count; ++i) {
+  std::vector<ProfileId> order = ReadProfileOrder();
+  if (order.size() >= kMaxSavedProfiles) return false;
+  for (ProfileId id : order) {
     char existing[kSavedProfileNameCapacity] = {};
-    ReadProfileName(i, existing, sizeof(existing));
+    ReadProfileName(id, existing, sizeof(existing));
     if (clean_name == existing) return false;
   }
 
-  WriteProfileName(count, clean_name.c_str());
-  SaveSettingsValues(g_settings, ProfileDataPrefix(count), false);
-  WriteValue("", "UserPresetCount", static_cast<int>(count + 1));
+  const ProfileId id = NewProfileId();
+  if (id == 0) return false;
+  const std::string value_prefix = ProfileValuePrefix(id);
+  WriteProfileName(id, clean_name.c_str());
+  SaveSettingsValues(g_settings, value_prefix, false);
+  SaveStore(g_settings, ProfileDataPrefix(id));
+  order.push_back(id);
+  WriteProfileOrder(order);
   return true;
 }
 
-bool SaveCurrentToProfile(uint32_t index) {
-  if (!ValidProfileIndex(index)) return false;
-  SaveSettingsValues(g_settings, ProfileDataPrefix(index), false);
-  return true;
-}
+bool RenameSavedProfile(ProfileId id, const char* name) {
+  if (!ValidProfileId(id)) return false;
 
-bool LoadSavedProfile(uint32_t index) {
-  if (!ValidProfileIndex(index)) return false;
-  Settings loaded = g_settings;
-  LoadSettingsValues(loaded, ProfileDataPrefix(index), false);
-  g_settings = loaded;
-  if (g_settings.active_pass < 0) g_settings.active_pass = 0;
-  if (g_settings.active_pass >= static_cast<int>(g_settings.pass_count)) {
-    g_settings.active_pass = static_cast<int>(g_settings.pass_count) - 1;
+  std::string clean_name = CStrToString(name);
+  const auto first = clean_name.find_first_not_of(" \t\r\n");
+  if (first == std::string::npos) return false;
+  const auto last = clean_name.find_last_not_of(" \t\r\n");
+  clean_name = clean_name.substr(first, last - first + 1);
+  if (clean_name.size() >= kSavedProfileNameCapacity) return false;
+
+  for (ProfileId other_id : ReadProfileOrder()) {
+    if (other_id == id) continue;
+    char existing[kSavedProfileNameCapacity] = {};
+    ReadProfileName(other_id, existing, sizeof(existing));
+    if (clean_name == existing) return false;
   }
-  DlssGuides::Get().RequestCloneResources(g_settings.clone_resources);
+
+  WriteProfileName(id, clean_name.c_str());
+  return true;
+}
+
+bool SaveCurrentToProfile(ProfileId id) {
+  if (!ValidProfileId(id)) return false;
+
+  // Remove all schema-defined keys from the old pass set before overwriting
+  // the profile. This prevents removed pass ids from leaving stale overrides
+  // behind when the profile is saved with fewer or different passes.
+  Settings previous;
+  previous.pass_order = ReadProfilePassOrder(id);
+  ctl::ReshadeConfigWriter writer;
+  ctl::Delete(ctl::Store(), writer, ProfileDataPrefix(id),
+              &InstanceKeysForSections, &previous);
+
+  SaveSettingsValues(g_settings, ProfileValuePrefix(id), false);
+  SaveStore(g_settings, ProfileDataPrefix(id));
+  return true;
+}
+
+bool LoadSavedProfile(ProfileId id) {
+  if (!ValidProfileId(id)) return false;
+  Settings loaded = g_settings;
+  LoadSettingsValues(loaded, ProfileValuePrefix(id), false);
+  // The store is process-wide, so loading a profile has to replace it, not
+  // merge into it -- otherwise the previous profile's HDR/mask overrides
+  // would survive into the one being loaded.
+  // Profile blocks use the stable-id schema only. Do not import old positional
+  // profile fields into a newly created block that happens to reuse its number.
+  LoadStore(loaded, ProfileDataPrefix(id), false);
+  g_settings = loaded;
+  const int pass_total = static_cast<int>(g_settings.pass_order.size());
+  if (g_settings.active_pass < 0) g_settings.active_pass = 0;
+  if (pass_total > 0 && g_settings.active_pass >= pass_total) {
+    g_settings.active_pass = pass_total - 1;
+  }
+  {
+    const ctl::InstanceKey shared = ctl::InstanceKey::FromInt(0);
+    const bool clone_resources = ctl::Store().Read(
+        feature::preferences::kSection, shared,
+        feature::preferences::kCloneResources).as_bool;
+    DlssGuides::Get().RequestCloneResources(clone_resources);
+  }
   SaveSettings();
   return true;
 }
 
-bool DeleteSavedProfile(uint32_t index) {
-  const uint32_t count = ReadProfileCount();
-  if (index >= count) return false;
+bool DeleteSavedProfile(ProfileId id) {
+  std::vector<ProfileId> order = ReadProfileOrder();
+  const auto found = std::find(order.begin(), order.end(), id);
+  if (found == order.end()) return false;
 
-  for (uint32_t i = index; i + 1 < count; ++i) {
-    char next_name[kSavedProfileNameCapacity] = {};
-    ReadProfileName(i + 1, next_name, sizeof(next_name));
-    Settings data = g_settings;
-    LoadSettingsValues(data, ProfileDataPrefix(i + 1), false);
-    SaveSettingsValues(data, ProfileDataPrefix(i), false);
-    WriteProfileName(i, next_name);
-  }
+  order.erase(found);
+  WriteProfileOrder(order);
 
-  WriteProfileName(count - 1, "");
-  WriteValue("", "UserPresetCount", static_cast<int>(count - 1));
+  // The stored pass order is the instance-key source for this profile's
+  // instanced ctl sections. Deletion does not modify the active store.
+  Settings profile;
+  profile.pass_order = ReadProfilePassOrder(id);
+  ctl::ReshadeConfigWriter writer;
+  ctl::Delete(ctl::Store(), writer, ProfileDataPrefix(id),
+              &InstanceKeysForSections, &profile);
+
+  const std::string value_prefix = ProfileValuePrefix(id);
+  writer.Erase(ProfileNameKey(id));
+  writer.Erase(value_prefix + "Enabled");
+  writer.Erase(value_prefix + kPassOrderKey);
+
   return true;
 }
 

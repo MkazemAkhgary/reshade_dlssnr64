@@ -110,8 +110,9 @@ struct HdrSettings {
   float gain_max_log2 = 6.0f;
 };
 
-void LoadHdrSettings(HdrSettings& hdr, const std::string& key_prefix = {});
-void SaveHdrSettings(const HdrSettings& hdr, const std::string& key_prefix = {});
+// Persistence is not here. The values are declared in
+// feature/hdr/schema.cpp, read by feature/hdr/view.cpp, and round-tripped by
+// ctl/serialize -- so a new setting needs no loader and no saver of its own.
 
 inline float CalcEffectiveSceneWhite(float scene_white, const HdrSettings& hdr) {
   return scene_white * std::max(hdr.highlight_headroom, 0.01f);

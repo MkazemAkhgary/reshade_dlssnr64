@@ -320,7 +320,7 @@ void HdrState::BeginFrame(CommandContext& cmd,
                           ID3D12Resource* source,
                           unsigned int width,
                           unsigned int height,
-                          const Settings& settings,
+                          const HdrSettings& hdr_settings,
                           ComputeEngine& codec,
                           ID3D12Resource* exposure_mask,
                           ID3D12Resource* game_exposure_texture,
@@ -328,15 +328,15 @@ void HdrState::BeginFrame(CommandContext& cmd,
                           bool depth_inverted,
                           unsigned int exposure_mask_width,
                           unsigned int exposure_mask_height) {
-  enabled_ = settings.hdr.enable;
+  enabled_ = hdr_settings.enable;
   if (!enabled_ || command_list == nullptr || source == nullptr || width == 0 || height == 0)
     return;
 
   ++frames_since_measure_;
-  PollReadback(fence_.Get(), settings);
+  PollReadback(fence_.Get(), hdr_settings);
 
   const HdrFormat old_format = resolved_format_;
-  resolved_format_ = DetectFormatFromResource(source, settings.hdr.format);
+  resolved_format_ = DetectFormatFromResource(source, hdr_settings.format);
   if (resolved_format_ != old_format || !have_logged_format_) {
     char message[160];
     std::snprintf(message, sizeof(message),
@@ -347,7 +347,7 @@ void HdrState::BeginFrame(CommandContext& cmd,
     have_logged_format_ = true;
   }
 
-  if (settings.hdr.game_exposure.enabled && !pending_game_exposure_ &&
+  if (hdr_settings.game_exposure.enabled && !pending_game_exposure_ &&
       game_exposure_texture != nullptr && game_exposure_value_buffer_ != nullptr &&
       codec.IsReady() && codec.IsPassCompiled("ReadGameExposure")) {
     const D3D12_RESOURCE_DESC desc = game_exposure_texture->GetDesc();
@@ -398,7 +398,7 @@ void HdrState::BeginFrame(CommandContext& cmd,
     return;
   }
   frames_until_measure_ = static_cast<uint32_t>(
-      std::clamp(settings.hdr.measure_interval, 1, 32)) - 1u;
+      std::clamp(hdr_settings.measure_interval, 1, 32)) - 1u;
   if (!codec.IsReady()) {
     ++frame_counter_;
     return;
@@ -434,9 +434,9 @@ void HdrState::BeginFrame(CommandContext& cmd,
   constants.shader.Params0.z = kLumaMaxLog2;
   constants.shader.Params0.w = 0.0f;
   const ExposureFilterSettings* filters[kHistogramLayerCount] = {
-      nullptr, &settings.hdr.game_exposure.filters,
-      &settings.hdr.adaptive_exposure.filters,
-      &settings.hdr.local_exposure.filters};
+      nullptr, &hdr_settings.game_exposure.filters,
+      &hdr_settings.adaptive_exposure.filters,
+      &hdr_settings.local_exposure.filters};
 
   for (uint32_t layer = 0; layer < kHistogramLayerCount; ++layer) {
     constants.shader.Params0.w = 0.0f;
@@ -514,7 +514,7 @@ void HdrState::SignalAtPresent(ID3D12CommandQueue* queue) {
   fence_value_ = signal_value;
 }
 
-void HdrState::PollReadback(ID3D12Fence* fence, const Settings& settings) {
+void HdrState::PollReadback(ID3D12Fence* fence, const HdrSettings& settings) {
   if (fence == nullptr) return;
   const uint64_t completed = fence->GetCompletedValue();
 
@@ -530,7 +530,7 @@ void HdrState::PollReadback(ID3D12Fence* fence, const Settings& settings) {
         game_exposure_available_ = true;
       }
     }
-    ResolveExposureStack(settings.hdr);
+    ResolveExposureStack(settings);
   }
 
   if (pending_measurement_ && completed >= pending_fence_value_) {
@@ -573,7 +573,7 @@ void HdrState::UpdateExposure(const uint32_t* full_bins,
                               const uint32_t* game_bins,
                               const uint32_t* adaptive_bins,
                               const uint32_t* local_bins,
-                              const Settings& settings) {
+                              const HdrSettings& settings) {
   const auto now = std::chrono::steady_clock::now();
   const float dt = have_measurement_time_
       ? std::chrono::duration<float>(now - last_measurement_time_).count()
@@ -599,7 +599,7 @@ void HdrState::UpdateExposure(const uint32_t* full_bins,
     last_local_histogram_[i] = local_bins[i];
   }
 
-  const auto& adaptive_settings = settings.hdr.adaptive_exposure;
+  const auto& adaptive_settings = settings.adaptive_exposure;
   ExposureParams adaptive_params;
   adaptive_params.midtone = adaptive_settings.midtone;
   adaptive_params.percentile_low = adaptive_settings.filters.percentile_low;
@@ -616,7 +616,7 @@ void HdrState::UpdateExposure(const uint32_t* full_bins,
         ? MeteringSource::FilteredPopulation : MeteringSource::FullFrame;
   }
 
-  const auto& game_settings = settings.hdr.game_exposure;
+  const auto& game_settings = settings.game_exposure;
   if (game_settings.bounded_tuning) {
     ExposureParams game_params;
     game_params.midtone = game_settings.tuning_midtone;
@@ -631,8 +631,8 @@ void HdrState::UpdateExposure(const uint32_t* full_bins,
 
   local_luma_min_ = 0.0f;
   local_luma_max_ = 1.0e8f;
-  if (settings.hdr.local_exposure.filters.percentile_range && local_total != 0) {
-    const auto& filters = settings.hdr.local_exposure.filters;
+  if (settings.local_exposure.filters.percentile_range && local_total != 0) {
+    const auto& filters = settings.local_exposure.filters;
     local_luma_min_ = BinToLinear(PercentileBin(
         local_bins, local_total, filters.percentile_low));
     local_luma_max_ = BinToLinear(PercentileBin(
@@ -647,7 +647,7 @@ void HdrState::UpdateExposure(const uint32_t* full_bins,
   last_samples_ = chosen_total;
   have_histogram_ = chosen_total != 0;
   p_hi_luma_ = adaptive_.scene_white;
-  ResolveExposureStack(settings.hdr);
+  ResolveExposureStack(settings);
 }
 
 void HdrState::ResolveExposureStack(const HdrSettings& settings) {
@@ -698,7 +698,7 @@ namespace {
 
 PipelineStatus RunHdrBeginFrame(PassRun& run) {
   if (!run.is_first_pass) return PipelineStatus::Ok;
-  if (run.hdr == nullptr || run.hdr_cmd == nullptr || run.settings == nullptr)
+  if (run.hdr == nullptr || run.hdr_cmd == nullptr)
     return PipelineStatus::Ok;
 
   const bool pre_dlss = run.stage != nullptr && run.stage->is_pre_dlss;
@@ -719,7 +719,7 @@ PipelineStatus RunHdrBeginFrame(PassRun& run) {
   ID3D12Resource* exposure_mask = nullptr;
   unsigned int exposure_mask_width = 0;
   unsigned int exposure_mask_height = 0;
-  if (run.settings->importance_mask.enable && run.importance_mask != nullptr) {
+  if (run.mask_state.enable && run.importance_mask != nullptr) {
     const ImportanceMask::Output detection = run.importance_mask->GetFrameOutput();
     if (detection.valid && detection.mask != nullptr && detection.width != 0 &&
         detection.height != 0) {
@@ -733,7 +733,7 @@ PipelineStatus RunHdrBeginFrame(PassRun& run) {
             run.stage != nullptr ? run.stage->name : "?", source_width,
             source_height, exposure_mask != nullptr ? 1 : 0);
   run.hdr->BeginFrame(*run.hdr_cmd, run.list, source, source_width,
-                      source_height, *run.settings, *run.codec, exposure_mask,
+                      source_height, run.hdr_state, *run.codec, exposure_mask,
                       run.game_exposure_texture, run.guides.depth,
                       run.guides.depth_inverted, exposure_mask_width,
                       exposure_mask_height);

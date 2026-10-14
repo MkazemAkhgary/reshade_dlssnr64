@@ -10,7 +10,7 @@
 #include "command_context.h"
 #include "compute_engine.h"
 #include "gpu_readback.h"
-#include "state/settings.h"
+#include "hdr/settings.h"
 
 namespace reshade_dlssnr {
 
@@ -86,7 +86,7 @@ class HdrState {
                   ID3D12Resource* source,
                   unsigned int width,
                   unsigned int height,
-                  const Settings& settings,
+                  const HdrSettings& hdr_settings,
                   ComputeEngine& codec,
                   ID3D12Resource* exposure_mask = nullptr,
                   ID3D12Resource* game_exposure_texture = nullptr,
@@ -121,10 +121,10 @@ class HdrState {
   HdrSnapshot GetSnapshot() const;
 
  private:
-  void PollReadback(ID3D12Fence* fence, const Settings& settings);
+  void PollReadback(ID3D12Fence* fence, const HdrSettings& settings);
   void UpdateExposure(const uint32_t* full_bins, const uint32_t* game_bins,
                       const uint32_t* adaptive_bins, const uint32_t* local_bins,
-                      const Settings& settings);
+                      const HdrSettings& settings);
   void ResolveExposureStack(const HdrSettings& settings);
 
   Microsoft::WRL::ComPtr<ID3D12Device> device_;

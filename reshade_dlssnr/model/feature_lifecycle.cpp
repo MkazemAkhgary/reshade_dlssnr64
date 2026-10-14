@@ -11,7 +11,7 @@ namespace reshade_dlssnr {
 
 bool FeatureLifecycle::EnsureFeature(
     NgxRuntime& runtime,
-    const PassSettings& pass,
+    const feature::pass::PassSnapshot& pass,
     ID3D12GraphicsCommandList* command_list,
     unsigned int width,
     unsigned int height) {

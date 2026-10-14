@@ -10,6 +10,19 @@
 #include <vector>
 
 #include "compose/settings.h"
+#include "ctl/usage/ui_store.h"
+#include "ctl/values.h"
+#include "feature/debug_log/settings.h"
+#include "feature/debug_log/view.h"
+#include "feature/grade/view.h"
+#include "feature/hdr/view.h"
+#include "feature/importance_mask/view.h"
+#include "feature/pass/settings.h"
+#include "feature/preferences/settings.h"
+#include "feature/pass/ui.h"
+#include "feature/pass/view.h"
+#include "hdr/settings.h"
+#include "importance_mask/settings.h"
 
 namespace reshade_dlssnr {
 
@@ -115,8 +128,13 @@ void AppendGrade(Snapshot& snap, const std::string& prefix,
   Append(snap, prefix + ".highlights", FloatText(grade.highlights));
 }
 
-void AppendPass(Snapshot& snap, const std::string& prefix,
-                const PassSettings& pass) {
+// The pass rows, resolved. Takes the store too, because the pass grades and
+// the inherit flags live in their own rows and their own sections -- they are
+// not part of PassSnapshot -- and a trace of the pass that omitted them would
+// be a trace of three quarters of one.
+void AppendPass(ctl::ValueStore& store, const ctl::InstanceKey& key,
+                Snapshot& snap, const std::string& prefix,
+                const feature::pass::PassSnapshot& pass) {
   Append(snap, prefix + ".preset", std::to_string(pass.preset));
   Append(snap, prefix + ".local_tone", FloatText(pass.local_tone));
   Append(snap, prefix + ".ui_correction", BoolText(pass.ui_correction));
@@ -125,7 +143,8 @@ void AppendPass(Snapshot& snap, const std::string& prefix,
   Append(snap, prefix + ".skin_structure", FloatText(pass.skin_structure));
   Append(snap, prefix + ".intensity", FloatText(pass.intensity));
   Append(snap, prefix + ".working_scale", FloatText(pass.working_scale));
-  Append(snap, prefix + ".injection_stage", StageText(pass.injection_stage));
+  Append(snap, prefix + ".target", std::to_string(pass.target));
+  Append(snap, prefix + ".custom_name", pass.custom_name);
   Append(snap, prefix + ".residual.edit_strength",
          FloatText(pass.residual.edit_strength));
   Append(snap, prefix + ".residual.chroma_strength",
@@ -148,8 +167,12 @@ void AppendPass(Snapshot& snap, const std::string& prefix,
          FloatText(pass.residual.ratio_brighten));
   Append(snap, prefix + ".residual.ratio_darken",
          FloatText(pass.residual.ratio_darken));
-  AppendGrade(snap, prefix + ".grade_input", pass.grade_input);
-  AppendGrade(snap, prefix + ".grade_output", pass.grade_output);
+  AppendGrade(snap, prefix + ".grade_input",
+              feature::grade::Read(store, key, feature::pass::kGradeInputSection,
+                                   feature::pass::kGradeInputPrefix));
+  AppendGrade(snap, prefix + ".grade_output",
+              feature::grade::Read(store, key, feature::pass::kGradeOutputSection,
+                                   feature::pass::kGradeOutputPrefix));
   Append(snap, prefix + ".strength.luma_strength",
          FloatText(pass.strength.luma_strength));
   Append(snap, prefix + ".strength.chroma_strength",
@@ -164,43 +187,44 @@ void AppendPass(Snapshot& snap, const std::string& prefix,
          FloatText(pass.soft_compression.max_chroma));
   Append(snap, prefix + ".soft_compression.knee",
          FloatText(pass.soft_compression.knee));
-  Append(snap, prefix + ".inherit.working_scale",
-         BoolText(pass.inherit_working_scale));
-  Append(snap, prefix + ".inherit.intensity", BoolText(pass.inherit_intensity));
-  Append(snap, prefix + ".inherit.local_tone",
-         BoolText(pass.inherit_local_tone));
-  Append(snap, prefix + ".inherit.local_structure",
-         BoolText(pass.inherit_local_structure));
-  Append(snap, prefix + ".inherit.skin_structure",
-         BoolText(pass.inherit_skin_structure));
-  Append(snap, prefix + ".inherit.luma_strength",
-         BoolText(pass.inherit_luma_strength));
-  Append(snap, prefix + ".inherit.chroma_strength",
-         BoolText(pass.inherit_chroma_strength));
-  Append(snap, prefix + ".inherit.soft_max_brighten",
-         BoolText(pass.inherit_soft_max_brighten));
-  Append(snap, prefix + ".inherit.soft_max_darken",
-         BoolText(pass.inherit_soft_max_darken));
-  Append(snap, prefix + ".inherit.soft_max_chroma",
-         BoolText(pass.inherit_soft_max_chroma));
-  Append(snap, prefix + ".inherit.soft_knee",
-         BoolText(pass.inherit_soft_knee));
+  Append(snap, prefix + ".rcas_enabled", BoolText(pass.rcas_enabled));
+  Append(snap, prefix + ".rcas_strength", FloatText(pass.rcas_strength));
+
 }
 
-Snapshot BuildSnapshot(const Settings& settings,
-                       const PassSettings* resolved_passes) {
+Snapshot BuildSnapshot(const Settings& settings) {
   Snapshot snap;
+  // HDR and the importance mask are read from the store, not from `settings`.
+  // They are single-instance sections the UI edits through the store, so a
+  // copy carried in Settings would be frozen at load time and the dump would
+  // report values the user has already changed. Only the raw-vs-resolved pass
+  // comparison and the backbuffer grade still come from Settings.
+  const ctl::InstanceKey shared_key = ctl::InstanceKey::FromInt(0);
+  ctl::ValueStore& store = ctl::Store();
+  const HdrSettings hdr = feature::hdr::Read(store, shared_key);
+  const ImportanceMaskSettings mask =
+      feature::importance_mask::Read(store, shared_key);
+
   Append(snap, "enabled", BoolText(settings.enabled));
-  Append(snap, "only_super_sampling", BoolText(settings.only_super_sampling));
-  Append(snap, "debug_view", std::to_string(settings.debug_view));
+  Append(snap, "debug_view", std::to_string(
+      feature::debug_log::Read(store, shared_key)));
+  Append(snap, "show_tooltips", BoolText(store.Read(
+      feature::preferences::kSection, shared_key,
+      feature::preferences::kShowTooltips).as_bool));
+  Append(snap, "require_dlss", BoolText(store.Read(
+      feature::preferences::kSection, shared_key,
+      feature::preferences::kRequireDlss).as_bool));
+  Append(snap, "clone_resources", BoolText(store.Read(
+      feature::preferences::kSection, shared_key,
+      feature::preferences::kCloneResources).as_bool));
   Append(snap, "active_pass", std::to_string(settings.active_pass));
-  Append(snap, "hdr_enable", BoolText(settings.hdr.enable));
-  Append(snap, "hdr_format", HdrFormatText(settings.hdr.format));
+  Append(snap, "hdr_enable", BoolText(hdr.enable));
+  Append(snap, "hdr_format", HdrFormatText(hdr.format));
   Append(snap, "hdr_measure_interval",
-         std::to_string(settings.hdr.measure_interval));
+         std::to_string(hdr.measure_interval));
   Append(snap, "hdr_highlight_headroom",
-         FloatText(settings.hdr.highlight_headroom));
-  const auto& game = settings.hdr.game_exposure;
+         FloatText(hdr.highlight_headroom));
+  const auto& game = hdr.game_exposure;
   Append(snap, "hdr.layer.game.enabled", BoolText(game.enabled));
   Append(snap, "hdr.layer.game.bias_stops", FloatText(game.bias_stops));
   Append(snap, "hdr.layer.game.bounded_tuning", BoolText(game.bounded_tuning));
@@ -211,7 +235,7 @@ Snapshot BuildSnapshot(const Settings& settings,
   Append(snap, "hdr.layer.game.tuning_speed_down", FloatText(game.tuning_speed_down));
   AppendExposureFilters(snap, "hdr.layer.game.filters", game.filters);
 
-  const auto& adaptive = settings.hdr.adaptive_exposure;
+  const auto& adaptive = hdr.adaptive_exposure;
   Append(snap, "hdr.layer.adaptive.enabled", BoolText(adaptive.enabled));
   Append(snap, "hdr.layer.adaptive.midtone", FloatText(adaptive.midtone));
   Append(snap, "hdr.layer.adaptive.speed_up", FloatText(adaptive.speed_up));
@@ -220,45 +244,47 @@ Snapshot BuildSnapshot(const Settings& settings,
   Append(snap, "hdr.layer.adaptive.max_correction_stops", FloatText(adaptive.max_correction_stops));
   AppendExposureFilters(snap, "hdr.layer.adaptive.filters", adaptive.filters);
 
-  const auto& local = settings.hdr.local_exposure;
+  const auto& local = hdr.local_exposure;
   Append(snap, "hdr.layer.local.enabled", BoolText(local.enabled));
   Append(snap, "hdr.layer.local.strength", FloatText(local.strength));
   Append(snap, "hdr.layer.local.max_brighten", FloatText(local.max_brighten));
   Append(snap, "hdr.layer.local.max_darken", FloatText(local.max_darken));
   Append(snap, "hdr.layer.local.midtone", FloatText(local.midtone));
   AppendExposureFilters(snap, "hdr.layer.local.filters", local.filters);
-  Append(snap, "hdr_bt2446_k1", FloatText(settings.hdr.bt2446_k1));
-  Append(snap, "hdr_bt2446_k2", FloatText(settings.hdr.bt2446_k2));
-  Append(snap, "hdr_bt2446_k3", FloatText(settings.hdr.bt2446_k3));
-  Append(snap, "hdr_bt2446_k4", FloatText(settings.hdr.bt2446_k4));
-  Append(snap, "hdr_bt2446_crosstalk", FloatText(settings.hdr.bt2446_crosstalk));
-  Append(snap, "hdr_gain_min_log2", FloatText(settings.hdr.gain_min_log2));
-  Append(snap, "hdr_gain_max_log2", FloatText(settings.hdr.gain_max_log2));
-  Append(snap, "importance_mask.enable", BoolText(settings.importance_mask.enable));
-  Append(snap, "importance_mask.luma_threshold", FloatText(settings.importance_mask.luma_threshold));
-  Append(snap, "importance_mask.luma_relative", FloatText(settings.importance_mask.luma_relative));
-  Append(snap, "importance_mask.chroma_threshold", FloatText(settings.importance_mask.chroma_threshold));
-  Append(snap, "importance_mask.edit_strength", FloatText(settings.importance_mask.edit_strength));
-  Append(snap, "importance_mask.smoothing", FloatText(settings.importance_mask.mask_smoothing));
-  Append(snap, "importance_mask.response", FloatText(settings.importance_mask.mask_response));
-  AppendGrade(snap, "grade_backbuffer", settings.grade_backbuffer);
+  Append(snap, "hdr_bt2446_k1", FloatText(hdr.bt2446_k1));
+  Append(snap, "hdr_bt2446_k2", FloatText(hdr.bt2446_k2));
+  Append(snap, "hdr_bt2446_k3", FloatText(hdr.bt2446_k3));
+  Append(snap, "hdr_bt2446_k4", FloatText(hdr.bt2446_k4));
+  Append(snap, "hdr_bt2446_crosstalk", FloatText(hdr.bt2446_crosstalk));
+  Append(snap, "hdr_gain_min_log2", FloatText(hdr.gain_min_log2));
+  Append(snap, "hdr_gain_max_log2", FloatText(hdr.gain_max_log2));
+  Append(snap, "importance_mask.enable", BoolText(mask.enable));
+  Append(snap, "importance_mask.luma_threshold", FloatText(mask.luma_threshold));
+  Append(snap, "importance_mask.luma_relative", FloatText(mask.luma_relative));
+  Append(snap, "importance_mask.chroma_threshold", FloatText(mask.chroma_threshold));
+  Append(snap, "importance_mask.edit_strength", FloatText(mask.edit_strength));
+  Append(snap, "importance_mask.smoothing", FloatText(mask.mask_smoothing));
+  Append(snap, "importance_mask.response", FloatText(mask.mask_response));
+  AppendGrade(snap, "grade_backbuffer",
+              feature::grade::ReadBackbuffer(store));
 
-  for (uint32_t i = 0; i < kMaxPasses; ++i) {
-    const std::string prefix = "pass[" + std::to_string(i) + "]";
-    Append(snap, prefix + ".enabled", BoolText(settings.pass_enabled[i]));
-
-    Snapshot pass;
-    AppendPass(pass, prefix, settings.passes[i]);
-    Snapshot resolved;
-    AppendPass(resolved, "resolved[" + std::to_string(i) + "]",
-               resolved_passes[i]);
-    for (size_t j = 0; j < resolved.size() && j < pass.size(); ++j) {
-      resolved[j].resolved = true;
-      resolved[j].raw_value = pass[j].value;
-    }
-
-    snap.insert(snap.end(), pass.begin(), pass.end());
-    snap.insert(snap.end(), resolved.begin(), resolved.end());
+  // Pass rows. Dumped once per pass, in tab order, from the store's resolved
+  // value -- the same number the render path runs at. The raw value is
+  // available too, as the pass's own un-inherited override, and the trace
+  // prints it beside the resolved one when they differ, which is exactly the
+  // information this dump exists to show: which settings are inherited.
+  for (size_t position = 0; position < settings.pass_order.size(); ++position) {
+    const feature::pass::PassId id = settings.pass_order[position];
+    const ctl::InstanceKey key = feature::pass::PassKey(id);
+    const std::string prefix =
+        "pass[" + std::to_string(position) + "]";
+    const feature::pass::PassSnapshot resolved =
+        feature::pass::Read(store, key);
+    AppendPass(store, key, snap, prefix, resolved);
+    Append(snap, prefix + ".enabled",
+           BoolText(store.Read(feature::pass::kSection, key,
+                               feature::pass::kPassEnabled)
+                        .as_bool));
   }
   return snap;
 }
@@ -284,9 +310,9 @@ void EmitSnapshot(const Snapshot& previous, const Snapshot& current,
 
 }  // namespace
 
-void TraceSettings(const Settings& settings, const PassSettings* resolved) {
+void TraceSettings(const Settings& settings) {
   if (!trace::Enabled()) return;
-  Snapshot current = BuildSnapshot(settings, resolved);
+  Snapshot current = BuildSnapshot(settings);
   EmitSnapshot(g_traced, current, !g_traced_valid);
   g_traced = std::move(current);
   g_traced_valid = true;

@@ -5,9 +5,9 @@
 
 namespace reshade_dlssnr {
 
-// `resolved` is kMaxPasses entries, the inheritance-applied view the runtime
-// reads. Compared against the raw pass settings so the dump can suppress
-// resolved fields that inheritance did not touch.
-void TraceSettings(const Settings& settings, const PassSettings* resolved);
+// Dumps the settings as they will run: resolved out of the store. The pass
+// rows come from pass_order and are keyed by stable pass id, so a reorder
+// shows up as a relabelled row rather than as a value moving.
+void TraceSettings(const Settings& settings);
 
 }  // namespace reshade_dlssnr

@@ -9,10 +9,10 @@ namespace reshade_dlssnr {
 
 PipelineStatus PassSession::StepBuildHdrUniforms(PassRun& run) {
   run.hdr_uniforms_ready = false;
-  if (run.hdr == nullptr || run.settings == nullptr) return PipelineStatus::Ok;
+  if (run.hdr == nullptr) return PipelineStatus::Ok;
   if (!run.hdr->Enabled()) return PipelineStatus::Ok;
 
-  const HdrSettings& hs = run.settings->hdr;
+  const HdrSettings& hs = run.hdr_state;
   const LocalExposureLayerSettings& local = hs.local_exposure;
   const HdrSnapshot snapshot = run.hdr->GetSnapshot();
   run.hdr_uniforms.format = static_cast<float>(HdrFormatCode(run.hdr->ResolvedFormat()));

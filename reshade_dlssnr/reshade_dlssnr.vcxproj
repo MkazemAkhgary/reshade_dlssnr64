@@ -192,19 +192,10 @@
     <ClCompile Include="pipeline\pipeline_trace.cpp" />
     <ClCompile Include="model\runtime.cpp" />
     <ClCompile Include="importance_mask\importance_mask.cpp" />
-    <ClCompile Include="compose\settings.cpp" />
-    <ClCompile Include="grade\settings.cpp" />
-    <ClCompile Include="hdr\settings.cpp" />
-    <ClCompile Include="importance_mask\settings.cpp" />
-    <ClCompile Include="state\pass.cpp" />
     <ClCompile Include="state\trace.cpp" />
     <ClCompile Include="state\settings.cpp" />
     <ClCompile Include="ui\ui.cpp" />
-    <ClCompile Include="ui\ui_debug.cpp" />
-    <ClCompile Include="ui\ui_grade.cpp" />
-    <ClCompile Include="ui\ui_hdr.cpp" />
     <ClCompile Include="ui\ui_pass.cpp" />
-    <ClCompile Include="ui\ui_importance_mask.cpp" />
     <ClCompile Include="ui\ui_status.cpp" />
     <ClCompile Include="ui\ui_widgets.cpp" />
     <ClCompile Include="ctl\builtin_settings.cpp" />
@@ -254,7 +245,6 @@
     <ClInclude Include="grade\settings.h" />
     <ClInclude Include="hdr\settings.h" />
     <ClInclude Include="importance_mask\settings.h" />
-    <ClInclude Include="state\pass.h" />
     <ClInclude Include="state\trace.h" />
     <ClInclude Include="hooks\streamline_compat.h" />
     <ClInclude Include="pipeline\addon_controller.h" />

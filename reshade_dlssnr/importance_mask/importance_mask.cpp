@@ -54,8 +54,8 @@ PipelineStatus RunBuildImportanceMask(PassRun& run) {
   // NGX evaluation must not publish a mask derived from stale output memory.
   if (run.stage == nullptr || run.stage->owns_submit ||
       (!run.stage->is_pre_dlss && !run.stage->is_post_dlss) ||
-      run.settings == nullptr || !run.settings->hdr.enable ||
-      !run.settings->importance_mask.enable || run.importance_mask == nullptr ||
+      !run.hdr_state.enable || !run.mask_state.enable ||
+      run.importance_mask == nullptr ||
       run.model_color == nullptr || run.model_output == nullptr ||
       run.eval_result != NVSDK_NGX_Result_Success || run.session == nullptr ||
       run.cmd == nullptr || run.codec == nullptr ||
@@ -67,7 +67,7 @@ PipelineStatus RunBuildImportanceMask(PassRun& run) {
   if (!run.importance_mask->Build(
           *run.cmd, *run.codec, run.session->StageList(run, *run.cmd),
           run.device, run.model_color, run.model_output,
-          run.settings->importance_mask)) {
+          run.mask_state)) {
     TRACE_EVT(run.session, "importance_mask BUILD_SKIP");
   }
   return PipelineStatus::Ok;

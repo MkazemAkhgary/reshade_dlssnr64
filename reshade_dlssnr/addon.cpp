@@ -102,11 +102,11 @@ void OnPresent(
 void Attach(HMODULE module) {
   if (g_initialized) return;
 
-  reshade_dlssnr::LoadSettings();
-  PinAddonModule();
-
   // First thing installed, so a fault during any of the rest is reported.
   reshade_dlssnr::crash_trace::Install();
+
+  reshade_dlssnr::LoadSettings();
+  PinAddonModule();
 
   reshade::register_event<reshade::addon_event::init_device>(OnInitDevice);
   reshade::register_event<reshade::addon_event::present>(OnPresent);
@@ -116,6 +116,12 @@ void Attach(HMODULE module) {
   // Streamline from the game's own directory. It is usually not there yet at
   // addon init, so the hook is retried from OnPresent until it lands.
   g_ngx_hooked = reshade_dlssnr::ngx_hook_compat::TryHookNgx();
+  
+  if (!g_ngx_hooked)
+  {
+      reshade::log::message(reshade::log::level::warning,
+          "DLSSNR: NGX hook not installed yet; will retry on present");
+  }
 
   g_initialized = true;
 }

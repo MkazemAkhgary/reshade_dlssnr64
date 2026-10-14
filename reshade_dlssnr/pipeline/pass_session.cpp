@@ -7,8 +7,16 @@
 
 #include <reshade.hpp>
 
+#include "ctl/usage/ui_store.h"
+#include "ctl/values.h"
 #include "d3d12_utils.h"
 #include "dlss_guides.h"
+#include "feature/debug_log/view.h"
+#include "feature/grade/view.h"
+#include "feature/hdr/view.h"
+#include "feature/importance_mask/view.h"
+#include "feature/pass/settings.h"
+#include "feature/pass/ui.h"
 #include "model/model_pipeline.h"
 #include "model/ngx_model_params.h"
 #include "pipeline_graph.h"
@@ -18,7 +26,32 @@
 
 namespace reshade_dlssnr {
 
+// Every enabled pass, in tab order.
+//
+// Enabled-ness and target are settings, so they are read from the store by
+// stable id rather than from Settings; only the tab order comes from Settings,
+// because that is application state the store does not hold.
+std::vector<EnabledPass> EnabledPasses(const Settings& settings) {
+  std::vector<EnabledPass> passes;
+  ctl::ValueStore& store = ctl::Store();
+  for (uint32_t position = 0; position < settings.pass_order.size();
+       ++position) {
+    const feature::pass::PassId id = settings.pass_order[position];
+    const feature::pass::PassSnapshot pass =
+        feature::pass::Read(store, feature::pass::PassKey(id));
+    if (!pass.enabled) continue;
+    EnabledPass entry;
+    entry.position = position;
+    entry.id = id;
+    entry.target = pass.target;
+    passes.push_back(entry);
+  }
+  return passes;
+}
+
 namespace {
+
+
 std::mutex g_session_mutex;
 
 // One line, because it is the difference between two very different worlds:
@@ -49,8 +82,8 @@ void BindLocalExposureFilters(PassRun& run, ComputeConstants& constants,
   ID3D12Resource* mask = source;
   ID3D12Resource* depth = source;
 
-  if ((flags & 1u) != 0u && run.settings != nullptr &&
-      run.settings->importance_mask.enable && run.importance_mask != nullptr) {
+  if ((flags & 1u) != 0u && run.mask_state.enable &&
+      run.importance_mask != nullptr) {
     const ImportanceMask::Output detection = run.importance_mask->GetFrameOutput();
     if (detection.valid && detection.mask != nullptr &&
         detection.width != 0 && detection.height != 0) {
@@ -265,7 +298,7 @@ bool PassSession::EnsureFrameResources(
 
 bool PassSession::FillEvaluateParams(
     NgxRuntime& runtime,
-    const PassSettings& pass,
+    const feature::pass::PassSnapshot& pass,
     const DlssGuideState& guides,
     ID3D12Resource* model_color,
     ID3D12Resource* model_output,
@@ -396,7 +429,8 @@ void PassSession::SubmitBackbuffer() {
 }
 
 bool PassSession::MaybeRenderDebug(
-    const Settings& settings,
+    int debug_view,
+    int active_pass,
     ComputeEngine& codec,
     ID3D12GraphicsCommandList* command_list,
     FrameDebugContext& frame_debug,
@@ -406,8 +440,8 @@ bool PassSession::MaybeRenderDebug(
     unsigned int height,
     DXGI_FORMAT format) {
   // Debug view is a shared setting; only the active pass renders it.
-  if (settings.debug_view == 0) return false;
-  if (static_cast<int>(pass_index_) != settings.active_pass) return false;
+  if (debug_view == 0) return false;
+  if (static_cast<int>(pass_index_) != active_pass) return false;
   if (command_list == nullptr) return false;
 
   // The debug output is displayed on the backbuffer, so prefer the
@@ -478,7 +512,7 @@ bool PassSession::MaybeRenderDebug(
 
   if (!RenderDebugView(command_, codec, command_list, snapshot,
                        hdr,
-                       settings.debug_view, frame_debug.output.Get(),
+                       debug_view, frame_debug.output.Get(),
                        target_width, target_height)) {
     return false;
   }
@@ -518,7 +552,10 @@ void PassSession::PrepareRun(PassRun& run,
                              ImportanceMask* importance_mask,
                              ID3D12Resource* game_exposure_texture,
                              ID3D12CommandQueue* command_queue,
-                             IDXGISwapChain* swapchain) {
+                             IDXGISwapChain* swapchain,
+                             feature::pass::PassId pass_id) {
+  // Set before anything can read it: PrepareRun keys the store by it.
+  pass_id_ = pass_id;
   run.session = this;
   run.cmd = &command_;
   run.resources = &resources_;
@@ -532,8 +569,35 @@ void PassSession::PrepareRun(PassRun& run,
   run.frame_debug = &frame_debug;
 
   run.settings = &settings;
-  run.pass = &GetResolvedPass(pass_index_);
+  run.pass_bound = true;
   run.pass_index = pass_index_;
+
+  // Read the pass's settings and its two model-boundary grades out of the
+  // store and carry them by value. The store is the source of truth; the
+  // render path never reaches for it again after this.
+  //
+  // Keyed by the pass's stable id, which the caller passes in: it is not the
+  // session's slot, because a reorder rearranges the tabs without moving any
+  // setting.
+  {
+    const ctl::ValueStore& store = ctl::Store();
+    const ctl::InstanceKey key = feature::pass::PassKey(pass_id_);
+    run.pass_state = feature::pass::Read(store, key);
+    run.grade_input =
+        feature::grade::Read(store, key, feature::pass::kGradeInputSection,
+                             feature::pass::kGradeInputPrefix);
+    run.grade_output =
+        feature::grade::Read(store, key, feature::pass::kGradeOutputSection,
+                             feature::pass::kGradeOutputPrefix);
+
+    // HDR and the importance mask are single-instance, so their snapshots do
+    // not depend on the pass index; the fixed key is the same one their
+    // sections are drawn with.
+    const ctl::InstanceKey shared = ctl::InstanceKey::FromInt(0);
+    run.debug_view = feature::debug_log::Read(store, shared);
+    run.hdr_state = feature::hdr::Read(store, shared);
+    run.mask_state = feature::importance_mask::Read(store, shared);
+  }
 
   run.list = command_list;
   run.output_resource = output_resource;
@@ -558,7 +622,8 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
                                      ImportanceMask* importance_mask,
                                      ID3D12Resource* game_exposure_texture,
                                      ID3D12CommandQueue* command_queue,
-                                     IDXGISwapChain* swapchain) {
+                                     IDXGISwapChain* swapchain,
+                                     feature::pass::PassId pass_id) {
   // The pre-refactor entry points were serialized against each other with this
   // mutex; the runner walk replaces them, so it has to hold the same lock.
   std::lock_guard<std::mutex> lock(g_session_mutex);
@@ -589,7 +654,7 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
   PassRun run;
   PrepareRun(run, settings, codec, runtime, command_list, output_resource,
              is_first_pass, frame_debug, hdr, hdr_cmd, importance_mask,
-             game_exposure_texture, command_queue, swapchain);
+             game_exposure_texture, command_queue, swapchain, pass_id);
 
   const PipelineStatus status = PipelineRunner::RunStage(stage, run);
 
@@ -808,9 +873,10 @@ PipelineStatus PassSession::StepEnsureComputeEngine(PassRun& run) {
 // working-scale setting.
 PipelineStatus PassSession::StepResolveWorkingScale(PassRun& run) {
   PassSession* self = run.session;
-  if (run.pass == nullptr) return PipelineStatus::SkipFrame;
+  if (!run.pass_bound) return PipelineStatus::SkipFrame;
 
-  const float working_scale = std::clamp(run.pass->working_scale, 0.10f, 1.0f);
+  const float working_scale =
+      std::clamp(run.pass_state.working_scale, 0.10f, 1.0f);
   run.work_width = std::max(
       1u, static_cast<unsigned int>(run.width * working_scale + 0.5f));
   run.work_height = std::max(
@@ -1013,7 +1079,7 @@ PipelineStatus PassSession::StepResolveModelInput(PassRun& run) {
 // rebuild happens only when the swapchain resolution itself changes.
 PipelineStatus PassSession::StepEnsureFeature(PassRun& run) {
   PassSession* self = run.session;
-  if (run.runtime == nullptr || run.pass == nullptr) {
+  if (run.runtime == nullptr || !run.pass_bound) {
     return PipelineStatus::SkipFrame;
   }
 
@@ -1027,8 +1093,8 @@ PipelineStatus PassSession::StepEnsureFeature(PassRun& run) {
             run.stage != nullptr ? run.stage->name : "?", self->pass_index_,
             static_cast<const void*>(list), run.width, run.height);
 
-  if (!self->feature_.EnsureFeature(*run.runtime, *run.pass, list, run.width,
-                              run.height)) {
+  if (!self->feature_.EnsureFeature(*run.runtime, run.pass_state, list,
+                                    run.width, run.height)) {
     self->FailForStep(self->feature_.GetLastError());
     if (run.stage != nullptr && run.stage->owns_submit) {
       // Backbuffer owns the list, so it has to close it; game-resource stages
@@ -1189,7 +1255,7 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
           run.work_width, run.work_height,
           run.hdr_uniforms_ready && run.hdr != nullptr &&
               run.hdr->ResolvedFormat() != HdrFormat::Sdr,
-          run.pass != nullptr && !run.pass->grade_input.enabled)) {
+          run.pass_bound && !run.grade_input.enabled)) {
     self->FailForStep("failed to prepare model input");
     return PipelineStatus::Fail;
   }
@@ -1303,12 +1369,13 @@ PipelineStatus PassSession::StepBuildEffectiveLocalExposure(PassRun& run) {
 // for this evaluation.
 PipelineStatus PassSession::StepFillEvaluateParams(PassRun& run) {
   PassSession* self = run.session;
-  if (run.runtime == nullptr || run.pass == nullptr) {
+  if (run.runtime == nullptr || !run.pass_bound) {
     return PipelineStatus::SkipFrame;
   }
-  if (!self->FillEvaluateParams(*run.runtime, *run.pass, run.guides, run.model_color,
-                          run.model_output, run.eval_width, run.eval_height,
-                          run.width, run.height)) {
+  if (!self->FillEvaluateParams(*run.runtime, run.pass_state, run.guides,
+                                run.model_color, run.model_output,
+                                run.eval_width, run.eval_height, run.width,
+                                run.height)) {
     self->FailForStep(self->reason_);
     return PipelineStatus::Fail;
   }
@@ -1397,9 +1464,9 @@ bool PassSession::EvalKeysDiffer(const EvalLogKey& a, const EvalLogKey& b) {
   // capture, and NGX can change/recreate handles independently of the resource
   // descriptor. None of those warrants reprinting the full INFO line every
   // frame. Feature rebuilds and failed evaluations have their own diagnostics.
-  const char* const a_stage = a.stage != nullptr ? a.stage : "";
-  const char* const b_stage = b.stage != nullptr ? b.stage : "";
-  return std::strcmp(a_stage, b_stage) != 0 ||
+  const std::string a_stage = CStrToString(a.stage);
+  const std::string b_stage = CStrToString(b.stage);
+  return a_stage != b_stage ||
          ((a.color == nullptr) != (b.color == nullptr)) ||
          ((a.output == nullptr) != (b.output == nullptr)) ||
          a.color_width != b.color_width || a.color_height != b.color_height ||
@@ -1480,7 +1547,7 @@ PipelineStatus PassSession::StepModelOutputBarrier(PassRun& run) {
 // for full-precision HDR composition.
 PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
   PassSession* self = run.session;
-  if (run.codec == nullptr || run.pass == nullptr) {
+  if (run.codec == nullptr || !run.pass_bound) {
     return PipelineStatus::SkipFrame;
   }
 
@@ -1502,10 +1569,10 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
   // exact model input as the compose reference so NGX/evaluation noise cannot
   // create a residual when the model output is intentionally bypassed.
   ID3D12Resource* enhanced_for_compose =
-      run.pass->intensity <= 0.0f ? run.model_color : run.model_output;
+      run.pass_state.intensity <= 0.0f ? run.model_color : run.model_output;
 
   ID3D12Resource* compose_input = run.model_color;
-  if (hdr_active && run.pass->intensity > 0.0f &&
+  if (hdr_active && run.pass_state.intensity > 0.0f &&
       run.hdr_uniforms.local_exposure_strength > 0.0f &&
       self->resources_.GetUnliftedWorkingInput() != nullptr) {
     compose_input = self->resources_.GetUnliftedWorkingInput();
@@ -1515,9 +1582,9 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
           self->command_, self->StageList(run, self->command_),
           self->resources_, run.codec, original, run.model_input,
           compose_input, enhanced_for_compose, run.width, run.height,
-          run.pass->strength, run.pass->soft_compression,
-          run.pass->residual, run.pass->rcas_enabled,
-          run.pass->rcas_strength, &run.pass->grade_input, hdr_ptr)) {
+          run.pass_state.strength, run.pass_state.soft_compression,
+          run.pass_state.residual, run.pass_state.rcas_enabled,
+          run.pass_state.rcas_strength, &run.grade_input, hdr_ptr)) {
     self->FailForStep("failed to compose model output");
     return PipelineStatus::Fail;
   }

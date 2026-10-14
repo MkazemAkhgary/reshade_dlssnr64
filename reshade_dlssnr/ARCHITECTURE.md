@@ -67,6 +67,29 @@ reshade_dlssnr/
   shaders/importance_mask/
     build_importance_mask.hlsl             Builds the per-frame Importance Mask from model input/output difference
 
+  ctl/                             Declarative settings framework
+    ctl.h                           Framework umbrella header
+    types.h/.cpp                   Values and setting metadata
+    schema.h/.cpp                  Section, setting, hook, and schema declarations
+    registry.h/.cpp                Setting-type registry
+    values.h/.cpp                  Instance store and inheritance resolution
+    serialize.h/.cpp               Schema-driven persistence
+    draw.h/.cpp                    Generic section renderer
+    builtin_settings.h/.cpp        Float, Int, Bool, Enum, and String settings
+    usage/                          ReShade config and UI-store adapters
+    ctl_acceptance.cpp              Headless acceptance harness
+  feature/                         Feature-owned setting schemas and typed views
+    register_all.cpp                Central feature registration
+    preferences/                    Shared preferences schema and setting keys
+    debug_log/                      Debug selection schema and view
+    grade/                          Grade schema and view
+    hdr/                            HDR schema, view, and UI hooks
+    importance_mask/                Importance Mask schema and view
+    pass/                           Per-pass schema, stable IDs, order, and view
+  fragments/                       Reusable schema row fragments
+    grade_rows/                     Shared grade declarations
+    hdr_filter_rows/                Shared HDR filter declarations
+
   gpu/
     command_context.h               Command allocator/list/fence interface
     command_context.cpp             Command allocator/list/fence implementation
@@ -84,8 +107,7 @@ reshade_dlssnr/
   compose/
     compose.h                       Model residual composition interface
     compose.cpp                     SDR/HDR composition dispatch and uniforms
-    settings.h                      Residual-edit settings structure
-    settings.cpp                    Residual-edit persistence
+    settings.h                      Residual-edit and reconstruction settings structures
   debug/
     debug_view.h                    Debug-view definitions and snapshot interface
     debug_view.cpp                  Debug-view selection and compute rendering
@@ -95,13 +117,11 @@ reshade_dlssnr/
     grade.h                         Grade orchestration interface
     grade.cpp                       Grade dispatch and uniforms
     settings.h                      Grade settings structure
-    settings.cpp                    Grade persistence
     steps.cpp                       Grade pipeline-step implementation
   hdr/
     hdr_state.h                     HDR measurement state and snapshot interface
     hdr_state.cpp                   Format detection, histogram, EMA and gain diagnostics
-    settings.h                      HDR settings and format definitions
-    settings.cpp                    HDR persistence
+    settings.h                      HDR runtime settings and format definitions
     steps.cpp                       HDR pipeline-step implementation
   hooks/
     d3d12_hooks.h                   D3D12 vtable hook interface
@@ -138,27 +158,20 @@ reshade_dlssnr/
     pipeline_trace.cpp              Trace writer and frame stream tracking
     status.h                        Runtime status snapshot definitions
   importance_mask/
-    settings.h                      Importance Mask controls
-    settings.cpp                    Importance Mask persistence
+    settings.h                      Importance Mask runtime settings snapshot
     importance_mask.h               Importance Mask resource and dispatch interface
     importance_mask.cpp             Importance Mask generation and frame publication
   state/
-    pass.h                          Pass status/runtime support
-    pass.cpp                        Pass state implementation
-    settings.h                      Persistent settings and resolved inheritance
-    settings.cpp                    Settings load/save/inheritance resolution
+    settings.h                      Top-level settings, profile metadata, and UI state
+    settings.cpp                    Top-level/profile config and legacy-setting migration
     trace.h                         Settings trace interface
     trace.cpp                       Settings change tracing
     version.h                       Addon version constant
   ui/
     ui.h                            Overlay entry point
-    ui.cpp                          Main ImGui overlay and pass selection
-    ui_debug.cpp                    Shared debug-view controls
-    ui_grade.cpp                    Grade controls
-    ui_hdr.cpp                      HDR controls and diagnostics
-    ui_pass.cpp                     Per-pass controls
+    ui.cpp                          Main overlay, section orchestration, and pass selection
+    ui_pass.cpp                     Pass toolbar and reset controls
     ui_sections.h                   Section-drawer declarations
-    ui_importance_mask.cpp          Importance Mask controls
     ui_status.cpp                   Status and retry controls
     ui_widgets.h                    Shared widget declarations
     ui_widgets.cpp                  Shared widget implementation
@@ -532,7 +545,7 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 **The debug target uses the swapchain's format and dimensions.** Pre-DLSS and Post-DLSS sources may have a different format or render extent. `DebugDisplay` renders into a backbuffer-sized debug texture and samples the selected source over its normalized extent, so the Release stage can copy it directly to the swapchain.
 
-**Debug selection is global, rendering is pass-local.** `Settings::debug_view` is shared, while only the active pass renders the selected view.
+**Debug selection is global, rendering is pass-local.** The Debug section's `ctl` value is snapshotted into each `PassRun`; only the active pass renders the selected view.
 
 ### Settings and UI
 
@@ -540,9 +553,11 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 **Working scale 1 avoids identity scaling work.** For SDR inputs with no input grade and equal input/working dimensions, `PrepareModelInput` passes the original resource to the model instead of dispatching an identity downsample. SDR/HDR composition still dispatches because it applies the model residual and writes the final image, but the shaders skip EASU reconstruction when the working and output sizes are equal; optional RCAS remains active. The HDR carrier preparation is not bypassed because it performs required color-domain conversion.
 
-**Inheritance is resolved only when settings change.** `RecomputeResolved()` runs on load and save; runtime code reads `GetResolvedPass()` directly and never recomputes inheritance per frame.
+**Inheritance is resolved by the `ctl` store.** Parent links belong to instances; `feature::pass::ApplyOrder` rebuilds the pass chain after the stable pass order changes or loads. Runtime views read values through `ValueStore::Read`, which resolves the declared inheritance chain.
 
-**Only explicitly inheritable fields are resolved.** Working scale, intensity, local tone, local structure, skin structure and dynamic shader parameters can inherit. Grade settings, residual settings and RCAS controls are intentionally per-pass.
+**Saved profiles use stable `ProfileId` keys.** `UserPresetOrder` is the comma-separated display order and `UserPresetNextId` preserves the allocation high-water mark. A profile's name, enabled state, and pass order live at `UserPreset.<id>.Name`, `.Enabled`, and `.PassOrder`; its `ctl` block is under `UserPreset.<id>.Data`. Save and delete pass that profile's pass order as the instance-key source, so unrelated live pass instances are not copied into or erased from its block. Deletion removes one id from the order and erases its schema-defined keys; it never shifts another profile's data. Legacy positional profile blocks are not imported.
+
+**Only explicitly inheritable settings are resolved through parents.** Working scale, intensity, local tone, local structure, skin structure, luma/chroma strength, and the soft-compression limits/knee opt in. Grade controls, residual controls, RCAS controls, names, targets, and model preset remain per-pass.
 
 **HDR composition uses Gain-Map Residual exclusively.** HDR Pre-DLSS and Post-DLSS passes use the packed per-pixel carrier-to-HDR multiplier to transfer model edits back to the untouched full-resolution HDR source. The former HDR Ratio mode and selector are removed. SDR composition, including Present/backbuffer passes, retains its existing log-ratio residual path and settings.
 
@@ -613,10 +628,11 @@ The build automatically embeds the new shader and the verification target compil
 
 ### Add a shader parameter
 
-1. Add the field to the owning settings struct in `compose/settings.h` (Strength or Soft Compression) or its module counterpart, with load/save in that module's `settings.cpp`.
-2. Add or reuse the corresponding field in `ShaderBlock` in `shaders/common/params.h` only when the parameter belongs to the shared cbuffer rather than a pass-specific constant convention.
-3. Write the value through the typed cbuffer field instead of a numeric slot offset.
-4. Add the HLSL alias in `shaders/common/bindings.hlsli` if the shader-facing semantic name is not already present.
+1. Add or update the runtime settings field in the owning header when the compose/grade code needs a typed snapshot, then declare the user-facing value in the owning `feature/<name>/schema.cpp`.
+2. Map the stored value into the runtime snapshot in that feature's `view.cpp`; `ctl::Save` and `ctl::Load` own setting persistence. Do not add a parallel per-feature INI loader.
+3. Add or reuse the corresponding field in `ShaderBlock` in `shaders/common/params.h` only when the parameter belongs to the shared cbuffer rather than a pass-specific constant convention.
+4. Write the value through the typed cbuffer field instead of a numeric slot offset.
+5. Add the HLSL alias in `shaders/common/bindings.hlsli` if the shader-facing semantic name is not already present.
 
 `ShaderBlock.Params0` and `Params1` hold the Strength/Soft-Compression parameters; the cbuffer layout is asserted in `gpu/compute_constants.h`.
 
@@ -639,15 +655,15 @@ The build automatically embeds the new shader and the verification target compil
 
 ### Add a UI section
 
-Use the existing section helpers and persistent settings fields. Shared sections belong in the overlay-level drawing flow; per-pass controls belong in `ui_pass.cpp` and operate on the selected `PassSettings`/resolved pass values.
+The overlay owns cross-feature layout and coordination. A feature's ordinary rows are declared in its schema and rendered by `ctl::DrawSection`; use hooks for feature-specific UI that must appear between rows. Pass-toolbar operations belong in `ui_pass.cpp`, while the pass's settings body is schema-driven.
 
 ### Add a setting
 
-1. Add the field to `Settings` or `PassSettings`.
-2. Add load/save handling in `state/settings.cpp`.
-3. Add the UI control in the relevant `ui_*.cpp` file.
-4. If later passes may inherit it, add the corresponding inherit flag and handle it in `RecomputeResolved`.
-5. If the setting is runtime-only UI state, keep it out of the frame-processing layer.
+1. Add the setting key to the owning `feature/<name>/settings.h` and declare its type, default, metadata, and inheritance policy in `feature/<name>/schema.cpp`.
+2. Expose it through that feature's typed `view.h/.cpp` only when runtime code needs it, and update the runtime settings structure if required.
+3. Use a schema hook for specialized UI; keep cross-feature enablement in the overlay rather than making one feature's schema depend on another feature's keys.
+4. Persistence is handled by `ctl::Save`/`ctl::Load`; do not add per-feature hand-written save/load mappings.
+5. Keep UI-only transient state in the overlay/settings UI flags rather than the frame-processing snapshot.
 
 ## Known gaps
 

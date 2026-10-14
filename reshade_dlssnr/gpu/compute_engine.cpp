@@ -8,6 +8,7 @@
 #include <reshade.hpp>
 
 #include "compute_passes.h"
+#include "ctl/types.h"
 #include "generated/shader_sources.h"
 #include "generated/shader_bytecode.h"
 #include "pipeline_trace.h"
@@ -19,7 +20,8 @@ namespace {
 std::string ShaderDiagnosticKey(const char* pass_name,
                                 reshade::log::level level,
                                 const std::string& text) {
-  std::string key = pass_name != nullptr ? pass_name : "<unknown>";
+  std::string key = CStrToString(pass_name);
+  if (pass_name == nullptr) key = "<unknown>";
   key += '\n';
   key += level == reshade::log::level::error ? "error" : "warning";
   key += '\n';

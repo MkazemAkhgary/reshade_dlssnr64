@@ -1,8 +1,6 @@
 // Grade settings: modes, per-grade values, and level ranges.
 #pragma once
 
-#include <string>
-
 namespace reshade_dlssnr {
 
 // ---------------------------------------------------------------------------
@@ -43,8 +41,5 @@ constexpr float kGradeBlackLevelMax =  0.20f;
 
 constexpr float kGradeWhiteLevelMin =  0.25f;
 constexpr float kGradeWhiteLevelMax =  4.0f;
-
-void LoadGrade(const std::string& prefix, GradeSettings& grade);
-void SaveGrade(const std::string& prefix, const GradeSettings& grade);
 
 }  // namespace reshade_dlssnr

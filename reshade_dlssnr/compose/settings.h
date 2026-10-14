@@ -1,8 +1,6 @@
 // Residual edit settings: how the model's edit is carried onto the source.
 #pragma once
 
-#include <string>
-
 namespace reshade_dlssnr {
 
 // Which algorithm reconstructs full resolution from the working-scale
@@ -71,14 +69,5 @@ struct SoftCompressionSettings {
   float max_chroma = 0.5f;
   float knee = 1.0f;
 };
-
-void LoadResidual(const std::string& prefix, ResidualSettings& residual);
-void SaveResidual(const std::string& prefix, const ResidualSettings& residual);
-void LoadStrength(const std::string& prefix, StrengthSettings& strength);
-void SaveStrength(const std::string& prefix, const StrengthSettings& strength);
-void LoadSoftCompression(const std::string& prefix,
-                         SoftCompressionSettings& soft_compression);
-void SaveSoftCompression(const std::string& prefix,
-                         const SoftCompressionSettings& soft_compression);
 
 }  // namespace reshade_dlssnr

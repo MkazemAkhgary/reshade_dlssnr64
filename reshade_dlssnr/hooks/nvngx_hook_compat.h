@@ -165,11 +165,11 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
   bool any_pass_enabled = false;
   bool any_pre_dlss = false;
   bool any_post_dlss = false;
-  for (uint32_t i = 0; i < kMaxPasses; ++i) {
-    if (!settings.pass_enabled[i]) continue;
+  // Tab order, keyed by stable pass id: the same list the render path walks.
+  for (const EnabledPass& pass : EnabledPasses(settings)) {
     any_pass_enabled = true;
-    any_pre_dlss |= settings.passes[i].injection_stage == InjectionStage::PreDLSS;
-    any_post_dlss |= settings.passes[i].injection_stage == InjectionStage::PostDLSS;
+    any_pre_dlss |= pass.target == static_cast<int>(InjectionStage::PreDLSS);
+    any_post_dlss |= pass.target == static_cast<int>(InjectionStage::PostDLSS);
   }
 
   bool recorded_pass = false;

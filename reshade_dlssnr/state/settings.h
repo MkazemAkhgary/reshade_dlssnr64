@@ -5,10 +5,12 @@
 
 #include <reshade.hpp>
 
+#include <string>
+#include <vector>
+
 #include "compose/settings.h"
+#include "feature/pass/ui.h"
 #include "grade/settings.h"
-#include "hdr/settings.h"
-#include "importance_mask/settings.h"
 #include "project_constants.h"
 
 namespace reshade_dlssnr {
@@ -19,100 +21,23 @@ enum class InjectionStage : int {
   Backbuffer = 2,
 };
 
-
-
-struct PassSettings {
-  int preset = 1;
-
-  float local_tone = 1.0f;
-  bool ui_correction = true;
-
-  float local_structure = 1.0f;
-  bool auto_mask = true;
-  float skin_structure = 1.0f;
-
-  float intensity = 1.0f;
-
-  float working_scale = 1.0f;
-
-  // Independent target for this pass. Runtime groups passes in execution order:
-  // Pre-DLSS, Post-DLSS, then Backbuffer; tab order is preserved within each group.
-  InjectionStage injection_stage = InjectionStage::Backbuffer;
-
-  // Grades at this pass's two model boundaries. Not inheritable — carrying
-  // one into the next pass would apply it twice.
-  GradeSettings grade_input;
-  GradeSettings grade_output;
-
-  // How this pass's model edit is carried back. Not inheritable.
-  ResidualSettings residual;
-
-  // Strength section: luma/chroma blend of the model edit. Inheritable.
-  StrengthSettings strength;
-  bool inherit_luma_strength = false;
-  bool inherit_chroma_strength = false;
-
-  // Soft compression of the residual delta. Sliders are inheritable; the
-  // enabled toggle is per-pass.
-  SoftCompressionSettings soft_compression;
-  bool inherit_soft_max_brighten = false;
-  bool inherit_soft_max_darken = false;
-  bool inherit_soft_max_chroma = false;
-  bool inherit_soft_knee = false;
-
-  // FSR RCAS on the EASU-upsampled working images. Not inheritable.
-  bool rcas_enabled = false;
-  float rcas_strength = 0.5f;  // [0, 1]
-
-  // Only meaningful for pass index > 0; a true flag makes the slider use
-  // the previous pass's resolved value.
-  bool inherit_working_scale = false;
-  bool inherit_intensity = false;
-  bool inherit_local_tone = false;
-  bool inherit_local_structure = false;
-  bool inherit_skin_structure = false;
-
-  // Display name for the pass tab. Purely cosmetic; empty means use the
-  // positional default ("Pass N").
-  char custom_name[64] = {};
-
-};
-
 struct Settings {
   bool enabled = true;
-  bool only_super_sampling = true;
 
-  // When true, hover tooltips are drawn in the overlay. Exposed in the
-  // Preferences section; defaults to on.
-  bool show_tooltips = true;
-
-  // Shared advanced guide/output resource policy. Disabled uses game-owned
-  // depth, motion, and post-DLSS output resources directly; enabled snapshots
-  // current-evaluation resources into addon-owned clones for timing tests.
-  bool clone_resources = false;
-
-  // Debug view selection, shared across all passes. 0 = off; N (1-based)
-  // selects kDebugViews[N-1] in runtime/debug_view.h. The active pass
-  // renders the selected view; switching tabs keeps the selection.
-  int debug_view = 0;
-
-  uint32_t pass_count = 3;
-  bool pass_enabled[kMaxPasses] = {true, false, false};
-  PassSettings passes[kMaxPasses];
+  // The passes, in tab order. Each entry is a stable pass id, not a position:
+  // reordering permutes this vector and moves nothing in the store, so a pass
+  // keeps its settings however the user rearranges the tabs. Adding a pass
+  // appends a fresh id; removing one erases it, and that id stays retired --
+  // its settings linger unused in the store rather than being inherited by a
+  // pass created later.
+  //
+  // This is application state on purpose. ctl does not track instance count
+  // and does not track instance order; the store never sees this vector.
+  std::vector<feature::pass::PassId> pass_order;
 
   // UI state: which pass tab is currently open. Determines whose debug view
   // is rendered. Transient (not persisted).
   int active_pass = 0;
-
-  HdrSettings hdr;
-  ImportanceMaskSettings importance_mask;
-
-  // ---------------------------------------------------------------------
-  // Final backbuffer grade. Runs once per frame, after every pass, on the
-  // swapchain backbuffer itself — the last thing before the game presents.
-  // Global rather than per-pass because there is one backbuffer.
-  // ---------------------------------------------------------------------
-  GradeSettings grade_backbuffer;
 
   // UI state: which collapsible sections are open. Persisted, and shared
   // across passes — collapsing a section in one tab collapses it in every
@@ -140,30 +65,31 @@ struct Settings {
 
 constexpr uint32_t kMaxSavedProfiles = 16;
 constexpr uint32_t kSavedProfileNameCapacity = 64;
+using ProfileId = uint32_t;
 
 struct SavedProfileInfo {
+  ProfileId id = 0;
   char name[kSavedProfileNameCapacity] = {};
 };
 
 Settings& GetSettings();
 
-// Resolved pass settings with inheritance applied. This is derived state,
-// kept in sync by LoadSettings and SaveSettings. The runtime reads it
-// directly, so no per-frame resolution is ever needed. Index 0 is always
-// the raw settings (there is nothing to inherit from).
-//
-// Inheritance is a UI / settings-change concern: the resolved array is
-// recomputed whenever the settings layer changes, and everyone else just
-// reads the result.
-const PassSettings& GetResolvedPass(uint32_t index);
-
 void LoadSettings();
 void SaveSettings();
 
+ProfileId NewProfileId();
+
+// Erase the persisted keys for one pass. Called when a pass is removed so
+// that its retired id leaves no orphan keys in the config. Only the three
+// pass-keyed sections (Pass, Grade Model Input, Grade Model Output) are
+// touched, and only for the given id.
+void ErasePassKeys(feature::pass::PassId id);
+
 uint32_t GetSavedProfiles(SavedProfileInfo* profiles, uint32_t capacity);
 bool SaveCurrentAsProfile(const char* name);
-bool SaveCurrentToProfile(uint32_t index);
-bool LoadSavedProfile(uint32_t index);
-bool DeleteSavedProfile(uint32_t index);
+bool SaveCurrentToProfile(ProfileId id);
+bool RenameSavedProfile(ProfileId id, const char* name);
+bool LoadSavedProfile(ProfileId id);
+bool DeleteSavedProfile(ProfileId id);
 
 }  // namespace reshade_dlssnr

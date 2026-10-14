@@ -55,10 +55,10 @@ PipelineStatus PassSession::StepRenderDebugView(PassRun& run) {
   debug.model_output = run.model_output;
   debug.model_output_width = run.eval_width;
   debug.model_output_height = run.eval_height;
-  if (run.pass != nullptr) {
-    debug.rcas_enabled = run.pass->rcas_enabled;
-    debug.rcas_strength = run.pass->rcas_strength;
-    debug.input_grade = run.pass->grade_input;
+  if (run.pass_bound) {
+    debug.rcas_enabled = run.pass_state.rcas_enabled;
+    debug.rcas_strength = run.pass_state.rcas_strength;
+    debug.input_grade = run.grade_input;
   }
   debug.composed_output = self->resources_.GetCompositeOutput();
   debug.composed_output_width = run.width;
@@ -78,8 +78,8 @@ PipelineStatus PassSession::StepRenderDebugView(PassRun& run) {
     debug.depth_height = run.guides.guide_height;
   }
 
-  self->MaybeRenderDebug(*run.settings, *run.codec,
-                         self->StageList(run, self->command_),
+  self->MaybeRenderDebug(run.debug_view, run.settings->active_pass,
+                         *run.codec, self->StageList(run, self->command_),
                          *run.frame_debug, debug,
                          (run.hdr_uniforms_ready ? &run.hdr_uniforms : nullptr),
                          run.width, run.height, run.desc.Format);

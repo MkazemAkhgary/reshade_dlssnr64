@@ -2,6 +2,7 @@
 #include <reshade.hpp>
 
 #include "ui/ui_widgets.h"
+#include "ctl/types.h"
 
 #include <algorithm>
 #include <cstdarg>
@@ -13,7 +14,7 @@ namespace reshade_dlssnr {
 bool g_show_tooltips = true;
 
 void Tip(const char* fmt, ...) {
-  if (!g_show_tooltips) return;
+  if (!g_show_tooltips || fmt == nullptr) return;
   va_list args;
   va_start(args, fmt);
   ImGui::SetTooltipV(fmt, args);
@@ -47,9 +48,10 @@ void DrawHeaderToggle(const char* label, bool& changed,
     changed = true;
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    if (controls.enabled_tooltip != nullptr &&
-        controls.enabled_tooltip[0] != '\0') {
-      Tip("%s", controls.enabled_tooltip);
+    const std::string enabled_tooltip =
+        CStrToString(controls.enabled_tooltip);
+    if (!enabled_tooltip.empty()) {
+      Tip("%s", enabled_tooltip.c_str());
     } else {
       Tip("Enable or disable %s.", label);
     }
@@ -77,6 +79,9 @@ void DrawHeaderReset(const char* label, bool& changed,
 
 bool PersistentHeader(const char* label, bool& open_setting, bool& changed,
                       const char* tooltip, HeaderControls controls) {
+  const std::string label_storage = CStrToString(label);
+  const std::string tooltip_storage = CStrToString(tooltip);
+  label = label_storage.c_str();
   ImGui::PushID(label);
   DrawHeaderToggle(label, changed, controls);
   ImGui::SetNextItemOpen(open_setting, ImGuiCond_Always);
@@ -86,8 +91,8 @@ bool PersistentHeader(const char* label, bool& open_setting, bool& changed,
   const bool header_hovered =
       ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
   if (header_hovered) {
-    if (tooltip != nullptr && tooltip[0] != '\0') {
-      Tip("%s", tooltip);
+    if (!tooltip_storage.empty()) {
+      Tip("%s", tooltip_storage.c_str());
     } else {
       Tip("Expand or collapse the %s section.", label);
     }
@@ -104,6 +109,9 @@ bool PersistentHeader(const char* label, bool& open_setting, bool& changed,
 bool PersistentSubHeader(const char* label, bool& open_setting,
                          bool& changed, const char* tooltip,
                          HeaderControls controls) {
+  const std::string label_storage = CStrToString(label);
+  const std::string tooltip_storage = CStrToString(tooltip);
+  label = label_storage.c_str();
   const ImVec4 base = ImGui::GetStyleColorVec4(ImGuiCol_Text);
   const ImVec4 tint(base.x * 0.82f, base.y * 0.82f, base.z * 0.92f, base.w);
 
@@ -130,8 +138,8 @@ bool PersistentSubHeader(const char* label, bool& open_setting,
       ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
   ImGui::PopStyleColor(4);
   if (header_hovered) {
-    if (tooltip != nullptr && tooltip[0] != '\0') {
-      Tip("%s", tooltip);
+    if (!tooltip_storage.empty()) {
+      Tip("%s", tooltip_storage.c_str());
     } else {
       Tip("Expand or collapse the %s subsection.", label);
     }
@@ -156,20 +164,25 @@ bool DrawFloatRow(uint32_t pass_index,
                   float lo,
                   float hi,
                   float default_value) {
+  const std::string id_storage = CStrToString(id);
+  id = id_storage.c_str();
+  const std::string label_storage = CStrToString(label);
+  label = label_storage.c_str();
   bool changed = false;
+  std::string tooltip_storage = CStrToString(tooltip);
   char fallback_tooltip[256];
-  if (tooltip == nullptr || tooltip[0] == '\0') {
+  if (tooltip_storage.empty()) {
     std::snprintf(fallback_tooltip, sizeof(fallback_tooltip),
                   "Adjust %s between %.4g and %.4g. Reset returns to %.4g.",
                   label, static_cast<double>(lo), static_cast<double>(hi),
                   static_cast<double>(default_value));
-    tooltip = fallback_tooltip;
+    tooltip_storage = fallback_tooltip;
   }
 
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted(label);
-  if (tooltip != nullptr && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("%s", tooltip);
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("%s", tooltip_storage.c_str());
   }
 
   ImGui::SameLine(kSliderLabelWidth);
@@ -193,8 +206,8 @@ bool DrawFloatRow(uint32_t pass_index,
     slider_changed =
         ImGui::SliderFloat(slider_id.c_str(), &display_value, lo, hi, "%.3f");
   });
-  if (tooltip != nullptr && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("%s", tooltip);
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("%s", tooltip_storage.c_str());
   }
   if (slider_changed && !inheriting) {
     *raw_value = display_value;
@@ -242,19 +255,24 @@ bool DrawIntRow(const char* id,
                 int lo,
                 int hi,
                 int default_value) {
+  const std::string id_storage = CStrToString(id);
+  id = id_storage.c_str();
+  const std::string label_storage = CStrToString(label);
+  label = label_storage.c_str();
   bool changed = false;
+  std::string tooltip_storage = CStrToString(tooltip);
   char fallback_tooltip[256];
-  if (tooltip == nullptr || tooltip[0] == '\0') {
+  if (tooltip_storage.empty()) {
     std::snprintf(fallback_tooltip, sizeof(fallback_tooltip),
                   "Adjust %s between %d and %d. Reset returns to %d.",
                   label, lo, hi, default_value);
-    tooltip = fallback_tooltip;
+    tooltip_storage = fallback_tooltip;
   }
 
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted(label);
-  if (tooltip != nullptr && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("%s", tooltip);
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("%s", tooltip_storage.c_str());
   }
 
   ImGui::SameLine(kSliderLabelWidth);
@@ -267,8 +285,8 @@ bool DrawIntRow(const char* id,
   if (ImGui::SliderInt(slider_id.c_str(), raw_value, lo, hi)) {
     changed = true;
   }
-  if (tooltip != nullptr && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("%s", tooltip);
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("%s", tooltip_storage.c_str());
   }
 
   ImGui::SameLine();
@@ -286,11 +304,14 @@ bool DrawIntRow(const char* id,
 }
 
 bool DrawCheckboxAtLabel(const char* id, bool* value, const char* tooltip) {
+  const std::string id_storage = CStrToString(id);
+  const std::string tooltip_storage = CStrToString(tooltip);
+  id = id_storage.c_str();
   const std::string cb_id = std::string("##") + id;
   const bool changed = ImGui::Checkbox(cb_id.c_str(), value);
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    if (tooltip != nullptr && tooltip[0] != '\0') {
-      Tip("%s", tooltip);
+    if (!tooltip_storage.empty()) {
+      Tip("%s", tooltip_storage.c_str());
     } else {
       Tip("Toggle this option.");
     }
@@ -305,40 +326,51 @@ bool DrawComboRow(const char* id,
                   const char* const* items,
                   const char* const* item_tooltips,
                   int item_count) {
+  const std::string id_storage = CStrToString(id);
+  const std::string label_storage = CStrToString(label);
+  std::string tooltip_storage = CStrToString(tooltip);
+  id = id_storage.c_str();
+  label = label_storage.c_str();
+  if (items == nullptr || item_count <= 0) return false;
   char fallback_tooltip[192];
-  if (tooltip == nullptr || tooltip[0] == '\0') {
+  if (tooltip_storage.empty()) {
     std::snprintf(fallback_tooltip, sizeof(fallback_tooltip),
                   "Choose the %s option.", label);
-    tooltip = fallback_tooltip;
+    tooltip_storage = fallback_tooltip;
   }
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted(label);
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("%s", tooltip);
+    Tip("%s", tooltip_storage.c_str());
   }
 
   ImGui::SameLine(kControlLabelWidth);
   ImGui::SetNextItemWidth(-1.0f);
 
   const int clamped = (*value >= 0 && *value < item_count) ? *value : 0;
-  const char* preview = items[clamped];
+  const std::string preview = CStrToString(items[clamped]);
   const std::string combo_id = std::string("##") + id;
 
   bool changed = false;
-  if (ImGui::BeginCombo(combo_id.c_str(), preview)) {
+  if (ImGui::BeginCombo(combo_id.c_str(), preview.c_str())) {
     for (int i = 0; i < item_count; ++i) {
       const bool selected = (i == clamped);
-      if (ImGui::Selectable(items[i], selected)) {
+      const std::string item_label = CStrToString(items[i]);
+      const bool has_item_tooltip =
+          item_tooltips != nullptr && item_tooltips[i] != nullptr;
+      const std::string item_tooltip =
+          CStrToString(has_item_tooltip ? item_tooltips[i] : nullptr);
+      if (ImGui::Selectable(item_label.c_str(), selected)) {
         if (*value != i) {
           *value = i;
           changed = true;
         }
       }
       if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        if (item_tooltips != nullptr && item_tooltips[i] != nullptr) {
-          Tip("%s", item_tooltips[i]);
+        if (has_item_tooltip) {
+          Tip("%s", item_tooltip.c_str());
         } else {
-          Tip("Select %s.", items[i]);
+          Tip("Select %s.", item_label.c_str());
         }
       }
       if (selected) ImGui::SetItemDefaultFocus();
@@ -347,10 +379,14 @@ bool DrawComboRow(const char* id,
   }
 
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    if (item_tooltips != nullptr && item_tooltips[clamped] != nullptr) {
-      Tip("%s", item_tooltips[clamped]);
+    const bool has_preview_tooltip =
+        item_tooltips != nullptr && item_tooltips[clamped] != nullptr;
+    const std::string preview_tooltip =
+        CStrToString(has_preview_tooltip ? item_tooltips[clamped] : nullptr);
+    if (has_preview_tooltip) {
+      Tip("%s", preview_tooltip.c_str());
     } else {
-      Tip("Current %s: %s.", label, preview);
+      Tip("Current %s: %s.", label, preview.c_str());
     }
   }
 
@@ -366,6 +402,8 @@ int DrawGroupButtons(const char* id,
                      float fixed_button_width) {
   if (count <= 0 || labels == nullptr) return -1;
 
+  const std::string id_storage = CStrToString(id);
+  id = id_storage.c_str();
   ImGui::PushID(id);
 
   const float spacing = ImGui::GetStyle().ItemSpacing.x;
@@ -396,7 +434,8 @@ int DrawGroupButtons(const char* id,
       ImGui::PushStyleColor(ImGuiCol_ButtonActive, accent);
     }
 
-    if (ImGui::Button(labels[i], ImVec2(button_width, 0.0f)) &&
+    const std::string item_label = CStrToString(labels[i]);
+    if (ImGui::Button(item_label.c_str(), ImVec2(button_width, 0.0f)) &&
         !is_selected && !is_disabled) {
       clicked = i;
     }
@@ -404,10 +443,13 @@ int DrawGroupButtons(const char* id,
     if (pushed > 0) ImGui::PopStyleColor(pushed);
 
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-      if (tooltips != nullptr && tooltips[i] != nullptr) {
-        Tip("%s", tooltips[i]);
+      const bool has_item_tooltip = tooltips != nullptr && tooltips[i] != nullptr;
+      const std::string item_tooltip =
+          CStrToString(has_item_tooltip ? tooltips[i] : nullptr);
+      if (has_item_tooltip) {
+        Tip("%s", item_tooltip.c_str());
       } else {
-        Tip("Select %s.", labels[i]);
+        Tip("Select %s.", item_label.c_str());
       }
     }
 
@@ -426,16 +468,21 @@ bool DrawGroupRow(const char* id,
                   int count,
                   int* value,
                   const bool* disabled) {
+  const std::string id_storage = CStrToString(id);
+  id = id_storage.c_str();
+  const std::string label_storage = CStrToString(label);
+  std::string tooltip_storage = CStrToString(tooltip);
+  label = label_storage.c_str();
   char fallback_tooltip[192];
-  if (tooltip == nullptr || tooltip[0] == '\0') {
+  if (tooltip_storage.empty()) {
     std::snprintf(fallback_tooltip, sizeof(fallback_tooltip),
                   "Choose the %s setting.", label);
-    tooltip = fallback_tooltip;
+    tooltip_storage = fallback_tooltip;
   }
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted(label);
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("%s", tooltip);
+    Tip("%s", tooltip_storage.c_str());
   }
 
   ImGui::SameLine(kControlLabelWidth);

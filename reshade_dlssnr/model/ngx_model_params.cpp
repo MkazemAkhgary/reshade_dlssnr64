@@ -4,7 +4,8 @@
 
 namespace reshade_dlssnr {
 
-void ApplyModelTuningParams(NgxParameterBlock& block, const PassSettings& pass) {
+void ApplyModelTuningParams(NgxParameterBlock& block,
+                            const feature::pass::PassSnapshot& pass) {
   const unsigned int model_value =
       static_cast<unsigned int>(std::clamp(pass.preset, 0, 2));
 

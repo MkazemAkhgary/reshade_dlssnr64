@@ -13,6 +13,7 @@
 #include "compute_engine.h"
 #include "debug/debug_view.h"
 #include "dlss_guides.h"
+#include "feature/pass/ui.h"
 #include "model/feature_lifecycle.h"
 #include "debug/frame_debug_context.h"
 #include "hdr_state.h"
@@ -53,7 +54,8 @@ class PassSession {
                           ImportanceMask* importance_mask,
                           ID3D12Resource* game_exposure_texture,
                           ID3D12CommandQueue* command_queue,
-                          IDXGISwapChain* swapchain);
+                          IDXGISwapChain* swapchain,
+                          feature::pass::PassId pass_id = 0);
 
   void Shutdown(NgxRuntime& runtime);
 
@@ -149,7 +151,8 @@ class PassSession {
                   ImportanceMask* importance_mask,
                   ID3D12Resource* game_exposure_texture,
                   ID3D12CommandQueue* command_queue,
-                  IDXGISwapChain* swapchain);
+                  IDXGISwapChain* swapchain,
+                  feature::pass::PassId pass_id = 0);
 
   // Acquires the backbuffer and its descriptor for the current frame.
   bool AcquireBackbuffer(
@@ -172,7 +175,7 @@ class PassSession {
   // subrects for the current evaluation.
   bool FillEvaluateParams(
       NgxRuntime& runtime,
-      const PassSettings& pass,
+      const feature::pass::PassSnapshot& pass,
       const DlssGuideState& guides,
       ID3D12Resource* model_color,
       ID3D12Resource* model_output,
@@ -201,7 +204,8 @@ class PassSession {
   // the pass's own command list, so the source resources have their true
   // states. Returns true on success. No-op otherwise.
   bool MaybeRenderDebug(
-      const Settings& settings,
+      int debug_view,
+      int active_pass,
       ComputeEngine& codec,
       ID3D12GraphicsCommandList* command_list,
       FrameDebugContext& frame_debug,
@@ -266,6 +270,10 @@ class PassSession {
 
   DlssGuides* guides_ = nullptr;
   uint32_t pass_index_ = 0;
+  // The pass's stable id, set per RunStage call from the controller's enabled-
+  // pass list. Separate from pass_index_ (the session's slot) because a
+  // reorder rearranges the slots without moving any setting.
+  feature::pass::PassId pass_id_ = 0;
 
   ID3D12CommandQueue* command_queue_ = nullptr;
 

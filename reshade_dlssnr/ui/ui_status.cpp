@@ -6,6 +6,12 @@
 #include <cstdio>
 
 #include "addon_controller.h"
+#include "ctl/usage/ui_store.h"
+#include "ctl/values.h"
+#include "feature/hdr/view.h"
+#include "feature/pass/settings.h"
+#include "feature/pass/ui.h"
+#include "feature/pass/view.h"
 #include "state/settings.h"
 #include "status.h"
 #include "ui/ui_widgets.h"
@@ -13,11 +19,15 @@
 namespace reshade_dlssnr {
 
 bool AnyPassUsesHdrInjection(const Settings& settings) {
-  for (uint32_t i = 0; i < kMaxPasses; ++i) {
-    if (settings.pass_enabled[i] &&
-        settings.passes[i].injection_stage != InjectionStage::Backbuffer) {
-      return true;
-    }
+  ctl::ValueStore& store = ctl::Store();
+  for (feature::pass::PassId id : settings.pass_order) {
+    const feature::pass::PassSnapshot snapshot =
+        feature::pass::Read(store, feature::pass::PassKey(id));
+    // Only enabled passes reach the render path at all.
+    if (!snapshot.enabled) continue;
+    const InjectionStage target =
+        static_cast<InjectionStage>(snapshot.target);
+    if (target != InjectionStage::Backbuffer) return true;
   }
   return false;
 }
@@ -116,9 +126,14 @@ void DrawStatusSection(Settings& settings, bool& changed) {
                 snap.guides_valid ? "Valid (depth + motion)" : "Not seen");
 
   const bool hdr_in_use = AnyPassUsesHdrInjection(settings);
-  const bool hdr_good = !settings.hdr.enable || !hdr_in_use || snap.hdr_ready;
+  // Read the HDR toggle from the store rather than from `settings`: the UI
+  // edits it through the store, so a copy carried in Settings would be frozen
+  // at load time and this panel would never see the user's change.
+  const ctl::InstanceKey hdr_key = ctl::InstanceKey::FromInt(0);
+  const bool hdr_enabled = feature::hdr::Read(ctl::Store(), hdr_key).enable;
+  const bool hdr_good = !hdr_enabled || !hdr_in_use || snap.hdr_ready;
   char hdr_buf[96];
-  if (!settings.hdr.enable) {
+  if (!hdr_enabled) {
     std::snprintf(hdr_buf, sizeof(hdr_buf), "Off");
   } else if (!hdr_in_use) {
     std::snprintf(hdr_buf, sizeof(hdr_buf), "Inactive (no Pre/Post-DLSS pass)");
@@ -150,7 +165,7 @@ void DrawStatusSection(Settings& settings, bool& changed) {
     ImGui::EndTable();
   }
 
-  if (settings.hdr.enable && hdr_in_use && snap.gain_map_ready) {
+  if (hdr_enabled && hdr_in_use && snap.gain_map_ready) {
     ImGui::Spacing();
     ImGui::Text("Gain map: %.3f .. %.3f log2 · SDR excursions: %u · gain-range: %u",
                 snap.gain_map_min_log2, snap.gain_map_max_log2,
@@ -200,28 +215,36 @@ void DrawStatusSection(Settings& settings, bool& changed) {
       InjectionStage::Backbuffer,
   };
   for (const InjectionStage display_stage : kStatusStageOrder) {
-    for (uint32_t i = 0; i < snap.pass_count; ++i) {
-      if (settings.passes[i].injection_stage != display_stage) continue;
+    for (uint32_t position = 0; position < settings.pass_order.size();
+         ++position) {
+      // One store read per pass, keyed by the pass's stable id. `position`
+      // selects the tab and the status row; `id` selects the pass.
+      const feature::pass::PassId id = settings.pass_order[position];
+      const feature::pass::PassSnapshot pass =
+          feature::pass::Read(ctl::Store(), feature::pass::PassKey(id));
+      if (pass.target != static_cast<int>(display_stage)) continue;
 
       char buf[kStatusTextLength];
-      FormatPassStatus(snap.passes[i], settings.passes[i].injection_stage,
-                       GetResolvedPass(i).working_scale,
+      // The working scale is inherited state, so read the resolved value the
+      // store holds rather than a raw copy: a pass that follows its
+      // predecessor must report the scale it will actually run at.
+      FormatPassStatus(snap.passes[position], display_stage, pass.working_scale,
                        snap.post_dlss_blocked, buf, sizeof(buf));
 
       char label[32];
-      std::snprintf(label, sizeof(label), "Pass %u", i + 1);
+      std::snprintf(label, sizeof(label), "Pass %u", position + 1);
 
       const bool stage_blocked =
           snap.post_dlss_blocked &&
-          settings.passes[i].injection_stage == InjectionStage::PostDLSS;
-      const bool ok = snap.passes[i].enabled && !snap.passes[i].failed &&
-                      !stage_blocked;
+          display_stage == InjectionStage::PostDLSS;
+      const bool ok = snap.passes[position].enabled &&
+                      !snap.passes[position].failed && !stage_blocked;
 
       bullet(ok);
       ImGui::AlignTextToFramePadding();
       ImGui::TextUnformatted(label);
       if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        Tip("Original pass index %u. Display order is grouped Pre-DLSS, Post-DLSS, then Backbuffer while preserving pass order inside each group.", i + 1);
+        Tip("Original pass index %u. Display order is grouped Pre-DLSS, Post-DLSS, then Backbuffer while preserving pass order inside each group.", position + 1);
       }
 
       ImGui::SameLine(kControlLabelWidth);

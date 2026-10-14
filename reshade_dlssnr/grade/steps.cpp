@@ -39,13 +39,11 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
   if (run.device == nullptr || run.codec == nullptr) return PipelineStatus::Ok;
 
   // Unexpose Hunt-effect controls. They only affect the unexpose path,
-  // which is part of Local Exposure, so the values live with that
-  // layer. Defaults match the shader's own defaults when the settings
-  // pointer is unavailable.
-  const float unexpose_naturalness = run.settings != nullptr
-      ? run.settings->hdr.local_exposure.unexpose_naturalness : 0.2f;
-  const float unexpose_reference_l = run.settings != nullptr
-      ? run.settings->hdr.local_exposure.unexpose_reference_l : 0.5f;
+  // which is part of Local Exposure, so the values live with that layer.
+  const float unexpose_naturalness =
+      run.hdr_state.local_exposure.unexpose_naturalness;
+  const float unexpose_reference_l =
+      run.hdr_state.local_exposure.unexpose_reference_l;
 
   const D3D12_RESOURCE_DESC desc = target->GetDesc();
   const unsigned int width = static_cast<unsigned int>(desc.Width);
@@ -73,14 +71,14 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
 }
 
 PipelineStatus PassSession::StepGradeModelInput(PassRun& run) {
-  if (run.pass == nullptr) return PipelineStatus::Ok;
+  if (!run.pass_bound) return PipelineStatus::Ok;
   PassSession* self = run.session;
 
   // Observer-only: the Input Grade mutates the model input in place, so
   // snapshot it first for the pre-grade debug view. Gated on the view being
   // selected by the active pass; no cost otherwise.
   if (self != nullptr && run.settings != nullptr && run.model_color != nullptr &&
-      DebugViewNeedsPreGradeInput(run.settings->debug_view) &&
+      DebugViewNeedsPreGradeInput(run.debug_view) &&
       static_cast<int>(self->pass_index_) == run.settings->active_pass) {
     const D3D12_RESOURCE_DESC desc = run.model_color->GetDesc();
     if (self->resources_.EnsureScratch(
@@ -101,7 +99,7 @@ PipelineStatus PassSession::StepGradeModelInput(PassRun& run) {
     }
   }
 
-  const GradeSettings& grade = run.pass->grade_input;
+  const GradeSettings& grade = run.grade_input;
   if (!grade.enabled) return PipelineStatus::Ok;
 
   TRACE_EVT(run.session, "grade_model_input pass=%u luma=%.3f chroma=%.3f",
@@ -130,14 +128,14 @@ PipelineStatus PassSession::StepGradeModelInput(PassRun& run) {
 // symmetric to the Input Grade on the model input — so downstream steps see
 // it as if the model had produced the graded SDR.
 PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
-  if (run.pass == nullptr || run.session == nullptr) return PipelineStatus::Ok;
+  if (!run.pass_bound || run.session == nullptr) return PipelineStatus::Ok;
   PassSession* self = run.session;
 
   // Observer-only: snapshot the ungraded model output for the "raw" debug
   // view before the Output Grade overwrites it. Gated on the view being
   // selected by the active pass; no cost otherwise.
   if (run.settings != nullptr && run.model_output != nullptr &&
-      DebugViewNeedsPreGradeOutput(run.settings->debug_view) &&
+      DebugViewNeedsPreGradeOutput(run.debug_view) &&
       static_cast<int>(self->pass_index_) == run.settings->active_pass) {
     const D3D12_RESOURCE_DESC desc = run.model_output->GetDesc();
     if (self->resources_.EnsureScratch(
@@ -158,15 +156,13 @@ PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
     }
   }
 
-  const GradeSettings& grade = run.pass->grade_output;
+  const GradeSettings& grade = run.grade_output;
 
   // Unexpose is gated on the local exposure layer having produced a map this
   // frame, and runs whether or not the grade itself is enabled.
   ID3D12Resource* exposure_map = nullptr;
-  if (run.settings != nullptr &&
-      run.settings->hdr.enable &&
-      run.settings->hdr.local_exposure.enabled &&
-      run.settings->hdr.local_exposure.unexpose_on_model_output &&
+  if (run.hdr_state.enable && run.hdr_state.local_exposure.enabled &&
+      run.hdr_state.local_exposure.unexpose_on_model_output &&
       run.hdr_uniforms_ready && run.hdr != nullptr &&
       run.hdr->ResolvedFormat() != HdrFormat::Sdr &&
       run.hdr_uniforms.local_exposure_strength > 0.0f &&

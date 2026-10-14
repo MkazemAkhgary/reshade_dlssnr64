@@ -157,7 +157,8 @@ class AddonController {
   // correct pair for the stage; the runner rejects missing required inputs.
   PipelineStatus RunPassStage(
       const PipelineStageDef& stage,
-      uint32_t pass_index,
+      uint32_t pass_position,
+      feature::pass::PassId pass_id,
       ID3D12GraphicsCommandList* command_list,
       ID3D12Resource* output_resource,
       bool is_first_pass,
