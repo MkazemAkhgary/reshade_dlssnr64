@@ -56,13 +56,10 @@ bool PersistentSubHeader(const char* label, bool& open_setting, bool& changed,
                          const char* tooltip = nullptr,
                          HeaderControls controls = {});
 
-bool DrawFloatRow(uint32_t pass_index,
-                  const char* id,
+bool DrawFloatRow(const char* id,
                   const char* label,
                   const char* tooltip,
                   float* raw_value,
-                  bool* inherit_flag,
-                  float inherited_value,
                   float lo,
                   float hi,
                   float default_value);

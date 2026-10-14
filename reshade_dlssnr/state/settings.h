@@ -28,16 +28,17 @@ struct Settings {
   // reordering permutes this vector and moves nothing in the store, so a pass
   // keeps its settings however the user rearranges the tabs. Adding a pass
   // appends a fresh id; removing one erases it, and that id stays retired --
-  // its settings linger unused in the store rather than being inherited by a
+  // its settings linger unused in the store rather than being handed to a
   // pass created later.
   //
   // This is application state on purpose. ctl does not track instance count
   // and does not track instance order; the store never sees this vector.
   std::vector<feature::pass::PassId> pass_order;
 
-  // UI state: which pass tab is currently open. Determines whose debug view
-  // is rendered. Transient (not persisted).
-  int active_pass = 0;
+  // UI state: the pass currently selected in the tab strip, held as the
+  // pass's stable id. Reordering or removing another pass never changes
+  // which pass is open. Transient (not persisted).
+  feature::pass::PassId active_pass_id = 0;
 
   // UI state: which collapsible sections are open. Persisted, and shared
   // across passes — collapsing a section in one tab collapses it in every
@@ -71,6 +72,12 @@ struct SavedProfileInfo {
   ProfileId id = 0;
   char name[kSavedProfileNameCapacity] = {};
 };
+
+// Allocates a fresh, never-reused pass id. The high-water mark is
+// persisted so a restart cannot hand out an id that is already in
+// pass_order. Removing a pass retires its id for the life of the
+// installation.
+feature::pass::PassId NewPassId();
 
 Settings& GetSettings();
 

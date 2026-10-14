@@ -1,7 +1,10 @@
 #include "addon_controller.h"
 
+#include <algorithm>
 #include <cstdio>
+#include <memory>
 #include <mutex>
+#include <unordered_map>
 
 #include "ctl/usage/ui_store.h"
 #include "ctl/values.h"
@@ -76,7 +79,6 @@ void AddonController::RefreshBackbufferFormat(IDXGISwapChain* swapchain) {
 }
 
 PipelineStatus AddonController::RunPassStage(const PipelineStageDef& stage,
-                                             uint32_t pass_position,
                                              feature::pass::PassId pass_id,
                                              ID3D12GraphicsCommandList* command_list,
                                              ID3D12Resource* output_resource,
@@ -85,9 +87,13 @@ PipelineStatus AddonController::RunPassStage(const PipelineStageDef& stage,
                                              IDXGISwapChain* swapchain,
                                              ID3D12Resource* exposure_texture) {
   const Settings& settings = GetSettings();
-  if (pass_position >= kMaxPasses) return PipelineStatus::SkipFrame;
 
-  return passes_[pass_position].RunStage(
+  std::unique_ptr<PassSession>& slot = sessions_[pass_id];
+  if (slot == nullptr) {
+    slot = std::make_unique<PassSession>(&DlssGuides::Get());
+  }
+
+  return slot->RunStage(
       stage, settings, codec_, runtime_, command_list, output_resource,
       is_first_pass, frame_debug_, &hdr_, &pass1_command_, &importance_mask_,
       exposure_texture, command_queue, swapchain, pass_id);
@@ -342,8 +348,8 @@ void AddonController::OnPresent(
     for (const EnabledPass& pass : EnabledPasses(settings)) {
       if (pass.target != static_cast<int>(InjectionStage::Backbuffer)) continue;
       TRACE_EVT(this, "controller_dispatch stage=Present pass=%u",
-                pass.position);
-      RunPassStage(*stage, pass.position, pass.id, nullptr, nullptr, false,
+                pass.id);
+      RunPassStage(*stage, pass.id, nullptr, nullptr, false,
                    command_queue, swapchain, nullptr);
     }
   }
@@ -428,8 +434,8 @@ void AddonController::OnPreDlssEvaluate(
     for (const EnabledPass& pass : EnabledPasses(settings)) {
       if (pass.target != static_cast<int>(InjectionStage::PreDLSS)) continue;
       TRACE_EVT(this, "controller_dispatch stage=PreDLSS pass=%u is_first=%d",
-                pass.position, is_first ? 1 : 0);
-      RunPassStage(*stage, pass.position, pass.id, command_list,
+                pass.id, is_first ? 1 : 0);
+      RunPassStage(*stage, pass.id, command_list,
                    input_resource, is_first, nullptr, nullptr,
                    exposure_texture);
       is_first = false;
@@ -481,8 +487,8 @@ void AddonController::OnPostDlssEvaluate(
     for (const EnabledPass& pass : EnabledPasses(settings)) {
       if (pass.target != static_cast<int>(InjectionStage::PostDLSS)) continue;
       TRACE_EVT(this, "controller_dispatch stage=PostDLSS pass=%u is_first=%d",
-                pass.position, is_first ? 1 : 0);
-      RunPassStage(*stage, pass.position, pass.id, command_list,
+                pass.id, is_first ? 1 : 0);
+      RunPassStage(*stage, pass.id, command_list,
                    output_resource, is_first, nullptr, nullptr,
                    exposure_texture);
       is_first = false;
@@ -609,8 +615,8 @@ void AddonController::SetPostDlssBlocked(const char* reason) {
 void AddonController::RetryAll() {
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
-  for (auto& pass : passes_) {
-    pass.Retry(runtime_);
+  for (auto& entry : sessions_) {
+    if (entry.second) entry.second->Retry(runtime_);
   }
 
   RefreshStatus(GetSettings());
@@ -652,27 +658,48 @@ void AddonController::RefreshStatus(const Settings& settings) {
   status_.pass_count = static_cast<uint32_t>(settings.pass_order.size());
   ctl::ValueStore& store = ctl::Store();
   for (uint32_t position = 0; position < kMaxPasses; ++position) {
-    // Take the runtime-owned part of the status from the session, then fill
-    // in the setting-owned part. The session array is positional -- one
-    // session per tab slot -- so the enabled flag comes from whichever pass
-    // currently sits in that slot.
-    status_.passes[position] = passes_[position].GetStatus();
+    status_.passes[position] = PassStatus{};
+    if (position >= settings.pass_order.size()) continue;
+    const feature::pass::PassId id = settings.pass_order[position];
+    auto it = sessions_.find(id);
+    if (it != sessions_.end() && it->second) {
+      status_.passes[position] = it->second->GetStatus();
+    }
     status_.passes[position].enabled =
-        position < settings.pass_order.size() &&
-        store.Read(feature::pass::kSection,
-                   feature::pass::PassKey(settings.pass_order[position]),
-                   feature::pass::kPassEnabled)
-            .as_bool;
+        store.Read(feature::pass::kSection, feature::pass::PassKey(id),
+                   feature::pass::kPassEnabled).as_bool;
   }
 }
+
+void AddonController::EnsureSessions(
+    const feature::pass::PassOrder& order) {
+  std::lock_guard<std::mutex> lock(g_direct_mutex);
+  for (auto it = sessions_.begin(); it != sessions_.end();) {
+    const bool keep =
+        std::find(order.begin(), order.end(), it->first) != order.end();
+    if (!keep) {
+      if (it->second) it->second->Shutdown(runtime_);
+      it = sessions_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  for (feature::pass::PassId id : order) {
+    if (sessions_.find(id) == sessions_.end()) {
+      sessions_[id] = std::make_unique<PassSession>(&DlssGuides::Get());
+    }
+  }
+}
+
 
 void AddonController::Shutdown() {
   grade_backbuffer_failure_logged_ = false;
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
-  for (auto& pass : passes_) {
-    pass.Shutdown(runtime_);
+  for (auto& entry : sessions_) {
+    if (entry.second) entry.second->Shutdown(runtime_);
   }
+  sessions_.clear();
   hdr_preparation_session_.Shutdown(runtime_);
   release_command_.Shutdown();
   release_list_begun_ = false;

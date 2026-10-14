@@ -30,8 +30,7 @@ class ImportanceMask;
 
 class PassSession {
  public:
-  PassSession(DlssGuides* guides, uint32_t pass_index)
-      : guides_(guides), pass_index_(pass_index) {}
+  explicit PassSession(DlssGuides* guides) : guides_(guides) {}
 
   // Runs `stage` against this session. This is the single entry point the
   // AddonController uses: the session supplies the owners of its own state and
@@ -199,13 +198,13 @@ class PassSession {
   // blocking. The allocator waits for completion only when its ring slot is reused.
   void SubmitBackbuffer();
 
-  // If this pass is the active one (matching Settings::active_pass) and a
+  // If this pass is the active one (matching Settings::active_pass_id) and a
   // debug view is selected, renders it into `frame_debug.output`. Runs on
   // the pass's own command list, so the source resources have their true
   // states. Returns true on success. No-op otherwise.
   bool MaybeRenderDebug(
       int debug_view,
-      int active_pass,
+      feature::pass::PassId active_pass_id,
       ComputeEngine& codec,
       ID3D12GraphicsCommandList* command_list,
       FrameDebugContext& frame_debug,
@@ -269,10 +268,8 @@ class PassSession {
   FeatureLifecycle feature_;
 
   DlssGuides* guides_ = nullptr;
-  uint32_t pass_index_ = 0;
-  // The pass's stable id, set per RunStage call from the controller's enabled-
-  // pass list. Separate from pass_index_ (the session's slot) because a
-  // reorder rearranges the slots without moving any setting.
+  // The pass's stable id, set per RunStage call. Sessions are keyed by id,
+  // so this is always the id of the pass this session belongs to.
   feature::pass::PassId pass_id_ = 0;
 
   ID3D12CommandQueue* command_queue_ = nullptr;

@@ -16,7 +16,7 @@
 #include "feature/hdr/settings.h"
 #include "feature/importance_mask/settings.h"
 #include "feature/pass/settings.h"
-#include "feature/pass/order.h"
+#include "feature/pass/ui.h"
 #include "feature/preferences/settings.h"
 #include "grade/settings.h"
 #include "state/trace.h"
@@ -46,12 +46,6 @@ inline void ReadValue(const std::string& root, const char* key,
   }
 }
 
-template <typename T>
-bool TryReadValue(const std::string& root, const char* key, T& value) {
-  const std::string full_key = root + CStrToString(key);
-  return reshade::get_config_value(nullptr, "RESHADE_DLSSNR", full_key.c_str(),
-                                   value);
-}
 
 template <typename T>
 void WriteValue(const std::string& root, const char* key, const T& value) {
@@ -71,6 +65,7 @@ inline void WriteValue(const std::string& root, const char* key,
 constexpr ProfileId kFirstProfileId = 1;
 constexpr const char* kProfileOrderKey = "UserPresetOrder";
 constexpr const char* kNextProfileIdKey = "UserPresetNextId";
+constexpr const char* kNextPassIdKey = "PassNextId";
 
 std::string ProfilePrefix(ProfileId id) {
   return "UserPreset." + std::to_string(id);
@@ -174,14 +169,20 @@ std::vector<feature::pass::PassId> ParsePassOrder(const std::string& text,
                                                       : comma - begin);
     if (!token.empty()) {
       const long long id = std::strtoll(token.c_str(), nullptr, 10);
-      if (id > 0) order.push_back(static_cast<feature::pass::PassId>(id));
+      if (id > 0) {
+        const feature::pass::PassId pid =
+            static_cast<feature::pass::PassId>(id);
+        if (std::find(order.begin(), order.end(), pid) == order.end()) {
+          order.push_back(pid);
+        }
+      }
     }
     if (comma == std::string::npos) break;
     begin = comma + 1;
   }
   if (order.size() > kMaxPasses || (ensure_nonempty && order.empty())) {
     order.clear();
-    if (ensure_nonempty) order.push_back(feature::pass::NewPassId());
+    if (ensure_nonempty) order.push_back(NewPassId());
   }
   return order;
 }
@@ -222,7 +223,13 @@ void LoadSettingsValues(Settings& settings, const std::string& key_prefix,
   std::string order_text;
   ReadValue(key_prefix, kPassOrderKey, order_text);
   settings.pass_order = ParsePassOrder(order_text);
-  feature::pass::ApplyOrder(ctl::Store(), settings.pass_order);
+  // active_pass_id is not persisted: fall back to the first pass when
+  // the previously-selected id is not in the freshly loaded list.
+  if (std::find(settings.pass_order.begin(), settings.pass_order.end(),
+                settings.active_pass_id) == settings.pass_order.end()) {
+    settings.active_pass_id =
+        settings.pass_order.empty() ? 0 : settings.pass_order.front();
+  }
 }
 
 void SaveSettingsValues(const Settings& settings, const std::string& key_prefix,
@@ -279,63 +286,16 @@ std::vector<ctl::InstanceKey> InstanceKeysForSections(
   return keys;
 }
 
-std::string CtlConfigKey(const std::string& prefix, const char* key) {
-  const std::string safe_key = CStrToString(key);
-  return prefix.empty() ? safe_key : prefix + "." + safe_key;
-}
 
-void MigrateLegacySettings(ctl::ValueStore& store,
-                           ctl::ReshadeConfigReader& reader,
-                           const std::string& prefix) {
-  // The ctl keys are authoritative. Import an older key only when its new
-  // counterpart is absent, including when loading a saved profile.
-  const ctl::InstanceKey shared = ctl::InstanceKey::FromInt(0);
-  bool stored_bool = false;
-  bool legacy_bool = false;
-
-  if (!reader.ReadBool(CtlConfigKey(prefix, "S.Preferences.show_tooltips"),
-                       &stored_bool) &&
-      TryReadValue(prefix, "ShowTooltips", legacy_bool)) {
-    store.Write(feature::preferences::kSection, shared,
-                feature::preferences::kShowTooltips,
-                ctl::Value::Bool(legacy_bool), false);
-  }
-  if (!reader.ReadBool(CtlConfigKey(prefix, "S.Preferences.require_dlss"),
-                       &stored_bool) &&
-      TryReadValue(prefix, "OnlySuperSampling", legacy_bool)) {
-    store.Write(feature::preferences::kSection, shared,
-                feature::preferences::kRequireDlss,
-                ctl::Value::Bool(legacy_bool), false);
-  }
-  if (!reader.ReadBool(CtlConfigKey(prefix, "S.Preferences.clone_resources"),
-                       &stored_bool) &&
-      TryReadValue(prefix, "CloneResources", legacy_bool)) {
-    store.Write(feature::preferences::kSection, shared,
-                feature::preferences::kCloneResources,
-                ctl::Value::Bool(legacy_bool), false);
-  }
-
-  int stored_int = 0;
-  int legacy_int = 0;
-  if (!reader.ReadInt(CtlConfigKey(prefix, "S.Debug.debug_view"),
-                      &stored_int) &&
-      TryReadValue(prefix, "DebugView", legacy_int)) {
-    store.Write(feature::debug_log::kSection, shared,
-                feature::debug_log::kDebugView,
-                ctl::Value::Enum(legacy_int), false);
-  }
-}
 
 // Load the store from `prefix`, replacing whatever it holds. Replacing
 // matters: a profile load must produce exactly the profile's state, not the
 // current state merged with the profile's overrides.
-void LoadStore(const Settings& settings, const std::string& prefix,
-               bool import_legacy_settings = true) {
+void LoadStore(const Settings& settings, const std::string& prefix) {
   ctl::ValueStore& store = ctl::Store();
   store.ResetToDefaults();
   ctl::ReshadeConfigReader reader;
   ctl::Load(store, reader, prefix, &InstanceKeysForSections, &settings);
-  if (import_legacy_settings) MigrateLegacySettings(store, reader, prefix);
 }
 
 void SaveStore(const Settings& settings, const std::string& prefix) {
@@ -349,6 +309,32 @@ void SaveStore(const Settings& settings, const std::string& prefix) {
 
 Settings& GetSettings() {
   return g_settings;
+}
+
+feature::pass::PassId NewPassId() {
+  uint64_t next = 1;
+  std::string next_text;
+  ReadValue("", kNextPassIdKey, next_text);
+  if (!next_text.empty()) {
+    char* end = nullptr;
+    const unsigned long long parsed =
+        std::strtoull(next_text.c_str(), &end, 10);
+    if (end != next_text.c_str() && *end == '\0' && parsed >= 1) {
+      next = parsed;
+    }
+  }
+  // The counter is the source of truth, but the current pass list is
+  // also consulted so a hand-edited or stale counter cannot hand out
+  // an id that is already in play.
+  for (feature::pass::PassId id : g_settings.pass_order) {
+    if (static_cast<uint64_t>(id) >= next) {
+      next = static_cast<uint64_t>(id) + 1;
+    }
+  }
+  const feature::pass::PassId id =
+      static_cast<feature::pass::PassId>(next);
+  WriteValue("", kNextPassIdKey, std::to_string(next + 1));
+  return id;
 }
 
 ProfileId NewProfileId() {
@@ -516,12 +502,12 @@ bool LoadSavedProfile(ProfileId id) {
   // would survive into the one being loaded.
   // Profile blocks use the stable-id schema only. Do not import old positional
   // profile fields into a newly created block that happens to reuse its number.
-  LoadStore(loaded, ProfileDataPrefix(id), false);
+  LoadStore(loaded, ProfileDataPrefix(id));
   g_settings = loaded;
-  const int pass_total = static_cast<int>(g_settings.pass_order.size());
-  if (g_settings.active_pass < 0) g_settings.active_pass = 0;
-  if (pass_total > 0 && g_settings.active_pass >= pass_total) {
-    g_settings.active_pass = pass_total - 1;
+  if (std::find(g_settings.pass_order.begin(), g_settings.pass_order.end(),
+                g_settings.active_pass_id) == g_settings.pass_order.end()) {
+    g_settings.active_pass_id =
+        g_settings.pass_order.empty() ? 0 : g_settings.pass_order.front();
   }
   {
     const ctl::InstanceKey shared = ctl::InstanceKey::FromInt(0);

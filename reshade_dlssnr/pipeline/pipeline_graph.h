@@ -57,17 +57,14 @@ struct Settings;
 
 // One enabled pass, as the render path wants it.
 //
-// `position` is the index into PassSession's array and into StatusSnapshot's
-// rows -- the runtime's bookkeeping, which is positional. `id` is the pass's
-// stable identity, which is what keys its settings in the store. The two are
-// deliberately separate: the runtime owns a slot per tab, the setting values
-// belong to the pass and survive any rearrangement of the tabs.
+// `id` is the pass's stable identity: it keys both its settings in the store
+// and its PassSession in the runtime. There is no positional slot; a reorder
+// permutes pass_order and nothing else.
 //
 // `target` is the raw int, not an InjectionStage: the enum lives in
 // state/settings.h, which this header cannot include without a cycle, and the
 // callers that care already narrow it themselves (as PassSnapshot::target does).
 struct EnabledPass {
-  uint32_t position = 0;
   feature::pass::PassId id = 0;
   int target = 2;  // InjectionStage; 2 == Backbuffer
 };
@@ -239,7 +236,9 @@ struct PassRun {
   const Settings* settings = nullptr;
   int debug_view = 0;
   bool pass_bound = false;
-  uint32_t pass_index = 0;
+  // The pass this run belongs to, set once by PrepareRun. Steps that
+  // need to correlate with the store or with pass_order read this.
+  feature::pass::PassId pass_id = 0;
 
   // -- frame inputs ---------------------------------------------------------
   ID3D12GraphicsCommandList* list = nullptr;  // the list this pass records on

@@ -17,7 +17,7 @@
 #include "feature/importance_mask/settings.h"
 #include "feature/pass/settings.h"
 #include "feature/pass/ui.h"
-#include "feature/pass/order.h"
+#include "feature/pass/ui.h"
 #include "feature/preferences/settings.h"
 #include "hooks/dlss_guides.h"
 #include "pipeline/addon_controller.h"
@@ -30,7 +30,7 @@ namespace reshade_dlssnr {
 
 // Set by ApplyPassReorder and consumed by DrawOverlay on the next frame. Tab
 // IDs are positional, so after a reorder ImGui still has the tab at the old
-// position selected and would overwrite active_pass back to it. This forces
+// position selected and would overwrite active_pass_id back to it. This forces
 // the tab that now holds the active pass to be selected instead.
 int g_force_select_tab = -1;
 
@@ -120,7 +120,7 @@ ctl::DrawOptions MakeOptions(bool headers, bool indent) {
 
 // ---------------------------------------------------------------------------
 // Pass-order mutation. Stable pass IDs remain attached to their stored values;
-// each order change relinks inheritance through the pass feature.
+// an order change permutes the vector and nothing else.
 // ---------------------------------------------------------------------------
 
 // Reset the backbuffer grade to its declared defaults. Writes through the
@@ -132,21 +132,13 @@ void ResetBackbufferGrade(void* /*context*/) {
 }
 
 // Reorder the pass_order vector. `order` holds the source position of each
-// destination position; the store is not consulted, because a position is a
-// property of this vector and of nothing else.
-//
-// Inheritance is positional -- pass at N follows the pass at N-1 -- so the
-// parent chain is relinked after the permute, from the new order.
+// destination position. Nothing in the store moves: each pass's values are
+// keyed by its stable id.
 // True when the pass at `position` is enabled, read from the store. The tab
 // bar and the body both need it, and both key it by the pass's stable id.
 
 void ApplyPassReorder(Settings& settings, const int* order, bool& changed) {
   const size_t total = settings.pass_order.size();
-  const feature::pass::PassId selected_id =
-      total > 0 && settings.active_pass >= 0 &&
-              static_cast<size_t>(settings.active_pass) < total
-          ? settings.pass_order[static_cast<size_t>(settings.active_pass)]
-          : 0;
   feature::pass::PassOrder reordered(total);
   for (size_t i = 0; i < total; ++i) {
     const int source = order[i];
@@ -155,16 +147,16 @@ void ApplyPassReorder(Settings& settings, const int* order, bool& changed) {
   }
   settings.pass_order.swap(reordered);
 
-  // Preserve selection by stable pass identity, never by the prior position.
-  const auto selected = std::find(settings.pass_order.begin(),
-                                  settings.pass_order.end(), selected_id);
-  if (selected != settings.pass_order.end()) {
-    settings.active_pass = static_cast<int>(
-        std::distance(settings.pass_order.begin(), selected));
+  // active_pass_id is a stable id, so a reorder does not need to update it.
+  // Fall back to the first pass only if the selected id somehow vanished.
+  if (std::find(settings.pass_order.begin(), settings.pass_order.end(),
+                settings.active_pass_id) == settings.pass_order.end()) {
+    settings.active_pass_id =
+        settings.pass_order.empty() ? 0 : settings.pass_order.front();
   }
 
-  feature::pass::ApplyOrder(ctl::Store(), settings.pass_order);
-  g_force_select_tab = settings.active_pass;
+  // Keep the runtime's session map in step with the new order.
+  AddonController::Get().EnsureSessions(settings.pass_order);
   changed = true;
 }
 
@@ -174,17 +166,17 @@ void AddPass(Settings& settings, bool& changed) {
   const size_t total = settings.pass_order.size();
   if (total >= kMaxPasses) return;
   const size_t source = static_cast<size_t>(
-      std::clamp(settings.active_pass, 0, static_cast<int>(total) - 1));
+      std::clamp(static_cast<int>(settings.active_pass_id), 0, static_cast<int>(total) - 1));
   const size_t insert_at = source + 1;
 
   feature::pass::PassOrder order = settings.pass_order;
-  order.insert(order.begin() + static_cast<ptrdiff_t>(insert_at),
-               feature::pass::NewPassId());
+  const feature::pass::PassId new_id = NewPassId();
+  order.insert(order.begin() + static_cast<ptrdiff_t>(insert_at), new_id);
   settings.pass_order.swap(order);
-  settings.active_pass = static_cast<int>(insert_at);
+  settings.active_pass_id = new_id;
 
-  feature::pass::ApplyOrder(ctl::Store(), settings.pass_order);
-  g_force_select_tab = settings.active_pass;
+  // Create the new pass's session so it is ready the first frame it runs.
+  AddonController::Get().EnsureSessions(settings.pass_order);
   changed = true;
 }
 
@@ -193,28 +185,36 @@ void AddPass(Settings& settings, bool& changed) {
 // created later.
 void RemoveActivePass(Settings& settings, bool& changed) {
   if (settings.pass_order.size() <= 1) return;
-  const size_t remove_at = static_cast<size_t>(
-      std::clamp(settings.active_pass, 0,
-                 static_cast<int>(settings.pass_order.size()) - 1));
+  const auto active_it = std::find(settings.pass_order.begin(),
+                                   settings.pass_order.end(),
+                                   settings.active_pass_id);
+  if (active_it == settings.pass_order.end()) return;
+  const size_t remove_at =
+      static_cast<size_t>(std::distance(settings.pass_order.begin(), active_it));
 
   // The id has to be captured before the erase: once it leaves pass_order it
   // is not reachable from anywhere else, and its keys are no longer rewritten
   // by Save, so they must be erased from the config explicitly.
-  const feature::pass::PassId removed_id = settings.pass_order[remove_at];
+  const feature::pass::PassId removed_id = *active_it;
 
   feature::pass::PassOrder order = settings.pass_order;
   order.erase(order.begin() + static_cast<ptrdiff_t>(remove_at));
   settings.pass_order.swap(order);
 
-  settings.active_pass = static_cast<int>(
-      std::min(remove_at, settings.pass_order.size() - 1));
+  if (settings.pass_order.empty()) {
+    settings.active_pass_id = 0;
+  } else {
+    const size_t next_index =
+        std::min(remove_at, settings.pass_order.size() - 1);
+    settings.active_pass_id = settings.pass_order[next_index];
+  }
 
-  // Erase the removed pass's ctl keys before relinking inheritance, so the
-  // retired id leaves no orphan keys behind.
+  // Erase the removed pass's ctl keys so the retired id leaves no orphan
+  // keys behind in the config.
   ErasePassKeys(removed_id);
 
-  feature::pass::ApplyOrder(ctl::Store(), settings.pass_order);
-  g_force_select_tab = settings.active_pass;
+  // EnsureSessions drops the removed pass's session and its NGX feature.
+  AddonController::Get().EnsureSessions(settings.pass_order);
   changed = true;
 }
 
@@ -502,15 +502,14 @@ void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
         if (!first_tab) ImGui::SameLine();
         first_tab = false;
 
-        const bool is_active =
-            (static_cast<int>(position) == settings.active_pass);
+        const bool is_active = (settings.active_pass_id == id);
         ImGui::PushStyleColor(ImGuiCol_Button,
                               is_active ? active_color : inactive_color);
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hovered_color);
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, active_color);
 
         if (ImGui::Button(label)) {
-          settings.active_pass = static_cast<int>(position);
+          settings.active_pass_id = id;
         }
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
           Tip("Select Pass %u - %s - target: %s - %s. The pass remains in its original tab position; runtime groups passes by target stage.",
@@ -521,8 +520,7 @@ void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
 
       ImGui::PopStyleVar();
       // The variable is a leftover of the ImGui tab-bar approach; the button
-      // row selects by writing settings.active_pass directly.
-      g_force_select_tab = -1;
+      // row selects by writing settings.active_pass_id directly.
     }
   }
   ImGui::EndChild();
@@ -536,17 +534,14 @@ void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
   ImGui::SetCursorScreenPos(
       ImVec2(tabs_row_pos.x, tabs_row_pos.y + tabs_row_height));
 
-  if (settings.active_pass < 0 ||
-      settings.active_pass >=
-          static_cast<int>(settings.pass_order.size())) {
-    return;
-  }
-
-  const uint32_t active = static_cast<uint32_t>(settings.active_pass);
-  ImGui::PushID(static_cast<int>(active));
+  const auto active_it = std::find(settings.pass_order.begin(),
+                                   settings.pass_order.end(),
+                                   settings.active_pass_id);
+  if (active_it == settings.pass_order.end()) return;
 
   // Keep the pass's own enable checkbox and name editable while it is off.
-  const feature::pass::PassId active_id = settings.pass_order[active];
+  const feature::pass::PassId active_id = *active_it;
+  ImGui::PushID(static_cast<int>(active_id));
   const ctl::InstanceKey key = feature::pass::PassKey(active_id);
   bool local_changed = false;
   // Keep the body interactive while the pass is off, including its own Enable

@@ -31,8 +31,6 @@ namespace {
 struct TraceField {
   std::string name;
   std::string value;
-  std::string raw_value;
-  bool resolved = false;
 };
 
 using Snapshot = std::vector<TraceField>;
@@ -100,7 +98,7 @@ const char* ChromaModeText(GradeChromaMode mode) {
 }
 
 void Append(Snapshot& snap, const std::string& name, std::string value) {
-  snap.push_back(TraceField{std::move(name), std::move(value), std::string(), false});
+  snap.push_back(TraceField{std::move(name), std::move(value)});
 }
 
 void AppendExposureFilters(Snapshot& snap, const std::string& prefix,
@@ -128,10 +126,9 @@ void AppendGrade(Snapshot& snap, const std::string& prefix,
   Append(snap, prefix + ".highlights", FloatText(grade.highlights));
 }
 
-// The pass rows, resolved. Takes the store too, because the pass grades and
-// the inherit flags live in their own rows and their own sections -- they are
-// not part of PassSnapshot -- and a trace of the pass that omitted them would
-// be a trace of three quarters of one.
+// The pass rows. Takes the store too, because the two model grades live in
+// their own sections and are not part of PassSnapshot, and a trace of the
+// pass that omitted them would be a trace of three quarters of one.
 void AppendPass(ctl::ValueStore& store, const ctl::InstanceKey& key,
                 Snapshot& snap, const std::string& prefix,
                 const feature::pass::PassSnapshot& pass) {
@@ -217,7 +214,7 @@ Snapshot BuildSnapshot(const Settings& settings) {
   Append(snap, "clone_resources", BoolText(store.Read(
       feature::preferences::kSection, shared_key,
       feature::preferences::kCloneResources).as_bool));
-  Append(snap, "active_pass", std::to_string(settings.active_pass));
+  Append(snap, "active_pass_id", std::to_string(settings.active_pass_id));
   Append(snap, "hdr_enable", BoolText(hdr.enable));
   Append(snap, "hdr_format", HdrFormatText(hdr.format));
   Append(snap, "hdr_measure_interval",
@@ -268,11 +265,8 @@ Snapshot BuildSnapshot(const Settings& settings) {
   AppendGrade(snap, "grade_backbuffer",
               feature::grade::ReadBackbuffer(store));
 
-  // Pass rows. Dumped once per pass, in tab order, from the store's resolved
-  // value -- the same number the render path runs at. The raw value is
-  // available too, as the pass's own un-inherited override, and the trace
-  // prints it beside the resolved one when they differ, which is exactly the
-  // information this dump exists to show: which settings are inherited.
+  // Pass rows. Dumped once per pass, in tab order, from the store. Every
+  // pass owns its own values, so what a pass shows is what it runs at.
   for (size_t position = 0; position < settings.pass_order.size(); ++position) {
     const feature::pass::PassId id = settings.pass_order[position];
     const ctl::InstanceKey key = feature::pass::PassKey(id);
@@ -298,7 +292,6 @@ void EmitSnapshot(const Snapshot& previous, const Snapshot& current,
   for (size_t i = 0; i < current.size(); ++i) {
     const TraceField& field = current[i];
     if (!comparable) {
-      if (field.resolved && field.raw_value == field.value) continue;
       TRACE_CFG("init %s %s", field.name.c_str(), field.value.c_str());
       continue;
     }

@@ -225,9 +225,8 @@ void DrawStatusSection(Settings& settings, bool& changed) {
       if (pass.target != static_cast<int>(display_stage)) continue;
 
       char buf[kStatusTextLength];
-      // The working scale is inherited state, so read the resolved value the
-      // store holds rather than a raw copy: a pass that follows its
-      // predecessor must report the scale it will actually run at.
+      // Read the working scale from the store so the row shows the value
+      // the runtime actually runs at.
       FormatPassStatus(snap.passes[position], display_stage, pass.working_scale,
                        snap.post_dlss_blocked, buf, sizeof(buf));
 

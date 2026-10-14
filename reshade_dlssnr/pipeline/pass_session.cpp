@@ -41,7 +41,6 @@ std::vector<EnabledPass> EnabledPasses(const Settings& settings) {
         feature::pass::Read(store, feature::pass::PassKey(id));
     if (!pass.enabled) continue;
     EnabledPass entry;
-    entry.position = position;
     entry.id = id;
     entry.target = pass.target;
     passes.push_back(entry);
@@ -134,7 +133,7 @@ void BindLocalExposureFilters(PassRun& run, ComputeConstants& constants,
 void PassSession::Fail(const char* reason) {
   failed_ = true;
   reason_ = reason;
-  TRACE_EVT(this, "FAIL pass=%u reason=%s", pass_index_,
+  TRACE_EVT(this, "FAIL pass=%u reason=%s", pass_id_,
             reason != nullptr ? reason : "(null)");
   // FailForStep() already substitutes a default before calling here, but Fail
   // is also reachable directly, and passing nullptr to the logger would
@@ -430,7 +429,7 @@ void PassSession::SubmitBackbuffer() {
 
 bool PassSession::MaybeRenderDebug(
     int debug_view,
-    int active_pass,
+    feature::pass::PassId active_pass_id,
     ComputeEngine& codec,
     ID3D12GraphicsCommandList* command_list,
     FrameDebugContext& frame_debug,
@@ -441,7 +440,7 @@ bool PassSession::MaybeRenderDebug(
     DXGI_FORMAT format) {
   // Debug view is a shared setting; only the active pass renders it.
   if (debug_view == 0) return false;
-  if (static_cast<int>(pass_index_) != active_pass) return false;
+  if (pass_id_ != active_pass_id) return false;
   if (command_list == nullptr) return false;
 
   // The debug output is displayed on the backbuffer, so prefer the
@@ -570,7 +569,6 @@ void PassSession::PrepareRun(PassRun& run,
 
   run.settings = &settings;
   run.pass_bound = true;
-  run.pass_index = pass_index_;
 
   // Read the pass's settings and its two model-boundary grades out of the
   // store and carry them by value. The store is the source of truth; the
@@ -644,7 +642,7 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
     return PipelineStatus::SkipFrame;
   }
 
-  TRACE_EVT(this, "ENTER stage=%s pass=%u", stage.name, pass_index_);
+  TRACE_EVT(this, "ENTER stage=%s pass=%u", stage.name, pass_id_);
 
   // Each game-list invocation starts with a clean per-stage state map. This
   // also makes early-exit cleanup independent of pointers/states cached by the
@@ -689,7 +687,7 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
     command_.Abort();
   }
 
-  TRACE_EVT(this, "EXIT stage=%s pass=%u status=%d", stage.name, pass_index_,
+  TRACE_EVT(this, "EXIT stage=%s pass=%u status=%d", stage.name, pass_id_,
             static_cast<int>(status));
   return status;
 }
@@ -750,7 +748,7 @@ PipelineStatus PassSession::StepAcquireBackbuffer(PassRun& run) {
   if (!self->AcquireBackbuffer(swapchain, queue, swapchain3, device, backbuffer,
                          desc)) {
     TRACE_EVT(self, "SKIP stage=Present pass=%u reason=acquire_backbuffer",
-              self->pass_index_);
+              self->pass_id_);
     return PipelineStatus::SkipFrame;
   }
 
@@ -786,7 +784,7 @@ PipelineStatus PassSession::StepResolveDevice(PassRun& run) {
       // Transient: don't fail the pass permanently. This can happen on frames
       // where ReShade hasn't fully wired up the command list yet.
       TRACE_EVT(self, "SKIP stage=PostDLSS pass=%u reason=no_device",
-                self->pass_index_);
+                self->pass_id_);
       return PipelineStatus::SkipFrame;
     }
 
@@ -795,7 +793,7 @@ PipelineStatus PassSession::StepResolveDevice(PassRun& run) {
     device = sl_compat::Native(device.Get());
     if (device == nullptr) {
       TRACE_EVT(self, "SKIP stage=PostDLSS pass=%u reason=no_native_device",
-                self->pass_index_);
+                self->pass_id_);
       return PipelineStatus::SkipFrame;
     }
 
@@ -807,7 +805,7 @@ PipelineStatus PassSession::StepResolveDevice(PassRun& run) {
       // Not fatal here either — the game may not have loaded the DLSS model
       // yet this frame. Log once and keep trying.
       TRACE_EVT(self, "SKIP stage=PostDLSS pass=%u reason=runtime_not_ready",
-                self->pass_index_);
+                self->pass_id_);
       const char* err = run.runtime->GetLastError();
       if (err != nullptr && err[0] != '\0') {
         reshade::log::message(reshade::log::level::warning, err);
@@ -859,7 +857,7 @@ PipelineStatus PassSession::StepEnsureComputeEngine(PassRun& run) {
   }
   if (!run.codec->IsReady()) {
     TRACE_EVT(self, "SKIP stage=%s pass=%u reason=codec_not_ready",
-              run.stage != nullptr ? run.stage->name : "?", self->pass_index_);
+              run.stage != nullptr ? run.stage->name : "?", self->pass_id_);
     return PipelineStatus::SkipFrame;
   }
   return PipelineStatus::Ok;
@@ -1030,7 +1028,7 @@ PipelineStatus PassSession::StepResolveModelInput(PassRun& run) {
   if (run.is_first_pass) {
     if (run.guides.dlss_output_color == nullptr) {
       TRACE_EVT(self, "SKIP stage=PostDLSS pass=%u reason=no_guide_color",
-                self->pass_index_);
+                self->pass_id_);
       return PipelineStatus::SkipFrame;
     }
     run.model_input = run.guides.dlss_output_color;
@@ -1052,7 +1050,7 @@ PipelineStatus PassSession::StepResolveModelInput(PassRun& run) {
     // Pre-refactor set failed_ directly here without a reason string; keep
     // that shape but give it a reason so the status UI is not blank.
     self->FailForStep("failed to create input snapshot");
-    TRACE_EVT(self, "FAIL pass=%u reason=ensure_scratch", self->pass_index_);
+    TRACE_EVT(self, "FAIL pass=%u reason=ensure_scratch", self->pass_id_);
     return PipelineStatus::Fail;
   }
   ID3D12Resource* scratch = self->resources_.GetScratch(kSnapshotSlot);
@@ -1090,7 +1088,7 @@ PipelineStatus PassSession::StepEnsureFeature(PassRun& run) {
   // Brackets the call so a crash inside it is attributable rather than just
   // "somewhere in this step".
   TRACE_EVT(self, "ensure_feature stage=%s pass=%u list=%p %ux%u",
-            run.stage != nullptr ? run.stage->name : "?", self->pass_index_,
+            run.stage != nullptr ? run.stage->name : "?", self->pass_id_,
             static_cast<const void*>(list), run.width, run.height);
 
   if (!self->feature_.EnsureFeature(*run.runtime, run.pass_state, list,
@@ -1108,7 +1106,7 @@ PipelineStatus PassSession::StepEnsureFeature(PassRun& run) {
     // The feature was just created or rebuilt; skip evaluation this frame so
     // the model has a frame to fully initialize.
     TRACE_EVT(self, "SKIP stage=%s pass=%u reason=feature_rebuilt",
-              run.stage != nullptr ? run.stage->name : "?", self->pass_index_);
+              run.stage != nullptr ? run.stage->name : "?", self->pass_id_);
     if (run.stage != nullptr && run.stage->owns_submit) {
       self->SubmitBackbuffer();
     }
@@ -1450,7 +1448,7 @@ void PassSession::BuildEvalKey(const PassRun& run, void* feature_handle,
   key->work_width = run.work_width;
   key->work_height = run.work_height;
   key->guides_valid = run.guides_valid ? 1 : 0;
-  key->pass_index = run.pass_index;
+  key->pass_index = run.pass_id;
   key->feature_handle = feature_handle;
   key->params = run.runtime != nullptr
                     ? static_cast<void*>(run.runtime->Parameters().Get())

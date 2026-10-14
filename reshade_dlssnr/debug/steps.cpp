@@ -78,7 +78,7 @@ PipelineStatus PassSession::StepRenderDebugView(PassRun& run) {
     debug.depth_height = run.guides.guide_height;
   }
 
-  self->MaybeRenderDebug(run.debug_view, run.settings->active_pass,
+  self->MaybeRenderDebug(run.debug_view, run.settings->active_pass_id,
                          *run.codec, self->StageList(run, self->command_),
                          *run.frame_debug, debug,
                          (run.hdr_uniforms_ready ? &run.hdr_uniforms : nullptr),

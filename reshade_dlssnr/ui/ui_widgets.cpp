@@ -154,13 +154,10 @@ bool PersistentSubHeader(const char* label, bool& open_setting,
   return open;
 }
 
-bool DrawFloatRow(uint32_t pass_index,
-                  const char* id,
+bool DrawFloatRow(const char* id,
                   const char* label,
                   const char* tooltip,
                   float* raw_value,
-                  bool* inherit_flag,
-                  float inherited_value,
                   float lo,
                   float hi,
                   float default_value) {
@@ -187,31 +184,17 @@ bool DrawFloatRow(uint32_t pass_index,
 
   ImGui::SameLine(kSliderLabelWidth);
 
-  const bool has_inherit = (pass_index > 0) && (inherit_flag != nullptr);
-  float trailing_width = kResetButtonWidth;
-  if (has_inherit) {
-    trailing_width += ImGui::GetStyle().ItemSpacing.x + kResetButtonWidth;
-  }
   const float slider_width = std::max(
-      60.0f, ImGui::GetContentRegionAvail().x - trailing_width -
+      60.0f, ImGui::GetContentRegionAvail().x - kResetButtonWidth -
                  ImGui::GetStyle().ItemSpacing.x);
   ImGui::SetNextItemWidth(slider_width);
 
-  const bool inheriting = has_inherit && *inherit_flag;
-  float display_value = inheriting ? inherited_value : *raw_value;
-
   const std::string slider_id = std::string("##") + id;
-  bool slider_changed = false;
-  WithDisabled(inheriting, [&] {
-    slider_changed =
-        ImGui::SliderFloat(slider_id.c_str(), &display_value, lo, hi, "%.3f");
-  });
+  if (ImGui::SliderFloat(slider_id.c_str(), raw_value, lo, hi, "%.3f")) {
+    changed = true;
+  }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("%s", tooltip_storage.c_str());
-  }
-  if (slider_changed && !inheriting) {
-    *raw_value = display_value;
-    changed = true;
   }
 
   ImGui::SameLine();
@@ -224,26 +207,6 @@ bool DrawFloatRow(uint32_t pass_index,
     Tip("Reset to default");
   }
   ImGui::PopID();
-
-  if (has_inherit) {
-    ImGui::SameLine();
-    const std::string inherit_id = std::string(id) + "_inherit";
-    ImGui::PushID(inherit_id.c_str());
-    const bool on = *inherit_flag;
-    if (on) {
-      ImGui::PushStyleColor(ImGuiCol_Button,
-                            ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-    }
-    if (ImGui::Button("I", ImVec2(kResetButtonWidth, 0.0f))) {
-      *inherit_flag = !*inherit_flag;
-      changed = true;
-    }
-    if (on) ImGui::PopStyleColor();
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-      Tip("Inherit this value from the previous pass");
-    }
-    ImGui::PopID();
-  }
 
   return changed;
 }

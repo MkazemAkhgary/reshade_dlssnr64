@@ -76,7 +76,13 @@ float PassToolbarWidth() {
 // permutes Settings::pass_order, and the store's instances do not move.
 void DrawPassToolbar(Settings& settings, bool& changed) {
   const int pass_total = static_cast<int>(settings.pass_order.size());
-  const int position = std::clamp(settings.active_pass, 0, pass_total - 1);
+  const auto active_it = std::find(settings.pass_order.begin(),
+                                   settings.pass_order.end(),
+                                   settings.active_pass_id);
+  const int position =
+      active_it == settings.pass_order.end()
+          ? 0
+          : static_cast<int>(std::distance(settings.pass_order.begin(), active_it));
 
   // The caller has already reserved PassToolbarWidth() on this row and placed
   // the cursor here, so the controls simply flow left to right.
@@ -116,7 +122,7 @@ void DrawPassToolbar(Settings& settings, bool& changed) {
     changed = true;
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Reset pass %d's model, residual, grade, sharpening, shader, and inheritance settings to defaults. Its name, target, and enabled state are preserved.",
+    Tip("Reset pass %d's model, residual, grade, sharpening, and shader settings to defaults. Its name, target, and enabled state are preserved.",
         position + 1);
   }
 

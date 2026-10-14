@@ -72,7 +72,7 @@ reshade_dlssnr/
     types.h/.cpp                   Values and setting metadata
     schema.h/.cpp                  Section, setting, hook, and schema declarations
     registry.h/.cpp                Setting-type registry
-    values.h/.cpp                  Instance store and inheritance resolution
+    values.h/.cpp                  Instance store
     serialize.h/.cpp               Schema-driven persistence
     draw.h/.cpp                    Generic section renderer
     builtin_settings.h/.cpp        Float, Int, Bool, Enum, and String settings
@@ -553,11 +553,9 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 **Working scale 1 avoids identity scaling work.** For SDR inputs with no input grade and equal input/working dimensions, `PrepareModelInput` passes the original resource to the model instead of dispatching an identity downsample. SDR/HDR composition still dispatches because it applies the model residual and writes the final image, but the shaders skip EASU reconstruction when the working and output sizes are equal; optional RCAS remains active. The HDR carrier preparation is not bypassed because it performs required color-domain conversion.
 
-**Inheritance is resolved by the `ctl` store.** Parent links belong to instances; `feature::pass::ApplyOrder` rebuilds the pass chain after the stable pass order changes or loads. Runtime views read values through `ValueStore::Read`, which resolves the declared inheritance chain.
 
 **Saved profiles use stable `ProfileId` keys.** `UserPresetOrder` is the comma-separated display order and `UserPresetNextId` preserves the allocation high-water mark. A profile's name, enabled state, and pass order live at `UserPreset.<id>.Name`, `.Enabled`, and `.PassOrder`; its `ctl` block is under `UserPreset.<id>.Data`. Save and delete pass that profile's pass order as the instance-key source, so unrelated live pass instances are not copied into or erased from its block. Deletion removes one id from the order and erases its schema-defined keys; it never shifts another profile's data. Legacy positional profile blocks are not imported.
 
-**Only explicitly inheritable settings are resolved through parents.** Working scale, intensity, local tone, local structure, skin structure, luma/chroma strength, and the soft-compression limits/knee opt in. Grade controls, residual controls, RCAS controls, names, targets, and model preset remain per-pass.
 
 **HDR composition uses Gain-Map Residual exclusively.** HDR Pre-DLSS and Post-DLSS passes use the packed per-pixel carrier-to-HDR multiplier to transfer model edits back to the untouched full-resolution HDR source. The former HDR Ratio mode and selector are removed. SDR composition, including Present/backbuffer passes, retains its existing log-ratio residual path and settings.
 
@@ -607,7 +605,7 @@ Set `DLSSNR_TRACE=<path>` to enable the command/event trace. The trace maintains
 
 Because trace lines are intentionally flushed immediately, the file is suitable for diagnosing the final commands leading into a crash. The trace should still be bounded to a deterministic test scene because a full frame contains many transitions and dispatches.
 
-Settings changes are recorded separately as `cfg` lines when tracing is enabled. Load-time state is emitted as `init`; changes at save time are emitted as `set` transitions. Resolved pass values are represented separately from raw inherited settings.
+Settings changes are recorded separately as `cfg` lines when tracing is enabled. Load-time state is emitted as `init`; changes at save time are emitted as `set` transitions.
 
 ### Crash trace
 
@@ -659,7 +657,7 @@ The overlay owns cross-feature layout and coordination. A feature's ordinary row
 
 ### Add a setting
 
-1. Add the setting key to the owning `feature/<name>/settings.h` and declare its type, default, metadata, and inheritance policy in `feature/<name>/schema.cpp`.
+1. Add the setting key to the owning `feature/<name>/settings.h` and declare its type, default, metadata, and presentation in `feature/<name>/schema.cpp`.
 2. Expose it through that feature's typed `view.h/.cpp` only when runtime code needs it, and update the runtime settings structure if required.
 3. Use a schema hook for specialized UI; keep cross-feature enablement in the overlay rather than making one feature's schema depend on another feature's keys.
 4. Persistence is handled by `ctl::Save`/`ctl::Load`; do not add per-feature hand-written save/load mappings.

@@ -8,6 +8,7 @@
 #include <wrl/client.h>
 
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 #include "command_context.h"
@@ -56,6 +57,11 @@ class AddonController {
   // Thread-safe snapshot of the addon's current health, for the UI.
   StatusSnapshot GetStatus() const;
 
+
+  // Ensures a session exists for every pass in `order` and drops the
+  // sessions of passes no longer present. Called by the UI after
+  // add/remove/reorder so the runtime map matches the pass list.
+  void EnsureSessions(const feature::pass::PassOrder& order);
 
   // Clears the failure state of every pass. One button in the UI, so the
   // user never has to click through tabs to un-stick a frame.
@@ -123,12 +129,7 @@ class AddonController {
 
  private:
   AddonController()
-      : hdr_preparation_session_(&DlssGuides::Get(), 0) {
-    passes_.reserve(kMaxPasses);
-    for (uint32_t i = 0; i < kMaxPasses; ++i) {
-      passes_.emplace_back(&DlssGuides::Get(), i);
-    }
-  }
+      : hdr_preparation_session_(&DlssGuides::Get()) {}
   ~AddonController() = default;
 
   AddonController(const AddonController&) = delete;
@@ -157,7 +158,6 @@ class AddonController {
   // correct pair for the stage; the runner rejects missing required inputs.
   PipelineStatus RunPassStage(
       const PipelineStageDef& stage,
-      uint32_t pass_position,
       feature::pass::PassId pass_id,
       ID3D12GraphicsCommandList* command_list,
       ID3D12Resource* output_resource,
@@ -180,7 +180,11 @@ class AddonController {
   void RefreshStatus(const Settings& settings);
 
   NgxRuntime runtime_;
-  std::vector<PassSession> passes_;
+  // One session per live pass, keyed by the pass's stable id. Sessions are
+  // created on demand and retired when a pass leaves pass_order. Keying by
+  // id means a reorder never migrates a feature handle, a failure flag, or
+  // an eval diagnostic between passes.
+  std::unordered_map<feature::pass::PassId, std::unique_ptr<PassSession>> sessions_;
   // Internal session: detection is shared across passes and must not latch a
   // failure onto a user-configured pass.
   PassSession hdr_preparation_session_;

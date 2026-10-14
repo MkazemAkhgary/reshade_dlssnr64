@@ -3,7 +3,7 @@
 namespace reshade_dlssnr {
 
 // Runtime snapshot populated by feature/importance_mask/view.cpp. The schema
-// and ctl store own declaration, editing, inheritance, and persistence.
+// and ctl store own declaration, editing, and persistence.
 struct ImportanceMaskSettings {
   bool enable = false;
   float luma_threshold = 0.02f;

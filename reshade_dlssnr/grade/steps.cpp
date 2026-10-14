@@ -79,7 +79,7 @@ PipelineStatus PassSession::StepGradeModelInput(PassRun& run) {
   // selected by the active pass; no cost otherwise.
   if (self != nullptr && run.settings != nullptr && run.model_color != nullptr &&
       DebugViewNeedsPreGradeInput(run.debug_view) &&
-      static_cast<int>(self->pass_index_) == run.settings->active_pass) {
+      self->pass_id_ == run.settings->active_pass_id) {
     const D3D12_RESOURCE_DESC desc = run.model_color->GetDesc();
     if (self->resources_.EnsureScratch(
             run.device, desc, static_cast<unsigned int>(desc.Width),
@@ -103,7 +103,7 @@ PipelineStatus PassSession::StepGradeModelInput(PassRun& run) {
   if (!grade.enabled) return PipelineStatus::Ok;
 
   TRACE_EVT(run.session, "grade_model_input pass=%u luma=%.3f chroma=%.3f",
-            run.pass_index, grade.luma, grade.chroma);
+            self->pass_id_, grade.luma, grade.chroma);
   PipelineStatus status =
       GradeInPlace(run, run.model_color, grade, kGradeScratchSlotA);
   if (status != PipelineStatus::Ok) return status;
@@ -136,7 +136,7 @@ PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
   // selected by the active pass; no cost otherwise.
   if (run.settings != nullptr && run.model_output != nullptr &&
       DebugViewNeedsPreGradeOutput(run.debug_view) &&
-      static_cast<int>(self->pass_index_) == run.settings->active_pass) {
+      self->pass_id_ == run.settings->active_pass_id) {
     const D3D12_RESOURCE_DESC desc = run.model_output->GetDesc();
     if (self->resources_.EnsureScratch(
             run.device, desc, static_cast<unsigned int>(desc.Width),
@@ -174,10 +174,10 @@ PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
 
   if (grade.enabled) {
     TRACE_EVT(run.session, "grade_model_output pass=%u luma=%.3f chroma=%.3f",
-              run.pass_index, grade.luma, grade.chroma);
+              self->pass_id_, grade.luma, grade.chroma);
   }
   if (exposure_map != nullptr) {
-    TRACE_EVT(run.session, "unexpose_model_output pass=%u", run.pass_index);
+    TRACE_EVT(run.session, "unexpose_model_output pass=%u", self->pass_id_);
   }
   return GradeInPlace(run, run.model_output, grade, kGradeScratchSlotB, true,
                       exposure_map);
