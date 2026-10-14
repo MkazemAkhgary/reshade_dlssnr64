@@ -217,6 +217,22 @@
     <ClCompile Include="ctl\usage\ui_schema.cpp" />
     <ClCompile Include="ctl\usage\ui_store.cpp" />
     <ClCompile Include="ctl\values.cpp" />
+    <ClCompile Include="fragments\grade_rows\rows.cpp" />
+    <ClCompile Include="fragments\hdr_filter_rows\rows.cpp" />
+    <ClCompile Include="feature\debug_log\schema.cpp" />
+    <ClCompile Include="feature\debug_log\view.cpp" />
+    <ClCompile Include="feature\grade\schema.cpp" />
+    <ClCompile Include="feature\grade\view.cpp" />
+    <ClCompile Include="feature\hdr\schema.cpp" />
+    <ClCompile Include="feature\hdr\ui.cpp" />
+    <ClCompile Include="feature\hdr\view.cpp" />
+    <ClCompile Include="feature\importance_mask\schema.cpp" />
+    <ClCompile Include="feature\importance_mask\view.cpp" />
+    <ClCompile Include="feature\pass\order.cpp" />
+    <ClCompile Include="feature\pass\schema.cpp" />
+    <ClCompile Include="feature\pass\view.cpp" />
+    <ClCompile Include="feature\preferences\schema.cpp" />
+    <ClCompile Include="feature\register_all.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="gpu\compute_constants.h" />
@@ -275,6 +291,23 @@
     <ClInclude Include="ctl\usage\ui_schema.h" />
     <ClInclude Include="ctl\usage\ui_store.h" />
     <ClInclude Include="ctl\values.h" />
+    <ClInclude Include="fragments\grade_rows\rows.h" />
+    <ClInclude Include="fragments\hdr_filter_rows\rows.h" />
+    <ClInclude Include="feature\register_all.h" />
+    <ClInclude Include="feature\debug_log\settings.h" />
+    <ClInclude Include="feature\debug_log\view.h" />
+    <ClInclude Include="feature\grade\settings.h" />
+    <ClInclude Include="feature\grade\view.h" />
+    <ClInclude Include="feature\hdr\settings.h" />
+    <ClInclude Include="feature\hdr\ui.h" />
+    <ClInclude Include="feature\hdr\view.h" />
+    <ClInclude Include="feature\importance_mask\settings.h" />
+    <ClInclude Include="feature\importance_mask\view.h" />
+    <ClInclude Include="feature\pass\order.h" />
+    <ClInclude Include="feature\pass\settings.h" />
+    <ClInclude Include="feature\pass\ui.h" />
+    <ClInclude Include="feature\pass\view.h" />
+    <ClInclude Include="feature\preferences\settings.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\common\color_constants.h" />

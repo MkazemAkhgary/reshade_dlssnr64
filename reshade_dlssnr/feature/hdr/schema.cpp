@@ -1,0 +1,273 @@
+// HDR schema: source preparation and the three exposure layers.
+//
+// One translation unit per feature, declared whole here. The three layers are
+// separate sections rather than categories, because each is a tab with its own
+// independent filter set -- two categories of the same names on one section
+// would collide, since a category is a label and never carries identity.
+//
+// The tab bar and the diagnostics block are hooks: they are rendering, not
+// settings, and a hook's identity is data so it is declared where it belongs.
+
+#include "ctl/builtin_settings.h"
+#include "ctl/schema.h"
+#include "ctl/values.h"
+#include "feature/hdr/settings.h"
+#include "feature/hdr/ui.h"
+#include "fragments/hdr_filter_rows/rows.h"
+
+namespace reshade_dlssnr {
+namespace feature {
+namespace hdr {
+
+namespace {
+
+const char* const kFormatNames[] = {"Auto", "SDR", "scRGB", "HDR10"};
+const char* const kFormatTips[] = {
+    "Detect the format automatically from the active Pre/Post-DLSS source.",
+    "Treat the source as SDR sRGB.",
+    "Treat the source as linear scRGB (1.0 = 80 nits).",
+    "Treat the source as HDR10 PQ (ST.2084)."};
+
+// The three layer toggles are the gates for everything after them, so they are
+// declared once and their predicates read the section they are drawn in.
+bool LayerEnabled(const void* context, const ctl::ValueStore& store,
+                  const ctl::InstanceKey& key, const std::string& section) {
+  const char* toggle = static_cast<const char*>(context);
+  return store.Read(section, key, toggle).as_bool;
+}
+
+// A sub-header gate: bounded tuning gates its own parameter rows.
+bool TuningEnabled(const void*, const ctl::ValueStore& store,
+                   const ctl::InstanceKey& key, const std::string& section) {
+  return store.Read(section, key, kGameBoundedTuning).as_bool;
+}
+
+bool UnexposeEnabled(const void*, const ctl::ValueStore& store,
+                     const ctl::InstanceKey& key,
+                     const std::string& section) {
+  return store.Read(section, key, kLocalUnexpose).as_bool;
+}
+
+bool DepthContinuityEnabled(const void*, const ctl::ValueStore& store,
+                            const ctl::InstanceKey& key,
+                            const std::string& section) {
+  return store.Read(section, key, kLocalDepthContinuity).as_bool;
+}
+
+}  // namespace
+
+}  // namespace hdr
+
+void RegisterHdrSchema(ctl::Schema& schema) {
+  using namespace hdr;
+
+  // --- HDR ---------------------------------------------------------------
+  ctl::Section& hdr = schema.AddSection(kSection, ctl::SectionKind::Single);
+  hdr.HeaderToggle(kEnable);
+  hdr.Add<ctl::BoolSetting>(kEnable, "Enable", true)
+      .Tooltip("Prepares the current Pre-DLSS or Post-DLSS source before the "
+               "first pass. Backbuffer-only configurations do not use HDR "
+               "measurement.");
+  hdr.Add<ctl::EnumSetting>(kFormat, "Format", 0)
+      .Items(kFormatNames, kFormatTips, 4)
+      .AsGroup()
+      .Tooltip("How the source image is encoded. Auto detects from the DLSS "
+               "output's DXGI format.");
+  hdr.Add<ctl::IntSetting>(kMeasureInterval, "Measure Interval", 4)
+      .Range(1, 32)
+      .Tooltip("How often exposure histograms are measured, in frames.");
+  hdr.Add<ctl::FloatSetting>(kHighlightHeadroom, "Highlight Headroom", 8.0f)
+      .Range(0.25f, 16.0f)
+      .Tooltip("Scales the effective HDR peak used by BT.2446C. This does not "
+               "change how exposure is interpreted.");
+
+  // The exposure layers are tabs, and a tab bar is rendering, not a setting:
+  // it is a hook. The three layer sections hold the settings; this draws the
+  // bar and each open tab's body, then the stack-order note.
+  hdr.AddHookAfter(kHighlightHeadroom, "ExposureTabs", &DrawExposureTabs);
+
+  hdr.Add<ctl::FloatSetting>(kBt2446K1, "BT.2446C k1", 0.83802f)
+      .Range(0.001f, 2.0f)
+      .Tooltip("Linear-region slope.");
+  hdr.Add<ctl::FloatSetting>(kBt2446K2, "BT.2446C k2", 15.09968f)
+      .Range(0.001f, 32.0f)
+      .Tooltip("Log-region slope.");
+  hdr.Add<ctl::FloatSetting>(kBt2446K3, "BT.2446C k3", 0.74204f)
+      .Range(0.001f, 1.0f)
+      .Tooltip("Reference construction parameter retained for parity/trace.");
+  hdr.Add<ctl::FloatSetting>(kBt2446K4, "BT.2446C k4", 78.99439f)
+      .Range(0.001f, 200.0f)
+      .Tooltip("Log-region intercept in nits.");
+  hdr.Add<ctl::FloatSetting>(kBt2446Crosstalk, "Crosstalk", 0.04f)
+      .Range(0.0f, 0.33f)
+      .Tooltip("BT.2446C pre-desaturation amount.");
+  hdr.Add<ctl::FloatSetting>(kGainMinLog2, "Gain Min", -4.0f)
+      .Range(-32.0f, 0.0f)
+      .Tooltip("Configured log2 gain metadata minimum.");
+  hdr.Add<ctl::FloatSetting>(kGainMaxLog2, "Gain Max", 6.0f)
+      .Range(0.0f, 32.0f)
+      .Tooltip("Configured log2 gain metadata maximum.");
+
+  // Live HDR measurement readout. Placed after the tuning rows so the
+  // section reads top-to-bottom as "configure, then observe".
+  hdr.AddHookAfter(kGainMaxLog2, "HdrDiagnostics", &DrawHdrDiagnostics);
+
+  // --- HDR Game Exposure -------------------------------------------------
+  ctl::Section& game =
+      schema.AddSection(kGameSection, ctl::SectionKind::Single);
+  game.Add<ctl::BoolSetting>(kGameEnabled, "Game Exposure", true)
+      .Tooltip("Use the game's NGX ExposureTexture as the base exposure for "
+               "the stack.");
+  game.Add<ctl::FloatSetting>(kGameBiasStops, "Exposure Bias", 0.0f)
+      .Range(-4.0f, 4.0f)
+      .Tooltip("Manual bias relative to the game's exposure, in stops. Zero "
+               "leaves the game's value untouched.")
+      .EnableWhen(&LayerEnabled, kGameEnabled);
+  game.Add<ctl::BoolSetting>(kGameBoundedTuning, "Bounded Adaptive Tuning",
+                             false)
+      .Tooltip("Allow the adaptive measurement to suggest a small correction, "
+               "clipped to Max Tuning Stops. The game remains the global "
+               "exposure anchor.")
+      .EnableWhen(&LayerEnabled, kGameEnabled);
+  game.Add<ctl::FloatSetting>(kGameTuningStrength, "Tuning Strength", 0.25f)
+      .Range(0.0f, 1.0f)
+      .Tooltip("Blend toward the adaptive exposure suggestion.")
+      .EnableWhen(&TuningEnabled);
+  game.Add<ctl::FloatSetting>(kGameTuningStops, "Max Tuning Stops", 0.5f)
+      .Range(0.0f, 2.0f)
+      .Tooltip("Maximum absolute correction away from the game's value.")
+      .EnableWhen(&TuningEnabled);
+  game.Add<ctl::FloatSetting>(kGameTuningMidtone, "Tuning Midtone", 0.18f)
+      .Range(0.01f, 0.5f)
+      .Tooltip("Target luminance used only to estimate the bounded correction.")
+      .EnableWhen(&TuningEnabled);
+  game.Add<ctl::FloatSetting>(kGameTuningSpeedUp, "Brighten Speed", 3.0f)
+      .Range(0.0f, 20.0f)
+      .Tooltip("Maximum brighten correction change in stops per second.")
+      .EnableWhen(&TuningEnabled);
+  game.Add<ctl::FloatSetting>(kGameTuningSpeedDown, "Darken Speed", 1.0f)
+      .Range(0.0f, 20.0f)
+      .Tooltip("Maximum darken correction change in stops per second.")
+      .EnableWhen(&TuningEnabled);
+  hdr_filter_rows::Declare(game);
+
+  // --- HDR Adaptive Exposure ---------------------------------------------
+  ctl::Section& adaptive =
+      schema.AddSection(kAdaptiveSection, ctl::SectionKind::Single);
+  adaptive.Add<ctl::BoolSetting>(kAdaptiveEnabled, "Adaptive Exposure", true)
+      .Tooltip("Use histogram-derived global exposure or a bounded correction "
+               "over Game Exposure.");
+  adaptive.Add<ctl::FloatSetting>(kAdaptiveMidtone, "Midtone Target", 0.18f)
+      .Range(0.01f, 0.5f)
+      .Tooltip("Target luminance for the selected population.")
+      .EnableWhen(&LayerEnabled, kAdaptiveEnabled);
+  adaptive.Add<ctl::FloatSetting>(kAdaptiveSpeedUp, "Brighten Speed", 3.0f)
+      .Range(0.0f, 20.0f)
+      .Tooltip("Maximum exposure increase in stops per second.")
+      .EnableWhen(&LayerEnabled, kAdaptiveEnabled);
+  adaptive.Add<ctl::FloatSetting>(kAdaptiveSpeedDown, "Darken Speed", 1.0f)
+      .Range(0.0f, 20.0f)
+      .Tooltip("Maximum exposure decrease in stops per second.")
+      .EnableWhen(&LayerEnabled, kAdaptiveEnabled);
+  adaptive
+      .Add<ctl::FloatSetting>(kAdaptiveStrengthOverGame, "Strength Over Game",
+                              0.0f)
+      .Range(0.0f, 1.0f)
+      .Tooltip("When Game Exposure is active, add this fraction of the "
+               "adaptive target's stop correction. With Game disabled, "
+               "Adaptive is the base exposure.")
+      .EnableWhen(&LayerEnabled, kAdaptiveEnabled);
+  adaptive
+      .Add<ctl::FloatSetting>(kAdaptiveMaxCorrection, "Max Correction Stops",
+                              0.75f)
+      .Range(0.0f, 3.0f)
+      .Tooltip("Maximum adjustment around Game Exposure when both layers are "
+               "enabled.")
+      .EnableWhen(&LayerEnabled, kAdaptiveEnabled);
+  hdr_filter_rows::Declare(adaptive);
+
+  // --- HDR Local Exposure ------------------------------------------------
+  ctl::Section& local = schema.AddSection(kLocalSection, ctl::SectionKind::Single);
+  local.Add<ctl::BoolSetting>(kLocalEnabled, "Local Exposure", false)
+      .Tooltip("Apply spatially varying exposure correction after the global "
+               "exposure layers.");
+  local.Add<ctl::FloatSetting>(kLocalStrength, "Strength", 0.50f)
+      .Range(0.0f, 1.0f)
+      .Tooltip("Blend factor for the spatial exposure adjustment.")
+      .EnableWhen(&LayerEnabled, kLocalEnabled);
+  local.Add<ctl::FloatSetting>(kLocalMaxBrighten, "Max Brighten", 1.75f)
+      .Range(0.0f, 4.0f)
+      .Tooltip("Maximum local brightening in stops.")
+      .EnableWhen(&LayerEnabled, kLocalEnabled);
+  local.Add<ctl::FloatSetting>(kLocalMaxDarken, "Max Darken", 1.75f)
+      .Range(0.0f, 4.0f)
+      .Tooltip("Maximum local darkening in stops.")
+      .EnableWhen(&LayerEnabled, kLocalEnabled);
+  local.Add<ctl::FloatSetting>(kLocalMidtone, "Local Midtone", 0.18f)
+      .Range(0.01f, 0.5f)
+      .Tooltip("Reference luminance for the local base/detail operator.")
+      .EnableWhen(&LayerEnabled, kLocalEnabled);
+  local.Add<ctl::FloatSetting>(kLocalBlockSize, "Neighborhood Block Size (px)",
+                               24.0f)
+      .Range(4.0f, 512.0f)
+      .Tooltip("Neighborhood diameter (4-512 px). Larger sizes spread the "
+               "local-base taps farther apart. Effective diameter is capped at "
+               "half the shorter source dimension; the field stays continuous "
+               "per pixel to avoid visible block boundaries.")
+      .EnableWhen(&LayerEnabled, kLocalEnabled);
+  local.Add<ctl::IntSetting>(kLocalSampleCount, "Neighborhood Samples", 24)
+      .Range(4, 48)
+      .Tooltip("Number of neighborhood taps (4-48). Higher counts fill gaps in "
+               "the same neighborhood and cost more GPU time; this does not "
+               "increase the block radius.")
+      .EnableWhen(&LayerEnabled, kLocalEnabled);
+  local.Add<ctl::FloatSetting>(kLocalEdgeSharpness, "Luma Edge Protection",
+                               4.0f)
+      .Range(0.0f, 8.0f)
+      .Tooltip("Controls how strongly samples with different log-luminance are "
+               "rejected. Higher values reduce correction bleed across facial "
+               "features and silhouettes; 0 disables luminance-edge weighting. "
+               "This is not a semantic face detector.")
+      .EnableWhen(&LayerEnabled, kLocalEnabled);
+  local.Add<ctl::BoolSetting>(kLocalDepthContinuity, "Depth Continuity", true)
+      .Tooltip("When a DLSS depth guide is available, exclude neighborhood "
+               "samples across depth discontinuities. This is separate from "
+               "the Depth filter, which restricts which pixels may receive "
+               "the correction.")
+      .EnableWhen(&LayerEnabled, kLocalEnabled);
+  local.Add<ctl::FloatSetting>(kLocalDepthEdgeThreshold,
+                               "Depth Edge Threshold", 0.01f)
+      .Range(0.001f, 0.1f)
+      .Tooltip("Maximum normalized depth difference allowed between "
+               "neighborhood samples. Lower values separate "
+               "foreground/background more aggressively; ignored when depth is "
+               "unavailable.")
+      .EnableWhen(&DepthContinuityEnabled);
+  local.Add<ctl::BoolSetting>(kLocalUnexpose, "Unexpose on Model Output", false)
+      .Tooltip("Divide the model output by the local exposure scale before the "
+               "output grade, removing the lift this layer applied to the "
+               "model input. Runs at the same step as the Output Grade, "
+               "whether or not that grade is enabled.")
+      .EnableWhen(&LayerEnabled, kLocalEnabled);
+  local.Add<ctl::FloatSetting>(kLocalUnexposeNaturalness,
+                               "Unexpose Naturalness", 0.2f)
+      .Range(0.0f, 1.0f)
+      .Tooltip("How strongly the unexpose desaturates as the image darkens, "
+               "reproducing the Hunt effect (perceived saturation falls with "
+               "luminance). 0 restores the plain linear divide; 0.2 is subtle; "
+               "0.5 is a strong, film-like look.")
+      .EnableWhen(&UnexposeEnabled);
+  local.Add<ctl::FloatSetting>(kLocalUnexposeReferenceL,
+                               "Unexpose Reference Lightness", 0.5f)
+      .Range(0.1f, 1.0f)
+      .Tooltip("OKLab lightness at which the unexpose is neutral (matches the "
+               "plain divide exactly). Below it chroma is reduced, above it is "
+               "boosted slightly. ~0.5 sits just below perceptual mid-grey; "
+               "raise it to affect more of the frame, lower it to affect only "
+               "the darkest pixels.")
+      .EnableWhen(&UnexposeEnabled);
+  hdr_filter_rows::Declare(local);
+}
+
+}  // namespace feature
+}  // namespace reshade_dlssnr
