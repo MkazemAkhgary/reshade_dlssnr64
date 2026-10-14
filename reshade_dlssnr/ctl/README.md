@@ -1,7 +1,7 @@
 # ctl — the control settings framework
 
 A declarative settings system. Settings are *declared* in code, one expression
-each; the framework owns storage, UI rendering, inheritance, and persistence.
+each; the framework owns storage, UI rendering, and persistence.
 Nothing in this directory knows what a "pass", "layer", "camera", or "preset"
 is — those are the application's words, expressed through sections, instance
 keys and parent links.
@@ -12,7 +12,7 @@ ctl/
   types.h/.cpp          Value, SettingMeta, Setting, SettingContext
   schema.h/.cpp         Section, Hook, Schema         (declaration)
   registry.h/.cpp       type registry                 (extensibility)
-  values.h/.cpp         InstanceKey, Instance, InstanceSet, ValueStore (storage + inheritance)
+  values.h/.cpp         InstanceKey, Instance, InstanceSet, ValueStore (storage)
   serialize.h/.cpp      KeyValueWriter/Reader, Save/Load (persistence)
   draw.h/.cpp           DrawSection                  (rendering)
   builtin_settings.h/.cpp  FloatSetting, IntSetting, BoolSetting, EnumSetting, StringSetting
@@ -38,10 +38,9 @@ prefs.Add<EnumSetting>("preset", "Preset", 1)
 Section& model = schema.AddSection("Model", SectionKind::Instanced);
 model.Add<FloatSetting>("intensity", "Intensity", 1.0f)
      .Range(0.0f, 2.0f)
-     .Tooltip("How strongly the model edits the image.")
-     .Inheritable();
+     .Tooltip("How strongly the model edits the image.");
 model.Add<EnumSetting>("upsample", "Upsample mode", 1)
-     .Items(kUpsampleNames, nullptr, 2);   // not inheritable
+     .Items(kUpsampleNames, nullptr, 2);
 
 model.AddHookBefore("upsample", "PresetRow",
                     [](const void*, ValueStore&, const DrawOptions&,
@@ -77,9 +76,9 @@ let them fall out of a blanket iteration. The caller enumerates.
 and the whole declaration stays one expression. Declaration order is render
 order — `Schema::Build` records it and the drawer replays it.
 
-`SettingMeta` carries `name`, `label`, `tooltip`, `category`, `persist`
-(default true) and `inheritable` (default **false**, opt-in). Adding a metadata
-field never breaks an existing setting because every field has a default.
+`SettingMeta` carries `name`, `label`, `tooltip`, `category` and `persist`
+(default true). Adding a metadata field never breaks an existing setting
+because every field has a default.
 
 ### Hooks
 
@@ -150,29 +149,6 @@ and a string key as `s<text>` so the two flavours can never collide in config.
 Instances are created lazily on first access, so declaring a key that nothing
 ever touches costs nothing.
 
-### Inheritance is opt-in per setting
-
-A parent link lives on the *instance*, but only settings flagged `inheritable`
-consult it:
-
-```cpp
-store.SetParent("Model", child_key, parent_key);   // rejects cycle-closing links
-store.Revert("Model", child_key, "intensity");     // drop one override
-store.RevertAll("Model", child_key);               // drop all inheritable overrides
-```
-
-Reading resolves by walking the parent chain to the first override, then
-falling back to the schema default. The walk is bounded, missing parents simply
-end the chain, and a cycle can never be created in the first place.
-
-A **non-inheritable** setting in the same section ignores the chain entirely:
-it reads its own value or its declared default, and it renders with no dimming,
-no source tag and no revert affordance even when the instance has a parent.
-
-Writing through either the UI or the programmatic API marks an override and
-invalidates every non-overriding descendant, so propagation is visible in the
-same frame.
-
 ### Persistence
 
 ```cpp
@@ -203,10 +179,9 @@ schema traversal and supplied instance keys to erase every persistable setting
 key in the block, regardless of whether the setting is overridden in the live
 store. It also erases the version key. Missing keys are a silent no-op.
 
-Guarantees: only `persist` settings are written; a non-inheritable setting is
-written unconditionally; an inheritable one is written only when overridden;
-unknown keys and unknown settings are skipped rather than failing; an instanced
-setting left unset stays at its declared default.
+Guarantees: only `persist` settings are written; unknown keys and unknown
+settings are skipped rather than failing; an instanced setting left unset
+stays at its declared default.
 
 **Who knows the instance keys.** `Load` and `Delete` need them, and `Save` can
 take them when it should write only a selected instance set. The reader and
@@ -245,10 +220,9 @@ still supply instance keys to `Load` and `Delete`.
 
 ## Worked example: per-pass settings
 
-The application has N effect passes, arranged in a chain where pass 0 is the
-root and each later pass may either define its own value or follow its
-predecessor. That is *entirely* the application's vocabulary — the framework
-only sees one instanced section, integer keys, and parent links.
+The application has N effect passes, each owning its own values. ctl sees
+one instanced section and integer keys, and nothing else: a pass's values
+are its own and survive any reorder of the tabs.
 
 ```cpp
 // --- Declaration, once at startup -----------------------------------------
@@ -261,21 +235,13 @@ pass.Add<BoolSetting>("enabled", "Enabled", true);
 
 pass.Add<FloatSetting>("intensity", "Intensity", 1.0f)
     .Range(0.0f, 2.0f)
-    .Tooltip("Blend weight for this pass.")
-    .Inheritable();
+    .Tooltip("Blend weight for this pass.");
 
 pass.Add<FloatSetting>("working_scale", "Working scale", 1.0f)
-    .Range(0.1f, 1.0f)
-    .Inheritable();
+    .Range(0.1f, 1.0f);
 
-// Deliberately NOT inheritable: the upsample kernel is a per-pass property
-// that must be chosen explicitly, never silently copied from the previous
-// pass.
 pass.Add<EnumSetting>("upsample", "Upsample kernel", 0)
     .Items(kUpsampleNames, kUpsampleTooltips, kUpsampleCount);
-
-// A hook that draws a "follow previous pass" toggle right above `intensity`.
-pass.AddHookBefore("intensity", "FollowRow", &DrawFollowRow);
 
 std::string error;
 schema.Build(&error);
@@ -285,45 +251,11 @@ ValueStore store(schema);
 ```
 
 ```cpp
-// --- Parent links ---------------------------------------------------------
-
-// Pass 0 is the root: no parent. Passes 1..N-1 follow their predecessor.
-for (int i = 1; i < pass_count; ++i) {
-  store.SetParent("Pass", InstanceKey::FromInt(i), InstanceKey::FromInt(i - 1));
-}
-```
-
-```cpp
-// --- The "follow previous pass" toggle, drawn by the hook -----------------
-
-bool DrawFollowRow(void* ctx, const InstanceKey& key, bool& changed) {
-  auto* app = static_cast<App*>(ctx);
-
-  bool follows = app->store.ParentOf("Pass", key, nullptr);
-  if (key == InstanceKey::FromInt(0)) {
-    ImGui::TextDisabled("(root pass)");
-    return false;
-  }
-  if (ImGui::Checkbox("Follow previous pass", &follows)) {
-    if (follows) {
-      app->store.SetParent("Pass", key, ctl::InstanceKey::FromInt(
-                                            key.int_value() - 1));
-    } else {
-      app->store.ClearParent("Pass", key);
-    }
-    changed = true;
-  }
-  return changed;
-}
-```
-
-```cpp
 // --- Per frame ------------------------------------------------------------
 
 void DrawPassSection(App& app, int pass_index) {
   const InstanceKey key = InstanceKey::FromInt(pass_index);
 
-  // The hook above owns the parent link, so the drawer does not need to.
   bool changed = false;
   DrawSection(app.store, "Pass", key, changed);
   if (changed) app.MarkDirty();
@@ -335,31 +267,14 @@ void DrawPassSection(App& app, int pass_index) {
 
 const float intensity =
     app.store.Read("Pass", InstanceKey::FromInt(pass_index), "intensity").as_float;
-// If pass 3 follows pass 2, and pass 2 follows pass 1, and only pass 1 set
-// `intensity`, all three read pass 1's value. If the user ticks pass 3 off
-// "follow", pass 3 keeps whatever it was showing until it is edited.
+// Each pass reads its own value. Reordering the tabs permutes which id sits
+// at which position; it does not move a value from one pass to another.
 
 // Programmatic write, e.g. from a sampler that auto-tunes:
 app.store.Write("Pass", InstanceKey::FromInt(pass_index), "intensity",
                 Value::Float(measured), /*from_user=*/false);
-// Only this one setting is now marked overridden on this instance; the
-// non-inheritable `upsample` is untouched, and descendants that do not
-// override `intensity` see the new value on their next read.
+// The value is now that pass's own; no other pass sees it.
 ```
-
-What the user sees, for an inheriting pass:
-
-* `intensity` and `working_scale` are dimmed and show the inherited value; no
-  revert button appears until the user overrides them, after which the row
-  gains a small revert affordance.
-* `upsample` and `enabled` render exactly as they would in a section with no
-  inheritance at all.
-* The `Follow previous pass` checkbox sits between the header and `intensity`,
-  because that is where it was declared.
-
-Every one of those behaviours comes from the `inheritable` flag on the
-declaration. There is no per-pass code, and no notion of "pass" anywhere in
-`ctl/`.
 
 ## Extending
 

@@ -89,10 +89,7 @@ bool FloatSetting::Draw(const SettingContext& ctx, const Value& resolved,
   bool changed = false;
   {
     const std::string id = std::string("##") + meta_.name;
-    // Interactive even while inheriting: editing creates an override on this
-    // instance, and the revert affordance appears on the next frame. This
-    // matches the natural cascading-form expectation (edit here means
-    // "override here"), instead of forcing the user to click R first.
+    // Editing writes the value on this instance.
     changed = ImGui::SliderFloat(id.c_str(), &display, lo_, hi_, format_.c_str());
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -193,7 +190,7 @@ bool IntSetting::Draw(const SettingContext& ctx, const Value& resolved,
   bool changed = false;
   {
     const std::string id = std::string("##") + meta_.name;
-    // Interactive even while inheriting: editing creates an override.
+    // Editing writes the value on this instance.
     changed = ImGui::SliderInt(id.c_str(), &display, lo_, hi_);
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -276,7 +273,7 @@ bool BoolSetting::Draw(const SettingContext& ctx, const Value& resolved,
   bool changed = false;
   {
     const std::string id = std::string("##") + meta_.name;
-    // Interactive even while inheriting: toggling creates an override.
+    // Toggling writes the value on this instance.
     changed = ImGui::Checkbox(id.c_str(), &display);
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -368,7 +365,7 @@ bool StringSetting::Draw(const SettingContext& ctx, const Value& resolved,
     const size_t capacity = max_length_ > 0 ? max_length_ : 255;
     std::vector<char> buffer(capacity + 1, '\0');
     std::snprintf(buffer.data(), buffer.size(), "%s", text.c_str());
-    // Interactive even while inheriting: typing creates an override.
+    // Typing writes the value on this instance.
     edited = ImGui::InputText(id.c_str(), buffer.data(), buffer.size());
     if (edited) text.assign(buffer.data());
   }
@@ -518,7 +515,7 @@ bool EnumSetting::Draw(const SettingContext& ctx, const Value& resolved,
   bool changed = false;
   ImGui::SetNextItemWidth(-1.0f);
 
-  // Interactive even while inheriting: selecting creates an override.
+  // Selecting writes the value on this instance.
   {
     if (meta_.enum_presentation == EnumPresentation::GroupButtons) {
       std::vector<const char*> labels;

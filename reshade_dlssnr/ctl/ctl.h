@@ -8,7 +8,7 @@
 // Layout:
 //   ctl/types.h    SettingBase, metadata, type-erased value storage
 //   ctl/schema.h   Section, Schema, Hook
-//   ctl/values.h   Instance, InstanceSet, inherited/overridden state
+//   ctl/values.h   Instance, InstanceSet, ValueStore
 //   ctl/registry.h value-type registry (add a type without touching the core)
 //   ctl/serialize.h versioned save/load/delete persistence
 //   ctl/draw.h     ImGui rendering of a schema
@@ -19,7 +19,7 @@
 //   RegisterColorSetting(registry);       // one extra line per new type
 //   ctl::Schema schema;
 //   auto& section = schema.AddSection("Model", ctl::SectionKind::Instanced);
-//   section.Add<ctl::FloatSetting>("intensity", ...).SetInheritable(true);
+//   section.Add<ctl::FloatSetting>("intensity", ...).Range(0.0f, 2.0f);
 //   schema.Build();                       // freeze, validate, index
 //
 // See ctl/README.md for the worked per-pass example.

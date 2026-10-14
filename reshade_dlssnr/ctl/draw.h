@@ -1,9 +1,7 @@
 // ctl rendering: draw a schema into an ImGui window.
 //
 // Rendering follows declaration order exactly. Hooks are drawn inline at
-// their anchor position. Inherited-vs-overridden decoration is applied only
-// to settings that opted into inheritance; every other setting draws exactly
-// as it would in a section with no parent at all.
+// their anchor position.
 
 #pragma once
 

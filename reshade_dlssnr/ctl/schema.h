@@ -134,7 +134,7 @@ class Section {
   // Declare a setting. Returns a reference so the whole declaration stays a
   // single expression, e.g.
   //   section.Add<FloatSetting>("intensity", "Intensity")
-  //          .Tooltip("...").Range(0, 2).Inheritable();
+  //          .Tooltip("...").Range(0, 2);
   template <typename T, typename... Args>
   T& Add(Args&&... args) {
     auto setting = std::make_unique<T>(std::forward<Args>(args)...);

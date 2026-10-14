@@ -4,8 +4,7 @@
 //   - only persist-flagged settings are written;
 //   - a single-instance section is written once, outside any instance block;
 //   - an instanced section is written under its instance key;
-//   - a non-inheritable setting is written unconditionally;
-//   - an inheritable setting is written only when the instance overrides it;
+//   - every persistable setting is written once per instance;
 //   - an unknown key or an unknown setting is skipped, not an error;
 //   - the format carries a version, and an older reader ignores keys it does
 //     not know rather than failing.

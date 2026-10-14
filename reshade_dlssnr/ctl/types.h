@@ -154,8 +154,7 @@ class Setting {
   const void* visible_context() const { return visible_context_; }
 
   // Draw one row. `resolved` is what the user should see; `ctx` carries the
-  // inherited/overridden state and the write/revert affordances. Returns
-  // true when the user changed the value.
+  // enabled flag. Returns true when the user changed the value.
   virtual bool Draw(const SettingContext& ctx, const Value& resolved,
                     Value& out) const = 0;
 

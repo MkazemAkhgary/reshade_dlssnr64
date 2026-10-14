@@ -1,5 +1,4 @@
-// ctl instance values: one value set per instance, plus the inheritance
-// state that decides whether a value is owned or resolved from a parent.
+// ctl instance values: one value set per instance, owned outright.
 
 #pragma once
 

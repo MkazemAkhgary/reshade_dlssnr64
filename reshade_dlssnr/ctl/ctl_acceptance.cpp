@@ -2,9 +2,9 @@
 //
 // Links the real ctl sources, including the built-in setting types and their
 // ImGui rows, and asserts every acceptance criterion from the requirements
-// document. Rules about inheritance, persistence, registration and access are
-// proven against the framework's actual implementation rather than a
-// re-description of it.
+// document. Rules about persistence, registration and access are proven
+// against the framework's actual implementation rather than a re-description
+// of it.
 //
 // Build and run: bash build_ctl_acceptance.sh
 
@@ -167,14 +167,14 @@ struct Fixture {
         .MaxLength(8);
 
     // Section 2: the instanced section, standing in for per-pass settings.
-    // It mixes an inheritable setting with a non-inheritable one on purpose.
+    // Every setting is owned by its instance; the store keeps no parent links.
     Section& model = schema.AddSection("Model", SectionKind::Instanced);
     model.Add<FloatSetting>("intensity", "Intensity", 1.0f)
         .Range(0.0f, 2.0f)
         .Tooltip("How strongly the model edits the image.");
     model.Add<FloatSetting>("working_scale", "Working Scale", 1.0f)
         .Range(0.1f, 1.0f);
-    // Non-inheritable: must stay owned per instance and never decorate.
+    // The upsample mode is a per-pass choice, never shared.
     model.Add<EnumSetting>("upsample", "Upsample Mode", 1)
         .Items(kUpsampleNames, nullptr, 2);
     // Never written to config.
@@ -480,12 +480,12 @@ int main() {
   }
 
   // ------------------------------------------------------------------------
-  std::printf("\n[19] Persistence: non-inheritable is always written\n");
+  std::printf("\n[19] Persistence: a written setting is always saved\n");
   {
     Fixture fx;
     MemStore mem;
     const InstanceKey k1 = InstanceKey::FromInt(1);
-    // `upsample` is never written by the user, so it holds only the default.
+    // `upsample` holds only the default because nothing wrote it.
     fx.store.Write("Model", k1, "intensity", Value::Float(1.1f));
     Save(fx.store, mem);
 
@@ -497,7 +497,7 @@ int main() {
       }
     }
     Check(upsample_present,
-          "a non-inheritable setting is written even when it only holds the default");
+          "a setting is written even when it only holds the default");
   }
 
   // ------------------------------------------------------------------------
@@ -561,7 +561,7 @@ int main() {
     Check(ReadFloat(restored, "Model", k1, "intensity") == 1.4f,
           "child override round-trips");
     Check(restored.Read("Model", k1, "upsample").as_int == 0,
-          "non-inheritable value round-trips");
+          "a written value round-trips");
     Check(restored.Read("Preferences", k0, "preset").as_int == 2,
           "single-instance value round-trips");
     Check(true, "unknown keys were skipped without error");
@@ -921,13 +921,12 @@ int main() {
     // A per-consumer view reads the store with Read() and hands the value to
     // the runtime; the drawer resolves the same value to draw the row. If
     // those two ever disagreed, a setting would render one thing and run
-    // another. This pins them together: after an inheritance-only override,
-    // Read() returns the parent's value with no UI involved.
+    // another. This pins them together: Read() returns exactly what the
+    // drawer would resolve, with no UI involved.
     Schema schema;
     Section& model = schema.AddSection("Model", SectionKind::Instanced);
     model.Add<FloatSetting>("intensity", "Intensity", 1.0f)
-        .Range(0.0f, 2.0f)
-        .Inheritable();
+        .Range(0.0f, 2.0f);
     model.Add<BoolSetting>("toggle", "Toggle", true);
 
     std::string err;
@@ -950,54 +949,8 @@ int main() {
           "a boolean written on one instance stays on that instance");
   }
 
-  std::printf("\n[36] Pass order relinks inheritance without moving stable-key values\n");
-  {
-    Schema schema;
-    Section& pass = schema.AddSection("Pass", SectionKind::Instanced);
-    pass.Add<FloatSetting>("intensity", "Intensity", 1.0f)
-        .Range(0.0f, 2.0f)
-        .Inheritable();
-    pass.Add<BoolSetting>("local", "Local", true);
-
-    std::string err;
-    Check(schema.Build(&err), "the pass-order test schema builds");
-
-    ValueStore store(schema);
-    const reshade_dlssnr::feature::pass::PassId first = 17;
-    const reshade_dlssnr::feature::pass::PassId second = 83;
-    const reshade_dlssnr::feature::pass::PassId third = 401;
-    const reshade_dlssnr::feature::pass::PassOrder order = {first, second, third};
-
-    store.Write("Pass", reshade_dlssnr::feature::pass::PassKey(first), "intensity",
-                Value::Float(1.5f), true);
-    store.Write("Pass", reshade_dlssnr::feature::pass::PassKey(first), "local",
-                Value::Bool(false), true);
-    store.Write("Pass", reshade_dlssnr::feature::pass::PassKey(second), "local",
-                Value::Bool(true), true);
-
-    reshade_dlssnr::feature::pass::ApplyOrder(store, order);
-    Check(store.Read("Pass", reshade_dlssnr::feature::pass::PassKey(second), "intensity").as_float == 1.5f,
-          "the second pass inherits from the first stable id");
-    Check(store.Read("Pass", reshade_dlssnr::feature::pass::PassKey(third), "intensity").as_float == 1.5f,
-          "inheritance continues through the ordered chain");
-    Check(store.Read("Pass", reshade_dlssnr::feature::pass::PassKey(second), "local").as_bool,
-          "non-inheritable values remain local despite the parent link");
-
-    const reshade_dlssnr::feature::pass::PassOrder reordered = {second, third, first};
-    reshade_dlssnr::feature::pass::ApplyOrder(store, reordered);
-    Check(store.Read("Pass", reshade_dlssnr::feature::pass::PassKey(second), "intensity").as_float == 1.0f,
-          "the new root has its default after its stale parent is cleared");
-    Check(store.Read("Pass", reshade_dlssnr::feature::pass::PassKey(first), "intensity").as_float == 1.5f,
-          "the first id keeps its own override after reordering");
-    Check(store.Read("Pass", reshade_dlssnr::feature::pass::PassKey(third), "intensity").as_float == 1.0f,
-          "reparenting invalidates the child's resolved-value cache");
-    Check(!store.Read("Pass", reshade_dlssnr::feature::pass::PassKey(first), "local").as_bool &&
-              store.Read("Pass", reshade_dlssnr::feature::pass::PassKey(second), "local").as_bool,
-          "reordering changes parents, not the values stored under each id");
-  }
-
   // ------------------------------------------------------------------------
-  std::printf("\n[37] ResetToDefaults clears the whole store without removing instances or parents\n");
+  std::printf("\n[37] ResetToDefaults clears the whole store without removing instances\n");
   {
     Fixture fx;
     const InstanceKey shared = InstanceKey::FromInt(0);
@@ -1057,7 +1010,7 @@ int main() {
           "reads fall back to declared defaults throughout the preserved instances");
     Check(ReadFloat(fx.store, "Model", child, "working_scale") == 1.0f &&
               fx.store.Read("Model", grandchild, "upsample").as_int == 1,
-          "non-inheritable reads also fall back to declared defaults");
+          "reads also fall back to declared defaults");
   }
 
   // ------------------------------------------------------------------------
@@ -1070,7 +1023,6 @@ int main() {
     const InstanceKey other = InstanceKey::FromInt(612);
     const InstanceKeyList keys = {parent, child};
     const InstanceKeyList other_keys = {other};
-    fx.store.SetParent("Model", child, parent);
     fx.store.Write("Preferences", InstanceKey::FromInt(0), "note",
                    Value::String("target"));
     fx.store.Write("Model", parent, "intensity", Value::Float(1.6f));

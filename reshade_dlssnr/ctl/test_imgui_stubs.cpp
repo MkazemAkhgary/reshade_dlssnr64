@@ -1,7 +1,7 @@
 // Inert ImGui entry points for the headless acceptance harness.
 //
-// The acceptance criteria are about values, inheritance, persistence and
-// access -- none of which need a live ImGui context. But the built-in setting
+// The acceptance criteria are about values, persistence and access -- none of
+// which need a live ImGui context. But the built-in setting
 // rows (builtin_settings.cpp) and the drawer (draw.cpp) are the real
 // implementations, and they call into ImGui. Linking the whole of ImGui pulls
 // in a second copy of the widget layer and collides with ui_widgets.cpp, so

@@ -1,7 +1,7 @@
 // Minimal ImGui stand-ins for the headless acceptance harness.
 //
 // The built-in setting rows and the drawer call into ImGui. The acceptance
-// criteria are about values, inheritance, persistence and access, none of
+// criteria are about values, persistence and access, none of
 // which need a live ImGui context, so this file provides inert definitions of
 // the handful of entry points the linked translation units reference. That
 // keeps the harness linkable without dragging in the whole of ImGui or
@@ -30,8 +30,8 @@ bool PersistentSubHeader(const char*, bool&, bool&, const char*,
   return false;
 }
 
-bool DrawFloatRow(uint32_t, const char*, const char*, const char*, float*,
-                  bool*, float, float, float, float) {
+bool DrawFloatRow(const char*, const char*, const char*, float*,
+                  float, float, float) {
   return false;
 }
 
