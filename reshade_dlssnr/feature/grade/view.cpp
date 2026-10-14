@@ -1,9 +1,8 @@
 // Grade view implementation. See view.h.
 //
-// Every read goes through ctl::ValueStore::Read, which applies inheritance and
-// returns the same Value the drawer would have resolved. The runtime therefore
-// sees exactly what the user sees, with no second copy of the grade to keep in
-// step.
+// Every read goes through ctl::ValueStore::Read, which returns the same Value
+// the drawer would have resolved. The runtime therefore sees exactly what the
+// user sees, with no second copy of the grade to keep in step.
 
 #include "feature/grade/view.h"
 

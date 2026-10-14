@@ -162,9 +162,8 @@ void RegisterPassSchema(ctl::Schema& schema) {
                "Backbuffer. Execution order is grouped by stage; passes "
                "within each stage follow their pass-tab order.");
 
-  // The tab label. Not inheritable: a pass shows its own name, never its
-  // predecessor's, and inheriting it would rename a pass the user did not
-  // touch. The cap matches the buffer the tab bar formats into.
+  // The tab label. A pass shows its own name; the cap matches the buffer the
+  // tab bar formats into.
   pass.Add<ctl::StringSetting>(kCustomName, "Name", std::string())
       .MaxLength(63)
       .Tooltip("Label shown on this pass's tab. Empty shows the positional "
@@ -202,8 +201,7 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .EnableWhen(&AutoMaskOn)
       .Category(kCatModel)
       .Tooltip("Controls how strongly the model applies its skin-specific "
-               "edits. Disabled when the model's automatic masking option is "
-               "off or this value is inherited.");
+               "edits. Disabled when the model's automatic masking option is off.");
   pass.Add<ctl::BoolSetting>(kUiCorrection, "UI Correction", true)
       .Category(kCatModel)
       .Tooltip("Reduce the model's edits where it detects UI elements.");

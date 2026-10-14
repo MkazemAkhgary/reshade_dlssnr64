@@ -4,8 +4,8 @@
 // value. This is the one place that translates between them for the Pass
 // section, so the setting names appear once and the runtime never spells one.
 //
-// A view reads; it does not write. Inheritance is applied by the store, so a
-// value read here is exactly the value the row would have drawn.
+// A view reads; it does not write. What a pass owns is what it runs at, so a
+// value read here is the value the row draws.
 //
 // The two model-boundary grades are separate sections and are read by
 // feature/grade/view.cpp; this view covers the Pass section itself.

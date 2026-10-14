@@ -219,7 +219,6 @@
     <ClCompile Include="feature\hdr\view.cpp" />
     <ClCompile Include="feature\importance_mask\schema.cpp" />
     <ClCompile Include="feature\importance_mask\view.cpp" />
-    <ClCompile Include="feature\pass\order.cpp" />
     <ClCompile Include="feature\pass\schema.cpp" />
     <ClCompile Include="feature\pass\view.cpp" />
     <ClCompile Include="feature\preferences\schema.cpp" />
@@ -293,7 +292,6 @@
     <ClInclude Include="feature\hdr\view.h" />
     <ClInclude Include="feature\importance_mask\settings.h" />
     <ClInclude Include="feature\importance_mask\view.h" />
-    <ClInclude Include="feature\pass\order.h" />
     <ClInclude Include="feature\pass\settings.h" />
     <ClInclude Include="feature\pass\ui.h" />
     <ClInclude Include="feature\pass\view.h" />
