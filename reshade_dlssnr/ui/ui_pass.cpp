@@ -6,8 +6,8 @@
 // that is genuinely about the pass array rather than about settings rows: the
 // toolbar that permutes and resizes it, the deferred mutation queue those
 // buttons feed, and the profile reset. The overlay applies the queue at the
-// top of the next frame, because the buttons are drawn inside the tab-bar loop
-// and permuting the array mid-loop would leave the current tab half-drawn.
+// top of the next frame so pass-order changes cannot invalidate the current
+// frame's tab layout.
 
 #include "ui/ui_sections.h"
 
@@ -63,10 +63,6 @@ void ResetPassProfile(feature::pass::PassId id) {
 
 }  // namespace
 
-float PassToolbarWidth() {
-  return kResetButtonWidth * 5.0f + ImGui::GetStyle().ItemSpacing.x * 4.0f;
-}
-
 // Draws the five pass-array controls: move left, move right, reset, add,
 // remove. All of them act on tab POSITIONS, and every mutation is deferred to
 // the next frame (see the globals in the header) because the toolbar is drawn
@@ -84,10 +80,7 @@ void DrawPassToolbar(Settings& settings, bool& changed) {
           ? 0
           : static_cast<int>(std::distance(settings.pass_order.begin(), active_it));
 
-  // The caller has already reserved PassToolbarWidth() on this row and placed
-  // the cursor here, so the controls simply flow left to right.
-
-  // Stable ids via "##": the visible glyph stays fixed while the label text
+    // Stable ids via "##": the visible glyph stays fixed while the label text
   // (which never changes here) cannot disturb widget identity.
   const bool can_move_left = position > 0;
   WithDisabled(!can_move_left, [&] {

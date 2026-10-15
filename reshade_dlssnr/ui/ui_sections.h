@@ -7,10 +7,9 @@ namespace reshade_dlssnr {
 
 struct Settings;
 
-// Set by the pass-body move buttons, applied at the top of the next frame by
-// DrawOverlay. Applied out of line because the buttons are drawn inside the
-// tab bar loop, and permuting the array mid-loop leaves the current tab's
-// body half-drawn for one frame.
+// Set by the pass-management toolbar, applied at the top of the next frame
+// by DrawOverlay so pass-order changes cannot invalidate the current frame's
+// tab layout.
 enum class PendingMove { None, Left, Right };
 extern PendingMove g_pending_move;
 extern int g_pending_move_index;
@@ -18,12 +17,10 @@ extern int g_pending_move_index;
 enum class PendingPassAction { None, Add, Remove };
 extern PendingPassAction g_pending_pass_action;
 
-// Pass-management toolbar drawn on the tab-bar row, to the right of the tabs.
-// It acts on the selected pass and lives outside the tab items so tab
-// hit-testing can never swallow the controls. `PassToolbarWidth()` reports the
-// horizontal space the caller must reserve before laying out the tab bar.
+// Pass-management toolbar drawn on its own row after the wrapped pass tabs.
+// Actions are deferred until the next frame so pass-order changes cannot
+// invalidate the active frame's tab layout.
 void DrawPassToolbar(Settings& settings, bool& changed);
-float PassToolbarWidth();
 
 bool AnyPassUsesHdrInjection(const Settings& settings);
 void DrawStatusSection(Settings& settings, bool& changed);

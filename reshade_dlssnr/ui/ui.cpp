@@ -429,9 +429,9 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
 }
 
 // ---------------------------------------------------------------------------
-// The pass section's body. The section header and the tab row are drawn here
-// rather than by the framework, because the tab bar needs a reserved child
-// column so tabs can never render or be hit-tested under the toolbar.
+// The pass section's body. The section header and tab row are drawn here
+// rather than by the generic section renderer because pass selection and
+// toolbar actions operate on the shared pass order and active-pass state.
 // ---------------------------------------------------------------------------
 
 namespace {
@@ -510,77 +510,47 @@ void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
     tabs.push_back(std::move(item));
   }
 
-  // The first row reserves the right-hand toolbar. Additional rows span the
-  // full section width, so later tabs remain visible and clickable.
-  const float toolbar_width = PassToolbarWidth();
+  // Draw tabs and toolbar in the parent window using normal ImGui item flow.
+  // Child windows must not overlap the item hit regions: even a visually
+  // transparent child can intercept clicks from controls beneath it.
   const float row_width = ImGui::GetContentRegionAvail().x;
-  const float tabs_column_width = std::max(120.0f, row_width - toolbar_width);
   const float spacing_x = ImGui::GetStyle().ItemSpacing.x;
-  const float spacing_y = ImGui::GetStyle().ItemSpacing.y;
-  const float row_height = ImGui::GetFrameHeight();
-  int tab_rows = 1;
+  const ImVec4 active_color = ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive);
+  const ImVec4 hovered_color = ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered);
+  const ImVec4 inactive_color = ImGui::GetStyleColorVec4(ImGuiCol_Button);
+  ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+
   float line_used = 0.0f;
-  float line_available = tabs_column_width;
   for (const PassTabItem& tab : tabs) {
-    const float required = tab.width + (line_used > 0.0f ? spacing_x : 0.0f);
-    if (line_used > 0.0f && line_used + required > line_available) {
-      ++tab_rows;
-      line_used = 0.0f;
-      line_available = row_width;
+    const float button_width = std::min(tab.width, row_width);
+    if (line_used > 0.0f &&
+        line_used + spacing_x + button_width <= row_width) {
+      ImGui::SameLine();
+      line_used += spacing_x + button_width;
+    } else {
+      line_used = button_width;
     }
-    line_used += tab.width + (line_used > 0.0f ? spacing_x : 0.0f);
-  }
-  const float tabs_row_height =
-      static_cast<float>(tab_rows) * row_height +
-      static_cast<float>(tab_rows) * spacing_y;
-  const ImVec2 tabs_row_pos = ImGui::GetCursorScreenPos();
 
-  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-  if (ImGui::BeginChild("##pass_tabs_column", ImVec2(row_width, tabs_row_height),
-                        false, ImGuiWindowFlags_NoScrollbar |
-                                   ImGuiWindowFlags_NoScrollWithMouse)) {
-    const ImVec4 active_color = ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive);
-    const ImVec4 hovered_color = ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered);
-    const ImVec4 inactive_color = ImGui::GetStyleColorVec4(ImGuiCol_Button);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-
-    line_used = 0.0f;
-    line_available = tabs_column_width;
-    for (const PassTabItem& tab : tabs) {
-      const float required = tab.width + (line_used > 0.0f ? spacing_x : 0.0f);
-      if (line_used > 0.0f && line_used + required > line_available) {
-        ImGui::NewLine();
-        line_used = 0.0f;
-        line_available = row_width;
-      }
-      if (line_used > 0.0f) {
-        ImGui::SameLine();
-        line_used += spacing_x;
-      }
-      const bool is_active = settings.active_pass_id == tab.id;
-      ImGui::PushStyleColor(ImGuiCol_Button,
-                            is_active ? active_color : inactive_color);
-      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hovered_color);
-      ImGui::PushStyleColor(ImGuiCol_ButtonActive, active_color);
-      if (ImGui::Button(tab.label.c_str(), ImVec2(tab.width, 0.0f))) {
-        settings.active_pass_id = tab.id;
-      }
-      if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        Tip("%s", tab.tooltip.c_str());
-      }
-      ImGui::PopStyleColor(3);
-      line_used += tab.width;
+    const bool is_active = settings.active_pass_id == tab.id;
+    ImGui::PushID(static_cast<int>(tab.id));
+    ImGui::PushStyleColor(ImGuiCol_Button,
+                          is_active ? active_color : inactive_color);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hovered_color);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, active_color);
+    if (ImGui::Button(tab.label.c_str(), ImVec2(button_width, 0.0f))) {
+      settings.active_pass_id = tab.id;
     }
-    ImGui::PopStyleVar();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      Tip("%s", tab.tooltip.c_str());
+    }
+    ImGui::PopStyleColor(3);
+    ImGui::PopID();
   }
-  ImGui::EndChild();
-  ImGui::PopStyleVar();
 
-  ImGui::SetCursorScreenPos(ImVec2(tabs_row_pos.x + tabs_column_width + spacing_x,
-                                   tabs_row_pos.y));
+  // Explicitly end the tab layout before emitting the toolbar row.
+  ImGui::NewLine();
   DrawPassToolbar(settings, changed);
-  ImGui::SetCursorScreenPos(ImVec2(tabs_row_pos.x,
-                                   tabs_row_pos.y + tabs_row_height));
+  ImGui::PopStyleVar();
 
   const auto active_it = std::find(settings.pass_order.begin(),
                                    settings.pass_order.end(),
