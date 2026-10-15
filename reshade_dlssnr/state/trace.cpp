@@ -249,8 +249,8 @@ Snapshot BuildSnapshot(const Settings& settings) {
   Append(snap, "hdr.layer.local.midtone", FloatText(local.midtone));
   Append(snap, "hdr.layer.local.block_size_px", FloatText(local.block_size_px));
   Append(snap, "hdr.layer.local.sample_count", std::to_string(local.sample_count));
-  Append(snap, "hdr.layer.local.unexpose_on_model_output",
-         BoolText(local.unexpose_on_model_output));
+  Append(snap, "hdr.layer.local.restore_global_exposure",
+         BoolText(local.restore_global_exposure));
   Append(snap, "hdr_bt2446_k1", FloatText(hdr.bt2446_k1));
   Append(snap, "hdr_bt2446_k2", FloatText(hdr.bt2446_k2));
   Append(snap, "hdr_bt2446_k3", FloatText(hdr.bt2446_k3));

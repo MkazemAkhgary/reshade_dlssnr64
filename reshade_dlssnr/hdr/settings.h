@@ -59,17 +59,9 @@ struct LocalExposureLayerSettings {
   // Number of neighborhood taps used to estimate the local log-luminance base.
   // More taps fill spatial gaps within the same radius, at additional GPU cost.
   int sample_count = 24;
-  // Removes the local exposure lift from the model output before the grade.
-  bool unexpose_on_model_output = false;
-  // Unexpose color response. Only used when unexpose_on_model_output is on.
-  // See UnexposeNatural in shaders/common/color.hlsli.
-  //
-  // naturalness: how much extra chroma reduction per unit of lightness
-  //   below reference_l. 0 reproduces the plain linear divide exactly.
-  // reference_l: OKLab lightness where the compensation is exactly 1.
-  //   Below it chroma is reduced, above it is boosted slightly.
-  float unexpose_naturalness = 0.2f;
-  float unexpose_reference_l = 0.5f;
+  // Restores the global exposure after model inference by applying the
+  // inverse local exposure multiplier in linear light.
+  bool restore_global_exposure = false;
 };
 
 // Encoding code consumed by the shaders: 0 sRGB, 1 scRGB, 2 HDR10.

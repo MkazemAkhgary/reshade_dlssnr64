@@ -7,7 +7,7 @@
 #include "common/grade.hlsli"
 
 Texture2D<float4> gSource : register(t0);
-// Only sampled when kUnexposeFlag is set. The caller binds gSource otherwise
+// Only sampled when kRestoreExposureFlag is set. The caller binds gSource otherwise
 // so the fixed kSrvCount descriptor contract still holds.
 Texture2D<float>  gExposure : register(t1);
 RWTexture2D<float4> gOutput : register(u0);
@@ -68,17 +68,12 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     float3 lin = DecodeSource(src.rgb);
 
-    // Unexpose before the grade: grading is nonlinear, so divide-then-grade
-    // is not equivalent to grade-then-divide. The unexpose itself is done in
-    // OKLab so the Hunt effect (perceived saturation falls with luminance)
-    // is reproduced, and the unlifted image reads as a naturally darker
-    // scene rather than the same scene with a linear brightness knob turned
-    // down. See UnexposeNatural in common/color.hlsli.
-    if (kUnexposeFlag > 0.5) {
-        const float local_scale =
-            max(gExposure.SampleLevel(s0, uv, 0), 1e-6);
-        lin = UnexposeNatural(lin, local_scale,
-                            kUnexposeNaturalness, kUnexposeReferenceL);
+    // Restore the global exposure before grading. The map contains the local
+    // multiplier applied to the model input, so its inverse is a linear-light divide.
+    if (kRestoreExposureFlag > 0.5) {
+        float local_scale = gExposure.SampleLevel(s0, uv, 0);
+        local_scale = max(local_scale, 1e-6);
+        lin /= local_scale;
     }
 
     float3 graded = GradeLinearFwd(lin);

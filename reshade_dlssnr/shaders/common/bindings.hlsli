@@ -15,7 +15,7 @@
 #define kGradeShadows    grade.Shadows
 #define kGradeHighlights grade.Highlights
 #define kGradeFormat     grade.Format
-#define kUnexposeFlag    grade.Unexpose
+#define kRestoreExposureFlag grade.RestoreExposure
 
 // Residual edit
 #define kEditStrength     residual.EditStrength
@@ -44,8 +44,6 @@
 #define kEasuCon2     easu.Con2
 #define kRcasEnabled  rcas.Enabled
 #define kRcasStrength rcas.Strength
-#define kUnexposeNaturalness  rcas.UnexposeNaturalness
-#define kUnexposeReferenceL   rcas.UnexposeReferenceL
 
 // Dynamic shader parameter table
 #define kLumaStrength    shader.Params0.x

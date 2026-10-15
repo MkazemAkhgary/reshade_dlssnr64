@@ -39,7 +39,7 @@ DLSSNR_BLOCK(GradeBlock)
     float Shadows;
     float Highlights;
     float Format;
-    float Unexpose;
+    float RestoreExposure;
 };
 
 DLSSNR_BLOCK(ResidualBlock)
@@ -94,12 +94,8 @@ DLSSNR_BLOCK(RcasBlock)
 {
     float Enabled;
     float Strength;
-    // Unexpose color response. These occupy the two slots previously
-    // named pad0/pad1; the byte layout of the block is unchanged, so the
-    // 256-byte ComputeConstants contract still holds. Used by
-    // UnexposeNatural in common/color.hlsli.
-    float UnexposeNaturalness;
-    float UnexposeReferenceL;
+    float Reserved0;
+    float Reserved1;
 };
 
 DLSSNR_BLOCK(TemporalBlock)

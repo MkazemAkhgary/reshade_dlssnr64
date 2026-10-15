@@ -34,16 +34,9 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
   PassSession* self = run.session;
   if (self == nullptr) return PipelineStatus::Ok;
   if (target == nullptr) return PipelineStatus::Ok;
-  // Runs even when the grade is disabled; unexpose is a separate transform.
+  // Runs even when the grade is disabled; exposure restoration is separate.
   if (!grade.enabled && exposure_map == nullptr) return PipelineStatus::Ok;
   if (run.device == nullptr || run.codec == nullptr) return PipelineStatus::Ok;
-
-  // Unexpose Hunt-effect controls. They only affect the unexpose path,
-  // which is part of Local Exposure, so the values live with that layer.
-  const float unexpose_naturalness =
-      run.hdr_state.local_exposure.unexpose_naturalness;
-  const float unexpose_reference_l =
-      run.hdr_state.local_exposure.unexpose_reference_l;
 
   const D3D12_RESOURCE_DESC desc = target->GetDesc();
   const unsigned int width = static_cast<unsigned int>(desc.Width);
@@ -60,7 +53,7 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
           self->command_, list, run.codec, target,
           self->resources_.GetScratch(scratch_slot), width, height,
           GradeFormatCode(run, target, model_sdr_domain), grade,
-          exposure_map, unexpose_naturalness, unexpose_reference_l)) {
+          exposure_map)) {
     self->FailForStep("failed to apply the grade");
     return PipelineStatus::Fail;
   }
@@ -158,11 +151,11 @@ PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
 
   const GradeSettings& grade = run.grade_output;
 
-  // Unexpose is gated on the local exposure layer having produced a map this
-  // frame, and runs whether or not the grade itself is enabled.
+  // Restore global exposure using the local exposure map. This is independent
+  // of whether the Output Grade itself is enabled.
   ID3D12Resource* exposure_map = nullptr;
   if (run.hdr_state.enable && run.hdr_state.local_exposure.enabled &&
-      run.hdr_state.local_exposure.unexpose_on_model_output &&
+      run.hdr_state.local_exposure.restore_global_exposure &&
       run.hdr_uniforms_ready && run.hdr != nullptr &&
       run.hdr->ResolvedFormat() != HdrFormat::Sdr &&
       run.hdr_uniforms.local_exposure_strength > 0.0f &&
@@ -177,7 +170,7 @@ PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
               self->pass_id_, grade.luma, grade.chroma);
   }
   if (exposure_map != nullptr) {
-    TRACE_EVT(run.session, "unexpose_model_output pass=%u", self->pass_id_);
+    TRACE_EVT(run.session, "restore_global_exposure pass=%u", self->pass_id_);
   }
   return GradeInPlace(run, run.model_output, grade, kGradeScratchSlotB, true,
                       exposure_map);

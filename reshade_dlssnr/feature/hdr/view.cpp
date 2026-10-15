@@ -89,11 +89,8 @@ HdrSnapshotView Read(const ctl::ValueStore& store,
     l.midtone = store.Read(sec, key, kLocalMidtone).as_float;
     l.block_size_px = store.Read(sec, key, kLocalBlockSize).as_float;
     l.sample_count = store.Read(sec, key, kLocalSampleCount).as_int;
-    l.unexpose_on_model_output = store.Read(sec, key, kLocalUnexpose).as_bool;
-    l.unexpose_naturalness =
-        store.Read(sec, key, kLocalUnexposeNaturalness).as_float;
-    l.unexpose_reference_l =
-        store.Read(sec, key, kLocalUnexposeReferenceL).as_float;
+    l.restore_global_exposure =
+        store.Read(sec, key, kLocalRestoreGlobalExposure).as_bool;
   }
 
   return s;

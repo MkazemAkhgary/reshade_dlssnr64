@@ -41,12 +41,6 @@ bool TuningEnabled(const void*, const ctl::ValueStore& store,
   return store.Read(section, key, kGameBoundedTuning).as_bool;
 }
 
-bool UnexposeEnabled(const void*, const ctl::ValueStore& store,
-                     const ctl::InstanceKey& key,
-                     const std::string& section) {
-  return store.Read(section, key, kLocalUnexpose).as_bool;
-}
-
 }  // namespace
 
 }  // namespace hdr
@@ -214,29 +208,12 @@ void RegisterHdrSchema(ctl::Schema& schema) {
                "the same neighborhood and cost more GPU time; this does not "
                "increase the block radius.")
       .EnableWhen(&LayerEnabled, kLocalEnabled);
-  local.Add<ctl::BoolSetting>(kLocalUnexpose, "Unexpose on Model Output", false)
-      .Tooltip("Divide the model output by the local exposure scale before the "
-               "output grade, removing the lift this layer applied to the "
-               "model input. Runs at the same step as the Output Grade, "
-               "whether or not that grade is enabled.")
+  local.Add<ctl::BoolSetting>(kLocalRestoreGlobalExposure, "Restore Global Exposure", false)
+      .Tooltip("Apply the inverse local-exposure multiplier to the model output "
+               "in linear light before the Output Grade. This returns the "
+               "output to the global exposure scale and preserves chromaticity.")
       .EnableWhen(&LayerEnabled, kLocalEnabled);
-  local.Add<ctl::FloatSetting>(kLocalUnexposeNaturalness,
-                               "Unexpose Naturalness", 0.2f)
-      .Range(0.0f, 1.0f)
-      .Tooltip("How strongly the unexpose desaturates as the image darkens, "
-               "reproducing the Hunt effect (perceived saturation falls with "
-               "luminance). 0 restores the plain linear divide; 0.2 is subtle; "
-               "0.5 is a strong, film-like look.")
-      .EnableWhen(&UnexposeEnabled);
-  local.Add<ctl::FloatSetting>(kLocalUnexposeReferenceL,
-                               "Unexpose Reference Lightness", 0.5f)
-      .Range(0.1f, 1.0f)
-      .Tooltip("OKLab lightness at which the unexpose is neutral (matches the "
-               "plain divide exactly). Below it chroma is reduced, above it is "
-               "boosted slightly. ~0.5 sits just below perceptual mid-grey; "
-               "raise it to affect more of the frame, lower it to affect only "
-               "the darkest pixels.")
-      .EnableWhen(&UnexposeEnabled);
+
 }
 
 }  // namespace feature
