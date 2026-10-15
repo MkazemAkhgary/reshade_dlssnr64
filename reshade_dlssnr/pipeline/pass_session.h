@@ -19,6 +19,7 @@
 #include "hdr_state.h"
 #include "model/model_pipeline.h"
 #include "pass_resources.h"
+#include "gpu_readback.h"
 #include "pipeline_graph.h"
 #include "model/runtime.h"
 #include "state/settings.h"
@@ -54,7 +55,10 @@ class PassSession {
                           ID3D12Resource* game_exposure_texture,
                           ID3D12CommandQueue* command_queue,
                           IDXGISwapChain* swapchain,
-                          feature::pass::PassId pass_id = 0);
+                          feature::pass::PassId pass_id = 0,
+                          uint64_t frame_id = 0,
+                          ID3D12Fence* temporal_feedback_fence = nullptr,
+                          uint64_t temporal_feedback_fence_value = 0);
 
   void Shutdown(NgxRuntime& runtime);
 
@@ -103,6 +107,7 @@ class PassSession {
   static PipelineStatus StepModelOutputBarrier(PassRun& run);
   static PipelineStatus StepComposeModelOutput(PassRun& run);
   static PipelineStatus StepGradeModelInput(PassRun& run);
+  static PipelineStatus StepTemporalPrepare(PassRun& run);
   static PipelineStatus StepGradeModelOutput(PassRun& run);
   static PipelineStatus StepRenderDebugView(PassRun& run);
   static PipelineStatus StepWriteToBackbuffer(PassRun& run);
@@ -151,7 +156,10 @@ class PassSession {
                   ID3D12Resource* game_exposure_texture,
                   ID3D12CommandQueue* command_queue,
                   IDXGISwapChain* swapchain,
-                  feature::pass::PassId pass_id = 0);
+                  feature::pass::PassId pass_id = 0,
+                  uint64_t frame_id = 0,
+                  ID3D12Fence* temporal_feedback_fence = nullptr,
+                  uint64_t temporal_feedback_fence_value = 0);
 
   // Acquires the backbuffer and its descriptor for the current frame.
   bool AcquireBackbuffer(
@@ -266,6 +274,36 @@ class PassSession {
   CommandContext command_;
   PassResources resources_;
   FeatureLifecycle feature_;
+
+  // Per-pass temporal amortization state. GPU history lives in PassResources;
+  // only feedback samples and policy bookkeeping are CPU-side.
+  GpuReadback temporal_readback_;
+  bool temporal_history_valid_ = false;
+  bool temporal_feedback_valid_ = false;
+  float temporal_invalid_fraction_ = 1.0f;
+  uint64_t temporal_last_refresh_frame_ = 0;
+  uint64_t temporal_last_frame_id_ = 0;
+  uint64_t temporal_last_guide_serial_ = 0;
+  uint64_t temporal_settings_signature_ = 0;
+  int temporal_last_mode_ = 0;
+  unsigned int temporal_guide_width_ = 0;
+  unsigned int temporal_guide_height_ = 0;
+  unsigned int temporal_motion_width_ = 0;
+  unsigned int temporal_motion_height_ = 0;
+  unsigned int temporal_guide_base_x_ = 0;
+  unsigned int temporal_guide_base_y_ = 0;
+  unsigned int temporal_guide_subrect_width_ = 0;
+  unsigned int temporal_guide_subrect_height_ = 0;
+  unsigned int temporal_motion_base_x_ = 0;
+  unsigned int temporal_motion_base_y_ = 0;
+  unsigned int temporal_motion_subrect_width_ = 0;
+  unsigned int temporal_motion_subrect_height_ = 0;
+  unsigned int temporal_reference_width_ = 0;
+  unsigned int temporal_reference_height_ = 0;
+  DXGI_FORMAT temporal_depth_format_ = DXGI_FORMAT_UNKNOWN;
+  DXGI_FORMAT temporal_motion_format_ = DXGI_FORMAT_UNKNOWN;
+  float temporal_mv_scale_x_ = 1.0f;
+  float temporal_mv_scale_y_ = 1.0f;
 
   DlssGuides* guides_ = nullptr;
   // The pass's stable id, set per RunStage call. Sessions are keyed by id,

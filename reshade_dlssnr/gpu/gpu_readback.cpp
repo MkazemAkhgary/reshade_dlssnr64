@@ -50,7 +50,8 @@ bool GpuReadback::Ensure(ID3D12Device* device, size_t bytes_per_slot) {
   device_ = device;
   bytes_per_slot_ = bytes_per_slot;
   next_write_ = 0;
-  last_consumed_fence_ = 0;
+  write_sequence_ = 0;
+  last_consumed_sequence_ = 0;
   return true;
 }
 
@@ -63,12 +64,14 @@ void GpuReadback::Shutdown() {
     slot.buffer.Reset();
     slot.fence_value = 0;
     slot.bytes = 0;
+    slot.sequence = 0;
     slot.valid = false;
   }
   device_.Reset();
   bytes_per_slot_ = 0;
   next_write_ = 0;
-  last_consumed_fence_ = 0;
+  write_sequence_ = 0;
+  last_consumed_sequence_ = 0;
 }
 
 bool GpuReadback::EnqueueCopy(
@@ -98,6 +101,7 @@ bool GpuReadback::EnqueueCopy(
 
   slot.fence_value = fence_value;
   slot.bytes = source_bytes;
+  slot.sequence = ++write_sequence_;
   slot.valid = true;
   return true;
 }
@@ -107,22 +111,19 @@ const void* GpuReadback::TryGet(ID3D12Fence* fence, uint32_t* out_bytes) {
 
   const uint64_t completed = fence->GetCompletedValue();
 
-  // Find the slot with the highest fence value that is both newer than what
-  // we already returned and known to have completed. Newer so the caller
-  // gets each frame's data at most once.
+  // Pick the most recently enqueued completed sample. Multiple passes can
+  // enqueue copies behind the same Present fence, so fence value alone is not
+  // a total ordering; sequence preserves the newest sample in that case.
   const Slot* newest = nullptr;
   for (const Slot& slot : slots_) {
-    if (!slot.valid) continue;
-    if (slot.fence_value <= last_consumed_fence_) continue;
+    if (!slot.valid || slot.sequence <= last_consumed_sequence_) continue;
     if (completed < slot.fence_value) continue;
-    if (newest == nullptr || slot.fence_value > newest->fence_value) {
-      newest = &slot;
-    }
+    if (newest == nullptr || slot.sequence > newest->sequence) newest = &slot;
   }
 
   if (newest == nullptr) return nullptr;
 
-  last_consumed_fence_ = newest->fence_value;
+  last_consumed_sequence_ = newest->sequence;
   if (out_bytes) *out_bytes = newest->bytes;
   return newest->mapped;
 }

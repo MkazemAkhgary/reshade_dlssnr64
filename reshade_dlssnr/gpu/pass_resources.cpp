@@ -294,6 +294,105 @@ bool PassResources::EnsureUnliftedWorkingInput(
   return true;
 }
 
+bool PassResources::EnsureTemporalResources(
+    ID3D12Device* device, const D3D12_RESOURCE_DESC& input_desc,
+    unsigned int width, unsigned int height, bool* out_reset_history) {
+  if (out_reset_history != nullptr) *out_reset_history = false;
+  if (device == nullptr || width == 0 || height == 0) return false;
+
+  const bool matches = temporal_previous_input != nullptr &&
+      temporal_previous_edit != nullptr && temporal_previous_depth != nullptr &&
+      temporal_candidate != nullptr && temporal_validated_candidate != nullptr &&
+      temporal_stats != nullptr && temporal_width == width &&
+      temporal_height == height && temporal_input_format == input_desc.Format &&
+      temporal_previous_input->GetDesc().Width == input_desc.Width &&
+      temporal_previous_input->GetDesc().Height == input_desc.Height;
+  if (matches) return true;
+
+  Dispose(temporal_previous_input);
+  Dispose(temporal_previous_edit);
+  Dispose(temporal_previous_depth);
+  Dispose(temporal_candidate);
+  Dispose(temporal_validated_candidate);
+  Dispose(temporal_stats);
+
+  D3D12_HEAP_PROPERTIES heap = {};
+  heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+  // This resource is only ever copied to and sampled; deliberately omit UAV
+  // flags so sRGB game formats remain legal.
+  D3D12_RESOURCE_DESC input_copy_desc = {};
+  input_copy_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+  input_copy_desc.Width = input_desc.Width;
+  input_copy_desc.Height = input_desc.Height;
+  input_copy_desc.DepthOrArraySize = 1;
+  input_copy_desc.MipLevels = 1;
+  input_copy_desc.Format = input_desc.Format;
+  input_copy_desc.SampleDesc.Count = 1;
+  input_copy_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+  ID3D12Resource* input_copy = nullptr;
+  if (FAILED(device->CreateCommittedResource(
+          &heap, D3D12_HEAP_FLAG_NONE, &input_copy_desc,
+          D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, nullptr,
+          IID_PPV_ARGS(&input_copy)))) {
+    return false;
+  }
+  temporal_previous_input.Attach(input_copy);
+
+  D3D12_RESOURCE_DESC edit_desc = {};
+  edit_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+  edit_desc.Width = width;
+  edit_desc.Height = height;
+  edit_desc.DepthOrArraySize = 1;
+  edit_desc.MipLevels = 1;
+  edit_desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+  edit_desc.SampleDesc.Count = 1;
+  edit_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+  if (!CreateUavTexture(device, edit_desc, temporal_previous_edit.GetAddressOf()) ||
+      !CreateUavTexture(device, edit_desc, temporal_candidate.GetAddressOf()) ||
+      !CreateUavTexture(device, edit_desc, temporal_validated_candidate.GetAddressOf())) {
+    Dispose(temporal_previous_input);
+    Dispose(temporal_previous_edit);
+    Dispose(temporal_candidate);
+    Dispose(temporal_validated_candidate);
+    return false;
+  }
+
+  D3D12_RESOURCE_DESC depth_desc = edit_desc;
+  depth_desc.Format = DXGI_FORMAT_R32_FLOAT;
+  if (!CreateUavTexture(device, depth_desc, temporal_previous_depth.GetAddressOf())) {
+    Dispose(temporal_previous_input);
+    Dispose(temporal_previous_edit);
+    Dispose(temporal_candidate);
+    Dispose(temporal_validated_candidate);
+    return false;
+  }
+
+  // Two uints: invalid-pixel count and a marker that distinguishes a real
+  // reprojection sample from the deliberately empty first-history frame.
+  if (!CreateUavBuffer(device, 2u * sizeof(uint32_t),
+                       temporal_stats.GetAddressOf())) {
+    Dispose(temporal_previous_input);
+    Dispose(temporal_previous_edit);
+    Dispose(temporal_previous_depth);
+    Dispose(temporal_candidate);
+    Dispose(temporal_validated_candidate);
+    return false;
+  }
+
+  temporal_width = width;
+  temporal_height = height;
+  temporal_input_format = input_desc.Format;
+  trace::NameResource(temporal_previous_input.Get(), "temporal_previous_input");
+  trace::NameResource(temporal_previous_edit.Get(), "temporal_previous_edit");
+  trace::NameResource(temporal_previous_depth.Get(), "temporal_previous_depth");
+  trace::NameResource(temporal_candidate.Get(), "temporal_candidate");
+  trace::NameResource(temporal_validated_candidate.Get(), "temporal_validated_candidate");
+  trace::NameResource(temporal_stats.Get(), "temporal_stats");
+  if (out_reset_history != nullptr) *out_reset_history = true;
+  return true;
+}
+
 bool PassResources::EnsureScratch(
     ID3D12Device* device,
     const D3D12_RESOURCE_DESC& desc,
@@ -348,6 +447,12 @@ void PassResources::Shutdown() {
   working_output.Reset();
   unlifted_working_input.Reset();
   effective_exposure_map.Reset();
+  temporal_previous_input.Reset();
+  temporal_previous_edit.Reset();
+  temporal_previous_depth.Reset();
+  temporal_candidate.Reset();
+  temporal_validated_candidate.Reset();
+  temporal_stats.Reset();
 
   for (uint32_t i = 0; i < kScratchCount; ++i) {
     scratch_[i].Reset();
@@ -366,6 +471,8 @@ void PassResources::Shutdown() {
   gain_stats_bytes = 0;
   effective_exposure_width = 0;
   effective_exposure_height = 0;
+  temporal_width = temporal_height = 0;
+  temporal_input_format = DXGI_FORMAT_UNKNOWN;
   working_width = 0;
   working_height = 0;
   working_format = DXGI_FORMAT_UNKNOWN;

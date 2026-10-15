@@ -97,74 +97,57 @@ enum class PipelineNodeId : uint32_t {
   Idle = 0,
 
   // -- frame / pass setup ---------------------------------------------------
-  AcquireBackbuffer = 1,   // Backbuffer stage only
-  ResolveDevice = 2,       // resolves the device; also runtime.Initialize
+  AcquireBackbuffer = 1,
+  ResolveDevice = 2,
   EnsureComputeEngine = 3,
-  ResetDebugContext = 4,   // restores the incremental debug state per pass
-  ResolveWorkingScale = 5, // defines work_width / work_height for the pass
+  ResetDebugContext = 4,
+  ResolveWorkingScale = 5,
   EnsureFrameResources = 6,
-  SeedResourceStates = 7,  // registers known frame-boundary states
-  // Seeds the guide resources' tracked state. Separate from
-  // SeedResourceStates because the two stages run it at different points:
-  // Present seeds guides after the feature is built, PostDLSS before.
+  SeedResourceStates = 7,
   SeedGuideStates = 8,
 
-  // -- Shared frame preparation ---------------------------------------------
-  // Lazily creates the HDR histogram resources before the first active
-  // PreDLSS/PostDLSS pass. Distinct from HdrBeginFrame because it runs once
-  // per process and must succeed before BeginFrame touches the histogram.
+  // -- shared frame preparation --------------------------------------------
   EnsureHdr = 9,
   Reserved10 = 10,
   HdrBeginFrame = 11,
-  HistogramZero = 12,      // dispatches "ZeroHistogram"
-  HistogramBuild = 13,     // dispatches "BuildHistogram"
-  HistogramReadback = 14,  // leaves histogram in COPY_SOURCE for the readback
+  HistogramZero = 12,
+  HistogramBuild = 13,
+  HistogramReadback = 14,
 
   // -- model input ----------------------------------------------------------
-  ResolveModelInput = 15,  // first pass -> guide color; else scratch snapshot
+  ResolveModelInput = 15,
   BuildHdrUniforms = 16,
-  GainMapSplit = 17,       // dispatches "GainMapSplit"
-  PrepareModelInput = 18,  // dispatches "PrepareModelInput"
-  BuildEffectiveLocalExposure = 19, // full-resolution local SDR exposure scale for HDR diagnostics
-  // Grades the image the model is about to read. Follows PrepareModelInput
-  // because that is what fills the working input, and precedes the evaluate
-  // because that is what consumes it.
+  GainMapSplit = 17,
+  PrepareModelInput = 18,
+  BuildEffectiveLocalExposure = 19,
   GradeModelInput = 20,
 
   // -- model evaluation -----------------------------------------------------
   EnsureFeature = 21,
-  // Re-reads the guide state. Must follow EnsureFeature: creating the NGX
-  // feature can make the game re-capture its DLSS guides, so a snapshot taken
-  // before the feature exists can be stale — or entirely invalid on the first
-  // frame. Both stages take the snapshot at exactly this point.
   SnapshotGuides = 22,
-  FillEvaluateParams = 23,
-  EvaluateFeature = 24,
-  ModelOutputBarrier = 25, // UavBarrier on the model output
+  TemporalPrepare = 23,  // reprojection/validation before the optional NGX evaluation
+  FillEvaluateParams = 24,
+  EvaluateFeature = 25,
+  ModelOutputBarrier = 26,
 
-  // -- post-evaluation analysis and composition -----------------------------
-  BuildImportanceMask = 26, // compares the actual model input with the first pass output
-  ComposeModelOutput = 27,    // dispatches "ComposeModelOutput"
-  ComposeModelOutputHdr = 28, // dispatches "ComposeModelOutputHdr"
-  // Grades the model's own output, before anything publishes it.
-  GradeModelOutput = 29,
+  // -- post-evaluation analysis and composition ----------------------------
+  BuildImportanceMask = 27,
+  ComposeModelOutput = 28,
+  ComposeModelOutputHdr = 29,
+  GradeModelOutput = 30,
 
   // -- output ---------------------------------------------------------------
-  RenderDebugView = 30,      // dispatches "DebugDisplay"
-  WriteToBackbuffer = 31,
-  WriteToGameResource = 32,
-  SubmitBackbuffer = 33,        // Backbuffer stage only
+  RenderDebugView = 31,
+  WriteToBackbuffer = 32,
+  WriteToGameResource = 33,
+  SubmitBackbuffer = 34,
 
   // -- release stage --------------------------------------------------------
-  // Grades the final backbuffer. Listed first in the Release stage on purpose:
-  // the debug-present override replaces the backbuffer wholesale, so grading
-  // before it keeps a debug view showing the pipeline's own output rather than
-  // a graded version of it.
-  GradeBackbuffer = 34,
-  WriteDebugToBackbuffer = 35, // dispatches "DebugDisplay"
-  SignalHdrAtPresent = 36,
+  GradeBackbuffer = 35,
+  WriteDebugToBackbuffer = 36,
+  SignalHdrAtPresent = 37,
 
-  Count = 37
+  Count = 38
 };
 
 const char* PipelineNodeName(PipelineNodeId id);
@@ -247,6 +230,17 @@ struct PassRun {
   ID3D12Resource* output_resource = nullptr;  // PostDLSS stage only
   IDXGISwapChain* swapchain = nullptr;        // Backbuffer/Release only
   ID3D12CommandQueue* command_queue = nullptr; // Backbuffer/Release only
+
+  // Stable identity for the image-processing frame. Game-list evaluates in
+  // one presentation frame share this value so duplicate view evaluations
+  // cannot incorrectly reuse another view's edit history.
+  uint64_t frame_id = 0;
+  ID3D12Fence* temporal_feedback_fence = nullptr;
+  uint64_t temporal_feedback_fence_value = 0;
+  bool temporal_active = false;
+  bool temporal_reuse = false;
+  bool temporal_store_history = false;
+  bool temporal_duplicate_frame = false;
 
   // Present only: the swapchain's IDXGISwapChain3 interface, kept alive for
   // the duration of the stage. The steps that need it (the backbuffer
@@ -694,6 +688,7 @@ inline constexpr PipelineNodeId kPresentStepNodes[] = {
     PipelineNodeId::ResolveModelInput,
     PipelineNodeId::PrepareModelInput,
     PipelineNodeId::GradeModelInput,
+    PipelineNodeId::TemporalPrepare,
     PipelineNodeId::FillEvaluateParams,
     PipelineNodeId::EvaluateFeature,
     PipelineNodeId::ModelOutputBarrier,
@@ -720,6 +715,7 @@ inline constexpr PipelineNodeId kPreDlssStepNodes[] = {
     PipelineNodeId::PrepareModelInput,
     PipelineNodeId::BuildEffectiveLocalExposure,
     PipelineNodeId::GradeModelInput,
+    PipelineNodeId::TemporalPrepare,
     PipelineNodeId::FillEvaluateParams,
     PipelineNodeId::EvaluateFeature,
     PipelineNodeId::ModelOutputBarrier,
@@ -746,6 +742,7 @@ inline constexpr PipelineNodeId kPostDlssStepNodes[] = {
     PipelineNodeId::PrepareModelInput,
     PipelineNodeId::BuildEffectiveLocalExposure,
     PipelineNodeId::GradeModelInput,
+    PipelineNodeId::TemporalPrepare,
     PipelineNodeId::FillEvaluateParams,
     PipelineNodeId::EvaluateFeature,
     PipelineNodeId::ModelOutputBarrier,

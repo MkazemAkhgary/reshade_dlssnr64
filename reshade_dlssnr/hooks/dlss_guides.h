@@ -23,6 +23,17 @@ struct DlssGuideState {
   unsigned int guide_height = 0;
   unsigned int motion_width = 0;
   unsigned int motion_height = 0;
+  // Active NGX guide rectangles within the underlying resource textures.
+  unsigned int guide_base_x = 0;
+  unsigned int guide_base_y = 0;
+  unsigned int motion_base_x = 0;
+  unsigned int motion_base_y = 0;
+  unsigned int guide_subrect_width = 0;
+  unsigned int guide_subrect_height = 0;
+  unsigned int motion_subrect_width = 0;
+  unsigned int motion_subrect_height = 0;
+  unsigned int reference_width = 0;
+  unsigned int reference_height = 0;
   unsigned int output_width = 0;
   unsigned int output_height = 0;
   float mv_scale_x = 1.0f;
@@ -30,6 +41,7 @@ struct DlssGuideState {
   bool depth_inverted = false;
   bool clone_resources = false;
   bool valid = false;
+  uint64_t capture_serial = 0;
 };
 
 class DlssGuides {
@@ -102,6 +114,7 @@ class DlssGuides {
   Microsoft::WRL::ComPtr<ID3D12Resource> dlss_output_direct_;
   std::atomic_bool requested_clone_resources_{false};
   bool clone_resources_ = false;
+  uint64_t capture_serial_ = 0;
 
   unsigned int depth_width_ = 0;
   unsigned int depth_height_ = 0;

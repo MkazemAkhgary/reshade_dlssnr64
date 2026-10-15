@@ -40,6 +40,7 @@ const char* const kNodeNames[] = {
     "GradeModelInput",
     "EnsureFeature",
     "SnapshotGuides",
+    "TemporalPrepare",
     "FillEvaluateParams",
     "EvaluateFeature",
     "ModelOutputBarrier",
@@ -210,6 +211,7 @@ constexpr PipelineNodeId kPresentSteps[] = {
     PipelineNodeId::ResolveModelInput,    // backbuffer -> SRV
     PipelineNodeId::PrepareModelInput,
     PipelineNodeId::GradeModelInput,
+    PipelineNodeId::TemporalPrepare,
     PipelineNodeId::FillEvaluateParams,
     PipelineNodeId::EvaluateFeature,
     PipelineNodeId::ModelOutputBarrier,
@@ -225,10 +227,10 @@ constexpr PipelinePhaseDef kPresentPhases[] = {
     {"feature", 5, 2, nullptr},
     {"snapshot", 7, 1, nullptr},
     {"input", 8, 1, nullptr},
-    {"prepare", 9, 2, nullptr},
-    {"evaluate", 11, 3, nullptr},
-    {"compose", 14, 2, nullptr},
-    {"output", 16, 3, nullptr},
+    {"prepare", 9, 3, nullptr},
+    {"evaluate", 12, 3, nullptr},
+    {"compose", 15, 2, nullptr},
+    {"output", 17, 3, nullptr},
 };
 
 // -- Pre-DLSS stage ---------------------------------------------------------
@@ -251,6 +253,7 @@ constexpr PipelineNodeId kPreDlssSteps[] = {
     PipelineNodeId::PrepareModelInput,
     PipelineNodeId::BuildEffectiveLocalExposure,
     PipelineNodeId::GradeModelInput,
+    PipelineNodeId::TemporalPrepare,
     PipelineNodeId::FillEvaluateParams,
     PipelineNodeId::EvaluateFeature,
     PipelineNodeId::ModelOutputBarrier,
@@ -265,10 +268,10 @@ constexpr PipelinePhaseDef kPreDlssPhases[] = {
     {"setup", 0, 3, nullptr},
     {"resources", 3, 4, nullptr},
     {"feature", 7, 3, nullptr},
-    {"prepare", 10, 6, nullptr},
-    {"evaluate", 16, 3, nullptr},
-    {"compose", 19, 2, nullptr},
-    {"output", 21, 2, nullptr},
+    {"prepare", 10, 7, nullptr},
+    {"evaluate", 17, 3, nullptr},
+    {"compose", 20, 2, nullptr},
+    {"output", 22, 2, nullptr},
 };
 
 // -- Post-DLSS stage --------------------------------------------------------
@@ -291,6 +294,7 @@ constexpr PipelineNodeId kPostDlssSteps[] = {
     PipelineNodeId::PrepareModelInput,
     PipelineNodeId::BuildEffectiveLocalExposure,
     PipelineNodeId::GradeModelInput,
+    PipelineNodeId::TemporalPrepare,
     PipelineNodeId::FillEvaluateParams,
     PipelineNodeId::EvaluateFeature,
     PipelineNodeId::ModelOutputBarrier,
@@ -305,10 +309,10 @@ constexpr PipelinePhaseDef kPostDlssPhases[] = {
     {"setup", 0, 3, nullptr},
     {"resources", 3, 4, nullptr},
     {"feature", 7, 3, nullptr},
-    {"prepare", 10, 5, nullptr},
-    {"evaluate", 15, 4, nullptr},
-    {"compose", 19, 2, nullptr},
-    {"output", 21, 2, nullptr},
+    {"prepare", 10, 6, nullptr},
+    {"evaluate", 16, 4, nullptr},
+    {"compose", 20, 2, nullptr},
+    {"output", 22, 2, nullptr},
 };
 
 constexpr PipelinePhaseDef kHdrPreparationPhases[] = {

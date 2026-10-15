@@ -19,6 +19,7 @@
 #include "pipeline_graph.h"
 #include "pipeline_trace.h"
 #include "state/settings.h"
+#include "streamline_compat.h"
 
 namespace reshade_dlssnr {
 
@@ -94,10 +95,36 @@ PipelineStatus AddonController::RunPassStage(const PipelineStageDef& stage,
     slot = std::make_unique<PassSession>(&DlssGuides::Get());
   }
 
+  uint64_t run_frame_id = frame_id_;
+  ID3D12Fence* feedback_fence = nullptr;
+  uint64_t feedback_fence_value = 0;
+  const ctl::ValueStore& store = ctl::Store();
+  const feature::pass::PassSnapshot pass_state =
+      feature::pass::Read(store, feature::pass::PassKey(pass_id));
+  if (pass_state.temporal_mode > 0 && !stage.owns_submit &&
+      command_list != nullptr) {
+    // Feedback is copied on the game's list, but completion is observed via a
+    // marker signalled later on the same queue at Present. Ensure the marker
+    // fence exists now, without opening or submitting the Release list here.
+    Microsoft::WRL::ComPtr<ID3D12Device> queried_device;
+    if (SUCCEEDED(command_list->GetDevice(IID_PPV_ARGS(&queried_device))) &&
+        queried_device != nullptr) {
+      Microsoft::WRL::ComPtr<ID3D12Device> native_device =
+          sl_compat::Native(queried_device.Get());
+      if (native_device != nullptr && release_command_.Ensure(native_device.Get())) {
+        feedback_fence = release_command_.GetFence();
+        feedback_fence_value = release_command_.GetNextFenceValue();
+        if (feedback_fence != nullptr && feedback_fence_value != 0)
+          temporal_feedback_pending_ = true;
+      }
+    }
+  }
+
   return slot->RunStage(
       stage, settings, codec_, runtime_, command_list, output_resource,
       is_first_pass, frame_debug_, &hdr_, &pass1_command_, &importance_mask_,
-      exposure_texture, command_queue, swapchain, pass_id);
+      exposure_texture, command_queue, swapchain, pass_id, run_frame_id,
+      feedback_fence, feedback_fence_value);
 }
 
 PipelineStatus AddonController::RunSingleStage(
@@ -331,6 +358,8 @@ void AddonController::OnPresent(
     IDXGISwapChain* swapchain) {
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
+  if (++frame_id_ == 0) frame_id_ = 1;
+
   if (command_queue != nullptr && last_command_queue_.Get() != command_queue) {
     last_command_queue_ = command_queue;
   }
@@ -349,14 +378,18 @@ void AddonController::OnPresent(
     const bool have_retired_resources =
         guides.RetiredGameResourceCount() != 0 ||
         guides.RetiredResourceCount() != 0 || HasUnfencedRetiredSessions();
-    if (command_queue != nullptr && have_retired_resources &&
+    if (command_queue != nullptr &&
+        (have_retired_resources || temporal_feedback_pending_) &&
         BeginReleaseCommands(command_queue) != nullptr) {
       const uint64_t before_marker = release_command_.LastSignaledFenceValue();
       EndReleaseCommands(command_queue);
       const uint64_t marker = release_command_.LastSignaledFenceValue();
       if (marker > before_marker) {
-        guides.TagRetiredResources(marker);
-        TagRetiredSessions(marker);
+        if (have_retired_resources) {
+          guides.TagRetiredResources(marker);
+          TagRetiredSessions(marker);
+        }
+        temporal_feedback_pending_ = false;
       }
     }
     frame_debug_.Reset();
@@ -402,26 +435,30 @@ void AddonController::OnPresent(
   const bool have_retired_resources =
       guides.RetiredGameResourceCount() != 0 ||
       guides.RetiredResourceCount() != 0 || HasUnfencedRetiredSessions();
+  const bool need_queue_marker = have_retired_resources || temporal_feedback_pending_;
   const bool retirement_sync_ready =
-      !have_retired_resources || BeginReleaseCommands(command_queue) != nullptr;
+      !need_queue_marker || BeginReleaseCommands(command_queue) != nullptr;
   const uint64_t fence_before_release = release_command_.LastSignaledFenceValue();
 
   RunSingleStage(PipelineReleaseStage(), command_queue, swapchain);
 
-  if (have_retired_resources && retirement_sync_ready) {
+  if (need_queue_marker && retirement_sync_ready) {
     const uint64_t retirement_fence = release_command_.LastSignaledFenceValue();
     if (retirement_fence > fence_before_release) {
-      guides.TagRetiredResources(retirement_fence);
-      TagRetiredSessions(retirement_fence);
+      if (have_retired_resources) {
+        guides.TagRetiredResources(retirement_fence);
+        TagRetiredSessions(retirement_fence);
+      }
+      temporal_feedback_pending_ = false;
       const uint64_t completed = release_command_.CompletedFenceValue();
       guides.ReleaseRetiredResourcesCompleted(completed);
       ReleaseRetiredSessionsCompleted(completed);
     } else {
       reshade::log::message(
           reshade::log::level::warning,
-          "DLSSNR: deferred resource release; GPU queue marker failed");
+          "DLSSNR: deferred resource release / temporal feedback; GPU queue marker failed");
     }
-  } else if (have_retired_resources) {
+  } else if (need_queue_marker) {
     reshade::log::message(
         reshade::log::level::warning,
         "DLSSNR: deferred resource release; GPU queue marker unavailable");

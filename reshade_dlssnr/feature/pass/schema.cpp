@@ -32,6 +32,7 @@ constexpr const char* kCatModel = "Model";
 constexpr const char* kCatStrength = "Strength";
 constexpr const char* kCatSoftCompression = "Advanced/Soft Compression";
 constexpr const char* kCatResidualEdits = "Advanced/Residual Edits";
+constexpr const char* kCatTemporal = "Advanced/Temporal Amortization";
 
 // Grade is the only part of the pass that the pass does not gate itself: the
 // grade rows follow the grade's own enable checkbox, and the two grade
@@ -90,6 +91,16 @@ const char* const kTargetTips[] = {
     "Run after the game's DLSS evaluation on its upscaled output, before later "
     "post-processing and UI.",
     "Run on the final swapchain backbuffer, after DLSS-stage passes."};
+
+const char* const kTemporalNames[] = {"Off", "Adaptive", "Every 2", "Every 4"};
+const char* const kTemporalTips[] = {
+    "Evaluate the neural model on every frame.",
+    "Skip only when asynchronous reprojection feedback is below 5% invalid "
+    "pixels; force a refresh at least every four frames.",
+    "Target one model evaluation every two frames, but refresh early when "
+    "reprojection feedback is unavailable or invalid.",
+    "Target one model evaluation every four frames, but refresh early when "
+    "reprojection feedback is unavailable or invalid."};
 
 const char* const kPresetNames[] = {"A", "B", "C"};
 // Presets are a name, not an enum: the C++ type is an int the model reads.
@@ -325,6 +336,13 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .VisibleWhen(&RcasStrengthVisible)
       .Category(kCatResidualEdits)
       .Tooltip("How aggressively to sharpen.");
+
+  pass.Add<ctl::EnumSetting>(kTemporalMode, "Temporal Amortization", 0)
+      .Items(kTemporalNames, kTemporalTips, 4)
+      .Category(kCatTemporal)
+      .Tooltip("Reuse a motion-reprojected multiplicative model edit instead of "
+               "running the model every frame. Requires current-frame depth and "
+               "motion guides; uncertain history forces a fresh evaluation.");
 
   // --- The two model grades ----------------------------------------------
   ctl::Section& grade_input =

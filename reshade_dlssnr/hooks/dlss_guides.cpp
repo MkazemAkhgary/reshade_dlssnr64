@@ -1,5 +1,6 @@
 #include "dlss_guides.h"
 
+#include <algorithm>
 #include <cstdio>
 
 #include <reshade.hpp>
@@ -201,6 +202,7 @@ void DlssGuides::CaptureGuides(
     const NVSDK_NGX_Parameter* params,
     NVSDK_NGX_Feature feature_id) {
   std::lock_guard<std::mutex> lock(lock_);
+  const uint64_t capture_serial = ++capture_serial_;
 
   // A mode request is latched exactly once per NGX evaluation. Resource
   // ownership is moved to the retire queue rather than dropped here because
@@ -237,6 +239,7 @@ void DlssGuides::CaptureGuides(
       command_list == nullptr || params == nullptr) {
     state_ = {};
     state_.clone_resources = clone_resources_;
+    state_.capture_serial = capture_serial;
     return;
   }
 
@@ -254,6 +257,7 @@ void DlssGuides::CaptureGuides(
     if (ID3D12Resource* retired = dlss_output_direct_.Detach()) retired_game_resources_.push_back({retired, 0});
     state_ = {};
     state_.clone_resources = clone_resources_;
+    state_.capture_serial = capture_serial;
     return;
   }
 
@@ -265,6 +269,7 @@ void DlssGuides::CaptureGuides(
         queried_device == nullptr) {
       state_ = {};
       state_.clone_resources = clone_resources_;
+      state_.capture_serial = capture_serial;
       return;
     }
     device = sl_compat::Native(queried_device);
@@ -272,6 +277,7 @@ void DlssGuides::CaptureGuides(
     if (device == nullptr) {
       state_ = {};
       state_.clone_resources = clone_resources_;
+      state_.capture_serial = capture_serial;
       return;
     }
   }
@@ -282,6 +288,35 @@ void DlssGuides::CaptureGuides(
   const unsigned int guide_height = static_cast<unsigned int>(depth_desc.Height);
   const unsigned int motion_width = static_cast<unsigned int>(motion_desc.Width);
   const unsigned int motion_height = static_cast<unsigned int>(motion_desc.Height);
+  auto get_uint = [params](const char* name, unsigned int fallback) {
+    unsigned int value = 0;
+    if (params->Get(name, &value) == NVSDK_NGX_Result_Success && value != 0) {
+      return value;
+    }
+    return fallback;
+  };
+  const unsigned int guide_base_x = get_uint(
+      NVSDK_NGX_Parameter_DLSS_Input_Depth_Subrect_Base_X, 0u);
+  const unsigned int guide_base_y = get_uint(
+      NVSDK_NGX_Parameter_DLSS_Input_Depth_Subrect_Base_Y, 0u);
+  const unsigned int motion_base_x = get_uint(
+      NVSDK_NGX_Parameter_DLSS_Input_MV_SubrectBase_X, 0u);
+  const unsigned int motion_base_y = get_uint(
+      NVSDK_NGX_Parameter_DLSS_Input_MV_SubrectBase_Y, 0u);
+  const unsigned int reference_width = get_uint(
+      NVSDK_NGX_Parameter_DLSS_Render_Subrect_Dimensions_Width,
+      get_uint(NVSDK_NGX_Parameter_Width, guide_width));
+  const unsigned int reference_height = get_uint(
+      NVSDK_NGX_Parameter_DLSS_Render_Subrect_Dimensions_Height,
+      get_uint(NVSDK_NGX_Parameter_Height, guide_height));
+  const unsigned int guide_subrect_width = guide_base_x < guide_width
+      ? std::min(reference_width, guide_width - guide_base_x) : 0u;
+  const unsigned int guide_subrect_height = guide_base_y < guide_height
+      ? std::min(reference_height, guide_height - guide_base_y) : 0u;
+  const unsigned int motion_subrect_width = motion_base_x < motion_width
+      ? std::min(reference_width, motion_width - motion_base_x) : 0u;
+  const unsigned int motion_subrect_height = motion_base_y < motion_height
+      ? std::min(reference_height, motion_height - motion_base_y) : 0u;
 
   unsigned int create_flags = 0;
   params->Get(NVSDK_NGX_Parameter_DLSS_Feature_Create_Flags, &create_flags);
@@ -323,6 +358,7 @@ void DlssGuides::CaptureGuides(
     if (depth_clone_ == nullptr || motion_clone_ == nullptr) {
       state_ = {};
       state_.clone_resources = clone_resources_;
+      state_.capture_serial = capture_serial;
       return;
     }
 
@@ -369,12 +405,23 @@ void DlssGuides::CaptureGuides(
   state_.guide_height = guide_height;
   state_.motion_width = motion_width;
   state_.motion_height = motion_height;
+  state_.guide_base_x = guide_base_x;
+  state_.guide_base_y = guide_base_y;
+  state_.motion_base_x = motion_base_x;
+  state_.motion_base_y = motion_base_y;
+  state_.guide_subrect_width = guide_subrect_width;
+  state_.guide_subrect_height = guide_subrect_height;
+  state_.motion_subrect_width = motion_subrect_width;
+  state_.motion_subrect_height = motion_subrect_height;
+  state_.reference_width = reference_width;
+  state_.reference_height = reference_height;
   state_.mv_scale_x = mv_scale_x;
   state_.mv_scale_y = mv_scale_y;
   state_.depth_inverted =
       (create_flags & NVSDK_NGX_DLSS_Feature_Flags_DepthInverted) != 0;
   state_.clone_resources = clone_resources_;
   state_.valid = true;
+  state_.capture_serial = capture_serial;
 }
 
 void DlssGuides::CaptureOutput(

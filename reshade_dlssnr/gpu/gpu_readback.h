@@ -55,6 +55,7 @@ class GpuReadback {
     void* mapped = nullptr;
     uint64_t fence_value = 0;
     uint32_t bytes = 0;  // size of the last copy recorded into this slot
+    uint64_t sequence = 0;
     bool valid = false;
   };
 
@@ -62,7 +63,8 @@ class GpuReadback {
   size_t bytes_per_slot_ = 0;
   Slot slots_[kRingSize];
   uint32_t next_write_ = 0;
-  uint64_t last_consumed_fence_ = 0;
+  uint64_t write_sequence_ = 0;
+  uint64_t last_consumed_sequence_ = 0;
 };
 
 }  // namespace reshade_dlssnr

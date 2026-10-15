@@ -3,6 +3,9 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <cmath>
+#include <cstdint>
+#include <type_traits>
 #include <mutex>
 
 #include <reshade.hpp>
@@ -10,6 +13,7 @@
 #include "ctl/usage/ui_store.h"
 #include "ctl/values.h"
 #include "d3d12_utils.h"
+#include "gpu_readback.h"
 #include "dlss_guides.h"
 #include "feature/debug_log/view.h"
 #include "feature/grade/view.h"
@@ -25,6 +29,74 @@
 #include "streamline_compat.h"
 
 namespace reshade_dlssnr {
+
+namespace {
+
+template <typename T>
+void HashTemporalValue(uint64_t* hash, const T& value) {
+  static_assert(std::is_trivially_copyable_v<T>);
+  const unsigned char* bytes = reinterpret_cast<const unsigned char*>(&value);
+  for (size_t i = 0; i < sizeof(T); ++i) {
+    *hash ^= bytes[i];
+    *hash *= 1099511628211ull;
+  }
+}
+
+uint64_t TemporalSettingsSignature(const PassRun& run) {
+  uint64_t hash = 1469598103934665603ull;
+  const auto& p = run.pass_state;
+  HashTemporalValue(&hash, run.width);
+  HashTemporalValue(&hash, run.height);
+  HashTemporalValue(&hash, run.work_width);
+  HashTemporalValue(&hash, run.work_height);
+  HashTemporalValue(&hash, p.target);
+  HashTemporalValue(&hash, p.preset);
+  HashTemporalValue(&hash, p.working_scale);
+  HashTemporalValue(&hash, p.intensity);
+  HashTemporalValue(&hash, p.local_tone);
+  HashTemporalValue(&hash, p.local_structure);
+  HashTemporalValue(&hash, p.skin_structure);
+  HashTemporalValue(&hash, p.auto_mask);
+  HashTemporalValue(&hash, p.ui_correction);
+  const auto& g = run.grade_input;
+  HashTemporalValue(&hash, g.enabled);
+  HashTemporalValue(&hash, g.luma);
+  HashTemporalValue(&hash, g.chroma);
+  HashTemporalValue(&hash, g.luma_mode);
+  HashTemporalValue(&hash, g.chroma_mode);
+  HashTemporalValue(&hash, g.black_level);
+  HashTemporalValue(&hash, g.white_level);
+  HashTemporalValue(&hash, g.contrast);
+  HashTemporalValue(&hash, g.shadows);
+  HashTemporalValue(&hash, g.highlights);
+  // Only include stable HDR interpretation parameters. Frame-varying exposure
+  // measurements are deliberately excluded so adaptation does not reset history.
+  HashTemporalValue(&hash, run.hdr_state.format);
+  HashTemporalValue(&hash, run.hdr_state.bt2446_k1);
+  HashTemporalValue(&hash, run.hdr_state.bt2446_k2);
+  HashTemporalValue(&hash, run.hdr_state.bt2446_k3);
+  HashTemporalValue(&hash, run.hdr_state.bt2446_k4);
+  HashTemporalValue(&hash, run.hdr_state.bt2446_crosstalk);
+  HashTemporalValue(&hash, run.hdr_uniforms.format);
+  HashTemporalValue(&hash, run.hdr_uniforms.local_exposure_strength);
+  return hash;
+}
+
+float TemporalReadInvalidFraction(GpuReadback& readback, ID3D12Fence* fence,
+                                  unsigned int width, unsigned int height,
+                                  bool* out_valid) {
+  if (out_valid != nullptr) *out_valid = false;
+  uint32_t bytes = 0;
+  const void* data = readback.TryGet(fence, &bytes);
+  if (data == nullptr || bytes < sizeof(uint32_t) * 2 || width == 0 || height == 0)
+    return 1.0f;
+  const auto* values = static_cast<const uint32_t*>(data);
+  if (out_valid != nullptr) *out_valid = values[1] != 0;
+  return std::min(1.0f, static_cast<float>(values[0]) /
+                           static_cast<float>(static_cast<uint64_t>(width) * height));
+}
+
+}  // namespace
 
 // Every enabled pass, in tab order.
 //
@@ -389,6 +461,18 @@ void PassSession::SeedFrameState(ID3D12Resource* backbuffer) {
     command_.SetResourceState(resources_.GetGainStats(),
                               D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   }
+  if (resources_.GetTemporalPreviousInput() != nullptr)
+    command_.SetResourceState(resources_.GetTemporalPreviousInput(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  if (resources_.GetTemporalPreviousEdit() != nullptr)
+    command_.SetResourceState(resources_.GetTemporalPreviousEdit(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  if (resources_.GetTemporalPreviousDepth() != nullptr)
+    command_.SetResourceState(resources_.GetTemporalPreviousDepth(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  if (resources_.GetTemporalCandidate() != nullptr)
+    command_.SetResourceState(resources_.GetTemporalCandidate(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  if (resources_.GetTemporalValidatedCandidate() != nullptr)
+    command_.SetResourceState(resources_.GetTemporalValidatedCandidate(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  if (resources_.GetTemporalStats() != nullptr)
+    command_.SetResourceState(resources_.GetTemporalStats(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
 
 void PassSession::CleanupFrameState(ID3D12GraphicsCommandList* command_list) {
@@ -417,6 +501,18 @@ void PassSession::CleanupFrameState(ID3D12GraphicsCommandList* command_list) {
     command_.Transition(command_list, resources_.GetGainStats(),
                         D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   }
+  if (resources_.GetTemporalPreviousInput() != nullptr)
+    command_.Transition(command_list, resources_.GetTemporalPreviousInput(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  if (resources_.GetTemporalPreviousEdit() != nullptr)
+    command_.Transition(command_list, resources_.GetTemporalPreviousEdit(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  if (resources_.GetTemporalPreviousDepth() != nullptr)
+    command_.Transition(command_list, resources_.GetTemporalPreviousDepth(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  if (resources_.GetTemporalCandidate() != nullptr)
+    command_.Transition(command_list, resources_.GetTemporalCandidate(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  if (resources_.GetTemporalValidatedCandidate() != nullptr)
+    command_.Transition(command_list, resources_.GetTemporalValidatedCandidate(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  if (resources_.GetTemporalStats() != nullptr)
+    command_.Transition(command_list, resources_.GetTemporalStats(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
 
 void PassSession::SubmitBackbuffer() {
@@ -523,6 +619,24 @@ bool PassSession::MaybeRenderDebug(
 void PassSession::Shutdown(NgxRuntime& runtime) {
   std::lock_guard<std::mutex> lock(g_session_mutex);
 
+  temporal_readback_.Shutdown();
+  temporal_history_valid_ = false;
+  temporal_feedback_valid_ = false;
+  temporal_invalid_fraction_ = 1.0f;
+  temporal_last_refresh_frame_ = 0;
+  temporal_last_frame_id_ = 0;
+  temporal_last_guide_serial_ = 0;
+  temporal_settings_signature_ = 0;
+  temporal_last_mode_ = 0;
+  temporal_guide_width_ = temporal_guide_height_ = 0;
+  temporal_motion_width_ = temporal_motion_height_ = 0;
+  temporal_guide_base_x_ = temporal_guide_base_y_ = 0;
+  temporal_guide_subrect_width_ = temporal_guide_subrect_height_ = 0;
+  temporal_motion_base_x_ = temporal_motion_base_y_ = 0;
+  temporal_motion_subrect_width_ = temporal_motion_subrect_height_ = 0;
+  temporal_reference_width_ = temporal_reference_height_ = 0;
+  temporal_depth_format_ = temporal_motion_format_ = DXGI_FORMAT_UNKNOWN;
+  temporal_mv_scale_x_ = temporal_mv_scale_y_ = 1.0f;
   feature_.Shutdown(runtime);
   resources_.Shutdown();
   command_.Shutdown();
@@ -552,7 +666,10 @@ void PassSession::PrepareRun(PassRun& run,
                              ID3D12Resource* game_exposure_texture,
                              ID3D12CommandQueue* command_queue,
                              IDXGISwapChain* swapchain,
-                             feature::pass::PassId pass_id) {
+                             feature::pass::PassId pass_id,
+                             uint64_t frame_id,
+                             ID3D12Fence* temporal_feedback_fence,
+                             uint64_t temporal_feedback_fence_value) {
   // Set before anything can read it: PrepareRun keys the store by it.
   pass_id_ = pass_id;
   run.session = this;
@@ -566,6 +683,9 @@ void PassSession::PrepareRun(PassRun& run,
   run.importance_mask = importance_mask;
   run.game_exposure_texture = game_exposure_texture;
   run.frame_debug = &frame_debug;
+  run.frame_id = frame_id;
+  run.temporal_feedback_fence = temporal_feedback_fence;
+  run.temporal_feedback_fence_value = temporal_feedback_fence_value;
 
   run.settings = &settings;
   run.pass_bound = true;
@@ -621,7 +741,10 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
                                      ID3D12Resource* game_exposure_texture,
                                      ID3D12CommandQueue* command_queue,
                                      IDXGISwapChain* swapchain,
-                                     feature::pass::PassId pass_id) {
+                                     feature::pass::PassId pass_id,
+                                     uint64_t frame_id,
+                                     ID3D12Fence* temporal_feedback_fence,
+                                     uint64_t temporal_feedback_fence_value) {
   // The pre-refactor entry points were serialized against each other with this
   // mutex; the runner walk replaces them, so it has to hold the same lock.
   std::lock_guard<std::mutex> lock(g_session_mutex);
@@ -652,7 +775,9 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
   PassRun run;
   PrepareRun(run, settings, codec, runtime, command_list, output_resource,
              is_first_pass, frame_debug, hdr, hdr_cmd, importance_mask,
-             game_exposure_texture, command_queue, swapchain, pass_id);
+             game_exposure_texture, command_queue, swapchain, pass_id,
+             frame_id, temporal_feedback_fence,
+             temporal_feedback_fence_value);
 
   const PipelineStatus status = PipelineRunner::RunStage(stage, run);
 
@@ -1302,6 +1427,332 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
   return PipelineStatus::Ok;
 }
 
+// Temporal edit amortization. This stage runs after the actual model input has
+// been prepared and graded, but before NGX is called. When all evidence from a
+// completed prior frame permits reuse, it writes current_input * exp(warpedGain)
+// into the ordinary model-output resource and marks the NGX step as skipped.
+// Every rejection is fail-open: the regular fresh model evaluation still runs.
+PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
+  PassSession* self = run.session;
+  if (self == nullptr || run.codec == nullptr || run.device == nullptr ||
+      run.model_color == nullptr || run.model_output == nullptr ||
+      run.work_width == 0 || run.work_height == 0) {
+    return PipelineStatus::Ok;
+  }
+
+  const int mode = std::clamp(run.pass_state.temporal_mode, 0, 3);
+  if (mode == 0) {
+    self->temporal_history_valid_ = false;
+    self->temporal_feedback_valid_ = false;
+    self->temporal_invalid_fraction_ = 1.0f;
+    self->temporal_last_mode_ = 0;
+    self->temporal_settings_signature_ = 0;
+    return PipelineStatus::Ok;
+  }
+
+  const D3D12_RESOURCE_DESC input_desc = run.model_color->GetDesc();
+  bool resources_reset = false;
+  if (!self->resources_.EnsureTemporalResources(
+          run.device, input_desc, run.work_width, run.work_height,
+          &resources_reset)) {
+    // The feature is optional; do not turn a failed temporal allocation into
+    // a pass failure. Fresh NGX evaluation remains the rendering fallback.
+    self->temporal_history_valid_ = false;
+    self->temporal_feedback_valid_ = false;
+    run.temporal_active = false;
+    TRACE_EVT(self, "temporal disabled pass=%u reason=resource_create", self->pass_id_);
+    return PipelineStatus::Ok;
+  }
+
+  const uint64_t signature = TemporalSettingsSignature(run);
+  const DXGI_FORMAT depth_format = run.guides.depth != nullptr
+      ? run.guides.depth->GetDesc().Format : DXGI_FORMAT_UNKNOWN;
+  const DXGI_FORMAT motion_format = run.guides.motion != nullptr
+      ? run.guides.motion->GetDesc().Format : DXGI_FORMAT_UNKNOWN;
+  const bool contract_changed = resources_reset || self->temporal_last_mode_ != mode ||
+      self->temporal_settings_signature_ != signature ||
+      self->temporal_guide_width_ != run.guides.guide_width ||
+      self->temporal_guide_height_ != run.guides.guide_height ||
+      self->temporal_motion_width_ != run.guides.motion_width ||
+      self->temporal_motion_height_ != run.guides.motion_height ||
+      self->temporal_guide_base_x_ != run.guides.guide_base_x ||
+      self->temporal_guide_base_y_ != run.guides.guide_base_y ||
+      self->temporal_guide_subrect_width_ != run.guides.guide_subrect_width ||
+      self->temporal_guide_subrect_height_ != run.guides.guide_subrect_height ||
+      self->temporal_motion_base_x_ != run.guides.motion_base_x ||
+      self->temporal_motion_base_y_ != run.guides.motion_base_y ||
+      self->temporal_motion_subrect_width_ != run.guides.motion_subrect_width ||
+      self->temporal_motion_subrect_height_ != run.guides.motion_subrect_height ||
+      self->temporal_reference_width_ != run.guides.reference_width ||
+      self->temporal_reference_height_ != run.guides.reference_height ||
+      self->temporal_depth_format_ != depth_format ||
+      self->temporal_motion_format_ != motion_format ||
+      self->temporal_mv_scale_x_ != run.guides.mv_scale_x ||
+      self->temporal_mv_scale_y_ != run.guides.mv_scale_y;
+  if (contract_changed) {
+    self->temporal_history_valid_ = false;
+    self->temporal_feedback_valid_ = false;
+    self->temporal_invalid_fraction_ = 1.0f;
+    self->temporal_last_refresh_frame_ = 0;
+  }
+  self->temporal_last_mode_ = mode;
+  self->temporal_settings_signature_ = signature;
+  self->temporal_guide_width_ = run.guides.guide_width;
+  self->temporal_guide_height_ = run.guides.guide_height;
+  self->temporal_motion_width_ = run.guides.motion_width;
+  self->temporal_motion_height_ = run.guides.motion_height;
+  self->temporal_guide_base_x_ = run.guides.guide_base_x;
+  self->temporal_guide_base_y_ = run.guides.guide_base_y;
+  self->temporal_guide_subrect_width_ = run.guides.guide_subrect_width;
+  self->temporal_guide_subrect_height_ = run.guides.guide_subrect_height;
+  self->temporal_motion_base_x_ = run.guides.motion_base_x;
+  self->temporal_motion_base_y_ = run.guides.motion_base_y;
+  self->temporal_motion_subrect_width_ = run.guides.motion_subrect_width;
+  self->temporal_motion_subrect_height_ = run.guides.motion_subrect_height;
+  self->temporal_reference_width_ = run.guides.reference_width;
+  self->temporal_reference_height_ = run.guides.reference_height;
+  self->temporal_depth_format_ = depth_format;
+  self->temporal_motion_format_ = motion_format;
+  self->temporal_mv_scale_x_ = run.guides.mv_scale_x;
+  self->temporal_mv_scale_y_ = run.guides.mv_scale_y;
+
+  // Backbuffer reuse is allowed only if an NGX guide capture happened since
+  // the previous Present-stage use. Pre/Post stages own the just-captured
+  // guide snapshot directly and therefore need no serial comparison.
+  bool guides_fresh = run.guides_valid && run.guides.depth != nullptr &&
+      run.guides.motion != nullptr && run.guides.guide_width != 0 &&
+      run.guides.guide_height != 0 && run.guides.motion_width != 0 &&
+      run.guides.motion_height != 0 &&
+      std::isfinite(run.guides.mv_scale_x) && std::isfinite(run.guides.mv_scale_y);
+  if (run.stage != nullptr && run.stage->owns_submit) {
+    guides_fresh = guides_fresh && run.guides.capture_serial != 0 &&
+        run.guides.capture_serial != self->temporal_last_guide_serial_;
+  }
+  if (run.guides.capture_serial != 0) {
+    self->temporal_last_guide_serial_ = run.guides.capture_serial;
+  }
+  if (!guides_fresh) {
+    self->temporal_history_valid_ = false;
+    self->temporal_feedback_valid_ = false;
+    run.temporal_active = false;
+    TRACE_EVT(self, "temporal fallback pass=%u reason=guides_not_fresh", self->pass_id_);
+    return PipelineStatus::Ok;
+  }
+
+  ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
+  ID3D12Resource* previous_input = self->resources_.GetTemporalPreviousInput();
+  ID3D12Resource* previous_edit = self->resources_.GetTemporalPreviousEdit();
+  ID3D12Resource* previous_depth = self->resources_.GetTemporalPreviousDepth();
+  ID3D12Resource* candidate = self->resources_.GetTemporalCandidate();
+  ID3D12Resource* validated = self->resources_.GetTemporalValidatedCandidate();
+  ID3D12Resource* stats = self->resources_.GetTemporalStats();
+  if (list == nullptr || previous_input == nullptr || previous_edit == nullptr ||
+      previous_depth == nullptr || candidate == nullptr || validated == nullptr ||
+      stats == nullptr) {
+    self->temporal_history_valid_ = false;
+    self->temporal_feedback_valid_ = false;
+    return PipelineStatus::Ok;
+  }
+
+  // The game-list feedback is retired by a Release-queue signal scheduled
+  // after the game's submission. Backbuffer feedback uses this session's own
+  // fence, signalled by SubmitBackbuffer. Polling never waits on the GPU.
+  ID3D12Fence* feedback_fence = run.stage != nullptr && run.stage->owns_submit
+      ? self->command_.GetFence() : run.temporal_feedback_fence;
+  if (feedback_fence != nullptr) {
+    if (self->temporal_readback_.Ensure(run.device, 2u * sizeof(uint32_t))) {
+      bool sample_valid = false;
+      const float fraction = TemporalReadInvalidFraction(
+          self->temporal_readback_, feedback_fence, run.work_width,
+          run.work_height, &sample_valid);
+      // Feedback validity is carried separately from the invalid fraction.
+      if (sample_valid) {
+        self->temporal_invalid_fraction_ = fraction;
+        self->temporal_feedback_valid_ = true;
+      } else if (fraction >= 1.0f && !self->temporal_history_valid_) {
+        self->temporal_feedback_valid_ = false;
+      }
+    }
+  }
+
+  const bool duplicate_frame = run.frame_id != 0 &&
+      run.frame_id == self->temporal_last_frame_id_;
+  run.temporal_duplicate_frame = duplicate_frame;
+  run.temporal_active = true;
+  run.temporal_reuse = false;
+  run.temporal_store_history = !duplicate_frame && run.frame_id != 0;
+  self->temporal_last_frame_id_ = run.frame_id;
+
+  self->command_.Transition(list, run.model_color,
+                            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  self->command_.Transition(list, run.model_output,
+                            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  self->command_.Transition(list, previous_input,
+                            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  self->command_.Transition(list, previous_edit,
+                            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  self->command_.Transition(list, previous_depth,
+                            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  self->command_.Transition(list, candidate,
+                            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  self->command_.Transition(list, validated,
+                            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  self->command_.Transition(list, stats,
+                            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  self->command_.Transition(list, run.guides.motion,
+                            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  self->command_.Transition(list, run.guides.depth,
+                            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+  ComputeConstants constants = {};
+  constants.Width = run.work_width;
+  constants.Height = run.work_height;
+  ID3D12Resource* repeated_srvs[kSrvCount] = {
+      run.model_color, run.model_color, run.model_color, run.model_color};
+  ID3D12Resource* stats_uavs[kUavCount] = {stats};
+  if (!run.codec->Dispatch("TemporalClearStats", list, constants,
+                           repeated_srvs, stats_uavs, 1, 1, 1)) {
+    self->temporal_history_valid_ = false;
+    self->temporal_feedback_valid_ = false;
+    run.temporal_active = false;
+    TRACE_EVT(self, "temporal fallback pass=%u reason=clear_stats", self->pass_id_);
+    return PipelineStatus::Ok;
+  }
+  self->command_.UavBarrier(list, stats);
+
+  bool have_candidate = self->temporal_history_valid_ && !contract_changed &&
+      previous_input != nullptr && previous_edit != nullptr &&
+      previous_depth != nullptr;
+  if (have_candidate) {
+    ID3D12Resource* reproject_srvs[kSrvCount] = {
+        run.model_color, previous_input, previous_edit, run.guides.motion};
+    ID3D12Resource* candidate_uavs[kUavCount] = {candidate};
+    constants.shader.Params0.x = run.guides.mv_scale_x;
+    constants.shader.Params0.y = run.guides.mv_scale_y;
+    constants.shader.Params0.z = static_cast<float>(run.guides.motion_base_x);
+    constants.shader.Params0.w = static_cast<float>(run.guides.motion_base_y);
+    constants.shader.Params1.x = static_cast<float>(run.guides.reference_width);
+    constants.shader.Params1.y = static_cast<float>(run.guides.reference_height);
+    constants.shader.Params1.z = static_cast<float>(run.guides.motion_subrect_width);
+    constants.shader.Params1.w = static_cast<float>(run.guides.motion_subrect_height);
+    constants.hdr.LocalExposure.x = static_cast<float>(run.guides.guide_base_x);
+    constants.hdr.LocalExposure.y = static_cast<float>(run.guides.guide_base_y);
+    constants.hdr.LocalExposure.z = static_cast<float>(run.guides.guide_subrect_width);
+    constants.hdr.LocalExposure.w = static_cast<float>(run.guides.guide_subrect_height);
+    if (!run.codec->Dispatch("TemporalReprojectEdit", list, constants,
+                             reproject_srvs, candidate_uavs)) {
+      self->temporal_history_valid_ = false;
+      self->temporal_feedback_valid_ = false;
+      run.temporal_active = false;
+      TRACE_EVT(self, "temporal fallback pass=%u reason=reproject", self->pass_id_);
+      return PipelineStatus::Ok;
+    }
+    self->command_.UavBarrier(list, candidate);
+    self->command_.Transition(list, candidate,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+    ID3D12Resource* validate_srvs[kSrvCount] = {
+        candidate, run.guides.motion, run.guides.depth, previous_depth};
+    ID3D12Resource* validated_uavs[kUavCount] = {validated};
+    constants.shader.Params0.x = run.guides.mv_scale_x;
+    constants.shader.Params0.y = run.guides.mv_scale_y;
+    constants.shader.Params0.z = static_cast<float>(run.guides.motion_base_x);
+    constants.shader.Params0.w = static_cast<float>(run.guides.motion_base_y);
+    constants.shader.Params1.x = static_cast<float>(run.guides.reference_width);
+    constants.shader.Params1.y = static_cast<float>(run.guides.reference_height);
+    constants.shader.Params1.z = static_cast<float>(run.guides.motion_subrect_width);
+    constants.shader.Params1.w = static_cast<float>(run.guides.motion_subrect_height);
+    constants.hdr.LocalExposure.x = static_cast<float>(run.guides.guide_base_x);
+    constants.hdr.LocalExposure.y = static_cast<float>(run.guides.guide_base_y);
+    constants.hdr.LocalExposure.z = static_cast<float>(run.guides.guide_subrect_width);
+    constants.hdr.LocalExposure.w = static_cast<float>(run.guides.guide_subrect_height);
+    if (!run.codec->Dispatch("TemporalValidateDepth", list, constants,
+                             validate_srvs, validated_uavs)) {
+      self->temporal_history_valid_ = false;
+      self->temporal_feedback_valid_ = false;
+      run.temporal_active = false;
+      TRACE_EVT(self, "temporal fallback pass=%u reason=depth_validate", self->pass_id_);
+      return PipelineStatus::Ok;
+    }
+    self->command_.UavBarrier(list, validated);
+    self->command_.Transition(list, validated,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+    ID3D12Resource* count_srvs[kSrvCount] = {
+        validated, validated, validated, validated};
+    if (!run.codec->Dispatch("TemporalCountInvalid", list, constants,
+                             count_srvs, stats_uavs)) {
+      self->temporal_history_valid_ = false;
+      self->temporal_feedback_valid_ = false;
+      run.temporal_active = false;
+      TRACE_EVT(self, "temporal fallback pass=%u reason=count_invalid", self->pass_id_);
+      return PipelineStatus::Ok;
+    }
+    self->command_.UavBarrier(list, stats);
+  }
+
+  // Enqueue the current validation sample for a later frame. The fence value
+  // is predicted from the owning queue's next signal; no CPU synchronization is
+  // introduced. A missing fence merely delays policy feedback and thus forces
+  // fresh model evaluation.
+  ID3D12Fence* copy_fence = feedback_fence;
+  uint64_t copy_fence_value = 0;
+  if (run.stage != nullptr && run.stage->owns_submit) {
+    copy_fence = self->command_.GetFence();
+    copy_fence_value = self->command_.GetNextFenceValue();
+  } else {
+    copy_fence_value = run.temporal_feedback_fence_value;
+  }
+  if (copy_fence != nullptr && copy_fence_value != 0 &&
+      self->temporal_readback_.Ensure(run.device, 2u * sizeof(uint32_t))) {
+    self->command_.Transition(list, stats, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    if (!self->temporal_readback_.EnqueueCopy(
+            list, stats, 2u * sizeof(uint32_t), copy_fence, copy_fence_value)) {
+      TRACE_EVT(self, "temporal feedback copy deferred pass=%u", self->pass_id_);
+    }
+    self->command_.Transition(list, stats, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  }
+
+  const uint64_t age = run.frame_id >= self->temporal_last_refresh_frame_
+      ? run.frame_id - self->temporal_last_refresh_frame_ : UINT64_MAX;
+  uint64_t cadence = 4;
+  if (mode == 2) cadence = 2;
+  // Adaptive and Every 4 both have a hard four-frame maximum age. Adaptive's
+  // refresh is driven by the same validation threshold; Every 4 adds the
+  // deterministic cadence floor, while failed validation always refreshes.
+  const bool can_skip = have_candidate && !duplicate_frame && run.frame_id != 0 &&
+      self->temporal_feedback_valid_ && self->temporal_invalid_fraction_ < 0.05f &&
+      self->temporal_last_refresh_frame_ != 0 && age > 0 && age < cadence;
+  if (can_skip) {
+    self->command_.Transition(list, validated,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    ID3D12Resource* apply_srvs[kSrvCount] = {
+        run.model_color, validated, validated, validated};
+    ID3D12Resource* output_uavs[kUavCount] = {run.model_output};
+    self->command_.Transition(list, run.model_output,
+                              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    if (run.codec->Dispatch("TemporalApplyEdit", list, constants,
+                             apply_srvs, output_uavs)) {
+      self->command_.UavBarrier(list, run.model_output);
+      run.temporal_reuse = true;
+      run.eval_result = NVSDK_NGX_Result_Success;
+      TRACE_EVT(self, "temporal reuse pass=%u age=%llu invalid=%.4f mode=%d",
+                self->pass_id_, static_cast<unsigned long long>(age),
+                self->temporal_invalid_fraction_, mode);
+    } else {
+      self->temporal_history_valid_ = false;
+      self->temporal_feedback_valid_ = false;
+      run.temporal_reuse = false;
+      TRACE_EVT(self, "temporal refresh pass=%u reason=apply_dispatch", self->pass_id_);
+    }
+  }
+
+  if (!run.temporal_reuse && run.frame_id != 0 && !duplicate_frame) {
+    self->temporal_last_refresh_frame_ = run.frame_id;
+  }
+  return PipelineStatus::Ok;
+}
+
 // Builds the full-resolution local SDR exposure scale for debug visualization.
 // HDR inverse composition recovers the same multiplier from the source/carrier
 // pair and does not use this extra texture in its descriptor table.
@@ -1367,6 +1818,7 @@ PipelineStatus PassSession::StepBuildEffectiveLocalExposure(PassRun& run) {
 // for this evaluation.
 PipelineStatus PassSession::StepFillEvaluateParams(PassRun& run) {
   PassSession* self = run.session;
+  if (run.temporal_reuse) return PipelineStatus::Ok;
   if (run.runtime == nullptr || !run.pass_bound) {
     return PipelineStatus::SkipFrame;
   }
@@ -1485,6 +1937,11 @@ bool PassSession::EvalKeysDiffer(const EvalLogKey& a, const EvalLogKey& b) {
 // behaviour this refactor preserves. The Stage 5 bug list records it.
 PipelineStatus PassSession::StepEvaluateFeature(PassRun& run) {
   PassSession* self = run.session;
+  if (run.temporal_reuse) {
+    run.eval_result = NVSDK_NGX_Result_Success;
+    TRACE_EVT(self, "temporal skip NGX pass=%u", self->pass_id_);
+    return PipelineStatus::Ok;
+  }
   if (run.runtime == nullptr) return PipelineStatus::SkipFrame;
 
   void* feature_handle = static_cast<void*>(self->feature_.FeatureHandle());
@@ -1532,7 +1989,107 @@ PipelineStatus PassSession::StepEvaluateFeature(PassRun& run) {
 PipelineStatus PassSession::StepModelOutputBarrier(PassRun& run) {
   PassSession* self = run.session;
   if (run.model_output == nullptr) return PipelineStatus::Ok;
-  self->command_.UavBarrier(self->StageList(run, self->command_), run.model_output);
+  ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
+  self->command_.UavBarrier(list, run.model_output);
+
+  if (!run.temporal_active) return PipelineStatus::Ok;
+  if (run.temporal_reuse) {
+    self->command_.Transition(list, run.model_output,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
+  if (!run.temporal_store_history || run.guides.depth == nullptr ||
+      run.guides.motion == nullptr ||
+      (!run.temporal_reuse && run.eval_result != NVSDK_NGX_Result_Success)) {
+    self->temporal_history_valid_ = false;
+    return PipelineStatus::Ok;
+  }
+
+  ID3D12Resource* previous_input = self->resources_.GetTemporalPreviousInput();
+  ID3D12Resource* previous_edit = self->resources_.GetTemporalPreviousEdit();
+  ID3D12Resource* previous_depth = self->resources_.GetTemporalPreviousDepth();
+  ID3D12Resource* validated = self->resources_.GetTemporalValidatedCandidate();
+  if (previous_input == nullptr || previous_edit == nullptr ||
+      previous_depth == nullptr || validated == nullptr || run.model_color == nullptr ||
+      run.codec == nullptr) {
+    self->temporal_history_valid_ = false;
+    return PipelineStatus::Ok;
+  }
+
+  ComputeConstants constants = {};
+  constants.Width = run.work_width;
+  constants.Height = run.work_height;
+  ID3D12Resource* edit_srvs[kSrvCount] = {
+      run.model_color, run.model_output, run.model_output, run.model_output};
+  ID3D12Resource* edit_uavs[kUavCount] = {previous_edit};
+
+  if (run.temporal_reuse) {
+    self->command_.Transition(list, validated,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    self->command_.Transition(list, previous_edit,
+                              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    ID3D12Resource* commit_srvs[kSrvCount] = {
+        validated, validated, validated, validated};
+    if (!run.codec->Dispatch("TemporalCommitEdit", list, constants,
+                             commit_srvs, edit_uavs)) {
+      self->temporal_history_valid_ = false;
+      return PipelineStatus::Ok;
+    }
+  } else {
+    self->command_.Transition(list, run.model_color,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    self->command_.Transition(list, run.model_output,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    self->command_.Transition(list, previous_edit,
+                              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    if (!run.codec->Dispatch("TemporalExtractEdit", list, constants,
+                             edit_srvs, edit_uavs)) {
+      self->temporal_history_valid_ = false;
+      return PipelineStatus::Ok;
+    }
+  }
+  self->command_.UavBarrier(list, previous_edit);
+
+  // Advance the photometric reference on every processed frame. The source is
+  // exactly the input seen by NGX (after preparation and input grade), not a
+  // prior model output that would freeze old lighting and scene content.
+  const D3D12_RESOURCE_STATES input_state =
+      self->command_.GetResourceState(run.model_color);
+  self->command_.Transition(list, run.model_color,
+                            D3D12_RESOURCE_STATE_COPY_SOURCE);
+  self->command_.Transition(list, previous_input,
+                            D3D12_RESOURCE_STATE_COPY_DEST);
+  list->CopyResource(previous_input, run.model_color);
+  self->command_.Transition(list, run.model_color,
+                            input_state == D3D12_RESOURCE_STATE_COMMON
+                                ? D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE
+                                : input_state);
+  self->command_.Transition(list, previous_input,
+                            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+  self->command_.Transition(list, run.guides.depth,
+                            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  self->command_.Transition(list, previous_depth,
+                            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  constants.hdr.LocalExposure.x = static_cast<float>(run.guides.guide_base_x);
+  constants.hdr.LocalExposure.y = static_cast<float>(run.guides.guide_base_y);
+  constants.hdr.LocalExposure.z = static_cast<float>(run.guides.guide_subrect_width);
+  constants.hdr.LocalExposure.w = static_cast<float>(run.guides.guide_subrect_height);
+  ID3D12Resource* depth_srvs[kSrvCount] = {
+      run.guides.depth, run.guides.depth, run.guides.depth, run.guides.depth};
+  ID3D12Resource* depth_uavs[kUavCount] = {previous_depth};
+  if (!run.codec->Dispatch("TemporalStoreDepth", list, constants,
+                           depth_srvs, depth_uavs)) {
+    self->temporal_history_valid_ = false;
+    return PipelineStatus::Ok;
+  }
+  self->command_.UavBarrier(list, previous_depth);
+  self->temporal_history_valid_ = true;
+  if (!run.temporal_reuse) {
+    self->temporal_last_refresh_frame_ = run.frame_id;
+  }
+  TRACE_EVT(self, "temporal history committed pass=%u reuse=%d frame=%llu",
+            self->pass_id_, run.temporal_reuse ? 1 : 0,
+            static_cast<unsigned long long>(run.frame_id));
   return PipelineStatus::Ok;
 }
 
@@ -1697,6 +2254,11 @@ constexpr PipelineNodeId kNoDeps[] = {PipelineNodeId::Count};
 // is producing those for later steps, not consuming them, so requiring them
 // would be wrong — AcquireBackbuffer writes both, and the steps that read them
 // run after it.
+constexpr PipelineNodeId kTemporalPrepareRequires[] = {
+    PipelineNodeId::GradeModelInput,
+    PipelineNodeId::SnapshotGuides,
+    PipelineNodeId::Count};
+
 constexpr PipelineStepDef kSessionSteps[] = {
     // -- setup --------------------------------------------------------------
     // Produces run.device and run.backbuffer; consumes the swapchain and the
@@ -1740,6 +2302,9 @@ constexpr PipelineStepDef kSessionSteps[] = {
     // command list: run.list is not what it reads in Backbuffer.
     {PipelineNodeId::GradeModelInput, "GradeModelInput",
      &PassSession::StepGradeModelInput, kNoDeps, StageInput::None, false},
+    {PipelineNodeId::TemporalPrepare, "TemporalPrepare",
+     &PassSession::StepTemporalPrepare, kTemporalPrepareRequires,
+     StageInput::Stage, false},
     {PipelineNodeId::FillEvaluateParams, "FillEvaluateParams",
      &PassSession::StepFillEvaluateParams, kNoDeps, StageInput::None, false},
     {PipelineNodeId::EvaluateFeature, "EvaluateFeature",

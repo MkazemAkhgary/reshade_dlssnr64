@@ -213,6 +213,9 @@ class AddonController {
   // The Release stage's command list, opened on demand by
   // BeginReleaseCommands and submitted by EndReleaseCommands.
   CommandContext release_command_;
+  uint64_t frame_id_ = 1;
+  // A game-list temporal stats copy is complete only after the next Present queue marker.
+  bool temporal_feedback_pending_ = false;
   // Keep the most recently observed direct queue so addon shutdown can place
   // a final queue marker before releasing sessions that may have GPU work.
   Microsoft::WRL::ComPtr<ID3D12CommandQueue> last_command_queue_;

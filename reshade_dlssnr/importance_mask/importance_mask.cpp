@@ -57,7 +57,8 @@ PipelineStatus RunBuildImportanceMask(PassRun& run) {
       !run.hdr_state.enable || !run.mask_state.enable ||
       run.importance_mask == nullptr ||
       run.model_color == nullptr || run.model_output == nullptr ||
-      run.eval_result != NVSDK_NGX_Result_Success || run.session == nullptr ||
+      run.eval_result != NVSDK_NGX_Result_Success || run.temporal_reuse ||
+      run.session == nullptr ||
       run.cmd == nullptr || run.codec == nullptr ||
       run.device == nullptr || run.hdr == nullptr || !run.hdr->Enabled() ||
       !run.importance_mask->CanBuildThisFrame()) {

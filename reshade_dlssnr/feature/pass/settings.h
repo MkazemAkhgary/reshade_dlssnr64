@@ -36,6 +36,7 @@ inline constexpr const char* kSkinStructure = "skin_structure";
 inline constexpr const char* kUiCorrection = "ui_correction";
 inline constexpr const char* kLumaStrength = "luma_strength";
 inline constexpr const char* kChromaStrength = "chroma_strength";
+inline constexpr const char* kTemporalMode = "temporal_mode";
 
 // Category "Advanced".
 inline constexpr const char* kSoftCompressionEnabled = "soft_compression_enabled";

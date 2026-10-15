@@ -69,6 +69,18 @@ class PassResources {
   // stores global exposure × the exact local exposure factor applied by the
   // gain-map split to that source pixel.
   Microsoft::WRL::ComPtr<ID3D12Resource> effective_exposure_map;
+
+  // Temporal edit history. The history stores the current model input and a
+  // bounded multiplicative log-gain field, never the previous output image.
+  Microsoft::WRL::ComPtr<ID3D12Resource> temporal_previous_input;
+  Microsoft::WRL::ComPtr<ID3D12Resource> temporal_previous_edit;
+  Microsoft::WRL::ComPtr<ID3D12Resource> temporal_previous_depth;
+  Microsoft::WRL::ComPtr<ID3D12Resource> temporal_candidate;
+  Microsoft::WRL::ComPtr<ID3D12Resource> temporal_validated_candidate;
+  Microsoft::WRL::ComPtr<ID3D12Resource> temporal_stats;
+  unsigned int temporal_width = 0;
+  unsigned int temporal_height = 0;
+  DXGI_FORMAT temporal_input_format = DXGI_FORMAT_UNKNOWN;
   unsigned int effective_exposure_width = 0;
   unsigned int effective_exposure_height = 0;
   unsigned int working_width = 0;
@@ -102,6 +114,12 @@ class PassResources {
       unsigned int work_height);
   bool EnsureEffectiveExposureMap(
       ID3D12Device* device, unsigned int width, unsigned int height);
+  // `input_desc` is the actual model-domain input (which may be the game
+  // resource in identity-scale SDR mode). `out_reset_history` is true when
+  // any temporal resource had to be recreated.
+  bool EnsureTemporalResources(
+      ID3D12Device* device, const D3D12_RESOURCE_DESC& input_desc,
+      unsigned int width, unsigned int height, bool* out_reset_history);
 
   // Ensures scratch slot `index` matches the given size and format.
   bool EnsureScratch(
@@ -127,6 +145,12 @@ class PassResources {
     return unlifted_working_input.Get();
   }
   ID3D12Resource* GetEffectiveExposureMap() const { return effective_exposure_map.Get(); }
+  ID3D12Resource* GetTemporalPreviousInput() const { return temporal_previous_input.Get(); }
+  ID3D12Resource* GetTemporalPreviousEdit() const { return temporal_previous_edit.Get(); }
+  ID3D12Resource* GetTemporalPreviousDepth() const { return temporal_previous_depth.Get(); }
+  ID3D12Resource* GetTemporalCandidate() const { return temporal_candidate.Get(); }
+  ID3D12Resource* GetTemporalValidatedCandidate() const { return temporal_validated_candidate.Get(); }
+  ID3D12Resource* GetTemporalStats() const { return temporal_stats.Get(); }
   // True when slot `index` already holds a texture of the given shape. Lets a
   // caller pick between two slots instead of letting EnsureScratch dispose a
   // matching one in the other.
