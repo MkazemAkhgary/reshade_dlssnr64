@@ -407,7 +407,6 @@
   <ItemGroup>
     <None Include="shaders\compose\compose_model_output.hlsl" />
     <None Include="shaders\compose\compose_model_output_hdr.hlsl" />
-    <None Include="shaders\compose\compose_model_output_hdr_inverse.hlsl" />
     <None Include="shaders\debug\debug_display.hlsl" />
     <None Include="shaders\debug\debug_hdr_roundtrip.hlsl" />
     <None Include="shaders\grade\apply_grade.hlsl" />
@@ -425,6 +424,7 @@
     <None Include="shaders\common\cbuffer.hlsli" />
     <None Include="shaders\common\color.hlsli" />
     <None Include="shaders\common\compose_common.hlsli" />
+    <None Include="shaders\common\compose_upsample.hlsli" />
     <None Include="shaders\common\fsr.hlsli" />
     <None Include="shaders\common\grade.hlsli" />
     <None Include="shaders\common\hdr_local_exposure.hlsli" />

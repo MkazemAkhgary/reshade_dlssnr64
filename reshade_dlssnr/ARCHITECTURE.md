@@ -8,7 +8,7 @@ HDR is handled by the Pre-DLSS and Post-DLSS paths. The source is converted into
 
 ## Repository layout
 
-The source tree is organized by ownership rather than by pipeline stage. `ctl` is domain-agnostic: it defines schemas, values, persistence, generic drawing, and tracing, but does not include or register application features. `feature/register_all.cpp` owns the application schema composition, and `feature/settings_store.cpp` builds the live store from that registration. This dependency runs from the feature layer into `ctl`, never the reverse. The only host-specific `ctl/usage` adapter is the ReShade config reader/writer.
+The source tree is organized by ownership rather than by pipeline stage. `ctl` is domain-agnostic: it defines schemas, values, persistence, generic drawing, and tracing, but does not include or register application features. `feature/register_all.cpp` owns the application schema composition, and `feature/settings_store.cpp` builds the live store from that registration. This dependency runs from the feature layer into `ctl`, never the reverse. The only host-specific `ctl/usage` adapter is the ReShade config reader/writer. `ctl` is domain-agnostic: it defines schemas, values, persistence, generic drawing, and tracing, but does not include or register application features. `feature/register_all.cpp` owns the application schema composition, and `feature/settings_store.cpp` builds the live store from that registration. This dependency runs from the feature layer into `ctl`, never the reverse. The only host-specific `ctl/usage` adapter is the ReShade config reader/writer.
 
 ```text
 reshade_dlssnr/
@@ -45,12 +45,11 @@ reshade_dlssnr/
     fsr.hlsli                       FSR 1.0 EASU/RCAS implementation
     box_filter.hlsli                Exact footprint Box Area Average
     compose_common.hlsli            Residual shaping, ratio compose, YCbCr blend
+    compose_upsample.hlsli          Shared SDR/HDR joint-bilateral upsampling
 
   shaders/compose/
     compose_model_output.hlsl       SDR compose with FSR upsampling
     compose_model_output_hdr.hlsl   Gain-Map Residual HDR compose with FSR upsampling and source-preserving HDR composition
-    compose_model_output_hdr_inverse.hlsl
-                                    Retained HDR inverse-compose shader root (verified, not registered for runtime dispatch)
   shaders/debug/
     debug_display.hlsl              Debug-view renderer
     debug_hdr_roundtrip.hlsl        HDR round-trip, error, and local-exposure diagnostic renderer
@@ -88,6 +87,7 @@ reshade_dlssnr/
     serialize.h/.cpp               Schema-driven persistence
     draw.h/.cpp                    Generic section renderer
     builtin_settings.h/.cpp        Float, Int, Bool, Enum, String, and IntList settings
+    trace.h/.cpp                   Generic tracing for all registered settings
     usage/                          ReShade config adapter
     ctl_acceptance.cpp              Headless acceptance harness
   feature/                         Feature-owned setting schemas and typed views
@@ -176,7 +176,7 @@ reshade_dlssnr/
     importance_mask.h               Importance Mask resource and dispatch interface
     importance_mask.cpp             Importance Mask generation and frame publication
   state/
-    settings.h                      Top-level settings, profile metadata, and UI state
+    settings.h                      Runtime flags, active pass, and profile metadata
     settings.cpp                    Top-level/profile config and legacy-setting migration
     trace.h                         Settings trace interface
     trace.cpp                       Settings change tracing
@@ -588,7 +588,7 @@ Debug views show the pre-depth candidate, post-depth validation result, and per-
 
 **HDR composition uses Gain-Map Residual exclusively.** HDR Pre-DLSS and Post-DLSS passes use the packed per-pixel carrier-to-HDR multiplier to transfer model edits back to the untouched full-resolution HDR source. The former HDR Ratio mode and selector are removed. SDR composition, including Present/backbuffer passes, retains its existing log-ratio residual path and settings.
 
-**HDR exposure is configured as a layer stack.** The HDR UI has separate `Game Exposure`, `Adaptive Exposure`, and `Local Exposure` tabs. The default stack order is Game Exposure base, Adaptive Exposure correction, then Local Exposure. Game and Adaptive Exposure retain their Importance Mask, Depth, and Percentile Range filter combinations. Local Exposure exposes neighborhood block size, a 4-48 sample count, and `Restore Global Exposure`; its correction remains continuous per pixel and uses no filters. Restoration computes the arithmetic mean of the local exposure multiplier on the GPU and applies its reciprocal uniformly to linear RGB, rather than reversing the per-pixel field. The exclusive Median and combined Auto Exposure + Local modes are removed; old settings are migrated to the closest layer configuration.
+**HDR exposure is configured as a layer stack.** The HDR UI has separate `Game Exposure`, `Adaptive Exposure`, and `Local Exposure` tabs. The default stack order is Game Exposure base, Adaptive Exposure correction, then Local Exposure. Game and Adaptive Exposure retain their Importance Mask, Depth, and Percentile Range filter combinations. Local Exposure exposes neighborhood block size, a 4-48 sample count, and `Restore Global Exposure`; its correction remains continuous per pixel and uses no filters. When restoration is enabled, a GPU reduction computes the arithmetic mean of the local-exposure multiplier texture and applies its reciprocal uniformly to linear RGB before output grading. It does not undo the local field pixel by pixel, so the model's intended spatial shading is retained while average exposure is brought roughly back toward the global level. The exclusive Median and combined Auto Exposure + Local modes are removed.
 
 **Importance Mask is derived from the pass result, not a separate model evaluation.** It compares the first successful Pre/Post-DLSS pass's raw model output with the same-resolution model input actually fed to NGX, including input grading and Local Exposure. The mask reads that input directly instead of making a separate ungraded/unlifted copy. The previous-frame mask is used by importance-mask temporal filtering and exposure only; it is separate from the model-edit reprojection history. The new mask is published at Present.
 
@@ -604,7 +604,7 @@ Debug views show the pre-depth candidate, post-depth validation result, and per-
 
 The HDR path is gain-map based and runs on the Pre-DLSS and Post-DLSS targets. Backbuffer passes use the existing SDR composition path.
 
-1. `HdrState` detects the source format and resolves the enabled exposure layers. Game Exposure is the base when its game-provided value is valid; Adaptive Exposure contributes its filtered histogram correction or supplies global exposure when Game Exposure is unavailable. Local Exposure computes a continuous spatial scale from its configured neighborhood block size and 4-48 tap sample count using spatial-distance weights only. The same helper and controls are used by the gain-map split and effective-exposure diagnostic map. The optional `Restore Global Exposure` step reduces the generated local exposure multiplier texture to an arithmetic mean, then applies the reciprocal as one uniform linear-RGB exposure correction before output grading. It does not undo each pixel's local lift, preserving the model's spatial shading while bringing average exposure roughly back toward the global level. Remaining differences depend on the image content and the model's response; this adjustment is not intended to reverse the model's own edits. Importance Mask compares the actual model input after input grading and Local Exposure with the raw model output.
+1. `HdrState` detects the source format and resolves the enabled exposure layers. Game Exposure is the base when its game-provided value is valid; Adaptive Exposure contributes its filtered histogram correction or supplies global exposure when Game Exposure is unavailable. Local Exposure computes a continuous spatial scale from its configured neighborhood block size and 4-48 tap sample count using spatial-distance weights only. The same helper and controls are used by the gain-map split and effective-exposure diagnostic map. The optional `Restore Global Exposure` step reduces the local-exposure multiplier texture to an arithmetic mean on the GPU, then divides model-output linear RGB by that single scalar before output grading. This restores average exposure approximately without cancelling local variation pixel by pixel; the model's intended shading remains intact. It preserves channel ratios, though the model and gamut mapping can still change the result. Importance Mask compares the actual model input after input grading and Local Exposure with the raw model output.
 2. `Importance Mask` is generated from the first successful Pre/Post-DLSS pass's actual model input (after input grading and Local Exposure, when enabled) and its raw model output. It reads the same model-input resource that NGX evaluated, so there is no separate ungraded/unlifted mask reference. The mask is not consumed by any stage until the next Present boundary; backbuffer passes are excluded. It does not evaluate a separate model feature.
 3. `GainMapSplit` converts the full-resolution HDR source into an RGBA32F carrier: RGB is the linear SDR base and A is the reciprocal of the complete carrier scale. BT.2446-C parameters and scene-white control the carrier; no additive gain offsets or gain ceiling are applied. If Local Exposure is enabled, a second invocation with Local Exposure disabled writes a global-only carrier for the residual reference.
 4. `PrepareModelInput` performs exact Box Area downsampling. For the HDR carrier path it applies the reversible model highlight/gamut fit and sRGB encoding. When Local Exposure is active, the global-only carrier uses this same path to create a separate unlifted working-resolution reference for HDR composition. Importance Mask instead reads the actual prepared model input after input grading; it never uses the composition reference.
@@ -712,7 +712,7 @@ These are retained as user-reported symptoms whose root causes are not establish
 
 ## Build
 
-The project is a Visual Studio x64 DLL/addon build. Release builds use speed optimization by default. UI-only drawing, schema/UI-hook, and ctl rendering translation units override this with size optimization and disabled inline expansion; these source files are also compiled without whole-program IR so link-time optimization cannot inline their functions back into the runtime modules. Pipeline, GPU, shader-dispatch, and other runtime translation units retain speed optimization.
+The project is a Visual Studio x64 DLL/addon build. Release builds use speed optimization by default. UI-only drawing, schema/UI-hook, and ctl rendering translation units override this with size optimization and disabled inline expansion; these source files are also compiled without whole-program IR so link-time optimization cannot inline their functions back into the runtime modules. Pipeline, GPU, shader-dispatch, and other runtime translation units retain speed optimization. Release builds use speed optimization by default. UI-only drawing, schema/UI-hook, and ctl rendering translation units override this with size optimization and disabled inline expansion; these source files are also compiled without whole-program IR so link-time optimization cannot inline their functions back into the runtime modules. Pipeline, GPU, shader-dispatch, and other runtime translation units retain speed optimization.
 
 - Solution: `reshade_dlssnr.sln`
 - Project: `reshade_dlssnr.vcxproj`
