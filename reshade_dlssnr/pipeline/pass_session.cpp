@@ -10,7 +10,7 @@
 
 #include <reshade.hpp>
 
-#include "ctl/usage/ui_store.h"
+#include "feature/settings_store.h"
 #include "ctl/values.h"
 #include "d3d12_utils.h"
 #include "gpu_readback.h"
@@ -111,7 +111,7 @@ float TemporalReadInvalidFraction(GpuReadback& readback, ID3D12Fence* fence,
 // because that is application state the store does not hold.
 std::vector<EnabledPass> EnabledPasses(const Settings& settings) {
   std::vector<EnabledPass> passes;
-  ctl::ValueStore& store = ctl::Store();
+  ctl::ValueStore& store = feature::SettingsStore();
   for (uint32_t position = 0; position < settings.pass_order.size();
        ++position) {
     const feature::pass::PassId id = settings.pass_order[position];
@@ -661,7 +661,7 @@ void PassSession::PrepareRun(PassRun& run,
   // session's slot, because a reorder rearranges the tabs without moving any
   // setting.
   {
-    const ctl::ValueStore& store = ctl::Store();
+    const ctl::ValueStore& store = feature::SettingsStore();
     const ctl::InstanceKey key = feature::pass::PassKey(pass_id_);
     run.pass_state = feature::pass::Read(store, key);
     run.grade_input =

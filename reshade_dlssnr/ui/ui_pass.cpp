@@ -2,7 +2,7 @@
 // own.
 //
 // Everything the pass body *renders* now comes from the ctl schema (see
-// ctl/usage/ui_schema.cpp, `sections::kPass`). What is left here is the part
+// feature/pass/schema.cpp). What is left here is the part
 // that is genuinely about the pass array rather than about settings rows: the
 // toolbar that permutes and resizes it, the deferred mutation queue those
 // buttons feed, and the profile reset. The overlay applies the queue at the
@@ -17,7 +17,7 @@
 #include <cstdio>
 #include <string>
 
-#include "ctl/usage/ui_store.h"
+#include "feature/settings_store.h"
 #include "ctl/values.h"
 #include "feature/pass/settings.h"
 #include "feature/pass/ui.h"
@@ -44,7 +44,7 @@ namespace {
 void ResetPassProfile(feature::pass::PassId id) {
   const ctl::InstanceKey key = feature::pass::PassKey(id);
   const std::string section = feature::pass::kSection;
-  ctl::ValueStore& store = ctl::Store();
+  ctl::ValueStore& store = feature::SettingsStore();
 
   const int target = store.Read(section, key, feature::pass::kTarget).as_int;
   const bool pass_enabled =

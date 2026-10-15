@@ -144,7 +144,7 @@ class ValueStore {
 
   // Resolve a setting for an instance: its own value, or the declared
   // default when nothing has been written yet.
-  Value Resolve(Instance& instance, uint32_t setting_id) const;
+  Value Resolve(const Instance& instance, uint32_t setting_id) const;
 
   // Programmatic read. Returns the resolved value. Never touches the UI.
   Value Read(const std::string& section, const InstanceKey& key,

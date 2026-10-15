@@ -36,7 +36,7 @@ MSYS2_ARG_CONV_EXCL='*' cl.exe /nologo /W3 /permissive- /std:c++20 /EHsc \
   "/Fo$OUT/" /Fe"$OUT/ctl_acceptance.exe" \
   ctl/ctl_acceptance.cpp ctl/types.cpp ctl/schema.cpp ctl/values.cpp \
   ctl/registry.cpp ctl/serialize.cpp ctl/builtin_settings.cpp ctl/draw.cpp \
-  feature/pass/order.cpp ctl/test_row_stubs.cpp ctl/test_imgui_stubs.cpp
+  ctl/trace.cpp ctl/test_row_stubs.cpp ctl/test_imgui_stubs.cpp
 
 echo "--- running ---"
 "$OUT/ctl_acceptance.exe"

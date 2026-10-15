@@ -18,7 +18,7 @@
 
 #include "ctl/builtin_settings.h"
 #include "ctl/ctl.h"
-#include "feature/pass/settings.h"
+#include "ctl/trace.h"
 
 using namespace reshade_dlssnr::ctl;
 
@@ -266,6 +266,11 @@ void SaveHarnessProfile(MemStore& mem, const HarnessProfile& profile) {
   mem.WriteBool(root + ".Enabled", profile.enabled);
   mem.WriteString(root + ".PassOrder", HarnessProfileOrder(profile.passes));
   Save(fx.store, mem, root + ".Data");
+}
+
+void CollectTraceChange(void* context, const TraceChange& change) {
+  auto* changes = static_cast<std::vector<TraceChange>*>(context);
+  changes->push_back(change);
 }
 
 bool HasPrefix(const MemStore& mem, const std::string& prefix) {
@@ -1153,6 +1158,58 @@ int main() {
       Check(local_values_match,
             "remaining profile restores only its own per-pass settings");
     }
+  }
+
+  // ------------------------------------------------------------------------
+  std::printf("\n[35] Setting trace is schema-driven and tracks live instances\n");
+  {
+    Schema schema;
+    Section& preferences = schema.AddSection("Preferences", SectionKind::Single);
+    preferences.Add<BoolSetting>("enabled", "Enabled", true);
+    preferences.Add<FloatSetting>("gain", "Gain", 0.5f).Range(0.0f, 2.0f);
+    Section& model = schema.AddSection("Model", SectionKind::Instanced);
+    model.Add<IntSetting>("quality", "Quality", 2).Range(0, 5);
+    std::string error;
+    Check(schema.Build(&error), "trace test schema builds without application registrations");
+
+    ValueStore store(schema);
+    const InstanceKey shared = InstanceKey::FromInt(0);
+    const InstanceKey pass = InstanceKey::FromInt(7);
+    store.Write("Model", pass, "quality", Value::Int(4));
+
+    TraceRecorder recorder;
+    std::vector<TraceChange> changes;
+    recorder.Record(store, &CollectTraceChange, &changes);
+    bool saw_enabled = false;
+    bool saw_gain = false;
+    bool saw_quality = false;
+    for (const TraceChange& change : changes) {
+      saw_enabled = saw_enabled || change.name == "Preferences.enabled";
+      saw_gain = saw_gain || change.name == "Preferences.gain";
+      saw_quality = saw_quality || change.name == "Model[i7].quality";
+      Check(change.kind == TraceChangeKind::Initial,
+            "first setting trace emits initial values");
+    }
+    Check(changes.size() == 3 && saw_enabled && saw_gain && saw_quality,
+          "trace automatically captures defaults and every registered live instance");
+
+    changes.clear();
+    store.Write("Preferences", shared, "enabled", Value::Bool(false));
+    recorder.Record(store, &CollectTraceChange, &changes);
+    Check(changes.size() == 1 &&
+              changes[0].kind == TraceChangeKind::Changed &&
+              changes[0].name == "Preferences.enabled",
+          "trace emits only the setting that changed");
+
+    changes.clear();
+    ValueStore without_model_instance(schema);
+    without_model_instance.Write("Preferences", shared, "enabled",
+                                 Value::Bool(false));
+    recorder.Record(without_model_instance, &CollectTraceChange, &changes);
+    Check(changes.size() == 1 &&
+              changes[0].kind == TraceChangeKind::Removed &&
+              changes[0].name == "Model[i7].quality",
+          "trace emits removal when an instance leaves the live store");
   }
 
   std::printf("\n======================\n");

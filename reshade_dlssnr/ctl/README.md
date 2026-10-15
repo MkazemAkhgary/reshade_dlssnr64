@@ -4,7 +4,8 @@ A declarative settings system. Settings are *declared* in code, one expression
 each; the framework owns storage, UI rendering, and persistence.
 Nothing in this directory knows what a "pass", "layer", "camera", or "preset"
 is — those are the application's words, expressed through sections, instance
-keys and parent links.
+keys and parent links. Schema composition and the live application store are built outside `ctl`;
+`ctl` never registers or includes feature modules.
 
 ```
 ctl/
@@ -16,6 +17,7 @@ ctl/
   serialize.h/.cpp      KeyValueWriter/Reader, Save/Load (persistence)
   draw.h/.cpp           DrawSection                  (rendering)
   builtin_settings.h/.cpp  FloatSetting, IntSetting, BoolSetting, EnumSetting, StringSetting
+  trace.h/.cpp             schema-driven setting trace recorder
   ctl_acceptance.cpp    acceptance harness
   build_ctl_acceptance.sh / build_ctl_check.sh  dev scripts
   test_row_stubs.cpp / test_imgui_stubs.cpp      harness-only link stubs
@@ -217,6 +219,10 @@ are the production implementations over `reshade::get_config_value` /
 ReShade's config API. Neither adapter can enumerate keys, so the consumer must
 still supply instance keys to `Load` and `Delete`.
 
+
+## Setting trace
+
+`TraceRecorder` walks the built schema and current `ValueStore` instances to record every declared setting. The caller supplies only a sink callback; ctl formats no feature names and has no dependency on the application layer. The first record emits all current values, later records emit only changed, added, or removed entries. New settings become trace-visible automatically when they are registered in the schema.
 
 ## Worked example: per-pass settings
 

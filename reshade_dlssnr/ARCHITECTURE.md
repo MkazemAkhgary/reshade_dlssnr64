@@ -8,7 +8,7 @@ HDR is handled by the Pre-DLSS and Post-DLSS paths. The source is converted into
 
 ## Repository layout
 
-The source tree is organized by ownership rather than by pipeline stage.
+The source tree is organized by ownership rather than by pipeline stage. `ctl` is domain-agnostic: it defines schemas, values, persistence, generic drawing, and tracing, but does not include or register application features. `feature/register_all.cpp` owns the application schema composition, and `feature/settings_store.cpp` builds the live store from that registration. This dependency runs from the feature layer into `ctl`, never the reverse. The only host-specific `ctl/usage` adapter is the ReShade config reader/writer.
 
 ```text
 reshade_dlssnr/
@@ -88,10 +88,12 @@ reshade_dlssnr/
     serialize.h/.cpp               Schema-driven persistence
     draw.h/.cpp                    Generic section renderer
     builtin_settings.h/.cpp        Float, Int, Bool, Enum, and String settings
-    usage/                          ReShade config and UI-store adapters
+    trace.h/.cpp                   Generic tracing for all registered settings
+    usage/                          ReShade config adapter
     ctl_acceptance.cpp              Headless acceptance harness
   feature/                         Feature-owned setting schemas and typed views
     register_all.cpp                Central feature registration
+    settings_store.h/.cpp            Application-owned schema composition and live store
     preferences/                    Shared preferences schema and setting keys
     debug_log/                      Debug selection schema and view
     grade/                          Grade schema and view
@@ -634,7 +636,7 @@ Set `DLSSNR_TRACE=<path>` to enable the command/event trace. The trace maintains
 
 Because trace lines are intentionally flushed immediately, the file is suitable for diagnosing the final commands leading into a crash. The trace should still be bounded to a deterministic test scene because a full frame contains many transitions and dispatches.
 
-Settings changes are recorded separately as `cfg` lines when tracing is enabled. Load-time state is emitted as `init`; changes at save time are emitted as `set` transitions.
+When tracing is enabled, `ctl::TraceRecorder` enumerates registered sections, instances, and settings from the built schema and emits initial values plus changed/removed keys automatically. Setting names use `Section.setting` for single-instance sections and `Section[key].setting` for instanced sections. Adding a registered setting therefore automatically adds it to the trace without another hand-maintained snapshot list. `state/trace.cpp` is only an adapter that formats ctl events and traces the few runtime fields that are not settings (`enabled` and `active_pass_id`).
 
 ### Crash trace
 

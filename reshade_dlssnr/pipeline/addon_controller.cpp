@@ -7,7 +7,7 @@
 #include <unordered_map>
 #include <utility>
 
-#include "ctl/usage/ui_store.h"
+#include "feature/settings_store.h"
 #include "ctl/values.h"
 #include "dlss_guides.h"
 #include "feature/debug_log/view.h"
@@ -32,7 +32,7 @@ std::mutex g_direct_mutex;
 // store -- the source of truth -- rather than a copy in Settings, so this
 // stays correct once Settings stops carrying the values.
 bool ImportanceMaskActive() {
-  const ctl::ValueStore& store = ctl::Store();
+  const ctl::ValueStore& store = feature::SettingsStore();
   const ctl::InstanceKey key = ctl::InstanceKey::FromInt(0);
   return feature::importance_mask::Read(store, key).enable &&
          feature::hdr::Read(store, key).enable;
@@ -98,7 +98,7 @@ PipelineStatus AddonController::RunPassStage(const PipelineStageDef& stage,
   uint64_t run_frame_id = frame_id_;
   ID3D12Fence* feedback_fence = nullptr;
   uint64_t feedback_fence_value = 0;
-  const ctl::ValueStore& store = ctl::Store();
+  const ctl::ValueStore& store = feature::SettingsStore();
   const feature::pass::PassSnapshot pass_state =
       feature::pass::Read(store, feature::pass::PassKey(pass_id));
   if (pass_state.temporal_mode > 0 && !stage.owns_submit &&
@@ -147,7 +147,7 @@ PipelineStatus AddonController::RunSingleStage(
   // grade directly (RunGradeBackbuffer), but hdr_state / mask_state are cheap
   // and keep the run self-consistent for any step later added to this stage.
   {
-    const ctl::ValueStore& store = ctl::Store();
+    const ctl::ValueStore& store = feature::SettingsStore();
     const ctl::InstanceKey shared = ctl::InstanceKey::FromInt(0);
     run.debug_view = feature::debug_log::Read(store, shared);
     run.hdr_state = feature::hdr::Read(store, shared);
@@ -737,7 +737,7 @@ void AddonController::RefreshStatus(const Settings& settings) {
   status_.gain_map_sdr_excursion_pixels = hdr.gain_sdr_excursion_pixels;
   status_.gain_map_out_of_range_pixels = hdr.gain_out_of_range_pixels;
 
-  ctl::ValueStore& store = ctl::Store();
+  ctl::ValueStore& store = feature::SettingsStore();
   status_.passes.reserve(settings.pass_order.size());
   for (feature::pass::PassId id : settings.pass_order) {
     PassStatusEntry entry;
@@ -875,7 +875,7 @@ PipelineStatus RunGradeBackbuffer(PassRun& run) {
   // Read the grade from the store -- the source of truth -- rather than from
   // a copy kept in Settings. The backbuffer grade is single-instance, so its
   // key is the same fixed key its section draws with.
-  const GradeSettings grade = feature::grade::ReadBackbuffer(ctl::Store());
+  const GradeSettings grade = feature::grade::ReadBackbuffer(feature::SettingsStore());
   if (!grade.enabled) return PipelineStatus::Ok;
 
   TRACE_EVT(run.session, "grade_backbuffer luma=%.3f chroma=%.3f", grade.luma,

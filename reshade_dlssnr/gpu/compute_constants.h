@@ -7,7 +7,7 @@
 static_assert(sizeof(ShaderBlock) == 32);
 static_assert(sizeof(GradeBlock) == 48);
 static_assert(sizeof(ResidualBlock) == 32);
-static_assert(sizeof(HdrBlock) == 64);
+static_assert(sizeof(HdrBlock) == 80);
 static_assert(sizeof(EasuBlock) == 48);
 static_assert(sizeof(RcasBlock) == 16);
 static_assert(sizeof(TemporalBlock) == 80);
@@ -29,5 +29,5 @@ static_assert(offsetof(ComputeConstants, easu) == kEasuOffset);
 static_assert(offsetof(ComputeConstants, rcas) == kRcasOffset);
 static_assert(offsetof(ComputeConstants, temporal) == kTemporalOffset);
 
-static_assert(kTemporalOffset == 256);
+static_assert(kTemporalOffset == 272);
 static_assert(sizeof(ComputeConstants) == 512);

@@ -11,7 +11,7 @@
 #include <vector>
 
 #include "ctl/draw.h"
-#include "ctl/usage/ui_store.h"
+#include "feature/settings_store.h"
 #include "ctl/values.h"
 #include "feature/debug_log/settings.h"
 #include "feature/grade/settings.h"
@@ -134,7 +134,7 @@ ctl::DrawOptions MakeOptions(bool headers, bool indent) {
 // value, and the header's local copy is refreshed from it on the next frame.
 void ResetBackbufferGrade(void* /*context*/) {
   const ctl::InstanceKey key = ctl::InstanceKey::FromInt(0);
-  ctl::Store().ResetSectionToDefault(feature::grade::kSection, key);
+  feature::SettingsStore().ResetSectionToDefault(feature::grade::kSection, key);
 }
 
 // Reorder the pass_order vector. `order` holds the source position of each
@@ -654,7 +654,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   Settings& settings = GetSettings();
   bool changed = false;
 
-  ctl::ValueStore& store = ctl::Store();
+  ctl::ValueStore& store = feature::SettingsStore();
   const ctl::InstanceKey shared_key = ctl::InstanceKey::FromInt(0);
   g_show_tooltips = store.Read(feature::preferences::kSection, shared_key,
                                feature::preferences::kShowTooltips).as_bool;

@@ -7,7 +7,7 @@
 #include <unordered_map>
 
 #include "addon_controller.h"
-#include "ctl/usage/ui_store.h"
+#include "feature/settings_store.h"
 #include "ctl/values.h"
 #include "feature/hdr/view.h"
 #include "feature/pass/settings.h"
@@ -20,7 +20,7 @@
 namespace reshade_dlssnr {
 
 bool AnyPassUsesHdrInjection(const Settings& settings) {
-  ctl::ValueStore& store = ctl::Store();
+  ctl::ValueStore& store = feature::SettingsStore();
   for (feature::pass::PassId id : settings.pass_order) {
     const feature::pass::PassSnapshot snapshot =
         feature::pass::Read(store, feature::pass::PassKey(id));
@@ -131,7 +131,7 @@ void DrawStatusSection(Settings& settings, bool& changed) {
   // edits it through the store, so a copy carried in Settings would be frozen
   // at load time and this panel would never see the user's change.
   const ctl::InstanceKey hdr_key = ctl::InstanceKey::FromInt(0);
-  const bool hdr_enabled = feature::hdr::Read(ctl::Store(), hdr_key).enable;
+  const bool hdr_enabled = feature::hdr::Read(feature::SettingsStore(), hdr_key).enable;
   const bool hdr_good = !hdr_enabled || !hdr_in_use || snap.hdr_ready;
   char hdr_buf[96];
   if (!hdr_enabled) {
@@ -227,7 +227,7 @@ void DrawStatusSection(Settings& settings, bool& changed) {
       if (position_it == position_by_id.end()) continue;
       const size_t position = position_it->second;
       const feature::pass::PassSnapshot pass =
-          feature::pass::Read(ctl::Store(), feature::pass::PassKey(entry.id));
+          feature::pass::Read(feature::SettingsStore(), feature::pass::PassKey(entry.id));
       if (pass.target != static_cast<int>(display_stage)) continue;
 
       char buf[kStatusTextLength];

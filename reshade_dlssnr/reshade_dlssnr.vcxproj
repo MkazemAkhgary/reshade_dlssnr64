@@ -204,9 +204,8 @@
     <ClCompile Include="ctl\schema.cpp" />
     <ClCompile Include="ctl\serialize.cpp" />
     <ClCompile Include="ctl\types.cpp" />
+    <ClCompile Include="ctl\trace.cpp" />
     <ClCompile Include="ctl\usage\config.cpp" />
-    <ClCompile Include="ctl\usage\ui_schema.cpp" />
-    <ClCompile Include="ctl\usage\ui_store.cpp" />
     <ClCompile Include="ctl\values.cpp" />
     <ClCompile Include="fragments\grade_rows\rows.cpp" />
     <ClCompile Include="fragments\hdr_filter_rows\rows.cpp" />
@@ -223,6 +222,7 @@
     <ClCompile Include="feature\pass\view.cpp" />
     <ClCompile Include="feature\preferences\schema.cpp" />
     <ClCompile Include="feature\register_all.cpp" />
+    <ClCompile Include="feature\settings_store.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="gpu\compute_constants.h" />
@@ -276,13 +276,13 @@
     <ClInclude Include="ctl\schema.h" />
     <ClInclude Include="ctl\serialize.h" />
     <ClInclude Include="ctl\types.h" />
+    <ClInclude Include="ctl\trace.h" />
     <ClInclude Include="ctl\usage\config.h" />
-    <ClInclude Include="ctl\usage\ui_schema.h" />
-    <ClInclude Include="ctl\usage\ui_store.h" />
     <ClInclude Include="ctl\values.h" />
     <ClInclude Include="fragments\grade_rows\rows.h" />
     <ClInclude Include="fragments\hdr_filter_rows\rows.h" />
     <ClInclude Include="feature\register_all.h" />
+    <ClInclude Include="feature\settings_store.h" />
     <ClInclude Include="feature\debug_log\settings.h" />
     <ClInclude Include="feature\debug_log\view.h" />
     <ClInclude Include="feature\grade\settings.h" />

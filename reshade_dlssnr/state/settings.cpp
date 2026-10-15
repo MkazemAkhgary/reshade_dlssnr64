@@ -10,7 +10,7 @@
 
 #include "compose/settings.h"
 #include "ctl/usage/config.h"
-#include "ctl/usage/ui_store.h"
+#include "feature/settings_store.h"
 #include "ctl/values.h"
 #include "feature/debug_log/settings.h"
 #include "feature/hdr/settings.h"
@@ -298,14 +298,14 @@ std::vector<ctl::InstanceKey> InstanceKeysForSections(
 // matters: a profile load must produce exactly the profile's state, not the
 // current state merged with the profile's overrides.
 void LoadStore(const Settings& settings, const std::string& prefix) {
-  ctl::ValueStore& store = ctl::Store();
+  ctl::ValueStore& store = feature::SettingsStore();
   store.ResetToDefaults();
   ctl::ReshadeConfigReader reader;
   ctl::Load(store, reader, prefix, &InstanceKeysForSections, &settings);
 }
 
 void SaveStore(const Settings& settings, const std::string& prefix) {
-  ctl::ValueStore& store = ctl::Store();
+  ctl::ValueStore& store = feature::SettingsStore();
   ctl::ReshadeConfigWriter writer;
   // The Pass section is scoped to pass_order on purpose, excluding stale live instances.
   ctl::Save(store, writer, prefix, &InstanceKeysForSections, &settings);
@@ -376,7 +376,7 @@ void LoadSettings() {
   LoadStore(g_settings, "");
   {
     const ctl::InstanceKey shared = ctl::InstanceKey::FromInt(0);
-    const bool clone_resources = ctl::Store().Read(
+    const bool clone_resources = feature::SettingsStore().Read(
         feature::preferences::kSection, shared,
         feature::preferences::kCloneResources).as_bool;
     DlssGuides::Get().RequestCloneResources(clone_resources);
@@ -397,7 +397,7 @@ void ErasePassKeys(feature::pass::PassId id) {
   // With an empty prefix this becomes "S.<Section>.K.<keytext>.<setting>".
   // Only settings marked persist are written by Save, so only those need
   // erasing here.
-  ctl::ValueStore& store = ctl::Store();
+  ctl::ValueStore& store = feature::SettingsStore();
   const ctl::Schema& schema = store.schema();
   ctl::ReshadeConfigWriter writer;
   const ctl::InstanceKey key = feature::pass::PassKey(id);
@@ -491,7 +491,7 @@ bool SaveCurrentToProfile(ProfileId id) {
   Settings previous;
   previous.pass_order = ReadProfilePassOrder(id);
   ctl::ReshadeConfigWriter writer;
-  ctl::Delete(ctl::Store(), writer, ProfileDataPrefix(id),
+  ctl::Delete(feature::SettingsStore(), writer, ProfileDataPrefix(id),
               &InstanceKeysForSections, &previous);
 
   SaveSettingsValues(g_settings, ProfileValuePrefix(id), false);
@@ -517,7 +517,7 @@ bool LoadSavedProfile(ProfileId id) {
   }
   {
     const ctl::InstanceKey shared = ctl::InstanceKey::FromInt(0);
-    const bool clone_resources = ctl::Store().Read(
+    const bool clone_resources = feature::SettingsStore().Read(
         feature::preferences::kSection, shared,
         feature::preferences::kCloneResources).as_bool;
     DlssGuides::Get().RequestCloneResources(clone_resources);
@@ -539,7 +539,7 @@ bool DeleteSavedProfile(ProfileId id) {
   Settings profile;
   profile.pass_order = ReadProfilePassOrder(id);
   ctl::ReshadeConfigWriter writer;
-  ctl::Delete(ctl::Store(), writer, ProfileDataPrefix(id),
+  ctl::Delete(feature::SettingsStore(), writer, ProfileDataPrefix(id),
               &InstanceKeysForSections, &profile);
 
   const std::string value_prefix = ProfileValuePrefix(id);

@@ -165,7 +165,7 @@ bool ValueStore::FindSettingId(const std::string& section,
   return false;
 }
 
-Value ValueStore::Resolve(Instance& instance, uint32_t setting_id) const {
+Value ValueStore::Resolve(const Instance& instance, uint32_t setting_id) const {
   const Setting* setting = SettingAt(setting_id);
   if (setting == nullptr) return Value();
   const SettingState& state = instance.states[setting_id];
