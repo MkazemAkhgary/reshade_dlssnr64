@@ -26,8 +26,8 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         gValidated[id.xy] = float4(0.0, 0.0, 0.0, 3.0);
         return;
     }
-    const float2 motion_base = float2(shader.Params0.z, shader.Params0.w);
-    const float2 motion_size = float2(shader.Params1.z, shader.Params1.w);
+    const float2 motion_base = kTemporalMotionBase;
+    const float2 motion_size = kTemporalMotionSubrectSize;
     const float2 motion_pixel = motion_base + uv * motion_size;
     if (any(motion_pixel < 0.0) || any(motion_pixel >= float2(mw, mh)))
     {
@@ -36,16 +36,17 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     }
     const uint2 mxy = min(uint2(motion_pixel), uint2(mw - 1u, mh - 1u));
     const float2 mv = gMotion.Load(int3(mxy, 0));
-    const float2 reference = max(float2(shader.Params1.x, shader.Params1.y), 1.0);
-    const float2 previous_uv = uv + mv * float2(shader.Params0.x, shader.Params0.y) / reference;
+    float2 reference_size = kTemporalMotionReferenceSize;
+    reference_size = max(reference_size, 1.0);
+    const float2 previous_uv = uv + mv * kTemporalMotionScale / reference_size;
     if (!all(isfinite(mv)) || !all(isfinite(previous_uv)) ||
         any(previous_uv < 0.0) || any(previous_uv >= 1.0))
     {
         gValidated[id.xy] = float4(0.0, 0.0, 0.0, 0.0);
         return;
     }
-    const float2 guide_base = hdr.LocalExposure.xy;
-    const float2 guide_size = hdr.LocalExposure.zw;
+    const float2 guide_base = kTemporalGuideBase;
+    const float2 guide_size = kTemporalGuideSize;
     const float2 current_depth_pixel = guide_base + uv * guide_size;
     if (any(current_depth_pixel < 0.0) ||
         any(current_depth_pixel >= float2(cw, ch)))
@@ -58,7 +59,13 @@ void CSMain(uint3 id : SV_DispatchThreadID)
                           uint2(Width - 1u, Height - 1u));
     const float d_now = gCurrentDepth.Load(int3(cxy, 0));
     const float d_old = gPreviousDepth.Load(int3(pxy, 0));
-    const float threshold = max(0.005, 0.03 * max(abs(d_now), abs(d_old)));
+    float abs_threshold = kTemporalDepthAbsThreshold;
+    abs_threshold = max(abs_threshold, 1.0e-6);
+    float rel_threshold = kTemporalDepthRelThreshold;
+    rel_threshold = max(rel_threshold, 0.0);
+    const float reference_depth = max(abs(d_now), abs(d_old));
+    const float relative_allowance = rel_threshold * reference_depth;
+    const float threshold = max(abs_threshold, relative_allowance);
     if (!isfinite(d_now) || !isfinite(d_old) || abs(d_now - d_old) > threshold)
     {
         // Depth-invalid edits are not applied; identity is committed as valid

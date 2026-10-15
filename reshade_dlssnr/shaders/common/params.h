@@ -102,6 +102,15 @@ DLSSNR_BLOCK(RcasBlock)
     float UnexposeReferenceL;
 };
 
+DLSSNR_BLOCK(TemporalBlock)
+{
+    float4 Thresholds;           // photometric abs/rel, depth abs/rel
+    float4 MotionLimits;         // x = max displacement, y = debug availability
+    float4 MotionScaleBase;      // motion scale xy, motion subrect origin zw
+    float4 MotionReferenceSize;  // reference dimensions xy, motion subrect size zw
+    float4 GuideBaseSize;        // guide subrect origin xy, guide subrect size zw
+};
+
 DLSSNR_CBUFFER(ComputeConstants)
 {
     DLSSNR_UINT Width;
@@ -115,4 +124,5 @@ DLSSNR_CBUFFER(ComputeConstants)
     HdrBlock hdr;
     EasuBlock easu;
     RcasBlock rcas;
+    TemporalBlock temporal;
 };

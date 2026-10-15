@@ -83,6 +83,12 @@ bool RcasStrengthVisible(const void*, const ctl::ValueStore& store,
          RcasOn(nullptr, store, key, section);
 }
 
+bool TemporalEnabled(const void*, const ctl::ValueStore& store,
+                     const ctl::InstanceKey& key,
+                     const std::string& section) {
+  return store.Read(section, key, kTemporalMode).as_int != 0;
+}
+
 const char* const kTargetNames[] = {"Pre-DLSS", "Post-DLSS", "Backbuffer"};
 const char* const kTargetTips[] = {
     "Run before the game's DLSS evaluation on its input Color resource. The "
@@ -95,12 +101,12 @@ const char* const kTargetTips[] = {
 const char* const kTemporalNames[] = {"Off", "Adaptive", "Every 2", "Every 4"};
 const char* const kTemporalTips[] = {
     "Evaluate the neural model on every frame.",
-    "Skip only when asynchronous reprojection feedback is below 5% invalid "
-    "pixels; force a refresh at least every four frames.",
+    "Reuse the reprojected edit while asynchronous validation stays below the "
+    "configured invalid-pixel limit; force a refresh at least every four frames.",
     "Target one model evaluation every two frames, but refresh early when "
-    "reprojection feedback is unavailable or invalid.",
+    "validation is unavailable or exceeds the invalid-pixel limit.",
     "Target one model evaluation every four frames, but refresh early when "
-    "reprojection feedback is unavailable or invalid."};
+    "validation is unavailable or exceeds the invalid-pixel limit."};
 
 const char* const kPresetNames[] = {"A", "B", "C"};
 // Presets are a name, not an enum: the C++ type is an int the model reads.
@@ -236,6 +242,47 @@ void RegisterPassSchema(ctl::Schema& schema) {
                "of evaluating the model every frame. Requires current-frame "
                "depth and motion guides; uncertain history forces a fresh "
                "evaluation.");
+  pass.Add<ctl::FloatSetting>(kTemporalPhotometricAbsThreshold,
+                              "Photo Abs.", 0.06f)
+      .Range(0.001f, 0.25f)
+      .EnableWhen(&TemporalEnabled)
+      .Category(kCatTemporal)
+      .Tooltip("Absolute model-input luma difference allowed between the "
+               "current pixel and its motion-reprojected previous-frame match.");
+  pass.Add<ctl::FloatSetting>(kTemporalPhotometricRelThreshold,
+                              "Photo Rel.", 0.10f)
+      .Range(0.0f, 0.50f)
+      .EnableWhen(&TemporalEnabled)
+      .Category(kCatTemporal)
+      .Tooltip("Relative luma-difference allowance, scaled by the larger "
+               "absolute current or previous luma. Added to Photo Abs.");
+  pass.Add<ctl::FloatSetting>(kTemporalDepthAbsThreshold,
+                              "Depth Abs.", 0.005f)
+      .Range(0.0001f, 0.05f)
+      .EnableWhen(&TemporalEnabled)
+      .Category(kCatTemporal)
+      .Tooltip("Absolute depth difference allowed after motion reprojection.");
+  pass.Add<ctl::FloatSetting>(kTemporalDepthRelThreshold,
+                              "Depth Rel.", 0.03f)
+      .Range(0.0f, 0.20f)
+      .EnableWhen(&TemporalEnabled)
+      .Category(kCatTemporal)
+      .Tooltip("Relative depth-difference allowance. Threshold is the larger "
+               "of this allowance and Depth Abs.");
+  pass.Add<ctl::FloatSetting>(kTemporalMaxDisplacement,
+                              "Max Motion", 40.0f)
+      .Range(1.0f, 128.0f)
+      .EnableWhen(&TemporalEnabled)
+      .Category(kCatTemporal)
+      .Tooltip("Reject reprojection when motion exceeds this many working-" 
+               "resolution pixels.");
+  pass.Add<ctl::FloatSetting>(kTemporalMaxInvalidPercent,
+                              "Max Invalid %", 5.0f)
+      .Range(1.0f, 50.0f)
+      .EnableWhen(&TemporalEnabled)
+      .Category(kCatTemporal)
+      .Tooltip("Maximum invalid or photometrically mismatched pixel fraction "
+               "allowed before refreshing the model.");
 
   // --- Advanced ----------------------------------------------------------
   pass.Add<ctl::BoolSetting>(kSoftCompressionEnabled, "Soft Compression", false)

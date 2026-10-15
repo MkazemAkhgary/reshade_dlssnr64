@@ -87,6 +87,31 @@ ID3D12Resource* SelectImportanceMask(const DebugSnapshot& s,
   return s.importance_mask;
 }
 
+ID3D12Resource* SelectTemporalCandidate(const DebugSnapshot& s,
+                                       unsigned int* w, unsigned int* h) {
+  if (s.temporal_candidate != nullptr) {
+    *w = s.temporal_width;
+    *h = s.temporal_height;
+    return s.temporal_candidate;
+  }
+  *w = s.source_width;
+  *h = s.source_height;
+  return s.source;
+}
+
+ID3D12Resource* SelectTemporalValidatedCandidate(const DebugSnapshot& s,
+                                                 unsigned int* w,
+                                                 unsigned int* h) {
+  if (s.temporal_validated_candidate != nullptr) {
+    *w = s.temporal_width;
+    *h = s.temporal_height;
+    return s.temporal_validated_candidate;
+  }
+  *w = s.source_width;
+  *h = s.source_height;
+  return s.source;
+}
+
 }  // namespace
 
 const DebugViewDef kDebugViews[] = {
@@ -158,6 +183,20 @@ const DebugViewDef kDebugViews[] = {
      "Game NGX exposure in stops: 1.0x (0 stops) is mid-gray; brighter/darker "
      "values move toward white/black. Magenta means no valid value was read.",
      DebugDisplayMode::GameExposure, SelectSource},
+    {"Temporal Candidate Status",
+     "Status of the motion-reprojected prior edit before depth validation: "
+     "red = rejected motion/history/coordinates, green = eligible, yellow = "
+     "photometric mismatch. Unavailable until a previous edit can be reprojected.",
+     DebugDisplayMode::TemporalCandidateStatus, SelectTemporalCandidate},
+    {"Temporal Validation Status",
+     "Status after depth validation: red = no candidate, green = accepted, "
+     "yellow = photometric mismatch, magenta = invalid depth or guide mapping.",
+     DebugDisplayMode::TemporalValidationStatus, SelectTemporalValidatedCandidate},
+    {"Temporal Reprojected Edit",
+     "Validated per-channel log-gain from the previous frame, mapped so "
+     "neutral gain is gray and stronger positive/negative edits move toward "
+     "white/black. Rejected pixels are dark.",
+     DebugDisplayMode::TemporalEdit, SelectTemporalValidatedCandidate},
     {nullptr, nullptr, DebugDisplayMode::Color, nullptr},
 };
 
@@ -244,6 +283,7 @@ bool RenderDebugView(
       static_cast<unsigned int>(source_desc.Height));
   constants.shader.Params1.y = snapshot.game_exposure;
   constants.shader.Params1.z = snapshot.game_exposure_available ? 1.0f : 0.0f;
+  constants.temporal.MotionLimits.y = snapshot.temporal_available ? 1.0f : 0.0f;
 
   if (hdr_diag) {
     constants.hdr.Format = hdr->format;

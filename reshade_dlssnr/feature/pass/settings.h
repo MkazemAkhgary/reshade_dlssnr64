@@ -37,6 +37,12 @@ inline constexpr const char* kUiCorrection = "ui_correction";
 inline constexpr const char* kLumaStrength = "luma_strength";
 inline constexpr const char* kChromaStrength = "chroma_strength";
 inline constexpr const char* kTemporalMode = "temporal_mode";
+inline constexpr const char* kTemporalPhotometricAbsThreshold = "temporal_photometric_abs_threshold";
+inline constexpr const char* kTemporalPhotometricRelThreshold = "temporal_photometric_rel_threshold";
+inline constexpr const char* kTemporalDepthAbsThreshold = "temporal_depth_abs_threshold";
+inline constexpr const char* kTemporalDepthRelThreshold = "temporal_depth_rel_threshold";
+inline constexpr const char* kTemporalMaxDisplacement = "temporal_max_displacement";
+inline constexpr const char* kTemporalMaxInvalidPercent = "temporal_max_invalid_percent";
 
 // Category "Advanced".
 inline constexpr const char* kSoftCompressionEnabled = "soft_compression_enabled";

@@ -18,8 +18,8 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     uint mw, mh;
     gMotion.GetDimensions(mw, mh);
     if (mw == 0 || mh == 0) { gCandidate[id.xy] = float4(0.0, 0.0, 0.0, 0.0); return; }
-    const float2 motion_base = float2(shader.Params0.z, shader.Params0.w);
-    const float2 motion_size = float2(shader.Params1.z, shader.Params1.w);
+    const float2 motion_base = kTemporalMotionBase;
+    const float2 motion_size = kTemporalMotionSubrectSize;
     const float2 motion_pixel = motion_base + uv * motion_size;
     if (any(motion_pixel < 0.0) || any(motion_pixel >= float2(mw, mh)))
     {
@@ -28,15 +28,18 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     }
     const uint2 mxy = min(uint2(motion_pixel), uint2(mw - 1u, mh - 1u));
     const float2 mv = gMotion.Load(int3(mxy, 0));
-    const float2 reference = max(float2(shader.Params1.x, shader.Params1.y), 1.0);
+    float2 reference_size = kTemporalMotionReferenceSize;
+    reference_size = max(reference_size, 1.0);
     // Contract: NGX motion vectors are current-to-previous displacement in
     // reference-image pixels; apply NGX's MV scales and convert to UV exactly
     // once. Never infer the coordinate space from vector magnitude.
-    const float2 delta_uv = mv * float2(shader.Params0.x, shader.Params0.y) / reference;
+    const float2 delta_uv = mv * kTemporalMotionScale / reference_size;
     const float2 previous_uv = uv + delta_uv;
     const float2 displacement = delta_uv * float2(Width, Height);
+    float max_displacement = kTemporalMaxDisplacement;
+    max_displacement = max(max_displacement, 1.0);
     if (!all(isfinite(mv)) || !all(isfinite(previous_uv)) ||
-        length(displacement) > 40.0 || any(previous_uv < 0.0) ||
+        length(displacement) > max_displacement || any(previous_uv < 0.0) ||
         any(previous_uv >= 1.0))
     {
         gCandidate[id.xy] = float4(0.0, 0.0, 0.0, 0.0);
@@ -61,7 +64,12 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     }
     const float yc = dot(max(current.rgb, 0.0), kLuma);
     const float yp = dot(max(previous.rgb, 0.0), kLuma);
-    const float threshold = 0.06 + 0.10 * max(abs(yc), abs(yp));
+    float abs_threshold = kTemporalPhotometricAbsThreshold;
+    abs_threshold = max(abs_threshold, 0.0);
+    float rel_threshold = kTemporalPhotometricRelThreshold;
+    rel_threshold = max(rel_threshold, 0.0);
+    const float relative_allowance = rel_threshold * max(abs(yc), abs(yp));
+    const float threshold = abs_threshold + relative_allowance;
     const bool photo_mismatch = abs(yc - yp) > threshold;
     // Alpha 1: eligible; 2: photometric mismatch (still eligible, but counted
     // as invalid feedback); 0: geometry/motion/history rejected.

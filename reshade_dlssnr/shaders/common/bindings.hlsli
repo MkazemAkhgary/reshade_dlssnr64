@@ -58,3 +58,17 @@
 #define kUpsampleMode      hdr.UpsampleMode
 #define kUpsampleSharpness hdr.UpsampleSharpness
 #define kUpsampleKernelHalf shader.Params1.w
+
+// Temporal reprojection settings and motion/depth guide mapping.
+#define kTemporalPhotometricAbsThreshold temporal.Thresholds.x
+#define kTemporalPhotometricRelThreshold temporal.Thresholds.y
+#define kTemporalDepthAbsThreshold      temporal.Thresholds.z
+#define kTemporalDepthRelThreshold      temporal.Thresholds.w
+#define kTemporalMaxDisplacement        temporal.MotionLimits.x
+#define kTemporalDebugAvailable         temporal.MotionLimits.y
+#define kTemporalMotionScale            temporal.MotionScaleBase.xy
+#define kTemporalMotionBase             temporal.MotionScaleBase.zw
+#define kTemporalMotionReferenceSize    temporal.MotionReferenceSize.xy
+#define kTemporalMotionSubrectSize      temporal.MotionReferenceSize.zw
+#define kTemporalGuideBase              temporal.GuideBaseSize.xy
+#define kTemporalGuideSize              temporal.GuideBaseSize.zw

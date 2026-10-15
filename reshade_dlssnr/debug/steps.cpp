@@ -77,6 +77,14 @@ PipelineStatus PassSession::StepRenderDebugView(PassRun& run) {
     debug.depth_width = run.guides.guide_width;
     debug.depth_height = run.guides.guide_height;
   }
+  debug.temporal_available = run.temporal_candidate_ready;
+  if (debug.temporal_available) {
+    debug.temporal_candidate = self->resources_.GetTemporalCandidate();
+    debug.temporal_validated_candidate =
+        self->resources_.GetTemporalValidatedCandidate();
+    debug.temporal_width = run.work_width;
+    debug.temporal_height = run.work_height;
+  }
 
   self->MaybeRenderDebug(run.debug_view, run.settings->active_pass_id,
                          *run.codec, self->StageList(run, self->command_),

@@ -90,6 +90,14 @@ struct DebugSnapshot {
   ID3D12Resource* importance_mask = nullptr;
   unsigned int importance_width = 0;
   unsigned int importance_height = 0;
+
+  // Motion-reprojected temporal edit and its validation state. These are
+  // exposed only on frames where both resources were produced successfully.
+  ID3D12Resource* temporal_candidate = nullptr;
+  ID3D12Resource* temporal_validated_candidate = nullptr;
+  unsigned int temporal_width = 0;
+  unsigned int temporal_height = 0;
+  bool temporal_available = false;
 };
 
 // How the display shader should interpret the selected resource.
@@ -104,6 +112,9 @@ enum class DebugDisplayMode : uint32_t {
   HdrRoundtripError = 7,
   HdrLocalExposure = 8,
   GameExposure = 9,
+  TemporalCandidateStatus = 10,
+  TemporalValidationStatus = 11,
+  TemporalEdit = 12,
 };
 
 struct DebugViewDef {

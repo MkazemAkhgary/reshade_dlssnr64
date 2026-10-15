@@ -1,4 +1,4 @@
-#include "common/cbuffer.hlsli"
+#include "common/bindings.hlsli"
 
 Texture2D<float> gCurrentDepth : register(t0);
 Texture2D<float4> gUnused1 : register(t1);
@@ -14,8 +14,8 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     gCurrentDepth.GetDimensions(dw, dh);
     if (dw == 0 || dh == 0) { gHistoryDepth[id.xy] = 0.0; return; }
     const float2 uv = (float2(id.xy) + 0.5) / float2(Width, Height);
-    const float2 base = hdr.LocalExposure.xy;
-    const float2 size = hdr.LocalExposure.zw;
+    const float2 base = kTemporalGuideBase;
+    const float2 size = kTemporalGuideSize;
     const float2 pixel = base + uv * size;
     if (any(pixel < 0.0) || any(pixel >= float2(dw, dh)))
     {

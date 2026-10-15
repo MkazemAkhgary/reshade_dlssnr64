@@ -53,6 +53,12 @@ uint64_t TemporalSettingsSignature(const PassRun& run) {
   HashTemporalValue(&hash, p.preset);
   HashTemporalValue(&hash, p.working_scale);
   HashTemporalValue(&hash, p.intensity);
+  HashTemporalValue(&hash, p.temporal_photometric_abs_threshold);
+  HashTemporalValue(&hash, p.temporal_photometric_rel_threshold);
+  HashTemporalValue(&hash, p.temporal_depth_abs_threshold);
+  HashTemporalValue(&hash, p.temporal_depth_rel_threshold);
+  HashTemporalValue(&hash, p.temporal_max_displacement);
+  HashTemporalValue(&hash, p.temporal_max_invalid_percent);
   HashTemporalValue(&hash, p.local_tone);
   HashTemporalValue(&hash, p.local_structure);
   HashTemporalValue(&hash, p.skin_structure);
@@ -1434,6 +1440,7 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
 // Every rejection is fail-open: the regular fresh model evaluation still runs.
 PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
   PassSession* self = run.session;
+  run.temporal_candidate_ready = false;
   if (self == nullptr || run.codec == nullptr || run.device == nullptr ||
       run.model_color == nullptr || run.model_output == nullptr ||
       run.work_width == 0 || run.work_height == 0) {
@@ -1607,6 +1614,15 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
   ComputeConstants constants = {};
   constants.Width = run.work_width;
   constants.Height = run.work_height;
+  constants.temporal.Thresholds.x =
+      run.pass_state.temporal_photometric_abs_threshold;
+  constants.temporal.Thresholds.y =
+      run.pass_state.temporal_photometric_rel_threshold;
+  constants.temporal.Thresholds.z =
+      run.pass_state.temporal_depth_abs_threshold;
+  constants.temporal.Thresholds.w =
+      run.pass_state.temporal_depth_rel_threshold;
+  constants.temporal.MotionLimits.x = run.pass_state.temporal_max_displacement;
   ID3D12Resource* repeated_srvs[kSrvCount] = {
       run.model_color, run.model_color, run.model_color, run.model_color};
   ID3D12Resource* stats_uavs[kUavCount] = {stats};
@@ -1627,18 +1643,28 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
     ID3D12Resource* reproject_srvs[kSrvCount] = {
         run.model_color, previous_input, previous_edit, run.guides.motion};
     ID3D12Resource* candidate_uavs[kUavCount] = {candidate};
-    constants.shader.Params0.x = run.guides.mv_scale_x;
-    constants.shader.Params0.y = run.guides.mv_scale_y;
-    constants.shader.Params0.z = static_cast<float>(run.guides.motion_base_x);
-    constants.shader.Params0.w = static_cast<float>(run.guides.motion_base_y);
-    constants.shader.Params1.x = static_cast<float>(run.guides.reference_width);
-    constants.shader.Params1.y = static_cast<float>(run.guides.reference_height);
-    constants.shader.Params1.z = static_cast<float>(run.guides.motion_subrect_width);
-    constants.shader.Params1.w = static_cast<float>(run.guides.motion_subrect_height);
-    constants.hdr.LocalExposure.x = static_cast<float>(run.guides.guide_base_x);
-    constants.hdr.LocalExposure.y = static_cast<float>(run.guides.guide_base_y);
-    constants.hdr.LocalExposure.z = static_cast<float>(run.guides.guide_subrect_width);
-    constants.hdr.LocalExposure.w = static_cast<float>(run.guides.guide_subrect_height);
+    constants.temporal.MotionScaleBase.x = run.guides.mv_scale_x;
+    constants.temporal.MotionScaleBase.y = run.guides.mv_scale_y;
+    constants.temporal.MotionScaleBase.z =
+        static_cast<float>(run.guides.motion_base_x);
+    constants.temporal.MotionScaleBase.w =
+        static_cast<float>(run.guides.motion_base_y);
+    constants.temporal.MotionReferenceSize.x =
+        static_cast<float>(run.guides.reference_width);
+    constants.temporal.MotionReferenceSize.y =
+        static_cast<float>(run.guides.reference_height);
+    constants.temporal.MotionReferenceSize.z =
+        static_cast<float>(run.guides.motion_subrect_width);
+    constants.temporal.MotionReferenceSize.w =
+        static_cast<float>(run.guides.motion_subrect_height);
+    constants.temporal.GuideBaseSize.x =
+        static_cast<float>(run.guides.guide_base_x);
+    constants.temporal.GuideBaseSize.y =
+        static_cast<float>(run.guides.guide_base_y);
+    constants.temporal.GuideBaseSize.z =
+        static_cast<float>(run.guides.guide_subrect_width);
+    constants.temporal.GuideBaseSize.w =
+        static_cast<float>(run.guides.guide_subrect_height);
     if (!run.codec->Dispatch("TemporalReprojectEdit", list, constants,
                              reproject_srvs, candidate_uavs)) {
       self->temporal_history_valid_ = false;
@@ -1654,18 +1680,6 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
     ID3D12Resource* validate_srvs[kSrvCount] = {
         candidate, run.guides.motion, run.guides.depth, previous_depth};
     ID3D12Resource* validated_uavs[kUavCount] = {validated};
-    constants.shader.Params0.x = run.guides.mv_scale_x;
-    constants.shader.Params0.y = run.guides.mv_scale_y;
-    constants.shader.Params0.z = static_cast<float>(run.guides.motion_base_x);
-    constants.shader.Params0.w = static_cast<float>(run.guides.motion_base_y);
-    constants.shader.Params1.x = static_cast<float>(run.guides.reference_width);
-    constants.shader.Params1.y = static_cast<float>(run.guides.reference_height);
-    constants.shader.Params1.z = static_cast<float>(run.guides.motion_subrect_width);
-    constants.shader.Params1.w = static_cast<float>(run.guides.motion_subrect_height);
-    constants.hdr.LocalExposure.x = static_cast<float>(run.guides.guide_base_x);
-    constants.hdr.LocalExposure.y = static_cast<float>(run.guides.guide_base_y);
-    constants.hdr.LocalExposure.z = static_cast<float>(run.guides.guide_subrect_width);
-    constants.hdr.LocalExposure.w = static_cast<float>(run.guides.guide_subrect_height);
     if (!run.codec->Dispatch("TemporalValidateDepth", list, constants,
                              validate_srvs, validated_uavs)) {
       self->temporal_history_valid_ = false;
@@ -1677,6 +1691,7 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
     self->command_.UavBarrier(list, validated);
     self->command_.Transition(list, validated,
                               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    run.temporal_candidate_ready = true;
 
     ID3D12Resource* count_srvs[kSrvCount] = {
         validated, validated, validated, validated};
@@ -1720,8 +1735,12 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
   // Adaptive and Every 4 both have a hard four-frame maximum age. Adaptive's
   // refresh is driven by the same validation threshold; Every 4 adds the
   // deterministic cadence floor, while failed validation always refreshes.
+  float max_invalid_percent = run.pass_state.temporal_max_invalid_percent;
+  max_invalid_percent = std::clamp(max_invalid_percent, 1.0f, 50.0f);
+  const float max_invalid_fraction = max_invalid_percent * 0.01f;
   const bool can_skip = have_candidate && !duplicate_frame && run.frame_id != 0 &&
-      self->temporal_feedback_valid_ && self->temporal_invalid_fraction_ < 0.05f &&
+      self->temporal_feedback_valid_ &&
+      self->temporal_invalid_fraction_ < max_invalid_fraction &&
       self->temporal_last_refresh_frame_ != 0 && age > 0 && age < cadence;
   if (can_skip) {
     self->command_.Transition(list, validated,
@@ -2070,10 +2089,14 @@ PipelineStatus PassSession::StepModelOutputBarrier(PassRun& run) {
                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   self->command_.Transition(list, previous_depth,
                             D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  constants.hdr.LocalExposure.x = static_cast<float>(run.guides.guide_base_x);
-  constants.hdr.LocalExposure.y = static_cast<float>(run.guides.guide_base_y);
-  constants.hdr.LocalExposure.z = static_cast<float>(run.guides.guide_subrect_width);
-  constants.hdr.LocalExposure.w = static_cast<float>(run.guides.guide_subrect_height);
+  constants.temporal.GuideBaseSize.x =
+      static_cast<float>(run.guides.guide_base_x);
+  constants.temporal.GuideBaseSize.y =
+      static_cast<float>(run.guides.guide_base_y);
+  constants.temporal.GuideBaseSize.z =
+      static_cast<float>(run.guides.guide_subrect_width);
+  constants.temporal.GuideBaseSize.w =
+      static_cast<float>(run.guides.guide_subrect_height);
   ID3D12Resource* depth_srvs[kSrvCount] = {
       run.guides.depth, run.guides.depth, run.guides.depth, run.guides.depth};
   ID3D12Resource* depth_uavs[kUavCount] = {previous_depth};

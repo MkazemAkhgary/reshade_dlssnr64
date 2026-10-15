@@ -1,4 +1,4 @@
-#include "common/cbuffer.hlsli"
+#include "common/bindings.hlsli"
 #include "common/registers.hlsli"
 
 // Debug-only parameters live in the generic shader block for this pass.
@@ -50,6 +50,26 @@ void CSMain(uint3 id : SV_DispatchThreadID)
             float t = saturate((stops + 4.0) / 8.0);
             rgb = t.xxx;
         }
+    } else if (mode == 10) {
+        // Candidate alpha: 0 = rejected, 1 = eligible, 2 = photometric mismatch.
+        rgb = kTemporalDebugAvailable < 0.5 ? float3(0.04, 0.12, 0.55) :
+              c.a < 0.5 ? float3(0.85, 0.04, 0.04) :
+              c.a < 1.5 ? float3(0.04, 0.80, 0.10) :
+                          float3(1.00, 0.60, 0.02);
+    } else if (mode == 11) {
+        // Validated alpha: 0 = no candidate, 1 = accepted, 2 = photo mismatch,
+        // 3 = depth/guide rejection.
+        rgb = kTemporalDebugAvailable < 0.5 ? float3(0.04, 0.12, 0.55) :
+              c.a < 0.5 ? float3(0.85, 0.04, 0.04) :
+              c.a < 1.5 ? float3(0.04, 0.80, 0.10) :
+              c.a < 2.5 ? float3(1.00, 0.60, 0.02) :
+                          float3(1.00, 0.02, 0.85);
+    } else if (mode == 12) {
+        // Per-channel log gain: neutral is gray; invalid pixels are dark.
+        rgb = kTemporalDebugAvailable < 0.5 ? float3(0.04, 0.12, 0.55) :
+              (c.a >= 0.5 && c.a < 2.5)
+            ? saturate(0.5 + c.rgb / (2.0 * 0.69314718056))
+            : float3(0.03, 0.00, 0.03);
     } else {
         rgb = c.rgb;
     }

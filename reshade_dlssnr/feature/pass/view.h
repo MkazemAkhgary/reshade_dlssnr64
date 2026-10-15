@@ -46,6 +46,12 @@ struct PassSnapshot {
   float intensity = 1.0f;
   // 0=Off, 1=Adaptive, 2=Every 2, 3=Every 4.
   int temporal_mode = 0;
+  float temporal_photometric_abs_threshold = 0.06f;
+  float temporal_photometric_rel_threshold = 0.10f;
+  float temporal_depth_abs_threshold = 0.005f;
+  float temporal_depth_rel_threshold = 0.03f;
+  float temporal_max_displacement = 40.0f;
+  float temporal_max_invalid_percent = 5.0f;
   float local_tone = 1.0f;
   float local_structure = 1.0f;
   float skin_structure = 1.0f;

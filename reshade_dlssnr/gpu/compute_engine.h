@@ -112,10 +112,8 @@ class ComputeEngine {
   uint32_t descriptor_size_ = 0;
   uint32_t heap_index_ = 0;
 
-  // One upload buffer holding every dispatch slot's 256-byte constants. A
-  // single allocation avoids a committed resource per dispatch while the
-  // descriptor/constant ring is intentionally deep.
-  static constexpr uint32_t kConstantStride = 256;  // CBV alignment requirement
+  // One upload buffer holds a 512-byte, 256-byte-aligned constant record per dispatch.
+  static constexpr uint32_t kConstantStride = 512;
   Microsoft::WRL::ComPtr<ID3D12Resource> constants_;
 
   struct CachedPass {

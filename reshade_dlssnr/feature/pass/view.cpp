@@ -21,6 +21,18 @@ PassSnapshot Read(const ctl::ValueStore& store, const ctl::InstanceKey& key) {
   p.working_scale = store.Read(section, key, kWorkingScale).as_float;
   p.intensity = store.Read(section, key, kIntensity).as_float;
   p.temporal_mode = store.Read(section, key, kTemporalMode).as_int;
+  p.temporal_photometric_abs_threshold =
+      store.Read(section, key, kTemporalPhotometricAbsThreshold).as_float;
+  p.temporal_photometric_rel_threshold =
+      store.Read(section, key, kTemporalPhotometricRelThreshold).as_float;
+  p.temporal_depth_abs_threshold =
+      store.Read(section, key, kTemporalDepthAbsThreshold).as_float;
+  p.temporal_depth_rel_threshold =
+      store.Read(section, key, kTemporalDepthRelThreshold).as_float;
+  p.temporal_max_displacement =
+      store.Read(section, key, kTemporalMaxDisplacement).as_float;
+  p.temporal_max_invalid_percent =
+      store.Read(section, key, kTemporalMaxInvalidPercent).as_float;
   p.local_tone = store.Read(section, key, kLocalTone).as_float;
   p.local_structure = store.Read(section, key, kLocalStructure).as_float;
   p.skin_structure = store.Read(section, key, kSkinStructure).as_float;
