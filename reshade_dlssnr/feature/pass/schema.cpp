@@ -76,13 +76,6 @@ bool BackbufferTarget(const void*, const ctl::ValueStore& store,
   return store.Read(section, key, kTarget).as_int == 2;
 }
 
-bool RcasStrengthVisible(const void*, const ctl::ValueStore& store,
-                         const ctl::InstanceKey& key,
-                         const std::string& section) {
-  return BackbufferTarget(nullptr, store, key, section) &&
-         RcasOn(nullptr, store, key, section);
-}
-
 bool TemporalEnabled(const void*, const ctl::ValueStore& store,
                      const ctl::InstanceKey& key,
                      const std::string& section) {
@@ -385,12 +378,11 @@ void RegisterPassSchema(ctl::Schema& schema) {
                "passes.");
 
   pass.Add<ctl::BoolSetting>(kRcasEnabled, "Sharpening", false)
-      .VisibleWhen(&BackbufferTarget)
       .Category(kCatResidualEdits)
       .Tooltip("Sharpen the model's upsampled output with FSR RCAS.");
   pass.Add<ctl::FloatSetting>(kRcasStrength, "Strength", 0.5f)
       .Range(0.0f, 1.0f)
-      .VisibleWhen(&RcasStrengthVisible)
+      .VisibleWhen(&RcasOn)
       .Category(kCatResidualEdits)
       .Tooltip("How aggressively to sharpen.");
 
