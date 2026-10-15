@@ -242,6 +242,7 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
   static ProfileId renaming_profile_id = 0;
   static char rename_profile_name[kSavedProfileNameCapacity] = {};
   static bool rename_profile_error = false;
+  static bool rename_focus_pending = false;
   static int profile_feedback_index = -1;
   static char profile_feedback[160] = {};
   static char new_profile_name[kSavedProfileNameCapacity] = {};
@@ -261,11 +262,31 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
     const bool is_renaming = renaming_profile_id == profiles[i].id;
     ImGui::AlignTextToFramePadding();
     if (is_renaming) {
+      if (rename_focus_pending) {
+        ImGui::SetKeyboardFocusHere();
+        rename_focus_pending = false;
+      }
       ImGui::SetNextItemWidth(210.0f);
-      ImGui::InputText("##rename_profile_name", rename_profile_name,
-                       sizeof(rename_profile_name));
+      const bool enter_pressed = ImGui::InputText(
+          "##rename_profile_name", rename_profile_name,
+          sizeof(rename_profile_name),
+          ImGuiInputTextFlags_EnterReturnsTrue |
+              ImGuiInputTextFlags_AutoSelectAll);
+      const bool save_clicked = [&]() {
+        ImGui::SameLine();
+        return ImGui::Button("Save Name");
+      }();
       ImGui::SameLine();
-      if (ImGui::Button("Save Name")) {
+      const bool cancel_clicked = ImGui::Button("Cancel");
+
+      if (ImGui::IsItemHovered()) {
+        Tip("Enter saves the name; Escape cancels editing.");
+      }
+      if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        renaming_profile_id = 0;
+        rename_profile_error = false;
+        rename_focus_pending = false;
+      } else if (enter_pressed || save_clicked) {
         if (RenameSavedProfile(profiles[i].id, rename_profile_name)) {
           renaming_profile_id = 0;
           rename_profile_error = false;
@@ -276,22 +297,22 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
         } else {
           rename_profile_error = true;
         }
-      }
-      ImGui::SameLine();
-      if (ImGui::Button("Cancel Rename")) {
+      } else if (cancel_clicked) {
         renaming_profile_id = 0;
         rename_profile_error = false;
+        rename_focus_pending = false;
       }
     } else {
       ImGui::TextUnformatted(profiles[i].name[0] != '\0'
                                  ? profiles[i].name
                                  : "(unnamed preset)");
       ImGui::SameLine();
-      if (ImGui::Button("Rename")) {
+      if (ImGui::SmallButton("Rename")) {
         renaming_profile_id = profiles[i].id;
         std::snprintf(rename_profile_name, sizeof(rename_profile_name), "%s",
                       profiles[i].name);
         rename_profile_error = false;
+        rename_focus_pending = true;
       }
       ImGui::SameLine();
     }
