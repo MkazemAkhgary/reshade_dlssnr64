@@ -151,61 +151,18 @@ void LogPresentInterfacesOnce(bool device_is_proxy, ID3D12CommandQueue* queue) {
   reshade::log::message(reshade::log::level::info, message);
 }
 
-void BindLocalExposureFilters(PassRun& run, ComputeConstants& constants,
-                              ID3D12Resource* source, CommandContext& command,
-                              ID3D12GraphicsCommandList* list,
-                              ID3D12Resource** srvs) {
-  uint32_t flags = run.hdr_uniforms.local_filter_flags;
-  ID3D12Resource* mask = source;
-  ID3D12Resource* depth = source;
-
-  if ((flags & 1u) != 0u && run.mask_state.enable &&
-      run.importance_mask != nullptr) {
-    const ImportanceMask::Output detection = run.importance_mask->GetFrameOutput();
-    if (detection.valid && detection.mask != nullptr &&
-        detection.width != 0 && detection.height != 0) {
-      mask = detection.mask;
-    } else {
-      flags &= ~1u;
-    }
-  } else {
-    flags &= ~1u;
-  }
-
-  if ((flags & (2u | 8u)) != 0u && run.guides.depth != nullptr) {
-    depth = run.guides.depth;
-  } else {
-    flags &= ~(2u | 8u);
-  }
-
-  // Pack sample count into upper flag bits; low four bits remain the filter flags.
-  flags |= (std::min(run.hdr_uniforms.local_sample_count, 48u) & 0xFFu) << 8u;
-  constants.shader.Params0.x = static_cast<float>(flags);
-  constants.shader.Params0.y = run.hdr_uniforms.local_depth_near;
-  constants.shader.Params0.z = run.hdr_uniforms.local_depth_far;
-  constants.shader.Params0.w = run.hdr_uniforms.local_depth_inverted;
-  constants.shader.Params1.x = run.hdr_uniforms.local_luma_min;
-  constants.shader.Params1.y = run.hdr_uniforms.local_luma_max;
-  constants.shader.Params1.z = run.hdr_uniforms.local_block_size_px;
-  constants.shader.Params1.w = run.hdr_uniforms.local_depth_edge_threshold;
+void BindLocalExposureInputs(const PassRun& run, ComputeConstants& constants,
+                             ID3D12Resource* source, ID3D12Resource** srvs) {
+  constants.hdr.LocalExposureParams.x = run.hdr_uniforms.local_block_size_px;
+  constants.hdr.LocalExposureParams.y = static_cast<float>(
+      std::clamp(run.hdr_uniforms.local_sample_count, 4u, 48u));
 
   srvs[0] = source;
-  srvs[1] = mask;
-  srvs[2] = depth;
+  srvs[1] = source;
+  srvs[2] = source;
   srvs[3] = source;
-  if (mask != source) {
-    // The shared snapshot is always left in SRV state, but each pass owns a
-    // separate state tracker. Seed that known state before asking for it.
-    command.SetResourceState(mask,
-                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    command.Transition(list, mask,
-                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  }
-  if (depth != source) {
-    command.Transition(list, depth,
-                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  }
 }
+
 }  // namespace
 
 void PassSession::Fail(const char* reason) {
@@ -1283,10 +1240,9 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
   constants.hdr.LocalExposure.y = run.hdr_uniforms.local_max_brighten;
   constants.hdr.LocalExposure.z = run.hdr_uniforms.local_max_darken;
   constants.hdr.LocalExposure.w = run.hdr_uniforms.midtone;
-  constants.hdr.LocalExposureEdgeSharpness = run.hdr_uniforms.local_edge_sharpness;
 
   ID3D12Resource* srvs[kSrvCount] = {};
-  BindLocalExposureFilters(run, constants, source, self->command_, run.list, srvs);
+  BindLocalExposureInputs(run, constants, source, srvs);
   ID3D12Resource* uavs[kUavCount] = {packed};
   self->command_.Transition(run.list, source,
                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -1808,11 +1764,10 @@ PipelineStatus PassSession::StepBuildEffectiveLocalExposure(PassRun& run) {
   constants.hdr.LocalExposure.y = run.hdr_uniforms.local_max_brighten;
   constants.hdr.LocalExposure.z = run.hdr_uniforms.local_max_darken;
   constants.hdr.LocalExposure.w = run.hdr_uniforms.midtone;
-  constants.hdr.LocalExposureEdgeSharpness = run.hdr_uniforms.local_edge_sharpness;
 
   ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
   ID3D12Resource* srvs[kSrvCount] = {};
-  BindLocalExposureFilters(run, constants, source, self->command_, list, srvs);
+  BindLocalExposureInputs(run, constants, source, srvs);
   ID3D12Resource* uavs[kUavCount] = {
       self->resources_.GetEffectiveExposureMap()};
   self->command_.Transition(list, source,

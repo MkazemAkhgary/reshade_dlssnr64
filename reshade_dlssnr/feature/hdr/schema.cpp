@@ -1,9 +1,8 @@
 // HDR schema: source preparation and the three exposure layers.
 //
-// One translation unit per feature, declared whole here. The three layers are
-// separate sections rather than categories, because each is a tab with its own
-// independent filter set -- two categories of the same names on one section
-// would collide, since a category is a label and never carries identity.
+// One translation unit per feature, declared whole here. Game and Adaptive
+// Exposure have histogram filters; Local Exposure uses spatial-neighborhood
+// controls only.
 //
 // The tab bar and the diagnostics block are hooks: they are rendering, not
 // settings, and a hook's identity is data so it is declared where it belongs.
@@ -46,12 +45,6 @@ bool UnexposeEnabled(const void*, const ctl::ValueStore& store,
                      const ctl::InstanceKey& key,
                      const std::string& section) {
   return store.Read(section, key, kLocalUnexpose).as_bool;
-}
-
-bool DepthContinuityEnabled(const void*, const ctl::ValueStore& store,
-                            const ctl::InstanceKey& key,
-                            const std::string& section) {
-  return store.Read(section, key, kLocalDepthContinuity).as_bool;
 }
 
 }  // namespace
@@ -221,28 +214,6 @@ void RegisterHdrSchema(ctl::Schema& schema) {
                "the same neighborhood and cost more GPU time; this does not "
                "increase the block radius.")
       .EnableWhen(&LayerEnabled, kLocalEnabled);
-  local.Add<ctl::FloatSetting>(kLocalEdgeSharpness, "Luma Edge Protection",
-                               4.0f)
-      .Range(0.0f, 8.0f)
-      .Tooltip("Controls how strongly samples with different log-luminance are "
-               "rejected. Higher values reduce correction bleed across facial "
-               "features and silhouettes; 0 disables luminance-edge weighting. "
-               "This is not a semantic face detector.")
-      .EnableWhen(&LayerEnabled, kLocalEnabled);
-  local.Add<ctl::BoolSetting>(kLocalDepthContinuity, "Depth Continuity", true)
-      .Tooltip("When a DLSS depth guide is available, exclude neighborhood "
-               "samples across depth discontinuities. This is separate from "
-               "the Depth filter, which restricts which pixels may receive "
-               "the correction.")
-      .EnableWhen(&LayerEnabled, kLocalEnabled);
-  local.Add<ctl::FloatSetting>(kLocalDepthEdgeThreshold,
-                               "Depth Edge Threshold", 0.01f)
-      .Range(0.001f, 0.1f)
-      .Tooltip("Maximum normalized depth difference allowed between "
-               "neighborhood samples. Lower values separate "
-               "foreground/background more aggressively; ignored when depth is "
-               "unavailable.")
-      .EnableWhen(&DepthContinuityEnabled);
   local.Add<ctl::BoolSetting>(kLocalUnexpose, "Unexpose on Model Output", false)
       .Tooltip("Divide the model output by the local exposure scale before the "
                "output grade, removing the lift this layer applied to the "
@@ -266,7 +237,6 @@ void RegisterHdrSchema(ctl::Schema& schema) {
                "raise it to affect more of the frame, lower it to affect only "
                "the darkest pixels.")
       .EnableWhen(&UnexposeEnabled);
-  hdr_filter_rows::Declare(local);
 }
 
 }  // namespace feature

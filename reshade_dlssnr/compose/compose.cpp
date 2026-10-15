@@ -103,7 +103,6 @@ bool ComposeOutput(
     constants.hdr.LocalExposure.y = hdr->local_max_brighten;
     constants.hdr.LocalExposure.z = hdr->local_max_darken;
     constants.hdr.LocalExposure.w = hdr->midtone;
-    constants.hdr.LocalExposureEdgeSharpness = hdr->local_edge_sharpness;
 
     if (grade_input != nullptr) {
       constants.grade.Enabled = grade_input->enabled ? 1.0f : 0.0f;

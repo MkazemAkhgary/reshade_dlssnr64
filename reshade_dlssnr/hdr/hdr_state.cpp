@@ -266,8 +266,6 @@ void HdrState::Shutdown() {
     last_local_histogram_[i] = 0;
   }
   p_hi_luma_ = 0.0f;
-  local_luma_min_ = 0.0f;
-  local_luma_max_ = 1.0e8f;
   last_samples_ = 0;
   last_full_samples_ = 0;
   last_game_samples_ = 0;
@@ -298,8 +296,6 @@ HdrSnapshot HdrState::GetSnapshot() const {
   snapshot.p_hi_luma = p_hi_luma_;
   snapshot.target_exposure = regular_.target_exposure;
   snapshot.samples = last_samples_;
-  snapshot.local_luma_min = local_luma_min_;
-  snapshot.local_luma_max = local_luma_max_;
   snapshot.measurement_generation = measurement_generation_;
   snapshot.game_exposure_available = game_exposure_available_;
   snapshot.game_exposure = game_exposure_value_;
@@ -435,8 +431,7 @@ void HdrState::BeginFrame(CommandContext& cmd,
   constants.shader.Params0.w = 0.0f;
   const ExposureFilterSettings* filters[kHistogramLayerCount] = {
       nullptr, &hdr_settings.game_exposure.filters,
-      &hdr_settings.adaptive_exposure.filters,
-      &hdr_settings.local_exposure.filters};
+      &hdr_settings.adaptive_exposure.filters, nullptr};
 
   for (uint32_t layer = 0; layer < kHistogramLayerCount; ++layer) {
     constants.shader.Params0.w = 0.0f;
@@ -629,17 +624,7 @@ void HdrState::UpdateExposure(const uint32_t* full_bins,
       game_tuning_.Update(game_bins, game_params, dt);
   }
 
-  local_luma_min_ = 0.0f;
-  local_luma_max_ = 1.0e8f;
-  if (settings.local_exposure.filters.percentile_range && local_total != 0) {
-    const auto& filters = settings.local_exposure.filters;
-    local_luma_min_ = BinToLinear(PercentileBin(
-        local_bins, local_total, filters.percentile_low));
-    local_luma_max_ = BinToLinear(PercentileBin(
-        local_bins, local_total, filters.percentile_high));
-    if (local_luma_max_ < local_luma_min_)
-      std::swap(local_luma_min_, local_luma_max_);
-  }
+
 
   const uint32_t chosen_total = adaptive_total != 0 ? adaptive_total : full_total;
   const uint32_t* chosen = adaptive_total != 0 ? adaptive_bins : full_bins;

@@ -76,11 +76,11 @@ DLSSNR_BLOCK(HdrBlock)
     float GainMaxLog2;
     // Absolute effective scene-white peak in nits.
     float EffectiveSceneWhiteNits;
-    // Edge-aware neighborhood weighting strength for Local Exposure.
-    float LocalExposureEdgeSharpness;
     // x = local exposure strength, y = max brighten stops, z = max darken
     // stops, w = model midtone target. Zero strength disables local exposure.
     float4 LocalExposure;
+    // x = neighborhood diameter in source pixels, y = neighborhood tap count.
+    float4 LocalExposureParams;
 };
 
 DLSSNR_BLOCK(EasuBlock)

@@ -7,8 +7,6 @@
 #include "common/hdr_transfer.hlsli"
 
 Texture2D<float4> gSource : register(t0);
-Texture2D<float> gMask : register(t1);
-Texture2D<float> gDepth : register(t2);
 RWTexture2D<float4> gOutput : register(u0);
 SamplerState s0 : register(s0);
 
@@ -29,7 +27,6 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     const float3 hdr_linear = DecodeToLinear(
         src.rgb, (int)(kFormat + 0.5), kSdrReferenceWhiteNits);
     const float3 pre_hdr = HdrPreDesaturate(hdr_linear, saturate(kCrosstalk));
-    const float source_hdr_luma = max(dot(max(hdr_linear, 0.0), luma_weights), 0.0);
     const float hdr_luma = max(dot(max(pre_hdr, 0.0), luma_weights), 0.0);
 
     const float exposure = max(kExposure, 1e-6);
@@ -47,7 +44,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
                               (exposure * chroma_scale);
     const float2 uv = (float2(id.xy) + 0.5) /
                       float2(max(Width, 1u), max(Height, 1u));
-    const float local_scale = LocalExposureScale(uv, y_sdr, source_hdr_luma);
+    const float local_scale = LocalExposureScale(uv, y_sdr);
     const float global_scale = exposure * chroma_scale;
     const float carrier_scale = global_scale * local_scale;
     const float3 sdr = max(hdr_linear, 0.0) * carrier_scale;

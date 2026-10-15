@@ -14,7 +14,6 @@ PipelineStatus PassSession::StepBuildHdrUniforms(PassRun& run) {
 
   const HdrSettings& hs = run.hdr_state;
   const LocalExposureLayerSettings& local = hs.local_exposure;
-  const HdrSnapshot snapshot = run.hdr->GetSnapshot();
   run.hdr_uniforms.format = static_cast<float>(HdrFormatCode(run.hdr->ResolvedFormat()));
   run.hdr_uniforms.exposure = run.hdr->Exposure();
   run.hdr_uniforms.bt2446_k1 = hs.bt2446_k1;
@@ -29,22 +28,8 @@ PipelineStatus PassSession::StepBuildHdrUniforms(PassRun& run) {
   run.hdr_uniforms.local_max_brighten = local.max_brighten;
   run.hdr_uniforms.local_max_darken = local.max_darken;
   run.hdr_uniforms.midtone = local.midtone;
-  const bool local_active = local.enabled && local.strength > 0.0f;
-  run.hdr_uniforms.local_filter_flags = local_active
-      ? ((local.filters.importance_mask ? 1u : 0u) |
-         (local.filters.depth ? 2u : 0u) |
-         (local.filters.percentile_range ? 4u : 0u) |
-         (local.depth_continuity ? 8u : 0u))
-      : 0u;
-  run.hdr_uniforms.local_depth_near = local.filters.depth_near;
-  run.hdr_uniforms.local_depth_far = local.filters.depth_far;
-  run.hdr_uniforms.local_depth_inverted = run.guides.depth_inverted ? 1.0f : 0.0f;
-  run.hdr_uniforms.local_luma_min = snapshot.local_luma_min;
-  run.hdr_uniforms.local_luma_max = snapshot.local_luma_max;
   run.hdr_uniforms.local_block_size_px = local.block_size_px;
   run.hdr_uniforms.local_sample_count = static_cast<uint32_t>(local.sample_count);
-  run.hdr_uniforms.local_depth_edge_threshold = local.depth_edge_threshold;
-  run.hdr_uniforms.local_edge_sharpness = local.edge_sharpness;
   run.hdr_uniforms_ready = true;
   return PipelineStatus::Ok;
 }

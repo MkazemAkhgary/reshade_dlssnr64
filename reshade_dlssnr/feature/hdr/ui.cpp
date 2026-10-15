@@ -177,10 +177,6 @@ bool DrawHdrDiagnostics(const void* context, ctl::ValueStore& store,
   ImGui::Text("  out of range: %u", hdr.gain_out_of_range_pixels);
 
   ImGui::Separator();
-  ImGui::Text("Local luma range: %.4f .. %.4f",
-              hdr.local_luma_min, hdr.local_luma_max);
-
-  ImGui::Separator();
   if (!hdr.has_histogram) {
     ImGui::TextDisabled("Histogram: not ready");
   } else {

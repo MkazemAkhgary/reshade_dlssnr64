@@ -56,8 +56,6 @@ struct HdrSnapshot {
   float p_hi_luma = 0.0f;
   float target_exposure = 1.0f;
   uint32_t samples = 0;
-  float local_luma_min = 0.0f;
-  float local_luma_max = 1.0e8f;
 
   bool game_exposure_available = false;
   float game_exposure = 1.0f;
@@ -167,8 +165,6 @@ class HdrState {
   uint32_t last_game_histogram_[256] = {};
   uint32_t last_local_histogram_[256] = {};
   float p_hi_luma_ = 0.0f;
-  float local_luma_min_ = 0.0f;
-  float local_luma_max_ = 1.0e8f;
   uint32_t last_samples_ = 0;
   uint32_t last_full_samples_ = 0;
   uint32_t last_game_samples_ = 0;
