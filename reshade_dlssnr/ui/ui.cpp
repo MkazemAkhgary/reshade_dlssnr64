@@ -7,6 +7,8 @@
 #include <iterator>
 #include <string>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "ctl/draw.h"
 #include "ctl/usage/ui_store.h"
@@ -444,106 +446,129 @@ void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
     status_by_id.emplace(entry.id, &entry.status);
   }
 
-  // Reproduce the tab-bar-in-a-child-column idiom: the bar spans only its own
-  // column, so no tab can be drawn or clicked under the toolbar buttons.
+  struct PassTabItem {
+    feature::pass::PassId id = 0;
+    uint32_t position = 0;
+    std::string label;
+    std::string tooltip;
+    float width = 0.0f;
+    bool enabled = true;
+    bool failed = false;
+  };
+  std::vector<PassTabItem> tabs;
+  tabs.reserve(settings.pass_order.size());
+  for (uint32_t position = 0; position < settings.pass_order.size(); ++position) {
+    const feature::pass::PassId id = settings.pass_order[position];
+    const feature::pass::PassSnapshot pass =
+        feature::pass::Read(store, feature::pass::PassKey(id));
+    const char* stage_name = pass.target == 0 ? "Pre-DLSS" :
+                             pass.target == 1 ? "Post-DLSS" : "Backbuffer";
+    const char* stage_short = pass.target == 0 ? "Pre" :
+                              pass.target == 1 ? "Post" : "BB";
+    const auto status_it = status_by_id.find(id);
+    const bool pass_failed = status_it != status_by_id.end() &&
+                             status_it->second->failed;
+    const char* state_tag = pass_failed ? "FAIL" : pass.enabled ? "on" : "off";
+    const char* state_description = pass_failed ? "failed" :
+                                    pass.enabled ? "enabled" : "disabled";
+    char label[128];
+    if (!pass.custom_name.empty()) {
+      std::snprintf(label, sizeof(label), "%s [%s] %s##PassTab%u",
+                    pass.custom_name.c_str(), state_tag, stage_short, id);
+    } else {
+      std::snprintf(label, sizeof(label), "Pass %u [%s] %s##PassTab%u",
+                    position + 1, state_tag, stage_short, id);
+    }
+    char default_name[24];
+    std::snprintf(default_name, sizeof(default_name), "Pass %u", position + 1);
+    char tip[256];
+    std::snprintf(tip, sizeof(tip),
+        "Select %s - target: %s - %s. Runtime groups passes by target stage.",
+        default_name, stage_name, state_description);
+
+    PassTabItem item;
+    item.id = id;
+    item.position = position;
+    item.label = label;
+    item.tooltip = tip;
+    item.enabled = pass.enabled;
+    item.failed = pass_failed;
+    item.width = ImGui::CalcTextSize(item.label.c_str()).x +
+                 ImGui::GetStyle().FramePadding.x * 2.0f;
+    tabs.push_back(std::move(item));
+  }
+
+  // The first row reserves the right-hand toolbar. Additional rows span the
+  // full section width, so later tabs remain visible and clickable.
   const float toolbar_width = PassToolbarWidth();
   const float row_width = ImGui::GetContentRegionAvail().x;
   const float tabs_column_width = std::max(120.0f, row_width - toolbar_width);
-  const ImVec2 tabs_row_pos = ImGui::GetCursorScreenPos();
+  const float spacing_x = ImGui::GetStyle().ItemSpacing.x;
+  const float spacing_y = ImGui::GetStyle().ItemSpacing.y;
+  const float row_height = ImGui::GetFrameHeight();
+  int tab_rows = 1;
+  float line_used = 0.0f;
+  float line_available = tabs_column_width;
+  for (const PassTabItem& tab : tabs) {
+    const float required = tab.width + (line_used > 0.0f ? spacing_x : 0.0f);
+    if (line_used > 0.0f && line_used + required > line_available) {
+      ++tab_rows;
+      line_used = 0.0f;
+      line_available = row_width;
+    }
+    line_used += tab.width + (line_used > 0.0f ? spacing_x : 0.0f);
+  }
   const float tabs_row_height =
-      ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.y;
+      static_cast<float>(tab_rows) * row_height +
+      static_cast<float>(tab_rows) * spacing_y;
+  const ImVec2 tabs_row_pos = ImGui::GetCursorScreenPos();
 
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-  if (ImGui::BeginChild("##pass_tabs_column",
-                        ImVec2(tabs_column_width, tabs_row_height), false,
-                        ImGuiWindowFlags_NoScrollbar |
-                            ImGuiWindowFlags_NoScrollWithMouse)) {
-    // Custom tab row: styled buttons that behave like tabs. ImGui's native
-    // tab bar caches tabs by ID and keeps them in first-submitted order, so
-    // reordering them requires changing the tab bar ID -- which renders the
-    // whole bar empty for a frame and flickers. Buttons have no cross-frame
-    // caching, so a reorder is instantaneous.
-    {
-      const ImVec4 active_color =
-          ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive);
-      const ImVec4 hovered_color =
-          ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered);
-      const ImVec4 inactive_color =
-          ImGui::GetStyleColorVec4(ImGuiCol_Button);
-      ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+  if (ImGui::BeginChild("##pass_tabs_column", ImVec2(row_width, tabs_row_height),
+                        false, ImGuiWindowFlags_NoScrollbar |
+                                   ImGuiWindowFlags_NoScrollWithMouse)) {
+    const ImVec4 active_color = ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive);
+    const ImVec4 hovered_color = ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered);
+    const ImVec4 inactive_color = ImGui::GetStyleColorVec4(ImGuiCol_Button);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
 
-      bool first_tab = true;
-      for (uint32_t position = 0; position < settings.pass_order.size();
-           ++position) {
-        // Every per-pass fact comes from the store, keyed by the pass's
-        // stable id. Tab position is a view over the order vector, never an
-        // identity.
-        const feature::pass::PassId id = settings.pass_order[position];
-        const feature::pass::PassSnapshot pass =
-            feature::pass::Read(store, feature::pass::PassKey(id));
-        const char* stage_name =
-            pass.target == 0 ? "Pre-DLSS" :
-            pass.target == 1 ? "Post-DLSS" : "Backbuffer";
-        const char* stage_short =
-            pass.target == 0 ? "Pre" :
-            pass.target == 1 ? "Post" : "BB";
-        const auto status_it = status_by_id.find(id);
-        const bool pass_failed = status_it != status_by_id.end() &&
-                                 status_it->second->failed;
-        const char* state_tag = pass_failed ? "FAIL" :
-                                pass.enabled ? "on" : "off";
-        const char* state_description = pass_failed ? "failed" :
-                                        pass.enabled ? "enabled" :
-                                                       "disabled";
-        const char* display_name =
-            pass.custom_name.empty() ? nullptr : pass.custom_name.c_str();
-        char default_name[24];
-        std::snprintf(default_name, sizeof(default_name), "Pass %u",
-                      position + 1);
-
-        char label[128];
-        if (display_name != nullptr) {
-          std::snprintf(label, sizeof(label), "%s [%s] %s##PassTab%u",
-                        display_name, state_tag, stage_short, id);
-        } else {
-          std::snprintf(label, sizeof(label), "Pass %u [%s] %s##PassTab%u",
-                        position + 1, state_tag, stage_short, id);
-        }
-
-        if (!first_tab) ImGui::SameLine();
-        first_tab = false;
-
-        const bool is_active = (settings.active_pass_id == id);
-        ImGui::PushStyleColor(ImGuiCol_Button,
-                              is_active ? active_color : inactive_color);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hovered_color);
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, active_color);
-
-        if (ImGui::Button(label)) {
-          settings.active_pass_id = id;
-        }
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-          Tip("Select Pass %u - %s - target: %s - %s. The pass remains in its original tab position; runtime groups passes by target stage.",
-              position + 1, default_name, stage_name, state_description);
-        }
-        ImGui::PopStyleColor(3);
+    line_used = 0.0f;
+    line_available = tabs_column_width;
+    for (const PassTabItem& tab : tabs) {
+      const float required = tab.width + (line_used > 0.0f ? spacing_x : 0.0f);
+      if (line_used > 0.0f && line_used + required > line_available) {
+        ImGui::NewLine();
+        line_used = 0.0f;
+        line_available = row_width;
       }
-
-      ImGui::PopStyleVar();
-      // The variable is a leftover of the ImGui tab-bar approach; the button
-      // row selects by writing settings.active_pass_id directly.
+      if (line_used > 0.0f) {
+        ImGui::SameLine();
+        line_used += spacing_x;
+      }
+      const bool is_active = settings.active_pass_id == tab.id;
+      ImGui::PushStyleColor(ImGuiCol_Button,
+                            is_active ? active_color : inactive_color);
+      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hovered_color);
+      ImGui::PushStyleColor(ImGuiCol_ButtonActive, active_color);
+      if (ImGui::Button(tab.label.c_str(), ImVec2(tab.width, 0.0f))) {
+        settings.active_pass_id = tab.id;
+      }
+      if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        Tip("%s", tab.tooltip.c_str());
+      }
+      ImGui::PopStyleColor(3);
+      line_used += tab.width;
     }
+    ImGui::PopStyleVar();
   }
   ImGui::EndChild();
   ImGui::PopStyleVar();
 
-  ImGui::SetCursorScreenPos(ImVec2(tabs_row_pos.x + tabs_column_width +
-                                       ImGui::GetStyle().ItemSpacing.x,
+  ImGui::SetCursorScreenPos(ImVec2(tabs_row_pos.x + tabs_column_width + spacing_x,
                                    tabs_row_pos.y));
   DrawPassToolbar(settings, changed);
-
-  ImGui::SetCursorScreenPos(
-      ImVec2(tabs_row_pos.x, tabs_row_pos.y + tabs_row_height));
+  ImGui::SetCursorScreenPos(ImVec2(tabs_row_pos.x,
+                                   tabs_row_pos.y + tabs_row_height));
 
   const auto active_it = std::find(settings.pass_order.begin(),
                                    settings.pass_order.end(),
