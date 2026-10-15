@@ -12,13 +12,12 @@ namespace grade_rows {
 
 namespace {
 
-const char* const kLumaModeNames[] = {"Gain", "Gamma", "Lift", "Soft"};
+const char* const kLumaModeNames[] = {"Gain", "Gamma", "Exposure", "Soft"};
 const char* const kLumaModeTips[] = {
     "Multiply luminance by 2^amount. An equal push either way.",
     "Raise luminance to a power. Black stays black and white stays white, "
     "so the effect concentrates in the midtones.",
-    "Raise the black level. Positive moves a pixel up by the room above it, "
-    "negative down by the room below it.",
+    "Multiply linear RGB by 2^amount (stops), preserving chromaticity until clipping.",
     "A parabolic lift, zero at both ends and strongest at mid grey."};
 
 const char* const kChromaModeNames[] = {"Saturation", "Vibrance"};
@@ -74,7 +73,7 @@ void Declare(ctl::Section& section, const std::string& prefix,
       .Range(-1.0f, 1.0f)
       .Tooltip("Scales the bright end. Fades out before it reaches black.");
 
-  group(section.Add<ctl::EnumSetting>(named(names::kLumaMode).c_str(), "Luma Mode",
+  group(section.Add<ctl::EnumSetting>(named(names::kLumaMode).c_str(), "Brightness Mode",
                                       0))
       .Items(kLumaModeNames, kLumaModeTips, 4)
       .Tooltip("Which algorithm brightness uses. These are alternatives, "
@@ -83,7 +82,7 @@ void Declare(ctl::Section& section, const std::string& prefix,
   group(section.Add<ctl::FloatSetting>(named(names::kLuma).c_str(), "Brightness",
                                        0.0f))
       .Range(-1.0f, 1.0f)
-      .Tooltip("Negative darkens, positive brightens.");
+      .Tooltip("In Exposure mode, the value is in stops (-1 halves linear light; +1 doubles it). Other modes use their own brightness curve.");
 
   group(section.Add<ctl::EnumSetting>(named(names::kChromaMode).c_str(),
                                       "Chroma Mode", 0))

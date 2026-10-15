@@ -66,7 +66,7 @@ const char* LumaModeText(GradeLumaMode mode) {
   switch (mode) {
     case GradeLumaMode::Gain: return "Gain";
     case GradeLumaMode::Gamma: return "Gamma";
-    case GradeLumaMode::Lift: return "Lift";
+    case GradeLumaMode::Exposure: return "Exposure";
     case GradeLumaMode::Soft:
     default: return "Soft";
   }

@@ -166,11 +166,7 @@ float GradeLumaFwd(float y, float a, int mode)
         }
         else if (mode == 2)
         {
-            float lift = 0.5 * a;
-            if (lift > 0.0)
-                result = y + lift * (1.0 - y);
-            else if (lift < 0.0)
-                result = y + lift * y;
+            result = y * exp2(a);
         }
         else
         {
@@ -196,11 +192,7 @@ float GradeLumaInv(float y, float a, int mode)
         }
         else if (mode == 2)
         {
-            float lift = 0.5 * a;
-            if (lift > 0.0)
-                result = (y - lift) / (1.0 - lift);
-            else if (lift < 0.0)
-                result = y / (1.0 + lift);
+            result = y / exp2(a);
         }
         else if (y > 0.0 && y < 1.0)
         {
@@ -328,25 +320,29 @@ float3 GradeChromaInv(float3 c, float a, int mode)
 
 float3 GradeLinearCoreFwd(float3 lin)
 {
-    float y0 = dot(lin, kL709);
-    float y = y0;
+    const float initial_luma = dot(lin, kL709);
+    float target_luma = initial_luma;
 
-    y = GradeLevelsFwd(y);
-    y = GradeContrastFwd(y);
-    y = GradeShadowFwd(y, kGradeShadows);
-    y = GradeHighlightFwd(y, kGradeHighlights);
-    y = GradeLumaFwd(
-        y,
-        kGradeLuma,
-        (int)(kGradeLumaMode + 0.5)
-    );
+    target_luma = GradeLevelsFwd(target_luma);
+    target_luma = GradeContrastFwd(target_luma);
+    target_luma = GradeShadowFwd(target_luma, kGradeShadows);
+    target_luma = GradeHighlightFwd(target_luma, kGradeHighlights);
 
-    // Change luma without dividing by y.
-    // This is stable at/near black and preserves the chroma residual.
-    float3 c = lin + (y - y0);
+    const int brightness_mode = (int)(kGradeLumaMode + 0.5);
+    float3 color = lin + (target_luma - initial_luma);
+    if (brightness_mode == 2)
+    {
+        // Exposure is a linear-light scale, not a luminance offset.
+        color *= exp2(kGradeLuma);
+    }
+    else
+    {
+        target_luma = GradeLumaFwd(target_luma, kGradeLuma, brightness_mode);
+        color = lin + (target_luma - initial_luma);
+    }
 
     return GradeChromaFwd(
-        c,
+        color,
         kGradeChroma,
         (int)(kGradeChromaMode + 0.5)
     );
@@ -354,30 +350,31 @@ float3 GradeLinearCoreFwd(float3 lin)
 
 float3 GradeLinearCoreInv(float3 lin)
 {
-    // Undo chroma first because chroma preserves luma.
-    float3 c = GradeChromaInv(
+    float3 color = GradeChromaInv(
         lin,
         kGradeChroma,
         (int)(kGradeChromaMode + 0.5)
     );
 
-    float y = dot(c, kL709);
+    const int brightness_mode = (int)(kGradeLumaMode + 0.5);
+    if (brightness_mode == 2)
+    {
+        color /= exp2(kGradeLuma);
+    }
 
-    y = GradeLumaInv(
-        y,
-        kGradeLuma,
-        (int)(kGradeLumaMode + 0.5)
-    );
+    float target_luma = dot(color, kL709);
+    if (brightness_mode != 2)
+    {
+        target_luma = GradeLumaInv(target_luma, kGradeLuma, brightness_mode);
+    }
 
-    y = GradeHighlightInv(y, kGradeHighlights);
-    y = GradeShadowInv(y, kGradeShadows);
-    y = GradeContrastInv(y);
-    y = GradeLevelsInv(y);
+    target_luma = GradeHighlightInv(target_luma, kGradeHighlights);
+    target_luma = GradeShadowInv(target_luma, kGradeShadows);
+    target_luma = GradeContrastInv(target_luma);
+    target_luma = GradeLevelsInv(target_luma);
 
-    float currentY = dot(c, kL709);
-
-    // Restore the original luma without a division by currentY.
-    return c + (y - currentY);
+    const float restored_current_luma = dot(color, kL709);
+    return color + (target_luma - restored_current_luma);
 }
 
 // -----------------------------------------------------------------------------
