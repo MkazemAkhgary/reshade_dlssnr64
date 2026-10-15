@@ -668,7 +668,7 @@ void AddonController::RetryAll() {
 }
 
 void AddonController::RefreshStatus(const Settings& settings) {
-  status_ = StatusSnapshot{};
+  status_.Reset();
 
   status_.enabled = settings.enabled;
   status_.runtime_initialized = runtime_.IsInitialized();
@@ -700,19 +700,21 @@ void AddonController::RefreshStatus(const Settings& settings) {
   status_.gain_map_sdr_excursion_pixels = hdr.gain_sdr_excursion_pixels;
   status_.gain_map_out_of_range_pixels = hdr.gain_out_of_range_pixels;
 
-  status_.pass_count = static_cast<uint32_t>(settings.pass_order.size());
   ctl::ValueStore& store = ctl::Store();
-  for (uint32_t position = 0; position < kMaxPasses; ++position) {
-    status_.passes[position] = PassStatus{};
-    if (position >= settings.pass_order.size()) continue;
-    const feature::pass::PassId id = settings.pass_order[position];
+  status_.passes.reserve(settings.pass_order.size());
+  for (feature::pass::PassId id : settings.pass_order) {
+    PassStatusEntry entry;
+    entry.id = id;
     auto it = sessions_.find(id);
     if (it != sessions_.end() && it->second) {
-      status_.passes[position] = it->second->GetStatus();
+      entry.status = it->second->GetStatus();
     }
-    status_.passes[position].enabled =
+    // Enabled remains setting-owned. A not-yet-created session deliberately
+    // contributes a default PassStatus with all flags false and no reason.
+    entry.status.enabled =
         store.Read(feature::pass::kSection, feature::pass::PassKey(id),
                    feature::pass::kPassEnabled).as_bool;
+    status_.passes.push_back(entry);
   }
 }
 

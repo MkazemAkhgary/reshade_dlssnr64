@@ -67,9 +67,10 @@ class KeyValueReader {
 //
 // The consumer supplies the keys instead, as a range over the section it is
 // loading. That keeps exactly one owner of instance identity: the code that
-// already owns pass_count. The alternative -- having Load discover keys from
-// the config -- requires a reader that can enumerate its keys, which no real
-// backend offers, and would make ctl the second authority on how many
+// already owns the live instance count. The alternative -- having Load
+// discover keys from the config -- requires a reader that can enumerate its
+// keys, which no real backend offers, and would make ctl the second authority
+// on how many
 // instances exist.
 //
 // A source is only consulted for instanced sections. Returning an empty range

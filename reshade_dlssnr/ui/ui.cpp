@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <iterator>
 #include <string>
+#include <unordered_map>
 
 #include "ctl/draw.h"
 #include "ctl/usage/ui_store.h"
@@ -434,6 +435,11 @@ void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
   }
 
   const StatusSnapshot tab_status = AddonController::Get().GetStatus();
+  std::unordered_map<feature::pass::PassId, const PassStatus*> status_by_id;
+  status_by_id.reserve(tab_status.passes.size());
+  for (const PassStatusEntry& entry : tab_status.passes) {
+    status_by_id.emplace(entry.id, &entry.status);
+  }
 
   // Reproduce the tab-bar-in-a-child-column idiom: the bar spans only its own
   // column, so no tab can be drawn or clicked under the toolbar buttons.
@@ -478,8 +484,9 @@ void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
         const char* stage_short =
             pass.target == 0 ? "Pre" :
             pass.target == 1 ? "Post" : "BB";
-        // Status rows are positional (see RefreshStatus), not id-indexed.
-        const bool pass_failed = tab_status.passes[position].failed;
+        const auto status_it = status_by_id.find(id);
+        const bool pass_failed = status_it != status_by_id.end() &&
+                                 status_it->second->failed;
         const char* state_tag = pass_failed ? "FAIL" :
                                 pass.enabled ? "on" : "off";
         const char* state_description = pass_failed ? "failed" :

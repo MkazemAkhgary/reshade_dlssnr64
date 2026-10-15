@@ -194,7 +194,7 @@ returns the keys to load, which the loader then creates if they are not there
 yet:
 
 ```cpp
-// The application owns pass_count; ctl does not.
+// The application owns the instance count; ctl does not.
 std::vector<InstanceKey> PassKeys(const void* context, const std::string& section) {
   if (section != kPassSection) return {};
   const int count = *static_cast<const int*>(context);

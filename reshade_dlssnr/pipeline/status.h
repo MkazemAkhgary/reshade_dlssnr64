@@ -8,8 +8,11 @@
 // state, no lifetimes to manage.
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
+#include <vector>
 
+#include "feature/pass/ui.h"
 #include "state/settings.h"
 
 namespace reshade_dlssnr {
@@ -30,6 +33,11 @@ struct PassStatus {
   bool failed = false;                           // failed at some point
   bool has_feature = false;                      // NGX feature handle exists
   char reason[kStatusTextLength] = {};           // failure reason, or ""
+};
+
+struct PassStatusEntry {
+  feature::pass::PassId id = 0;
+  PassStatus status;
 };
 
 struct StatusSnapshot {
@@ -61,9 +69,33 @@ struct StatusSnapshot {
   uint32_t gain_map_out_of_range_pixels = 0;
   char hdr_reason[kStatusTextLength] = {};
 
-  // Per-pass state.
-  uint32_t pass_count = 0;
-  PassStatus passes[kMaxPasses];
+  // One entry per live pass, in pass_order order. Each entry identifies its
+  // own pass; consumers correlate it with settings or sessions by id, never
+  // by assuming the vector's position has identity semantics.
+  std::vector<PassStatusEntry> passes;
+
+  // Clears all fields without releasing vector capacity. Once steady state is
+  // reached, RefreshStatus can rebuild the snapshot without allocating.
+  void Reset() {
+    enabled = false;
+    runtime_initialized = false;
+    std::fill_n(runtime_reason, kStatusTextLength, '\0');
+    guides_valid = false;
+    post_dlss_blocked = false;
+    std::fill_n(post_dlss_block_reason, kStatusTextLength, '\0');
+
+    hdr_ready = false;
+    hdr_exposure = 0.0f;
+    hdr_scene_white = 0.0f;
+    gain_map_ready = false;
+    gain_map_min_log2 = 0.0f;
+    gain_map_max_log2 = 0.0f;
+    gain_map_sdr_excursion_pixels = 0;
+    gain_map_out_of_range_pixels = 0;
+    std::fill_n(hdr_reason, kStatusTextLength, '\0');
+
+    passes.clear();
+  }
 };
 
 }  // namespace reshade_dlssnr

@@ -4,6 +4,7 @@
 #include "ui/ui_sections.h"
 
 #include <cstdio>
+#include <unordered_map>
 
 #include "addon_controller.h"
 #include "ctl/usage/ui_store.h"
@@ -188,8 +189,8 @@ void DrawStatusSection(Settings& settings, bool& changed) {
 
   {
     bool any_failed = false;
-    for (uint32_t i = 0; i < snap.pass_count; ++i) {
-      if (snap.passes[i].failed) { any_failed = true; break; }
+    for (const PassStatusEntry& entry : snap.passes) {
+      if (entry.status.failed) { any_failed = true; break; }
     }
 
     if (any_failed) {
@@ -205,45 +206,52 @@ void DrawStatusSection(Settings& settings, bool& changed) {
 
   ImGui::Separator();
 
+  // Map stable ids to display positions once. Position is presentation data
+  // used only for the "Pass N" label; status and settings are matched by id.
+  std::unordered_map<feature::pass::PassId, size_t> position_by_id;
+  position_by_id.reserve(settings.pass_order.size());
+  for (size_t position = 0; position < settings.pass_order.size(); ++position) {
+    position_by_id.emplace(settings.pass_order[position], position);
+  }
+
   // Match the runtime's established execution grouping: Pre-DLSS, then
-  // Post-DLSS, then Backbuffer. Within each target group, retain pass/tab
-  // order. Status remains indexed by the original pass ID, so rows display
-  // the original Pass N label and look up the matching settings/status.
+  // Post-DLSS, then Backbuffer. Within each target group, retain pass/tab order.
   constexpr InjectionStage kStatusStageOrder[] = {
       InjectionStage::PreDLSS,
       InjectionStage::PostDLSS,
       InjectionStage::Backbuffer,
   };
   for (const InjectionStage display_stage : kStatusStageOrder) {
-    for (uint32_t position = 0; position < settings.pass_order.size();
-         ++position) {
-      // One store read per pass, keyed by the pass's stable id. `position`
-      // selects the tab and the status row; `id` selects the pass.
-      const feature::pass::PassId id = settings.pass_order[position];
+    for (const PassStatusEntry& entry : snap.passes) {
+      const auto position_it = position_by_id.find(entry.id);
+      if (position_it == position_by_id.end()) continue;
+      const size_t position = position_it->second;
       const feature::pass::PassSnapshot pass =
-          feature::pass::Read(ctl::Store(), feature::pass::PassKey(id));
+          feature::pass::Read(ctl::Store(), feature::pass::PassKey(entry.id));
       if (pass.target != static_cast<int>(display_stage)) continue;
 
       char buf[kStatusTextLength];
       // Read the working scale from the store so the row shows the value
       // the runtime actually runs at.
-      FormatPassStatus(snap.passes[position], display_stage, pass.working_scale,
+      FormatPassStatus(entry.status, display_stage, pass.working_scale,
                        snap.post_dlss_blocked, buf, sizeof(buf));
 
       char label[32];
-      std::snprintf(label, sizeof(label), "Pass %u", position + 1);
+      std::snprintf(label, sizeof(label), "Pass %u",
+                    static_cast<unsigned>(position + 1));
 
       const bool stage_blocked =
           snap.post_dlss_blocked &&
           display_stage == InjectionStage::PostDLSS;
-      const bool ok = snap.passes[position].enabled &&
-                      !snap.passes[position].failed && !stage_blocked;
+      const bool ok = entry.status.enabled && !entry.status.failed &&
+                      !stage_blocked;
 
       bullet(ok);
       ImGui::AlignTextToFramePadding();
       ImGui::TextUnformatted(label);
       if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        Tip("Original pass index %u. Display order is grouped Pre-DLSS, Post-DLSS, then Backbuffer while preserving pass order inside each group.", position + 1);
+        Tip("Original pass index %u. Display order is grouped Pre-DLSS, Post-DLSS, then Backbuffer while preserving pass order inside each group.",
+            static_cast<unsigned>(position + 1));
       }
 
       ImGui::SameLine(kControlLabelWidth);
