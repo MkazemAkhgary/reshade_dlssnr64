@@ -213,7 +213,8 @@ void RemoveActivePass(Settings& settings, bool& changed) {
   // keys behind in the config.
   ErasePassKeys(removed_id);
 
-  // EnsureSessions drops the removed pass's session and its NGX feature.
+  // EnsureSessions removes it from the live map and defers releasing its NGX
+  // feature/resources until work recorded by earlier frames has completed.
   AddonController::Get().EnsureSessions(settings.pass_order);
   changed = true;
 }

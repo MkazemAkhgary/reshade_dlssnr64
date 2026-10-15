@@ -7,6 +7,7 @@
 #include <windows.h>
 #include <wrl/client.h>
 
+#include <cstdint>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -58,9 +59,9 @@ class AddonController {
   StatusSnapshot GetStatus() const;
 
 
-  // Ensures a session exists for every pass in `order` and drops the
-  // sessions of passes no longer present. Called by the UI after
-  // add/remove/reorder so the runtime map matches the pass list.
+  // Ensures a session exists for every pass in `order`. Removed sessions leave
+  // the live map immediately but are retained until a queue fence proves their
+  // previously recorded GPU work has completed. Called by the UI after changes.
   void EnsureSessions(const feature::pass::PassOrder& order);
 
   // Clears the failure state of every pass. One button in the UI, so the
@@ -179,12 +180,26 @@ class AddonController {
   // OnPresent and OnPostDlssEvaluate.
   void RefreshStatus(const Settings& settings);
 
+  // Passes removed from the live order must keep their NGX feature and GPU
+  // resources alive until a queue-ordered Release fence proves that all earlier
+  // pass work has completed. These helpers are called with g_direct_mutex held.
+  bool HasUnfencedRetiredSessions() const;
+  void TagRetiredSessions(uint64_t fence_value);
+  void ReleaseRetiredSessionsCompleted(uint64_t completed_fence_value);
+
   NgxRuntime runtime_;
   // One session per live pass, keyed by the pass's stable id. Sessions are
   // created on demand and retired when a pass leaves pass_order. Keying by
   // id means a reorder never migrates a feature handle, a failure flag, or
   // an eval diagnostic between passes.
   std::unordered_map<feature::pass::PassId, std::unique_ptr<PassSession>> sessions_;
+  struct RetiredPassSession {
+    std::unique_ptr<PassSession> session;
+    uint64_t fence_value = 0;  // zero means no queue marker has been enqueued yet
+  };
+  // A session removed while its commands may still be in flight. Keep the
+  // entire session (including its NGX feature) until its fence completes.
+  std::vector<RetiredPassSession> retired_sessions_;
   // Internal session: detection is shared across passes and must not latch a
   // failure onto a user-configured pass.
   PassSession hdr_preparation_session_;
@@ -198,6 +213,9 @@ class AddonController {
   // The Release stage's command list, opened on demand by
   // BeginReleaseCommands and submitted by EndReleaseCommands.
   CommandContext release_command_;
+  // Keep the most recently observed direct queue so addon shutdown can place
+  // a final queue marker before releasing sessions that may have GPU work.
+  Microsoft::WRL::ComPtr<ID3D12CommandQueue> last_command_queue_;
 
   // True between BeginReleaseCommands and EndReleaseCommands. Distinguishes
   // "the list is open and has work in it" from "the list was never opened",

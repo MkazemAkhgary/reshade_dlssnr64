@@ -465,6 +465,8 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 **Abandoned Present recordings must be closed before allocator reuse.** `CommandContext::Abort` closes a recording that exited before the normal `SubmitBackbuffer` tail; `Reset` must never reset an allocator while its command list is still recording.
 
+**Removed pass sessions are retired after a queue fence.** Removing a pass drops it from the live ID map immediately, but its `PassSession`, NGX feature, and resources remain owned until a Release-queue marker behind prior pass work completes. `PreDLSS` and `PostDLSS` record on the game's command list, so erasing a session must not synchronously release their feature/resources while that list may still be in flight.
+
 **The descriptor/constant ring cannot be reused ahead of the GPU.** Descriptor views and the 256-byte constant slot are written by the CPU while commands are recorded but consumed later by the GPU. The ring depth therefore has to cover the maximum CPU lead and worst-case dispatch count.
 
 **Importance Mask keeps the published snapshot immutable across resolution changes.** The destination ping-pong texture is resized independently; the currently published texture is retained until Present. Temporal history samples the prior mask in normalized coordinates if its resolution differs. Resource replacement uses the deferred-retirement path, and a successful generated mask is promoted only at Present.

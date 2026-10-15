@@ -5,6 +5,7 @@
 #include <memory>
 #include <mutex>
 #include <unordered_map>
+#include <utility>
 
 #include "ctl/usage/ui_store.h"
 #include "ctl/values.h"
@@ -294,13 +295,50 @@ bool AddonController::EnsureHdr(ID3D12Device* device) {
   return true;
 }
 
+bool AddonController::HasUnfencedRetiredSessions() const {
+  for (const RetiredPassSession& retired : retired_sessions_) {
+    if (retired.session != nullptr && retired.fence_value == 0) return true;
+  }
+  return false;
+}
+
+void AddonController::TagRetiredSessions(uint64_t fence_value) {
+  if (fence_value == 0) return;
+  for (RetiredPassSession& retired : retired_sessions_) {
+    if (retired.session != nullptr && retired.fence_value == 0) {
+      retired.fence_value = fence_value;
+    }
+  }
+}
+
+void AddonController::ReleaseRetiredSessionsCompleted(
+    uint64_t completed_fence_value) {
+  for (auto it = retired_sessions_.begin(); it != retired_sessions_.end();) {
+    if (it->session != nullptr && it->fence_value != 0 &&
+        it->fence_value <= completed_fence_value) {
+      // Only now can ReleaseFeature and PassResources::Shutdown safely drop
+      // objects that an earlier NGX/GPU command may still reference.
+      it->session->Shutdown(runtime_);
+      it = retired_sessions_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
 void AddonController::OnPresent(
     ID3D12CommandQueue* command_queue,
     IDXGISwapChain* swapchain) {
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
+  if (command_queue != nullptr && last_command_queue_.Get() != command_queue) {
+    last_command_queue_ = command_queue;
+  }
+
   DlssGuides& guides = DlssGuides::Get();
-  guides.ReleaseRetiredResourcesCompleted(release_command_.CompletedFenceValue());
+  const uint64_t completed_fence = release_command_.CompletedFenceValue();
+  guides.ReleaseRetiredResourcesCompleted(completed_fence);
+  ReleaseRetiredSessionsCompleted(completed_fence);
 
   const Settings& settings = GetSettings();
   if (!settings.enabled) {
@@ -308,14 +346,18 @@ void AddonController::OnPresent(
     // The effect can be disabled after a mode/resource change retired objects.
     // Submit an empty marker only; do not run grading/debug steps while the
     // master switch is off.
-    if (command_queue != nullptr &&
-        (guides.RetiredGameResourceCount() != 0 ||
-         guides.RetiredResourceCount() != 0) &&
+    const bool have_retired_resources =
+        guides.RetiredGameResourceCount() != 0 ||
+        guides.RetiredResourceCount() != 0 || HasUnfencedRetiredSessions();
+    if (command_queue != nullptr && have_retired_resources &&
         BeginReleaseCommands(command_queue) != nullptr) {
       const uint64_t before_marker = release_command_.LastSignaledFenceValue();
       EndReleaseCommands(command_queue);
       const uint64_t marker = release_command_.LastSignaledFenceValue();
-      if (marker > before_marker) guides.TagRetiredResources(marker);
+      if (marker > before_marker) {
+        guides.TagRetiredResources(marker);
+        TagRetiredSessions(marker);
+      }
     }
     frame_debug_.Reset();
     pre_stage_seen_ = false;
@@ -359,7 +401,7 @@ void AddonController::OnPresent(
   // the Release list gets submitted even when no grade/debug dispatch is active.
   const bool have_retired_resources =
       guides.RetiredGameResourceCount() != 0 ||
-      guides.RetiredResourceCount() != 0;
+      guides.RetiredResourceCount() != 0 || HasUnfencedRetiredSessions();
   const bool retirement_sync_ready =
       !have_retired_resources || BeginReleaseCommands(command_queue) != nullptr;
   const uint64_t fence_before_release = release_command_.LastSignaledFenceValue();
@@ -370,7 +412,10 @@ void AddonController::OnPresent(
     const uint64_t retirement_fence = release_command_.LastSignaledFenceValue();
     if (retirement_fence > fence_before_release) {
       guides.TagRetiredResources(retirement_fence);
-      guides.ReleaseRetiredResourcesCompleted(release_command_.CompletedFenceValue());
+      TagRetiredSessions(retirement_fence);
+      const uint64_t completed = release_command_.CompletedFenceValue();
+      guides.ReleaseRetiredResourcesCompleted(completed);
+      ReleaseRetiredSessionsCompleted(completed);
     } else {
       reshade::log::message(
           reshade::log::level::warning,
@@ -678,7 +723,12 @@ void AddonController::EnsureSessions(
     const bool keep =
         std::find(order.begin(), order.end(), it->first) != order.end();
     if (!keep) {
-      if (it->second) it->second->Shutdown(runtime_);
+      if (it->second) {
+        // RunStage may have recorded Pre/Post-DLSS commands on the game's list,
+        // which is submitted asynchronously by the host. Do not release its
+        // NGX feature or resources here; OnPresent will fence and retire it.
+        retired_sessions_.push_back({std::move(it->second), 0});
+      }
       it = sessions_.erase(it);
     } else {
       ++it;
@@ -696,12 +746,34 @@ void AddonController::Shutdown() {
   grade_backbuffer_failure_logged_ = false;
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
+  // Shutdown is allowed to wait. Enqueue a final marker behind submitted game
+  // and addon work so feature handles/resources can be released deterministically
+  // instead of relying on the non-blocking per-frame retirement path.
+  ID3D12CommandQueue* const queue = last_command_queue_.Get();
+  if (queue != nullptr && BeginReleaseCommands(queue) != nullptr) {
+    EndReleaseCommands(queue);
+    release_command_.WaitGpu(queue);
+    const uint64_t fence = release_command_.LastSignaledFenceValue();
+    const uint64_t completed = release_command_.CompletedFenceValue();
+    if (fence != 0) {
+      DlssGuides::Get().TagRetiredResources(fence);
+      TagRetiredSessions(fence);
+    }
+    DlssGuides::Get().ReleaseRetiredResourcesCompleted(completed);
+    ReleaseRetiredSessionsCompleted(completed);
+  }
+
   for (auto& entry : sessions_) {
     if (entry.second) entry.second->Shutdown(runtime_);
   }
   sessions_.clear();
+  for (auto& retired : retired_sessions_) {
+    if (retired.session) retired.session->Shutdown(runtime_);
+  }
+  retired_sessions_.clear();
   hdr_preparation_session_.Shutdown(runtime_);
   release_command_.Shutdown();
+  last_command_queue_.Reset();
   release_list_begun_ = false;
   grade_scratch_.Reset();
   grade_scratch_out_.Reset();
