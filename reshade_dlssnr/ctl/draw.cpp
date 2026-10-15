@@ -131,7 +131,8 @@ bool IsCategoryToggle(const Setting& setting) {
 bool DrawCategoryHeader(const DrawOptions& options, ValueStore& store,
                         const Section& section, const InstanceKey& key,
                         const std::string& label,
-                        const std::string& full_path, bool was_open,
+                        const std::string& full_path,
+                        const std::string& id_path, bool was_open,
                         const Setting* toggle_setting, bool& changed) {
   bool toggle_value = false;
   bool toggle_changed = false;
@@ -142,8 +143,7 @@ bool DrawCategoryHeader(const DrawOptions& options, ValueStore& store,
 
   bool open = was_open;
   if (options.category_style == DrawOptions::CategoryStyle::SubHeader) {
-    const std::string id = section.name() + "/" + full_path;
-    ImGui::PushID(id.c_str());
+    ImGui::PushID(id_path.c_str());
     HeaderControls controls;
     if (toggle_setting != nullptr) {
       controls.enabled = &toggle_value;
@@ -155,8 +155,7 @@ bool DrawCategoryHeader(const DrawOptions& options, ValueStore& store,
                      toggle_value != store.Read(section.name(), key,
                          toggle_setting->meta().name).as_bool;
   } else {
-    const std::string id = section.name() + "/" + full_path;
-    ImGui::PushID(id.c_str());
+    ImGui::PushID(id_path.c_str());
     if (toggle_setting != nullptr) {
       if (ImGui::Checkbox("##ctl_category_toggle", &toggle_value)) {
         toggle_changed = true;
@@ -218,6 +217,9 @@ bool DrawSection(ValueStore& store, const std::string& section_name,
   const Section* section = schema.FindSection(section_name);
   if (section == nullptr) return false;
 
+  const std::string instance_scope = section_name + "/" + key.ToText();
+  ImGui::PushID(instance_scope.c_str());
+
   InstanceSet& set_ref = store.SectionSet(*section);
   Instance& instance = set_ref.Get(key);
   const uint32_t offset = store.SettingOffsetOf(*section);
@@ -245,6 +247,7 @@ bool DrawSection(ValueStore& store, const std::string& section_name,
     }
     if (!open) {
       changed |= local_changed;
+      ImGui::PopID();
       return local_changed;
     }
     if (options.indent_bodies) ImGui::Indent(16.0f);
@@ -271,8 +274,10 @@ bool DrawSection(ValueStore& store, const std::string& section_name,
         const std::string full_path = JoinCategoryPath(desired, i + 1);
         const std::string& label = desired[i];
         const bool was_open = CategoryIsOpen(options, section_name, full_path);
+        const std::string id_path = JoinCategoryPath(desired, desired.size()) +
+            "/level/" + std::to_string(i);
         open = DrawCategoryHeader(options, store, *section, key, label,
-                                  full_path, was_open,
+                                  full_path, id_path, was_open,
                                   FindCategoryToggle(*section, full_path),
                                   local_changed);
       }
@@ -332,6 +337,7 @@ bool DrawSection(ValueStore& store, const std::string& section_name,
   if (options.draw_headers && options.indent_bodies) ImGui::Unindent(16.0f);
 
   changed |= local_changed;
+  ImGui::PopID();
   return local_changed;
 }
 
