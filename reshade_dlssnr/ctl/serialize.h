@@ -1,7 +1,8 @@
 // ctl persistence: versioned serialization of a ValueStore.
 //
 // Rules the format guarantees:
-//   - only persist-flagged settings are written;
+//   - only persist-flagged settings are written; profile targets additionally
+//     exclude settings marked global-only;
 //   - a single-instance section is written once, outside any instance block;
 //   - an instanced section is written under its instance key;
 //   - every persistable setting is written once per instance;
@@ -87,7 +88,8 @@ using InstanceKeySource = std::vector<InstanceKey> (*)(
 void Save(ValueStore& store, KeyValueWriter& writer,
           const std::string& prefix = {},
           const InstanceKeySource& source = nullptr,
-          const void* context = nullptr);
+          const void* context = nullptr,
+          PersistenceTarget target = PersistenceTarget::Global);
 
 // Erase every persistable key in a serialized block. The schema enumerates
 // the setting names; for instanced sections, `source` supplies the instance
@@ -97,7 +99,8 @@ void Save(ValueStore& store, KeyValueWriter& writer,
 void Delete(ValueStore& store, KeyValueWriter& writer,
             const std::string& prefix = {},
             const InstanceKeySource& source = nullptr,
-            const void* context = nullptr);
+            const void* context = nullptr,
+            PersistenceTarget target = PersistenceTarget::Global);
 
 // Load into the store. Unknown keys and unknown settings are skipped. Falls
 // back to the declared default for every setting the config does not mention,
@@ -107,13 +110,14 @@ void Delete(ValueStore& store, KeyValueWriter& writer,
 // pointer means no keys are known, so instanced sections load nothing.
 // Single-instance sections never consult it.
 //
-// The instances are created here if they do not exist, so a store that starts
-// empty ends up with exactly the instances the caller declared -- which is
-// the point: the caller's key range and the loaded values cannot disagree.
+// The instance set is reconciled to the supplied keys before loading: a
+// store starts or remains with exactly the instances the caller declared, so
+// values left by an earlier profile cannot leak into the newly loaded profile.
 void Load(ValueStore& store, KeyValueReader& reader,
           const std::string& prefix = {},
           const InstanceKeySource& source = nullptr,
-          const void* context = nullptr);
+          const void* context = nullptr,
+          PersistenceTarget target = PersistenceTarget::Global);
 
 }  // namespace ctl
 }  // namespace reshade_dlssnr

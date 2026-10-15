@@ -41,9 +41,9 @@ void WriteValue(KeyValueWriter& writer, const std::string& key,
       writer.WriteBool(key, value.as_bool);
       break;
     case Value::Kind::String:
-      // An empty string is written, not skipped: the file has to be able to
-      // record "the user cleared this", which is a different state from "never
-      // set".
+    case Value::Kind::IntList:
+      // Empty values are written, not skipped: clearing a setting is distinct
+      // from the absence of a persisted override.
       writer.WriteString(key, setting.ToString(value));
       break;
   }
@@ -74,7 +74,8 @@ bool ReadValue(KeyValueReader& reader, const std::string& key,
     // Returns false only when the key is absent. An empty string is a value
     // the file can hold ("the user cleared it"), not an absent key, so the
     // presence test and the content are separate.
-    case Value::Kind::String: {
+    case Value::Kind::String:
+    case Value::Kind::IntList: {
       std::string text;
       if (!reader.ReadString(key, &text)) return false;
       return setting.FromString(text, *out);
@@ -83,8 +84,10 @@ bool ReadValue(KeyValueReader& reader, const std::string& key,
   return false;
 }
 
-bool ShouldWrite(const Setting& setting, const SettingState&) {
-  return setting.meta().persist;
+bool ShouldPersist(const Setting& setting, PersistenceTarget target) {
+  if (!setting.meta().persist) return false;
+  return target == PersistenceTarget::Global ||
+         setting.meta().persist_in_profiles;
 }
 
 Value ValueToWrite(const Setting& setting, const SettingState& state) {
@@ -93,14 +96,15 @@ Value ValueToWrite(const Setting& setting, const SettingState& state) {
 
 void SaveInstance(ValueStore& store, KeyValueWriter& writer,
                   const std::string& prefix, const Section& section,
-                  const Instance& instance, bool instanced) {
+                  const Instance& instance, bool instanced,
+                  PersistenceTarget target) {
   const std::string base =
       InstancePrefix(prefix, section.name(), instanced, instance.key);
   const uint32_t offset = store.SettingOffsetOf(section);
   for (uint32_t i = 0; i < section.settings().size(); ++i) {
     const Setting& setting = *section.settings()[i];
     const SettingState& state = instance.states[offset + i];
-    if (!ShouldWrite(setting, state)) continue;
+    if (!ShouldPersist(setting, target)) continue;
     WriteValue(writer, Join(base, setting.meta().name), setting,
                ValueToWrite(setting, state));
   }
@@ -110,7 +114,7 @@ void SaveInstance(ValueStore& store, KeyValueWriter& writer,
 
 void Save(ValueStore& store, KeyValueWriter& writer,
           const std::string& prefix, const InstanceKeySource& source,
-          const void* context) {
+          const void* context, PersistenceTarget target) {
   writer.WriteInt(Join(prefix, "Version"), kSerializeVersion);
 
   const Schema& schema = store.schema();
@@ -121,7 +125,7 @@ void Save(ValueStore& store, KeyValueWriter& writer,
       // Single-instance sections: one block, no key.
       InstanceSet& set = store.SectionSet(section);
       const Instance& instance = set.Get(set.single_key());
-      SaveInstance(store, writer, prefix, section, instance, false);
+      SaveInstance(store, writer, prefix, section, instance, false, target);
       continue;
     }
 
@@ -129,7 +133,7 @@ void Save(ValueStore& store, KeyValueWriter& writer,
     InstanceSet& set = store.SectionSet(section);
     if (source == nullptr) {
       for (const Instance& instance : set.instances()) {
-        SaveInstance(store, writer, prefix, section, instance, true);
+        SaveInstance(store, writer, prefix, section, instance, true, target);
       }
     } else {
       const std::vector<InstanceKey> keys = source(context, section.name());
@@ -137,7 +141,7 @@ void Save(ValueStore& store, KeyValueWriter& writer,
         // Declared keys are part of the save contract even if a collapsed UI
         // has not touched that section yet; Get creates the default instance.
         const Instance& instance = set.Get(key);
-        SaveInstance(store, writer, prefix, section, instance, true);
+        SaveInstance(store, writer, prefix, section, instance, true, target);
       }
     }
   }
@@ -145,7 +149,7 @@ void Save(ValueStore& store, KeyValueWriter& writer,
 
 void Delete(ValueStore& store, KeyValueWriter& writer,
             const std::string& prefix, const InstanceKeySource& source,
-            const void* context) {
+            const void* context, PersistenceTarget target) {
   writer.Erase(Join(prefix, "Version"));
 
   const Schema& schema = store.schema();
@@ -155,7 +159,7 @@ void Delete(ValueStore& store, KeyValueWriter& writer,
       const std::string base = InstancePrefix(prefix, section.name(), false, {});
       for (const auto& setting_ptr : section.settings()) {
         const Setting& setting = *setting_ptr;
-        if (!setting.meta().persist) continue;
+        if (!ShouldPersist(setting, target)) continue;
         writer.Erase(Join(base, setting.meta().name));
       }
       continue;
@@ -167,7 +171,7 @@ void Delete(ValueStore& store, KeyValueWriter& writer,
       const std::string base = InstancePrefix(prefix, section.name(), true, key);
       for (const auto& setting_ptr : section.settings()) {
         const Setting& setting = *setting_ptr;
-        if (!setting.meta().persist) continue;
+        if (!ShouldPersist(setting, target)) continue;
         writer.Erase(Join(base, setting.meta().name));
       }
     }
@@ -176,7 +180,7 @@ void Delete(ValueStore& store, KeyValueWriter& writer,
 
 void Load(ValueStore& store, KeyValueReader& reader,
           const std::string& prefix, const InstanceKeySource& source,
-          const void* context) {
+          const void* context, PersistenceTarget target) {
   // A version we do not recognise is not an error: unknown keys are skipped,
   // and every setting keeps its declared default, so a newer or older file
   // still loads what it can.
@@ -194,7 +198,7 @@ void Load(ValueStore& store, KeyValueReader& reader,
       const uint32_t offset = store.SettingOffsetOf(section);
       for (uint32_t i = 0; i < section.settings().size(); ++i) {
         const Setting& setting = *section.settings()[i];
-        if (!setting.meta().persist) continue;
+        if (!ShouldPersist(setting, target)) continue;
         SettingState& state = instance.states[offset + i];
         Value candidate = setting.DefaultValue();
         if (!ReadValue(reader, Join(base, setting.meta().name), setting,
@@ -218,6 +222,7 @@ void Load(ValueStore& store, KeyValueReader& reader,
     const std::vector<InstanceKey> keys =
         source != nullptr ? source(context, section.name())
                           : std::vector<InstanceKey>();
+    set.Retain(keys);
 
     for (const InstanceKey& key : keys) {
       Instance& instance = set.Get(key);
@@ -225,7 +230,7 @@ void Load(ValueStore& store, KeyValueReader& reader,
           InstancePrefix(prefix, section.name(), true, key);
       for (uint32_t i = 0; i < section.settings().size(); ++i) {
         const Setting& setting = *section.settings()[i];
-        if (!setting.meta().persist) continue;
+        if (!ShouldPersist(setting, target)) continue;
         SettingState& state = instance.states[offset + i];
         Value candidate = setting.DefaultValue();
         if (!ReadValue(reader, Join(base, setting.meta().name), setting,

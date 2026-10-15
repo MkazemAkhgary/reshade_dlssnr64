@@ -16,6 +16,7 @@
 #include "ctl/schema.h"
 #include "ctl/values.h"
 #include "feature/pass/settings.h"
+#include "project_constants.h"
 #include "feature/pass/ui.h"
 #include "fragments/grade_rows/rows.h"
 
@@ -24,6 +25,11 @@ namespace feature {
 namespace pass {
 
 namespace {
+
+bool NeverVisible(const void*, const ctl::ValueStore&,
+                  const ctl::InstanceKey&, const std::string&) {
+  return false;
+}
 
 // Category tags. A tag is a label; consecutive rows sharing one are drawn
 // under a collapsible sub-header, so it also carries the sub-header's identity
@@ -156,6 +162,15 @@ bool DrawGradeSections(const void*, ctl::ValueStore& store,
 
 void RegisterPassSchema(ctl::Schema& schema) {
   using namespace pass;
+
+  ctl::Section& order = schema.AddSection(kOrderSection, ctl::SectionKind::Single);
+  order.Add<ctl::IntListSetting>(kOrderSetting, "Pass Order",
+                                 std::vector<int64_t>{1})
+      .MinItems(1)
+      .MaxItems(kMaxPasses)
+      .RangeEach(1, UINT32_MAX)
+      .UniqueItems()
+      .VisibleWhen(&NeverVisible);
 
   ctl::Section& pass =
       schema.AddSection(kSection, ctl::SectionKind::Instanced);

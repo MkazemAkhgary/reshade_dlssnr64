@@ -145,89 +145,51 @@ bool ValidProfileId(ProfileId id) {
   return std::find(order.begin(), order.end(), id) != order.end();
 }
 
-// The pass order is one config value: a comma-separated list of stable pass
-// ids. Position is not recorded, because the vector IS the order.
-constexpr const char* kPassOrderKey = "PassOrder";
-
-std::string PassOrderText(const std::vector<feature::pass::PassId>& order) {
-  std::string text;
-  for (feature::pass::PassId id : order) {
-    if (!text.empty()) text += ',';
-    text += std::to_string(id);
-  }
-  return text;
+void LoadSettingsValues(Settings& settings, const std::string& key_prefix) {
+  ReadValue(key_prefix, "Enabled", settings.enabled);
 }
 
-std::vector<feature::pass::PassId> ParsePassOrder(const std::string& text,
-                                                  bool ensure_nonempty = true) {
-  std::vector<feature::pass::PassId> order;
-  size_t begin = 0;
-  while (begin <= text.size()) {
-    const size_t comma = text.find(',', begin);
-    const std::string token =
-        text.substr(begin, comma == std::string::npos ? std::string::npos
-                                                      : comma - begin);
-    if (!token.empty()) {
-      const long long id = std::strtoll(token.c_str(), nullptr, 10);
-      if (id > 0) {
-        const feature::pass::PassId pid =
-            static_cast<feature::pass::PassId>(id);
-        if (std::find(order.begin(), order.end(), pid) == order.end()) {
-          order.push_back(pid);
-        }
-      }
+void SaveSettingsValues(const Settings& settings,
+                        const std::string& key_prefix) {
+  WriteValue(key_prefix, "Enabled", settings.enabled);
+}
+
+feature::pass::PassOrder ReadPassOrder(const ctl::ValueStore& store) {
+  const ctl::Value value = store.Read(
+      feature::pass::kOrderSection, ctl::InstanceKey::FromInt(0),
+      feature::pass::kOrderSetting);
+  feature::pass::PassOrder order;
+  order.reserve(value.as_int_list.size());
+  for (int64_t id : value.as_int_list) {
+    if (id <= 0 || id > std::numeric_limits<feature::pass::PassId>::max()) {
+      continue;
     }
-    if (comma == std::string::npos) break;
-    begin = comma + 1;
-  }
-  if (order.size() > kMaxPasses || (ensure_nonempty && order.empty())) {
-    order.clear();
-    if (ensure_nonempty) order.push_back(NewPassId());
+    const auto pass_id = static_cast<feature::pass::PassId>(id);
+    if (std::find(order.begin(), order.end(), pass_id) == order.end()) {
+      order.push_back(pass_id);
+    }
+    if (order.size() >= kMaxPasses) break;
   }
   return order;
 }
 
-std::vector<feature::pass::PassId> ReadProfilePassOrder(ProfileId id) {
-  std::string text;
-  ReadValue(ProfileValuePrefix(id), kPassOrderKey, text);
-  return ParsePassOrder(text, false);
+void WritePassOrder(ctl::ValueStore& store,
+                    const feature::pass::PassOrder& order) {
+  std::vector<int64_t> values;
+  values.reserve(order.size());
+  for (feature::pass::PassId id : order) values.push_back(id);
+  store.Write(feature::pass::kOrderSection, ctl::InstanceKey::FromInt(0),
+              feature::pass::kOrderSetting,
+              ctl::Value::IntList(std::move(values)));
 }
 
-void LoadSettingsValues(Settings& settings, const std::string& key_prefix,
-                        bool load_ui_state) {
-  ReadValue(key_prefix, "Enabled", settings.enabled);
-
-  if (load_ui_state) {
-    ReadValue(key_prefix, "UI.StatusOpen", settings.ui_status_open);
-    ReadValue(key_prefix, "UI.PreferencesOpen", settings.ui_preferences_open);
-    ReadValue(key_prefix, "UI.PresetsOpen", settings.ui_presets_open);
-    ReadValue(key_prefix, "UI.PassesOpen", settings.ui_passes_open);
-    ReadValue(key_prefix, "UI.DebugOpen", settings.ui_debug_open);
-    ReadValue(key_prefix, "UI.HdrOpen", settings.ui_hdr_open);
-    ReadValue(key_prefix, "UI.GradeOpen", settings.ui_grade_open);
-    ReadValue(key_prefix, "UI.HdrDiagnosticsOpen", settings.ui_hdr_diagnostics_open);
-    ReadValue(key_prefix, "UI.BoundedTuningOpen", settings.ui_bounded_tuning_open);
-    ReadValue(key_prefix, "UI.ImportanceMaskOpen", settings.ui_importance_mask_open);
-    ReadValue(key_prefix, "UI.ModelOpen", settings.ui_model_open);
-    ReadValue(key_prefix, "UI.StrengthOpen", settings.ui_strength_open);
-    ReadValue(key_prefix, "UI.PassTemporalOpen", settings.ui_pass_temporal_open);
-    ReadValue(key_prefix, "UI.PassTemporalOpen", settings.ui_pass_temporal_open);
-    ReadValue(key_prefix, "UI.PassTemporalOpen", settings.ui_pass_temporal_open);
-    ReadValue(key_prefix, "UI.SoftCompressionOpen", settings.ui_soft_compression_open);
-    ReadValue(key_prefix, "UI.PassAdvancedOpen", settings.ui_pass_advanced_open);
-    ReadValue(key_prefix, "UI.ResidualOpen", settings.ui_residual_open);
-    ReadValue(key_prefix, "UI.RcasOpen", settings.ui_rcas_open);
-    ReadValue(key_prefix, "UI.GradeInputOpen", settings.ui_grade_input_open);
-    ReadValue(key_prefix, "UI.GradeOutputOpen", settings.ui_grade_output_open);
+void SyncPassOrder(Settings& settings, bool ensure_nonempty) {
+  feature::pass::PassOrder order = ReadPassOrder(feature::SettingsStore());
+  if (order.empty() && ensure_nonempty) {
+    order.push_back(NewPassId());
+    WritePassOrder(feature::SettingsStore(), order);
   }
-
-  // Pass order first: the store's key source needs it, because it is what
-  // decides which instances exist.
-  std::string order_text;
-  ReadValue(key_prefix, kPassOrderKey, order_text);
-  settings.pass_order = ParsePassOrder(order_text);
-  // active_pass_id is not persisted: fall back to the first pass when
-  // the previously-selected id is not in the freshly loaded list.
+  settings.pass_order = std::move(order);
   if (std::find(settings.pass_order.begin(), settings.pass_order.end(),
                 settings.active_pass_id) == settings.pass_order.end()) {
     settings.active_pass_id =
@@ -235,86 +197,67 @@ void LoadSettingsValues(Settings& settings, const std::string& key_prefix,
   }
 }
 
-void SaveSettingsValues(const Settings& settings, const std::string& key_prefix,
-                        bool save_ui_state) {
-  WriteValue(key_prefix, "Enabled", settings.enabled);
-  WriteValue(key_prefix, kPassOrderKey,
-             PassOrderText(settings.pass_order));
-
-  if (save_ui_state) {
-    WriteValue(key_prefix, "UI.StatusOpen", settings.ui_status_open);
-    WriteValue(key_prefix, "UI.PreferencesOpen", settings.ui_preferences_open);
-    WriteValue(key_prefix, "UI.PresetsOpen", settings.ui_presets_open);
-    WriteValue(key_prefix, "UI.PassesOpen", settings.ui_passes_open);
-    WriteValue(key_prefix, "UI.DebugOpen", settings.ui_debug_open);
-    WriteValue(key_prefix, "UI.HdrOpen", settings.ui_hdr_open);
-    WriteValue(key_prefix, "UI.GradeOpen", settings.ui_grade_open);
-    WriteValue(key_prefix, "UI.HdrDiagnosticsOpen", settings.ui_hdr_diagnostics_open);
-    WriteValue(key_prefix, "UI.BoundedTuningOpen", settings.ui_bounded_tuning_open);
-    WriteValue(key_prefix, "UI.ImportanceMaskOpen", settings.ui_importance_mask_open);
-    WriteValue(key_prefix, "UI.ModelOpen", settings.ui_model_open);
-    WriteValue(key_prefix, "UI.StrengthOpen", settings.ui_strength_open);
-    WriteValue(key_prefix, "UI.PassTemporalOpen", settings.ui_pass_temporal_open);
-    WriteValue(key_prefix, "UI.PassTemporalOpen", settings.ui_pass_temporal_open);
-    WriteValue(key_prefix, "UI.PassTemporalOpen", settings.ui_pass_temporal_open);
-    WriteValue(key_prefix, "UI.SoftCompressionOpen", settings.ui_soft_compression_open);
-    WriteValue(key_prefix, "UI.PassAdvancedOpen", settings.ui_pass_advanced_open);
-    WriteValue(key_prefix, "UI.ResidualOpen", settings.ui_residual_open);
-    WriteValue(key_prefix, "UI.RcasOpen", settings.ui_rcas_open);
-    WriteValue(key_prefix, "UI.GradeInputOpen", settings.ui_grade_input_open);
-    WriteValue(key_prefix, "UI.GradeOutputOpen", settings.ui_grade_output_open);
-  }
-}
-
-// Instance keys for the instanced sections, supplied to ctl::Load.
-//
-// ctl does not track instance count -- see the non-goal in ctl/serialize.h.
-// How many passes exist is application state, and it is already here in
-// Settings, so it is this function's job to hand the keys over rather than
-// have the loader guess them from a config file it cannot enumerate.
+// The key source reads the pass-order setting directly from the store. Since
+// the Pass Order section precedes the instanced Pass/grade sections in schema
+// order, ctl loads it before asking for those sections' instance keys.
 std::vector<ctl::InstanceKey> InstanceKeysForSections(
     const void* context, const std::string& section) {
-  const Settings& settings = *static_cast<const Settings*>(context);
-  // Pass and its two grade sections are all indexed by pass.
   const bool pass_indexed = section == feature::pass::kSection ||
                             section == feature::pass::kGradeInputSection ||
                             section == feature::pass::kGradeOutputSection;
   if (!pass_indexed) return {};
 
-  // The order IS the key list: one instance per pass in pass_order, each under
-  // its own stable id. Position never enters a key, which is what makes a
-  // reorder free.
+  const auto& store = *static_cast<const ctl::ValueStore*>(context);
+  const feature::pass::PassOrder order = ReadPassOrder(store);
   std::vector<ctl::InstanceKey> keys;
-  keys.reserve(settings.pass_order.size());
-  for (feature::pass::PassId id : settings.pass_order) {
+  keys.reserve(order.size());
+  for (feature::pass::PassId id : order) {
     keys.push_back(feature::pass::PassKey(id));
   }
   return keys;
 }
 
-
-
-// Load the store from `prefix`, replacing whatever it holds. Replacing
-// matters: a profile load must produce exactly the profile's state, not the
-// current state merged with the profile's overrides.
-void LoadStore(const Settings& settings, const std::string& prefix) {
-  ctl::ValueStore& store = feature::SettingsStore();
-  store.ResetToDefaults();
+// A fresh store is used when inspecting a profile's instance list. Loading
+// only its single-instance settings is enough to resolve Pass Order without
+// instantiating or merging the live pass sections.
+void LoadProfileOrderStore(ctl::ValueStore& store, ProfileId id) {
   ctl::ReshadeConfigReader reader;
-  ctl::Load(store, reader, prefix, &InstanceKeysForSections, &settings);
+  ctl::Load(store, reader, ProfileDataPrefix(id), nullptr, nullptr,
+            ctl::PersistenceTarget::Profile);
 }
 
-void SaveStore(const Settings& settings, const std::string& prefix) {
+void LoadStore(Settings& settings, const std::string& prefix,
+               ctl::PersistenceTarget target) {
   ctl::ValueStore& store = feature::SettingsStore();
+  store.ResetToDefaults(target);
+  ctl::ReshadeConfigReader reader;
+  ctl::Load(store, reader, prefix, &InstanceKeysForSections, &store, target);
+  SyncPassOrder(settings, true);
+}
+
+void SaveStore(const Settings& settings, const std::string& prefix,
+               ctl::PersistenceTarget target) {
+  ctl::ValueStore& store = feature::SettingsStore();
+  WritePassOrder(store, settings.pass_order);
   ctl::ReshadeConfigWriter writer;
-  // The Pass section is scoped to pass_order on purpose, excluding stale live instances.
-  ctl::Save(store, writer, prefix, &InstanceKeysForSections, &settings);
+  ctl::Save(store, writer, prefix, &InstanceKeysForSections, &store, target);
 }
 
 }  // namespace
 
 Settings& GetSettings() {
   return g_settings;
+}
+
+void SetPassOrder(Settings& settings, feature::pass::PassOrder order) {
+  if (order.size() > kMaxPasses) order.resize(kMaxPasses);
+  settings.pass_order = std::move(order);
+  WritePassOrder(feature::SettingsStore(), settings.pass_order);
+  if (std::find(settings.pass_order.begin(), settings.pass_order.end(),
+                settings.active_pass_id) == settings.pass_order.end()) {
+    settings.active_pass_id =
+        settings.pass_order.empty() ? 0 : settings.pass_order.front();
+  }
 }
 
 feature::pass::PassId NewPassId() {
@@ -370,10 +313,10 @@ ProfileId NewProfileId() {
 }
 
 void LoadSettings() {
-  // Read the stable pass order first, because it determines which instance
-  // keys the store loads.
-  LoadSettingsValues(g_settings, "", true);
-  LoadStore(g_settings, "");
+  // ctl loads the order setting before the instanced sections, then uses it
+  // to resolve the active pass keys for this profile.
+  LoadSettingsValues(g_settings, "");
+  LoadStore(g_settings, "", ctl::PersistenceTarget::Global);
   {
     const ctl::InstanceKey shared = ctl::InstanceKey::FromInt(0);
     const bool clone_resources = feature::SettingsStore().Read(
@@ -386,8 +329,8 @@ void LoadSettings() {
 
 void SaveSettings() {
   TraceSettings(g_settings);
-  SaveSettingsValues(g_settings, "", true);
-  SaveStore(g_settings, "");
+  SaveSettingsValues(g_settings, "");
+  SaveStore(g_settings, "", ctl::PersistenceTarget::Global);
 }
 
 void ErasePassKeys(feature::pass::PassId id) {
@@ -417,6 +360,7 @@ void ErasePassKeys(feature::pass::PassId id) {
       if (!setting->meta().persist) continue;
       writer.Erase(base + "." + setting->meta().name);
     }
+    store.EraseInstance(section_name, key);
   }
 }
 
@@ -454,8 +398,8 @@ bool SaveCurrentAsProfile(const char* name) {
   if (id == 0) return false;
   const std::string value_prefix = ProfileValuePrefix(id);
   WriteProfileName(id, clean_name.c_str());
-  SaveSettingsValues(g_settings, value_prefix, false);
-  SaveStore(g_settings, ProfileDataPrefix(id));
+  SaveSettingsValues(g_settings, value_prefix);
+  SaveStore(g_settings, ProfileDataPrefix(id), ctl::PersistenceTarget::Profile);
   order.push_back(id);
   WriteProfileOrder(order);
   return true;
@@ -488,27 +432,28 @@ bool SaveCurrentToProfile(ProfileId id) {
   // Remove all schema-defined keys from the old pass set before overwriting
   // the profile. This prevents removed pass ids from leaving stale overrides
   // behind when the profile is saved with fewer or different passes.
-  Settings previous;
-  previous.pass_order = ReadProfilePassOrder(id);
+  ctl::ValueStore previous(feature::SettingsStore().schema());
+  LoadProfileOrderStore(previous, id);
   ctl::ReshadeConfigWriter writer;
   ctl::Delete(feature::SettingsStore(), writer, ProfileDataPrefix(id),
-              &InstanceKeysForSections, &previous);
+              &InstanceKeysForSections, &previous,
+              ctl::PersistenceTarget::Profile);
 
-  SaveSettingsValues(g_settings, ProfileValuePrefix(id), false);
-  SaveStore(g_settings, ProfileDataPrefix(id));
+  SaveSettingsValues(g_settings, ProfileValuePrefix(id));
+  SaveStore(g_settings, ProfileDataPrefix(id), ctl::PersistenceTarget::Profile);
   return true;
 }
 
 bool LoadSavedProfile(ProfileId id) {
   if (!ValidProfileId(id)) return false;
   Settings loaded = g_settings;
-  LoadSettingsValues(loaded, ProfileValuePrefix(id), false);
+  LoadSettingsValues(loaded, ProfileValuePrefix(id));
   // The store is process-wide, so loading a profile has to replace it, not
   // merge into it -- otherwise the previous profile's HDR/mask overrides
   // would survive into the one being loaded.
   // Profile blocks use the stable-id schema only. Do not import old positional
   // profile fields into a newly created block that happens to reuse its number.
-  LoadStore(loaded, ProfileDataPrefix(id));
+  LoadStore(loaded, ProfileDataPrefix(id), ctl::PersistenceTarget::Profile);
   g_settings = loaded;
   if (std::find(g_settings.pass_order.begin(), g_settings.pass_order.end(),
                 g_settings.active_pass_id) == g_settings.pass_order.end()) {
@@ -534,18 +479,18 @@ bool DeleteSavedProfile(ProfileId id) {
   order.erase(found);
   WriteProfileOrder(order);
 
-  // The stored pass order is the instance-key source for this profile's
-  // instanced ctl sections. Deletion does not modify the active store.
-  Settings profile;
-  profile.pass_order = ReadProfilePassOrder(id);
+  // Resolve the profile's own instance set, then let ctl erase every
+  // registered profile-persisted setting for exactly those instances.
+  ctl::ValueStore profile(feature::SettingsStore().schema());
+  LoadProfileOrderStore(profile, id);
   ctl::ReshadeConfigWriter writer;
   ctl::Delete(feature::SettingsStore(), writer, ProfileDataPrefix(id),
-              &InstanceKeysForSections, &profile);
+              &InstanceKeysForSections, &profile,
+              ctl::PersistenceTarget::Profile);
 
   const std::string value_prefix = ProfileValuePrefix(id);
   writer.Erase(ProfileNameKey(id));
   writer.Erase(value_prefix + "Enabled");
-  writer.Erase(value_prefix + kPassOrderKey);
 
   return true;
 }

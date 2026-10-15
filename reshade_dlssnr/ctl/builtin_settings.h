@@ -1,4 +1,4 @@
-// ctl built-in setting types: float, int, bool, enum.
+// ctl built-in setting types: float, int, bool, enum, string, integer list.
 //
 // Each is a dedicated class that owns its own storage, validation, text
 // form, and UI row. They share the row layout helpers in ui/ui_widgets.h so
@@ -163,6 +163,43 @@ class StringSetting : public Setting {
  private:
   std::string default_;
   size_t max_length_ = 0;  // 0 = no cap
+};
+
+// ---------------------------------------------------------------------------
+// IntListSetting
+// ---------------------------------------------------------------------------
+
+class IntListSetting : public Setting {
+ public:
+  IntListSetting(const char* name, const char* label,
+                 std::vector<int64_t> default_value = {});
+
+  IntListSetting& Tooltip(const char* text) { meta_.tooltip = CStrToString(text); return *this; }
+  IntListSetting& MaxItems(size_t count) { max_items_ = count; return *this; }
+  IntListSetting& MinItems(size_t count) { min_items_ = count; return *this; }
+  IntListSetting& UniqueItems(bool enabled = true) { unique_items_ = enabled; return *this; }
+  IntListSetting& RangeEach(int64_t lo, int64_t hi) { lo_ = lo; hi_ = hi; has_range_ = true; return *this; }
+  IntListSetting& VisibleWhen(VisibilityPredicate visible, const void* context = nullptr) {
+    SetVisible(visible, context);
+    return *this;
+  }
+
+  Value DefaultValue() const override;
+  void Clamp(Value& value) const override;
+  bool Assign(Value& out, const Value& in) const override;
+  std::string ToString(const Value& value) const override;
+  bool FromString(const std::string& text, Value& out) const override;
+  bool Draw(const SettingContext& ctx, const Value& resolved,
+            Value& out) const override;
+
+ private:
+  std::vector<int64_t> default_;
+  size_t min_items_ = 0;
+  size_t max_items_ = 0;
+  bool unique_items_ = false;
+  bool has_range_ = false;
+  int64_t lo_ = 0;
+  int64_t hi_ = 0;
 };
 
 // ---------------------------------------------------------------------------

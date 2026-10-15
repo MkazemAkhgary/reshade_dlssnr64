@@ -20,8 +20,9 @@
 #include "feature/importance_mask/settings.h"
 #include "feature/pass/settings.h"
 #include "feature/pass/ui.h"
-#include "feature/pass/ui.h"
 #include "feature/preferences/settings.h"
+#include "feature/ui_state/settings.h"
+#include "feature/ui_state/view.h"
 #include "hooks/dlss_guides.h"
 #include "pipeline/addon_controller.h"
 #include "state/settings.h"
@@ -50,63 +51,53 @@ void* Ui() {
 }
 
 // ---------------------------------------------------------------------------
-// Section open/closed state. The framework owns no UI state, so these two
-// callbacks translate between a section name and the matching Settings flag.
+// Section open/closed state is stored as ordinary global ctl settings.
 // ---------------------------------------------------------------------------
 
-bool* SectionOpenFlag(Settings& settings, const std::string& name) {
-  if (name == feature::preferences::kSection) return &settings.ui_preferences_open;
-  if (name == feature::debug_log::kSection) return &settings.ui_debug_open;
-  if (name == feature::grade::kSection) return &settings.ui_grade_open;
-  if (name == feature::pass::kGradeInputSection) return &settings.ui_grade_input_open;
-  if (name == feature::pass::kGradeOutputSection) return &settings.ui_grade_output_open;
-  if (name == feature::hdr::kSection) return &settings.ui_hdr_open;
-  if (name == feature::pass::kSection) return &settings.ui_passes_open;
-  if (name == feature::importance_mask::kSection) {
-    return &settings.ui_importance_mask_open;
-  }
+const char* SectionOpenSetting(const std::string& name) {
+  if (name == feature::preferences::kSection) return feature::ui_state::kPreferencesOpen;
+  if (name == feature::debug_log::kSection) return feature::ui_state::kDebugOpen;
+  if (name == feature::grade::kSection) return feature::ui_state::kGradeOpen;
+  if (name == feature::pass::kGradeInputSection) return feature::ui_state::kGradeInputOpen;
+  if (name == feature::pass::kGradeOutputSection) return feature::ui_state::kGradeOutputOpen;
+  if (name == feature::hdr::kSection) return feature::ui_state::kHdrOpen;
+  if (name == feature::pass::kSection) return feature::ui_state::kPassesOpen;
+  if (name == feature::importance_mask::kSection) return feature::ui_state::kImportanceMaskOpen;
   return nullptr;
 }
 
 bool ReadSectionOpen(void* /*context*/, const std::string& name) {
-  Settings& settings = GetSettings();
-  bool* flag = SectionOpenFlag(settings, name);
-  return flag != nullptr ? *flag : true;
+  const char* setting = SectionOpenSetting(name);
+  return setting != nullptr ? feature::ui_state::Read(setting) : true;
 }
 
 void WriteSectionOpen(void* /*context*/, const std::string& name, bool open) {
-  Settings& settings = GetSettings();
-  if (bool* flag = SectionOpenFlag(settings, name)) *flag = open;
+  const char* setting = SectionOpenSetting(name);
+  if (setting != nullptr) feature::ui_state::Write(setting, open);
 }
 
-// The HDR exposure tabs are drawn by their hook rather than as categories.
-// The pass section uses these callbacks for its nested Model / Strength /
-// Advanced / Soft Compression / Residual Edits groups.
-bool* CategoryOpenFlag(Settings& settings, const std::string& section,
-                       const std::string& category) {
+const char* CategoryOpenSetting(const std::string& section,
+                                const std::string& category) {
   if (section != feature::pass::kSection) return nullptr;
-  if (category == "Model") return &settings.ui_model_open;
-  if (category == "Strength") return &settings.ui_strength_open;
-  if (category == "Temporal Reprojection") return &settings.ui_pass_temporal_open;
-  if (category == "Temporal Reprojection") return &settings.ui_pass_temporal_open;
-  if (category == "Temporal Reprojection") return &settings.ui_pass_temporal_open;
-  if (category == "Advanced/Soft Compression") return &settings.ui_soft_compression_open;
-  if (category == "Advanced") return &settings.ui_pass_advanced_open;
-  if (category == "Advanced/Residual Edits") return &settings.ui_residual_open;
+  if (category == "Model") return feature::ui_state::kModelOpen;
+  if (category == "Strength") return feature::ui_state::kStrengthOpen;
+  if (category == "Temporal Reprojection") return feature::ui_state::kTemporalOpen;
+  if (category == "Advanced/Soft Compression") return feature::ui_state::kSoftCompressionOpen;
+  if (category == "Advanced") return feature::ui_state::kAdvancedOpen;
+  if (category == "Advanced/Residual Edits") return feature::ui_state::kResidualOpen;
   return nullptr;
 }
 
 bool ReadCategoryOpen(void* /*context*/, const std::string& section,
                       const std::string& category) {
-  Settings& settings = GetSettings();
-  bool* flag = CategoryOpenFlag(settings, section, category);
-  return flag != nullptr ? *flag : true;
+  const char* setting = CategoryOpenSetting(section, category);
+  return setting != nullptr ? feature::ui_state::Read(setting) : true;
 }
 
 void WriteCategoryOpen(void* /*context*/, const std::string& section,
                        const std::string& category, bool open) {
-  Settings& settings = GetSettings();
-  if (bool* flag = CategoryOpenFlag(settings, section, category)) *flag = open;
+  const char* setting = CategoryOpenSetting(section, category);
+  if (setting != nullptr) feature::ui_state::Write(setting, open);
 }
 
 ctl::DrawOptions MakeOptions(bool headers, bool indent) {
@@ -151,7 +142,7 @@ void ApplyPassReorder(Settings& settings, const int* order, bool& changed) {
     if (source < 0 || static_cast<size_t>(source) >= total) continue;  // defensive
     reordered[i] = settings.pass_order[source];
   }
-  settings.pass_order.swap(reordered);
+  SetPassOrder(settings, std::move(reordered));
 
   // active_pass_id is a stable id, so a reorder does not need to update it.
   // Fall back to the first pass only if the selected id somehow vanished.
@@ -178,7 +169,7 @@ void AddPass(Settings& settings, bool& changed) {
   feature::pass::PassOrder order = settings.pass_order;
   const feature::pass::PassId new_id = NewPassId();
   order.insert(order.begin() + static_cast<ptrdiff_t>(insert_at), new_id);
-  settings.pass_order.swap(order);
+  SetPassOrder(settings, std::move(order));
   settings.active_pass_id = new_id;
 
   // Create the new pass's session so it is ready the first frame it runs.
@@ -205,7 +196,7 @@ void RemoveActivePass(Settings& settings, bool& changed) {
 
   feature::pass::PassOrder order = settings.pass_order;
   order.erase(order.begin() + static_cast<ptrdiff_t>(remove_at));
-  settings.pass_order.swap(order);
+  SetPassOrder(settings, std::move(order));
 
   if (settings.pass_order.empty()) {
     settings.active_pass_id = 0;
@@ -226,8 +217,8 @@ void RemoveActivePass(Settings& settings, bool& changed) {
 }
 
 void DrawSavedProfilesSection(Settings& settings, bool& changed) {
-  if (!PersistentHeader(
-          "Presets", settings.ui_presets_open, changed,
+  if (!PersistentSettingHeader(
+          "Presets", feature::ui_state::kPresetsOpen, changed,
           "Save and restore named profiles of the current DLSSNR settings in ReShade.ini.")) {
     return;
   }
@@ -448,8 +439,8 @@ namespace {
 void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
                         bool& changed) {
   // The section header keeps the legacy label.
-  if (!PersistentHeader(
-          "Passes", settings.ui_passes_open, changed,
+  if (!PersistentSettingHeader(
+          "Passes", feature::ui_state::kPassesOpen, changed,
           "Configure each pass profile. Execution order is grouped by target stage, then follows this tab order within each stage.")) {
     return;
   }

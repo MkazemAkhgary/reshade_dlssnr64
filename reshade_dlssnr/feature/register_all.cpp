@@ -11,8 +11,10 @@ void RegisterGradeSchema(ctl::Schema& schema);
 void RegisterHdrSchema(ctl::Schema& schema);
 void RegisterImportanceMaskSchema(ctl::Schema& schema);
 void RegisterPassSchema(ctl::Schema& schema);
+void RegisterUiStateSchema(ctl::Schema& schema);
 
 void RegisterAllSchemas(ctl::Schema& schema) {
+  RegisterUiStateSchema(schema);
   RegisterPreferencesSchema(schema);
   RegisterDebugLogSchema(schema);
   RegisterGradeSchema(schema);

@@ -32,10 +32,9 @@ inline ctl::InstanceKey PassKey(PassId id) {
 
 // Every pass id currently in play, in the order the passes sit.
 //
-// This is application state: ctl does not track instance count and does
-// not track instance order. Reordering reorders this vector and nothing
-// else. Adding a pass appends an id; removing one erases it. Each pass's
-// settings live under its own stable key and are unaffected by either.
+// The canonical order is persisted as a ctl integer-list setting. This
+// vector is the runtime/UI mirror: adding a pass appends an id, removing a
+// pass erases it, and each pass keeps its settings under a stable key.
 using PassOrder = std::vector<PassId>;
 
 }  // namespace pass

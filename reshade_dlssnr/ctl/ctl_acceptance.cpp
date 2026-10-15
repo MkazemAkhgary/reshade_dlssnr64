@@ -624,6 +624,9 @@ int main() {
     Load(fewer, mem, "", &InstanceKeys, &one);
     Check(fewer.SectionSet("Model").instances().size() == 1,
           "the supplied range is the authority on instance count");
+    Load(fx.store, mem, "", &InstanceKeys, &one);
+    Check(fx.store.SectionSet("Model").instances().size() == 1,
+          "Load removes stale instances outside the supplied keys");
     Check(ReadFloat(fewer, "Model", InstanceKey::FromInt(0), "intensity") == 1.0f,
           "a section with no supplied keys loads nothing");
 
@@ -1161,7 +1164,51 @@ int main() {
   }
 
   // ------------------------------------------------------------------------
-  std::printf("\n[35] Setting trace is schema-driven and tracks live instances\n");
+  std::printf("\n[40] Typed integer lists and persistence targets\n");
+  {
+    Schema schema;
+    Section& ui = schema.AddSection("Overlay", SectionKind::Single);
+    ui.Add<BoolSetting>("open", "Open", false).GlobalOnly();
+    Section& settings = schema.AddSection("Settings", SectionKind::Single);
+    settings.Add<IntListSetting>("order", "Order", std::vector<int64_t>{1})
+        .MinItems(1).MaxItems(4).RangeEach(1, 99).UniqueItems();
+    settings.Add<FloatSetting>("amount", "Amount", 0.25f).Range(0.0f, 1.0f);
+    std::string error;
+    Check(schema.Build(&error), "integer-list and global-only metadata build");
+
+    ValueStore store(schema);
+    const InstanceKey shared = InstanceKey::FromInt(0);
+    store.Write("Overlay", shared, "open", Value::Bool(true));
+    store.Write("Settings", shared, "order",
+                Value::IntList(std::vector<int64_t>{3, 3, 4, 0}));
+    store.Write("Settings", shared, "amount", Value::Float(0.75f));
+    const auto order = store.Read("Settings", shared, "order").as_int_list;
+    Check(order == std::vector<int64_t>({3, 4, 1}),
+          "integer lists enforce range, uniqueness, and item limits");
+
+    MemStore profile;
+    Save(store, profile, "profile", nullptr, nullptr,
+         PersistenceTarget::Profile);
+    Check(profile.data.find("profile.S.Overlay.open") == profile.data.end(),
+          "global-only settings are excluded from profile saves");
+    Check(profile.data.find("profile.S.Settings.order") != profile.data.end(),
+          "typed integer lists serialize through generic persistence");
+
+    ValueStore restored(schema);
+    restored.Write("Overlay", shared, "open", Value::Bool(true));
+    restored.ResetToDefaults(PersistenceTarget::Profile);
+    Load(restored, profile, "profile", nullptr, nullptr,
+         PersistenceTarget::Profile);
+    Check(restored.Read("Overlay", shared, "open").as_bool,
+          "profile reset/load preserves global-only UI state");
+    Check(restored.Read("Settings", shared, "order").as_int_list == order,
+          "typed integer lists round-trip through profile persistence");
+    Check(restored.Read("Settings", shared, "amount").as_float == 0.75f,
+          "profile persistence still restores ordinary settings");
+  }
+
+  // ------------------------------------------------------------------------
+  std::printf("\n[41] Setting trace is schema-driven and tracks live instances\n");
   {
     Schema schema;
     Section& preferences = schema.AddSection("Preferences", SectionKind::Single);

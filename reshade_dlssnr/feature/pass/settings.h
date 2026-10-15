@@ -11,6 +11,8 @@ namespace pass {
 
 // Section names. The pass feature owns three: the pass itself, and the two
 // model-boundary grades it hosts.
+inline constexpr const char* kOrderSection = "Pass Order";
+inline constexpr const char* kOrderSetting = "ids";
 inline constexpr const char* kSection = "Pass";
 inline constexpr const char* kGradeInputSection = "Grade Model Input";
 inline constexpr const char* kGradeOutputSection = "Grade Model Output";

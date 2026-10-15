@@ -80,6 +80,33 @@ const Instance* InstanceSet::Find(const InstanceKey& key) const {
   return &instances_[it->second];
 }
 
+bool InstanceSet::Erase(const InstanceKey& key) {
+  const auto found = index_.find(key);
+  if (found == index_.end()) return false;
+  instances_.erase(instances_.begin() + found->second);
+  index_.clear();
+  index_.reserve(instances_.size());
+  for (uint32_t i = 0; i < instances_.size(); ++i) {
+    index_.emplace(instances_[i].key, i);
+  }
+  return true;
+}
+
+void InstanceSet::Retain(const std::vector<InstanceKey>& keys) {
+  instances_.erase(
+      std::remove_if(instances_.begin(), instances_.end(),
+                     [&keys](const Instance& instance) {
+                       return std::find(keys.begin(), keys.end(), instance.key) ==
+                              keys.end();
+                     }),
+      instances_.end());
+  index_.clear();
+  index_.reserve(instances_.size());
+  for (uint32_t i = 0; i < instances_.size(); ++i) {
+    index_.emplace(instances_[i].key, i);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // ValueStore
 // ---------------------------------------------------------------------------
@@ -124,6 +151,15 @@ InstanceSet& ValueStore::SectionSet(const Section& section) {
 
 const InstanceSet& ValueStore::SectionSet(const Section& section) const {
   return section_sets_[section.index()];
+}
+
+bool ValueStore::EraseInstance(const std::string& section,
+                              const InstanceKey& key) {
+  const Section* declared = schema_->FindSection(section);
+  if (declared == nullptr) return false;
+  const bool erased = SectionSet(*declared).Erase(key);
+  if (erased) MarkChanged();
+  return erased;
 }
 
 const Setting* ValueStore::SettingAt(uint32_t setting_id) const {
@@ -239,10 +275,17 @@ void ValueStore::ResetSectionToDefault(const std::string& section,
   }
 }
 
-void ValueStore::ResetToDefaults() {
+void ValueStore::ResetToDefaults(PersistenceTarget target) {
   for (InstanceSet& set : section_sets_) {
     for (Instance& instance : set.instances()) {
-      for (SettingState& state : instance.states) {
+      const size_t count = instance.states.size();
+      for (size_t id = 0; id < count; ++id) {
+        const Setting* setting = SettingAt(static_cast<uint32_t>(id));
+        if (target == PersistenceTarget::Profile && setting != nullptr &&
+            !setting->meta().persist_in_profiles) {
+          continue;
+        }
+        SettingState& state = instance.states[id];
         state.has_value = false;
         state.value = Value();
         state.changed_by_user = false;

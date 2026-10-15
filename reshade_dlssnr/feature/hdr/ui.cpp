@@ -15,6 +15,7 @@
 #include "ctl/draw.h"
 #include "ctl/values.h"
 #include "feature/hdr/settings.h"
+#include "feature/ui_state/settings.h"
 #include "pipeline/addon_controller.h"
 #include "state/settings.h"
 #include "ui/ui_widgets.h"
@@ -128,9 +129,8 @@ bool DrawHdrDiagnostics(const void* context, ctl::ValueStore& store,
   (void)section;
   (void)key;
 
-  Settings& settings = GetSettings();
-  if (!PersistentHeader(
-          "HDR Diagnostics", settings.ui_hdr_diagnostics_open, changed,
+  if (!PersistentSettingHeader(
+          "HDR Diagnostics", feature::ui_state::kHdrDiagnosticsOpen, changed,
           "Live HDR measurement state. Read-only; reflects the current "
           "exposure, histogram, and gain-map values the pipeline is using.")) {
     return false;

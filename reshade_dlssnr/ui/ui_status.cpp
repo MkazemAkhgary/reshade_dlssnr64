@@ -16,6 +16,7 @@
 #include "state/settings.h"
 #include "status.h"
 #include "ui/ui_widgets.h"
+#include "feature/ui_state/settings.h"
 
 namespace reshade_dlssnr {
 
@@ -75,8 +76,8 @@ void FormatPassStatus(const PassStatus& pass,
 }  // namespace
 
 void DrawStatusSection(Settings& settings, bool& changed) {
-  if (!PersistentHeader(
-          "Status", settings.ui_status_open, changed,
+  if (!PersistentSettingHeader(
+          "Status", feature::ui_state::kStatusOpen, changed,
           "Live addon, NGX, guide, HDR, and per-pass health. Pass rows use the same target-stage grouping as execution.")) {
     return;
   }

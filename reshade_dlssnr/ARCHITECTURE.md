@@ -87,8 +87,7 @@ reshade_dlssnr/
     values.h/.cpp                  Instance store
     serialize.h/.cpp               Schema-driven persistence
     draw.h/.cpp                    Generic section renderer
-    builtin_settings.h/.cpp        Float, Int, Bool, Enum, and String settings
-    trace.h/.cpp                   Generic tracing for all registered settings
+    builtin_settings.h/.cpp        Float, Int, Bool, Enum, String, and IntList settings
     usage/                          ReShade config adapter
     ctl_acceptance.cpp              Headless acceptance harness
   feature/                         Feature-owned setting schemas and typed views
@@ -100,6 +99,7 @@ reshade_dlssnr/
     hdr/                            HDR schema, view, and UI hooks
     importance_mask/                Importance Mask schema and view
     pass/                           Per-pass schema, stable IDs, order, and view
+    ui_state/                       Global-only schema for persisted overlay open/closed state
   fragments/                       Reusable schema row fragments
     grade_rows/                     Shared grade declarations
     hdr_filter_rows/                Shared HDR filter declarations
@@ -583,7 +583,7 @@ Debug views show the pre-depth candidate, post-depth validation result, and per-
 **Brightness mode `Exposure` operates in linear light.** It multiplies all three linear RGB channels by `2^stops` before output encoding, which changes scene intensity while preserving chromaticity until gamut limits/clipping. It replaces the former Lift mode; the shared mode index is retained so profile serialization remains stable. Gain, Gamma, and Soft keep their separate luminance-shaped curves.
 
 
-**Saved profiles use stable `ProfileId` keys.** `UserPresetOrder` is the comma-separated display order and `UserPresetNextId` preserves the allocation high-water mark. A profile's name, enabled state, and pass order live at `UserPreset.<id>.Name`, `.Enabled`, and `.PassOrder`; its `ctl` block is under `UserPreset.<id>.Data`. Save and delete pass that profile's pass order as the instance-key source, so unrelated live pass instances are not copied into or erased from its block. Deletion removes one id from the order and erases its schema-defined keys; it never shifts another profile's data. Legacy positional profile blocks are not imported Rename edits the selected profile name in place after validation; Enter saves and Escape cancels.
+**Saved profiles use stable `ProfileId` keys.** `UserPresetOrder` is the comma-separated display order and `UserPresetNextId` preserves the allocation high-water mark. A profile's name and enabled state live at `UserPreset.<id>.Name` and `.Enabled`; its `ctl` settings, including the typed `Pass Order.ids` integer list, live under `UserPreset.<id>.Data`. The pass-order setting is loaded before instanced sections, and its stable IDs supply the instance keys for pass settings. Profile persistence excludes settings marked global-only; loading a profile preserves the current global overlay UI state. Rename edits the selected profile name in place and confirms only after validation, while Enter saves and Escape cancels. Deletion removes one ID and its schema-defined keys without shifting another profile's data.
 
 
 **HDR composition uses Gain-Map Residual exclusively.** HDR Pre-DLSS and Post-DLSS passes use the packed per-pixel carrier-to-HDR multiplier to transfer model edits back to the untouched full-resolution HDR source. The former HDR Ratio mode and selector are removed. SDR composition, including Present/backbuffer passes, retains its existing log-ratio residual path and settings.
@@ -598,7 +598,7 @@ Debug views show the pre-depth candidate, post-depth validation result, and per-
 
 **Temporal reprojection is configured per pass and sits before Advanced/model grading.** The `Temporal Reprojection` section follows Strength and precedes the Advanced settings and grade-boundary sections. Mode defaults to Off. Its controls expose absolute/relative photometric thresholds, absolute/relative depth thresholds, maximum working-resolution motion displacement, and the maximum invalid-pixel percentage that permits reuse. Defaults preserve the existing acceptance limits: 0.06/0.10 photometric, 0.005/0.03 depth, 40 working pixels, and 5% invalid/mismatched pixels. Threshold changes are included in the temporal-history signature and invalidate stale history. The pass-tab row wraps when buttons no longer fit beside the toolbar.
 
-**ImGui IDs are scoped by section identity and instance identity.** `ctl::DrawSection` pushes a scope derived from the schema section name and `InstanceKey`, so equal visible labels in different sections or instances do not share collapsing-header IDs. Persistent open/closed state remains governed by the overlay callbacks; `PersistentHeader` owns the common non-schema section state.
+**ImGui IDs are scoped by section identity and instance identity.** `ctl::DrawSection` pushes a scope derived from the schema section name and `InstanceKey`, so equal visible labels in different sections or instances do not share collapsing-header IDs. All persisted overlay open/closed states are schema settings in `Overlay UI State`, marked global-only so profile loads cannot change them. The overlay callbacks still implement the same header interactions, but read and write the ctl store rather than manually maintained `Settings` booleans.
 
 ## HDR model path
 

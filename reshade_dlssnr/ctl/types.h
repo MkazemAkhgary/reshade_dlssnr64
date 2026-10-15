@@ -31,13 +31,14 @@ namespace ctl {
 using EnumValue = int;
 
 struct Value {
-  enum class Kind : uint8_t { Float, Int, Bool, Enum, String };
+  enum class Kind : uint8_t { Float, Int, Bool, Enum, String, IntList };
 
   Kind kind = Kind::Float;
   float as_float = 0.0f;
   int as_int = 0;
   bool as_bool = false;
   std::string as_string;
+  std::vector<int64_t> as_int_list;
 
   Value() = default;
   static Value Float(float v) { Value x; x.kind = Kind::Float; x.as_float = v; return x; }
@@ -48,6 +49,12 @@ struct Value {
     Value x;
     x.kind = Kind::String;
     x.as_string = std::move(v);
+    return x;
+  }
+  static Value IntList(std::vector<int64_t> v) {
+    Value x;
+    x.kind = Kind::IntList;
+    x.as_int_list = std::move(v);
     return x;
   }
 
@@ -63,6 +70,7 @@ struct Value {
 // existing settings simply leave them at their defaults, so adding metadata
 // never breaks a previously declared setting.
 enum class EnumPresentation : uint8_t { Combo, GroupButtons };
+enum class PersistenceTarget : uint8_t { Global, Profile };
 
 struct SettingMeta {
   std::string name;      // stable identifier, unique within its section
@@ -72,6 +80,7 @@ struct SettingMeta {
   // treats each path component as a collapsible group.
   std::string category;
   bool persist = true;   // false = never written to config
+  bool persist_in_profiles = true;
   bool category_toggle = false;  // bool setting drawn in its category header
   EnumPresentation enum_presentation = EnumPresentation::Combo;
 };
@@ -127,6 +136,9 @@ class Setting {
   // Parse a value from its serialized text form. Returns false and leaves
   // `out` untouched when the text is not valid for this type.
   virtual bool FromString(const std::string& text, Value& out) const = 0;
+
+  // Persist normally to global settings but exclude this setting from profiles.
+  Setting& GlobalOnly() { meta_.persist_in_profiles = false; return *this; }
 
   // --- rendering ---------------------------------------------------------
 

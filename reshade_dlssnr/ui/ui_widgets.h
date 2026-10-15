@@ -38,6 +38,9 @@ struct HeaderControls {
 bool PersistentHeader(const char* label, bool& open_setting, bool& changed,
                       const char* tooltip = nullptr,
                       HeaderControls controls = {});
+bool PersistentSettingHeader(const char* label, const char* setting_key,
+                             bool& changed, const char* tooltip = nullptr,
+                             HeaderControls controls = {});
 
 class IndentScope {
  public:

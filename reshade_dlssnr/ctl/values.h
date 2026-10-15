@@ -102,8 +102,8 @@ class InstanceSet {
   // yields a const Instance.
   Instance* Find(const InstanceKey& key);
   const Instance* Find(const InstanceKey& key) const;
-
-
+  bool Erase(const InstanceKey& key);
+  void Retain(const std::vector<InstanceKey>& keys);
 
   std::vector<Instance>& instances() { return instances_; }
   const std::vector<Instance>& instances() const { return instances_; }
@@ -141,6 +141,7 @@ class ValueStore {
   const InstanceSet& SectionSet(const std::string& name) const;
   InstanceSet& SectionSet(const Section& section);
   const InstanceSet& SectionSet(const Section& section) const;
+  bool EraseInstance(const std::string& section, const InstanceKey& key);
 
   // Resolve a setting for an instance: its own value, or the declared
   // default when nothing has been written yet.
@@ -175,7 +176,7 @@ class ValueStore {
   // profile's overrides.
   //
   // Instances survive: which keys exist is not this store's decision to make.
-  void ResetToDefaults();
+  void ResetToDefaults(PersistenceTarget target = PersistenceTarget::Global);
 
   // Resolve the global setting id (index into Instance::states) of a setting.
   bool FindSettingId(const std::string& section, const std::string& setting,

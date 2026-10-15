@@ -4,8 +4,7 @@ A declarative settings system. Settings are *declared* in code, one expression
 each; the framework owns storage, UI rendering, and persistence.
 Nothing in this directory knows what a "pass", "layer", "camera", or "preset"
 is — those are the application's words, expressed through sections, instance
-keys and parent links. Schema composition and the live application store are built outside `ctl`;
-`ctl` never registers or includes feature modules.
+keys and parent links.
 
 ```
 ctl/
@@ -16,7 +15,7 @@ ctl/
   values.h/.cpp         InstanceKey, Instance, InstanceSet, ValueStore (storage)
   serialize.h/.cpp      KeyValueWriter/Reader, Save/Load (persistence)
   draw.h/.cpp           DrawSection                  (rendering)
-  builtin_settings.h/.cpp  FloatSetting, IntSetting, BoolSetting, EnumSetting, StringSetting
+  builtin_settings.h/.cpp  FloatSetting, IntSetting, BoolSetting, EnumSetting, StringSetting, IntListSetting
   trace.h/.cpp             schema-driven setting trace recorder
   ctl_acceptance.cpp    acceptance harness
   build_ctl_acceptance.sh / build_ctl_check.sh  dev scripts
@@ -78,9 +77,11 @@ let them fall out of a blanket iteration. The caller enumerates.
 and the whole declaration stays one expression. Declaration order is render
 order — `Schema::Build` records it and the drawer replays it.
 
-`SettingMeta` carries `name`, `label`, `tooltip`, `category` and `persist`
-(default true). Adding a metadata field never breaks an existing setting
-because every field has a default.
+`SettingMeta` carries `name`, `label`, `tooltip`, `category`, `persist`, and
+`persist_in_profiles` (both persistence flags default to true). Mark a setting
+`GlobalOnly()` when it belongs to global application state rather than a saved
+profile. The framework implements this generically: it does not infer what a
+setting means or which feature owns it.
 
 ### Hooks
 
@@ -158,13 +159,15 @@ using InstanceKeySource =
     std::vector<InstanceKey> (*)(const void* context, const std::string& section);
 
 void Save(ValueStore&, KeyValueWriter&, const std::string& prefix = {},
-          const InstanceKeySource& source = nullptr,
-          const void* context = nullptr);
+          const InstanceKeySource& source = nullptr, const void* context = nullptr,
+          PersistenceTarget target = PersistenceTarget::Global);
 void Delete(ValueStore&, KeyValueWriter&,
             const InstanceKeySource& source = nullptr,
-            const void* context = nullptr, const std::string& prefix = {});
+            const void* context = nullptr, const std::string& prefix = {},
+            PersistenceTarget target = PersistenceTarget::Global);
 void Load(ValueStore&, KeyValueReader&, const InstanceKeySource& source = nullptr,
-          const void* context = nullptr, const std::string& prefix = {});
+          const void* context = nullptr, const std::string& prefix = {},
+          PersistenceTarget target = PersistenceTarget::Global);
 ```
 
 Both key-value interfaces are abstract, so the framework never depends on
@@ -181,37 +184,26 @@ schema traversal and supplied instance keys to erase every persistable setting
 key in the block, regardless of whether the setting is overridden in the live
 store. It also erases the version key. Missing keys are a silent no-op.
 
-Guarantees: only `persist` settings are written; unknown keys and unknown
-settings are skipped rather than failing; an instanced setting left unset
-stays at its declared default.
+Guarantees: only `persist` settings are written, and profile operations also
+require `persist_in_profiles`; unknown keys and settings are skipped rather
+than failing; an instanced setting left unset stays at its declared default.
+`IntListSetting` stores an ordered typed integer list with optional item bounds,
+range clamping, and uniqueness enforcement, so a domain can persist ordering as
+ordinary schema data rather than hand-encoding a comma-separated config field.
 
 **Who knows the instance keys.** `Load` and `Delete` need them, and `Save` can
 take them when it should write only a selected instance set. The reader and
-writer cannot enumerate keys because the backend behind them (ReShade's config
-API) cannot. This is a deliberate limit, not a shortage: a key-value interface
-that *could* enumerate would be promising more than a config file delivers.
+writer cannot enumerate keys because a backend may not expose that capability.
+The consumer supplies the current keys. `source` is called once per instanced
+section and returns the keys to load, which the loader creates if they are not
+present yet. If ordering or selection is persisted as an ordinary setting, the
+application may read that setting and provide its values through `source`; the
+framework does not special-case the setting or interpret its contents.
 
-So the consumer supplies them. `source` is called once per instanced section and
-returns the keys to load, which the loader then creates if they are not there
-yet:
-
-```cpp
-// The application owns the instance count; ctl does not.
-std::vector<InstanceKey> PassKeys(const void* context, const std::string& section) {
-  if (section != kPassSection) return {};
-  const int count = *static_cast<const int*>(context);
-  std::vector<InstanceKey> keys;
-  for (int i = 0; i < count; ++i) keys.push_back(InstanceKey::FromInt(i));
-  return keys;
-}
-```
-
-**NON-GOAL: ctl does not track instance count.** How many instances exist is
-application state — it is what the UI edits, what the schema is built for, and
-what a saved file describes. ctl will not infer it from the config (it cannot)
-and will not own it in a counter of its own; the consumer passes it in as a key
-range. Exactly one place therefore knows how many instances there are, and it is
-the place that already did.
+**NON-GOAL: ctl does not infer instance keys from persisted data.** The backend
+may not enumerate stored keys, and interpreting a domain's ordering, selection,
+or count would introduce domain policy into the framework. The caller remains
+responsible for supplying the intended instance-key set.
 
 **`ReshadeConfigWriter` / `ReshadeConfigReader`** (`ctl/usage/config.{h,cpp}`)
 are the production implementations over `reshade::get_config_value` /
@@ -222,7 +214,12 @@ still supply instance keys to `Load` and `Delete`.
 
 ## Setting trace
 
-`TraceRecorder` walks the built schema and current `ValueStore` instances to record every declared setting. The caller supplies only a sink callback; ctl formats no feature names and has no dependency on the application layer. The first record emits all current values, later records emit only changed, added, or removed entries. New settings become trace-visible automatically when they are registered in the schema.
+`TraceRecorder` walks the built schema and current `ValueStore` instances to
+record every declared setting. The caller supplies only a sink callback; ctl
+formats no feature names and has no dependency on the application layer. The
+first record emits all current values, later records emit only changed, added,
+or removed entries. New settings become trace-visible automatically when they
+are registered in the schema.
 
 ## Worked example: per-pass settings
 

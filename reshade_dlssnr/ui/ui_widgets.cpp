@@ -2,6 +2,8 @@
 #include <reshade.hpp>
 
 #include "ui/ui_widgets.h"
+
+#include "feature/ui_state/view.h"
 #include "ctl/types.h"
 
 #include <algorithm>
@@ -76,6 +78,16 @@ void DrawHeaderReset(const char* label, bool& changed,
 }
 
 }  // namespace
+
+bool PersistentSettingHeader(const char* label, const char* setting_key,
+                             bool& changed, const char* tooltip,
+                             HeaderControls controls) {
+  bool open = feature::ui_state::Read(setting_key);
+  const bool previous = open;
+  const bool expanded = PersistentHeader(label, open, changed, tooltip, controls);
+  if (open != previous) feature::ui_state::Write(setting_key, open);
+  return expanded;
+}
 
 bool PersistentHeader(const char* label, bool& open_setting, bool& changed,
                       const char* tooltip, HeaderControls controls) {

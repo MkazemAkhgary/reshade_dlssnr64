@@ -24,47 +24,13 @@ enum class InjectionStage : int {
 struct Settings {
   bool enabled = true;
 
-  // The passes, in tab order. Each entry is a stable pass id, not a position:
-  // reordering permutes this vector and moves nothing in the store, so a pass
-  // keeps its settings however the user rearranges the tabs. Adding a pass
-  // appends a fresh id; removing one erases it, and that id stays retired --
-  // its settings linger unused in the store rather than being handed to a
-  // pass created later.
-  //
-  // This is application state on purpose. ctl does not track instance count
-  // and does not track instance order; the store never sees this vector.
+  // Runtime cache of the stable pass IDs in tab order. The persisted source of
+  // truth is the ctl "Pass Order" setting; state/settings keeps this vector for
+  // convenient frame/UI access.
   std::vector<feature::pass::PassId> pass_order;
 
-  // UI state: the pass currently selected in the tab strip, held as the
-  // pass's stable id. Reordering or removing another pass never changes
-  // which pass is open. Transient (not persisted).
+  // Transient UI state: the selected pass's stable ID, never persisted.
   feature::pass::PassId active_pass_id = 0;
-
-  // UI state: which collapsible sections are open. Persisted, and shared
-  // across passes — collapsing a section in one tab collapses it in every
-  // tab, so the panel keeps a single, consistent shape. Model, Strength,
-  // and each sub-section default to open except Advanced.
-  bool ui_model_open = true;
-  bool ui_strength_open = true;
-  bool ui_pass_temporal_open = true;
-  bool ui_pass_temporal_open = true;
-  bool ui_pass_temporal_open = true;
-  bool ui_soft_compression_open = true;
-  bool ui_pass_advanced_open = false;
-  bool ui_residual_open = false;
-  bool ui_rcas_open = false;
-  bool ui_grade_input_open = false;
-  bool ui_grade_output_open = false;
-  bool ui_status_open = true;
-  bool ui_preferences_open = false;
-  bool ui_presets_open = false;
-  bool ui_passes_open = true;
-  bool ui_debug_open = false;
-  bool ui_hdr_open = true;
-  bool ui_grade_open = true;
-  bool ui_hdr_diagnostics_open = false;
-  bool ui_bounded_tuning_open = false;
-  bool ui_importance_mask_open = true;
 };
 
 constexpr uint32_t kMaxSavedProfiles = 16;
@@ -86,6 +52,7 @@ Settings& GetSettings();
 
 void LoadSettings();
 void SaveSettings();
+void SetPassOrder(Settings& settings, feature::pass::PassOrder order);
 
 ProfileId NewProfileId();
 

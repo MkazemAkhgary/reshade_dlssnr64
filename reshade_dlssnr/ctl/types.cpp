@@ -22,6 +22,8 @@ bool Value::operator==(const Value& o) const {
       return as_bool == o.as_bool;
     case Kind::String:
       return as_string == o.as_string;
+    case Kind::IntList:
+      return as_int_list == o.as_int_list;
   }
   return false;
 }

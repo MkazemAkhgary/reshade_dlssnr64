@@ -3,6 +3,8 @@
 #include <imgui.h>
 
 #include <algorithm>
+#include <charconv>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -399,6 +401,125 @@ bool StringSetting::Draw(const SettingContext& ctx, const Value& resolved,
 }
 
 // ---------------------------------------------------------------------------
+// IntListSetting
+// ---------------------------------------------------------------------------
+
+IntListSetting::IntListSetting(const char* name, const char* label,
+                               std::vector<int64_t> default_value)
+    : default_(std::move(default_value)) {
+  meta_.name = CStrToString(name);
+  meta_.label = CStrToString(label);
+}
+
+Value IntListSetting::DefaultValue() const { return Value::IntList(default_); }
+
+void IntListSetting::Clamp(Value& value) const {
+  if (value.kind != Value::Kind::IntList) return;
+  std::vector<int64_t> result;
+  result.reserve(std::min(value.as_int_list.size(), max_items_));
+  for (int64_t item : value.as_int_list) {
+    if (has_range_) item = std::clamp(item, lo_, hi_);
+    if (unique_items_ &&
+        std::find(result.begin(), result.end(), item) != result.end()) {
+      continue;
+    }
+    result.push_back(item);
+    if (max_items_ > 0 && result.size() >= max_items_) break;
+  }
+  if (result.size() < min_items_) result = default_;
+  if (max_items_ > 0 && result.size() > max_items_) {
+    result.resize(max_items_);
+  }
+  value.as_int_list = std::move(result);
+}
+
+bool IntListSetting::Assign(Value& out, const Value& in) const {
+  if (in.kind != Value::Kind::IntList) return false;
+  out = in;
+  Clamp(out);
+  return true;
+}
+
+std::string IntListSetting::ToString(const Value& value) const {
+  if (value.kind != Value::Kind::IntList) return {};
+  std::string text;
+  for (int64_t item : value.as_int_list) {
+    if (!text.empty()) text.push_back(',');
+    text += std::to_string(item);
+  }
+  return text;
+}
+
+bool IntListSetting::FromString(const std::string& text, Value& out) const {
+  std::vector<int64_t> values;
+  size_t begin = 0;
+  while (begin < text.size()) {
+    const size_t comma = text.find(',', begin);
+    const size_t end = comma == std::string::npos ? text.size() : comma;
+    size_t token_begin = begin;
+    size_t token_end = end;
+    while (token_begin < token_end &&
+           std::isspace(static_cast<unsigned char>(text[token_begin]))) {
+      ++token_begin;
+    }
+    while (token_end > token_begin &&
+           std::isspace(static_cast<unsigned char>(text[token_end - 1]))) {
+      --token_end;
+    }
+    if (token_begin == token_end) return false;
+
+    int64_t value = 0;
+    const char* first = text.data() + token_begin;
+    const char* last = text.data() + token_end;
+    const auto parsed = std::from_chars(first, last, value);
+    if (parsed.ec != std::errc() || parsed.ptr != last) return false;
+    values.push_back(value);
+    if (comma == std::string::npos) break;
+    begin = comma + 1;
+  }
+  if (!text.empty() && text.back() == ',') return false;
+  Value candidate = Value::IntList(std::move(values));
+  Clamp(candidate);
+  out = std::move(candidate);
+  return true;
+}
+
+bool IntListSetting::Draw(const SettingContext&, const Value& resolved,
+                          Value& out) const {
+  const std::string current = ToString(resolved);
+  std::vector<char> buffer(std::max<size_t>(current.size() + 64, 128), '\0');
+  std::snprintf(buffer.data(), buffer.size(), "%s", current.c_str());
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted(meta_.label.c_str());
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("%s", meta_.tooltip.empty() ? meta_.label.c_str() : meta_.tooltip.c_str());
+  }
+  ImGui::SameLine(kControlLabelWidth);
+  const float trailing = kResetButtonWidth;
+  ImGui::SetNextItemWidth(std::max(
+      60.0f, ImGui::GetContentRegionAvail().x - trailing -
+                 ImGui::GetStyle().ItemSpacing.x));
+  const std::string id = std::string("##") + meta_.name;
+  bool changed = ImGui::InputText(id.c_str(), buffer.data(), buffer.size());
+  if (changed) {
+    Value candidate;
+    if (FromString(buffer.data(), candidate) && candidate != resolved) {
+      out = std::move(candidate);
+    } else {
+      changed = false;
+    }
+  }
+  ImGui::SameLine();
+  ImGui::PushID(meta_.name.c_str());
+  if (ImGui::Button("R", ImVec2(kResetButtonWidth, 0.0f))) {
+    out = DefaultValue();
+    changed = true;
+  }
+  ImGui::PopID();
+  return changed;
+}
+
+// ---------------------------------------------------------------------------
 // EnumSetting
 // ---------------------------------------------------------------------------
 
@@ -578,6 +699,7 @@ void RegisterBuiltinTypes(Registry& registry) {
   registry.Register("bool", [] { return std::make_unique<BoolSetting>("", ""); });
   registry.Register("enum", [] { return std::make_unique<EnumSetting>("", ""); });
   registry.Register("string", [] { return std::make_unique<StringSetting>("", ""); });
+  registry.Register("int_list", [] { return std::make_unique<IntListSetting>("", ""); });
 }
 
 }  // namespace ctl
