@@ -60,8 +60,7 @@ inline constexpr const char* kLocalMaxDarken = "max_darken";
 inline constexpr const char* kLocalMidtone = "midtone";
 inline constexpr const char* kLocalBlockSize = "block_size_px";
 inline constexpr const char* kLocalSampleCount = "sample_count";
-// Preserve the legacy key so saved profiles retain the setting.
-inline constexpr const char* kLocalRestoreGlobalExposure = "unexpose_on_model_output";
+inline constexpr const char* kLocalRestoreGlobalExposure = "restore_global_exposure";
 
 }  // namespace hdr
 }  // namespace feature

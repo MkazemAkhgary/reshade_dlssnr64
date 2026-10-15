@@ -68,12 +68,13 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     float3 lin = DecodeSource(src.rgb);
 
-    // Restore the global exposure before grading. The map contains the local
-    // multiplier applied to the model input, so its inverse is a linear-light divide.
+    // The 1x1 texture stores the mean local multiplier. Apply one uniform
+    // correction so the model's pixel-level shading remains intact.
     if (kRestoreExposureFlag > 0.5) {
-        float local_scale = gExposure.SampleLevel(s0, uv, 0);
-        local_scale = max(local_scale, 1e-6);
-        lin /= local_scale;
+        float mean_local_scale = gExposure.SampleLevel(s0, float2(0.5, 0.5), 0);
+        const float minimum_local_scale = 1.0e-6;
+        mean_local_scale = max(mean_local_scale, minimum_local_scale);
+        lin /= mean_local_scale;
     }
 
     float3 graded = GradeLinearFwd(lin);

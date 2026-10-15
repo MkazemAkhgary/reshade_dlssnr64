@@ -30,6 +30,8 @@ const ComputePassDef kComputePasses[] = {
     {"BuildHistogram",        "hdr/build_histogram.hlsl",       BytecodeData("hdr/build_histogram.hlsl"),       BytecodeSize("hdr/build_histogram.hlsl")},
     {"GainMapSplit",          "hdr/gain_map_split.hlsl",        BytecodeData("hdr/gain_map_split.hlsl"),        BytecodeSize("hdr/gain_map_split.hlsl")},
     {"BuildEffectiveLocalExposure", "hdr/build_effective_local_exposure.hlsl", BytecodeData("hdr/build_effective_local_exposure.hlsl"), BytecodeSize("hdr/build_effective_local_exposure.hlsl")},
+    {"ReduceLocalExposureTiles", "hdr/reduce_local_exposure_tiles.hlsl", BytecodeData("hdr/reduce_local_exposure_tiles.hlsl"), BytecodeSize("hdr/reduce_local_exposure_tiles.hlsl")},
+    {"ReduceLocalExposureMean", "hdr/reduce_local_exposure_mean.hlsl", BytecodeData("hdr/reduce_local_exposure_mean.hlsl"), BytecodeSize("hdr/reduce_local_exposure_mean.hlsl")},
     {"ZeroGainMapStats",      "hdr/zero_gain_map_stats.hlsl",   BytecodeData("hdr/zero_gain_map_stats.hlsl"),   BytecodeSize("hdr/zero_gain_map_stats.hlsl")},
     {"BuildGainMapStats",     "hdr/build_gain_map_stats.hlsl",  BytecodeData("hdr/build_gain_map_stats.hlsl"),  BytecodeSize("hdr/build_gain_map_stats.hlsl")},
     {"ReadGameExposure",      "hdr/read_game_exposure.hlsl",   BytecodeData("hdr/read_game_exposure.hlsl"),   BytecodeSize("hdr/read_game_exposure.hlsl")},

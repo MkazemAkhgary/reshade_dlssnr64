@@ -214,6 +214,56 @@ bool PassResources::EnsureEffectiveExposureMap(
   return true;
 }
 
+bool PassResources::EnsureLocalExposureMeanResources(
+    ID3D12Device* device, unsigned int width, unsigned int height) {
+  if (device == nullptr || width == 0 || height == 0) return false;
+
+  const unsigned int partial_width = (width + 7u) / 8u;
+  const unsigned int partial_height = (height + 7u) / 8u;
+  const bool matches = local_exposure_partial_sums != nullptr &&
+      local_exposure_mean != nullptr &&
+      local_exposure_partial_width == partial_width &&
+      local_exposure_partial_height == partial_height;
+  if (matches) return true;
+
+  Dispose(local_exposure_partial_sums);
+  Dispose(local_exposure_mean);
+
+  D3D12_RESOURCE_DESC desc = {};
+  desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+  desc.Width = partial_width;
+  desc.Height = partial_height;
+  desc.DepthOrArraySize = 1;
+  desc.MipLevels = 1;
+  desc.Format = DXGI_FORMAT_R32_FLOAT;
+  desc.SampleDesc.Count = 1;
+  desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+
+  ID3D12Resource* partial_raw = nullptr;
+  if (!CreateUavTexture(device, desc, &partial_raw)) return false;
+  local_exposure_partial_sums.Attach(partial_raw);
+
+  desc.Width = 1;
+  desc.Height = 1;
+  ID3D12Resource* mean_raw = nullptr;
+  if (!CreateUavTexture(device, desc, &mean_raw)) {
+    Dispose(local_exposure_partial_sums);
+    return false;
+  }
+  local_exposure_mean.Attach(mean_raw);
+
+  local_exposure_partial_width = partial_width;
+  local_exposure_partial_height = partial_height;
+  trace::NameResource(local_exposure_partial_sums.Get(),
+                      "local_exposure_partial_sums");
+  trace::NameResource(local_exposure_mean.Get(), "local_exposure_mean");
+  TRACE_CMD(this, "create local exposure reduction res=%d/%d %ux%u -> 1x1",
+            trace::ResourceId(local_exposure_partial_sums.Get()),
+            trace::ResourceId(local_exposure_mean.Get()),
+            partial_width, partial_height);
+  return true;
+}
+
 bool PassResources::EnsureWorkingResources(
     ID3D12Device* device,
     const D3D12_RESOURCE_DESC& desc,
@@ -447,6 +497,8 @@ void PassResources::Shutdown() {
   working_output.Reset();
   unlifted_working_input.Reset();
   effective_exposure_map.Reset();
+  local_exposure_partial_sums.Reset();
+  local_exposure_mean.Reset();
   temporal_previous_input.Reset();
   temporal_previous_edit.Reset();
   temporal_previous_depth.Reset();
@@ -471,6 +523,8 @@ void PassResources::Shutdown() {
   gain_stats_bytes = 0;
   effective_exposure_width = 0;
   effective_exposure_height = 0;
+  local_exposure_partial_width = 0;
+  local_exposure_partial_height = 0;
   temporal_width = temporal_height = 0;
   temporal_input_format = DXGI_FORMAT_UNKNOWN;
   working_width = 0;

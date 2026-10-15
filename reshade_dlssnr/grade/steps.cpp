@@ -160,7 +160,56 @@ PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
       run.hdr->ResolvedFormat() != HdrFormat::Sdr &&
       run.hdr_uniforms.local_exposure_strength > 0.0f &&
       self->resources_.GetEffectiveExposureMap() != nullptr) {
-    exposure_map = self->resources_.GetEffectiveExposureMap();
+    ID3D12Resource* local_map = self->resources_.GetEffectiveExposureMap();
+    if (!self->resources_.EnsureLocalExposureMeanResources(
+            run.device, run.width, run.height)) {
+      self->FailForStep("failed to create local exposure reduction resources");
+      return PipelineStatus::Fail;
+    }
+
+    ComputeConstants constants = {};
+    constants.Width = run.width;
+    constants.Height = run.height;
+    constants.shader.Params0.x = static_cast<float>(
+        self->resources_.LocalExposurePartialWidth());
+    constants.shader.Params0.y = static_cast<float>(
+        self->resources_.LocalExposurePartialHeight());
+
+    ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
+    ID3D12Resource* source_srvs[kSrvCount] = {
+        local_map, local_map, local_map, local_map};
+    ID3D12Resource* partial_sums =
+        self->resources_.GetLocalExposurePartialSums();
+    ID3D12Resource* partial_uavs[kUavCount] = {partial_sums};
+    self->command_.Transition(list, local_map,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    self->command_.Transition(list, partial_sums,
+                              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    if (run.codec == nullptr || !run.codec->Dispatch(
+            "ReduceLocalExposureTiles", list, constants, source_srvs,
+            partial_uavs)) {
+      self->FailForStep("failed to reduce local exposure tiles");
+      return PipelineStatus::Fail;
+    }
+    self->command_.UavBarrier(list, partial_sums);
+    self->command_.Transition(list, partial_sums,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+    ID3D12Resource* reduce_srvs[kSrvCount] = {
+        partial_sums, partial_sums, partial_sums, partial_sums};
+    ID3D12Resource* mean = self->resources_.GetLocalExposureMean();
+    ID3D12Resource* mean_uavs[kUavCount] = {mean};
+    self->command_.Transition(list, mean,
+                              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    if (!run.codec->Dispatch("ReduceLocalExposureMean", list, constants,
+                             reduce_srvs, mean_uavs, 1, 1)) {
+      self->FailForStep("failed to compute mean local exposure");
+      return PipelineStatus::Fail;
+    }
+    self->command_.UavBarrier(list, mean);
+    self->command_.Transition(list, mean,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    exposure_map = mean;
   }
 
   if (!grade.enabled && exposure_map == nullptr) return PipelineStatus::Ok;
