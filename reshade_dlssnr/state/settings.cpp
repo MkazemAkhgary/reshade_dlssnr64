@@ -210,6 +210,9 @@ void LoadSettingsValues(Settings& settings, const std::string& key_prefix,
     ReadValue(key_prefix, "UI.ImportanceMaskOpen", settings.ui_importance_mask_open);
     ReadValue(key_prefix, "UI.ModelOpen", settings.ui_model_open);
     ReadValue(key_prefix, "UI.StrengthOpen", settings.ui_strength_open);
+    ReadValue(key_prefix, "UI.PassTemporalOpen", settings.ui_pass_temporal_open);
+    ReadValue(key_prefix, "UI.PassTemporalOpen", settings.ui_pass_temporal_open);
+    ReadValue(key_prefix, "UI.PassTemporalOpen", settings.ui_pass_temporal_open);
     ReadValue(key_prefix, "UI.SoftCompressionOpen", settings.ui_soft_compression_open);
     ReadValue(key_prefix, "UI.PassAdvancedOpen", settings.ui_pass_advanced_open);
     ReadValue(key_prefix, "UI.ResidualOpen", settings.ui_residual_open);
@@ -251,6 +254,9 @@ void SaveSettingsValues(const Settings& settings, const std::string& key_prefix,
     WriteValue(key_prefix, "UI.ImportanceMaskOpen", settings.ui_importance_mask_open);
     WriteValue(key_prefix, "UI.ModelOpen", settings.ui_model_open);
     WriteValue(key_prefix, "UI.StrengthOpen", settings.ui_strength_open);
+    WriteValue(key_prefix, "UI.PassTemporalOpen", settings.ui_pass_temporal_open);
+    WriteValue(key_prefix, "UI.PassTemporalOpen", settings.ui_pass_temporal_open);
+    WriteValue(key_prefix, "UI.PassTemporalOpen", settings.ui_pass_temporal_open);
     WriteValue(key_prefix, "UI.SoftCompressionOpen", settings.ui_soft_compression_open);
     WriteValue(key_prefix, "UI.PassAdvancedOpen", settings.ui_pass_advanced_open);
     WriteValue(key_prefix, "UI.ResidualOpen", settings.ui_residual_open);

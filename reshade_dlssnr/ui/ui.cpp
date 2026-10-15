@@ -85,6 +85,9 @@ bool* CategoryOpenFlag(Settings& settings, const std::string& section,
   if (section != feature::pass::kSection) return nullptr;
   if (category == "Model") return &settings.ui_model_open;
   if (category == "Strength") return &settings.ui_strength_open;
+  if (category == "Temporal Reprojection") return &settings.ui_pass_temporal_open;
+  if (category == "Temporal Reprojection") return &settings.ui_pass_temporal_open;
+  if (category == "Temporal Reprojection") return &settings.ui_pass_temporal_open;
   if (category == "Advanced/Soft Compression") return &settings.ui_soft_compression_open;
   if (category == "Advanced") return &settings.ui_pass_advanced_open;
   if (category == "Advanced/Residual Edits") return &settings.ui_residual_open;

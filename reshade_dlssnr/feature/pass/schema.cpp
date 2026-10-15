@@ -32,7 +32,7 @@ constexpr const char* kCatModel = "Model";
 constexpr const char* kCatStrength = "Strength";
 constexpr const char* kCatSoftCompression = "Advanced/Soft Compression";
 constexpr const char* kCatResidualEdits = "Advanced/Residual Edits";
-constexpr const char* kCatTemporal = "Advanced/Temporal Amortization";
+constexpr const char* kCatTemporal = "Temporal Reprojection";
 
 // Grade is the only part of the pass that the pass does not gate itself: the
 // grade rows follow the grade's own enable checkbox, and the two grade
@@ -227,6 +227,16 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .Category(kCatStrength)
       .Tooltip("Blend between original and edited chroma.");
 
+  // --- Temporal Reprojection --------------------------------------------
+  pass.Add<ctl::EnumSetting>(kTemporalMode, "Mode", 0)
+      .Items(kTemporalNames, kTemporalTips, 4)
+      .AsGroup()
+      .Category(kCatTemporal)
+      .Tooltip("Reuse a motion-reprojected multiplicative model edit instead "
+               "of evaluating the model every frame. Requires current-frame "
+               "depth and motion guides; uncertain history forces a fresh "
+               "evaluation.");
+
   // --- Advanced ----------------------------------------------------------
   pass.Add<ctl::BoolSetting>(kSoftCompressionEnabled, "Soft Compression", false)
       .Category(kCatSoftCompression)
@@ -336,13 +346,6 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .VisibleWhen(&RcasStrengthVisible)
       .Category(kCatResidualEdits)
       .Tooltip("How aggressively to sharpen.");
-
-  pass.Add<ctl::EnumSetting>(kTemporalMode, "Temporal Amortization", 0)
-      .Items(kTemporalNames, kTemporalTips, 4)
-      .Category(kCatTemporal)
-      .Tooltip("Reuse a motion-reprojected multiplicative model edit instead of "
-               "running the model every frame. Requires current-frame depth and "
-               "motion guides; uncertain history forces a fresh evaluation.");
 
   // --- The two model grades ----------------------------------------------
   ctl::Section& grade_input =

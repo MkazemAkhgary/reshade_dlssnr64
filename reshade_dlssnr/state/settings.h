@@ -46,6 +46,9 @@ struct Settings {
   // and each sub-section default to open except Advanced.
   bool ui_model_open = true;
   bool ui_strength_open = true;
+  bool ui_pass_temporal_open = true;
+  bool ui_pass_temporal_open = true;
+  bool ui_pass_temporal_open = true;
   bool ui_soft_compression_open = true;
   bool ui_pass_advanced_open = false;
   bool ui_residual_open = false;
