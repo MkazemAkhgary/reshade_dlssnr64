@@ -98,6 +98,14 @@ DLSSNR_BLOCK(RcasBlock)
     float Reserved1;
 };
 
+DLSSNR_BLOCK(HistogramBlock)
+{
+    // x = filter flags, y/z = depth range, w = whether game tuning is active.
+    float4 GameFilter;
+    // x = filter flags, y/z = depth range, w = depth inversion.
+    float4 AdaptiveFilter;
+};
+
 DLSSNR_BLOCK(TemporalBlock)
 {
     float4 Thresholds;           // photometric abs/rel, depth abs/rel
@@ -120,5 +128,6 @@ DLSSNR_CBUFFER(ComputeConstants)
     HdrBlock hdr;
     EasuBlock easu;
     RcasBlock rcas;
+    HistogramBlock histogram;
     TemporalBlock temporal;
 };

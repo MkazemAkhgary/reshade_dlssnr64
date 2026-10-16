@@ -6,11 +6,14 @@
 #define kHistogramFormat shader.Params0.x
 #define kLumaMinLog2     shader.Params0.y
 #define kLumaMaxLog2     shader.Params0.z
-#define kFilterFlags     ((uint)(shader.Params0.w + 0.5))
-#define kDepthNear       shader.Params1.x
-#define kDepthFar        shader.Params1.y
-#define kDepthInverted   shader.Params1.z
-#define kHistogramOffset shader.Params1.w
+#define kGameFilterFlags ((uint)(histogram.GameFilter.x + 0.5))
+#define kGameDepthNear   histogram.GameFilter.y
+#define kGameDepthFar    histogram.GameFilter.z
+#define kGameTuningOn    (histogram.GameFilter.w > 0.5)
+#define kAdaptiveFilterFlags ((uint)(histogram.AdaptiveFilter.x + 0.5))
+#define kAdaptiveDepthNear histogram.AdaptiveFilter.y
+#define kAdaptiveDepthFar  histogram.AdaptiveFilter.z
+#define kDepthInverted     (histogram.AdaptiveFilter.w > 0.5)
 
 Texture2D<float4> gSource : register(t0);
 Texture2D<float> gMask : register(t1);
@@ -18,7 +21,9 @@ Texture2D<float> gDepth : register(t2);
 RWBuffer<uint> gHistogram : register(u0);
 SamplerState s0 : register(s0);
 
-groupshared uint gSharedHist[256];
+groupshared uint gFullHistogram[256];
+groupshared uint gGameHistogram[256];
+groupshared uint gAdaptiveHistogram[256];
 
 uint2 ToResourcePixel(uint2 pixel, uint2 source_size, uint2 resource_size)
 {
@@ -27,13 +32,28 @@ uint2 ToResourcePixel(uint2 pixel, uint2 source_size, uint2 resource_size)
                resource_size - 1u);
 }
 
+uint FilteredContribution(uint flags, float depth_near, float depth_far,
+                          float mask_value, float depth_value)
+{
+    uint contribution = 1u;
+    if ((flags & 1u) != 0u)
+        contribution = (uint)round(saturate(mask_value) * 16.0);
+    if (contribution > 0u && (flags & 2u) != 0u &&
+        (depth_value < depth_near || depth_value > depth_far))
+        contribution = 0u;
+    return contribution;
+}
+
 [numthreads(8, 8, 1)]
 void CSMain(uint3 gtid : SV_GroupThreadID,
             uint3 dtid : SV_DispatchThreadID)
 {
     const uint local_index = gtid.x + gtid.y * 8u;
-    for (uint i = local_index; i < 256u; i += 64u)
-        gSharedHist[i] = 0u;
+    for (uint i = local_index; i < 256u; i += 64u) {
+        gFullHistogram[i] = 0u;
+        gGameHistogram[i] = 0u;
+        gAdaptiveHistogram[i] = 0u;
+    }
     GroupMemoryBarrierWithGroupSync();
 
     if (dtid.x < Width && dtid.y < Height) {
@@ -43,42 +63,60 @@ void CSMain(uint3 gtid : SV_GroupThreadID,
         const float3 luma_weights = ((int)(kHistogramFormat + 0.5) == 2)
             ? kLuma2020 : kLuma709;
         const float luma = dot(max(linear_rgb, 0.0), luma_weights);
+        const float l2 = log2(max(luma, 1e-8));
+        const float span = max(kLumaMaxLog2 - kLumaMinLog2, 1e-4);
+        const float t = saturate((l2 - kLumaMinLog2) / span);
+        const uint bin = min((uint)(t * 255.0 + 0.5), 255u);
 
-        uint contribution = 1u;
-        if ((kFilterFlags & 1u) != 0u) {
+        float mask_value = 1.0;
+        if (((kGameFilterFlags | kAdaptiveFilterFlags) & 1u) != 0u) {
             uint mask_width, mask_height;
             gMask.GetDimensions(mask_width, mask_height);
-            const uint2 mask_xy = ToResourcePixel(
-                dtid.xy, uint2(Width, Height), uint2(mask_width, mask_height));
-            const float mask_value = saturate(gMask.Load(int3(mask_xy, 0)));
-            contribution = (uint)round(mask_value * 16.0);
+            if (mask_width > 0u && mask_height > 0u) {
+                const uint2 mask_xy = ToResourcePixel(
+                    dtid.xy, uint2(Width, Height), uint2(mask_width, mask_height));
+                mask_value = gMask.Load(int3(mask_xy, 0));
+            } else {
+                mask_value = 0.0;
+            }
         }
 
-        if (contribution > 0u && (kFilterFlags & 2u) != 0u) {
+        float depth_value = 0.5;
+        if (((kGameFilterFlags | kAdaptiveFilterFlags) & 2u) != 0u) {
             uint depth_width, depth_height;
             gDepth.GetDimensions(depth_width, depth_height);
-            const uint2 depth_xy = ToResourcePixel(
-                dtid.xy, uint2(Width, Height), uint2(depth_width, depth_height));
-            float depth = saturate(gDepth.Load(int3(depth_xy, 0)));
-            if (kDepthInverted > 0.5) depth = 1.0 - depth;
-            if (depth < kDepthNear || depth > kDepthFar) contribution = 0u;
+            if (depth_width > 0u && depth_height > 0u) {
+                const uint2 depth_xy = ToResourcePixel(
+                    dtid.xy, uint2(Width, Height), uint2(depth_width, depth_height));
+                depth_value = saturate(gDepth.Load(int3(depth_xy, 0)));
+                if (kDepthInverted) depth_value = 1.0 - depth_value;
+            } else {
+                depth_value = 0.0;
+            }
         }
 
-        if (contribution > 0u) {
-            const float l2 = log2(max(luma, 1e-8));
-            const float span = max(kLumaMaxLog2 - kLumaMinLog2, 1e-4);
-            const float t = saturate((l2 - kLumaMinLog2) / span);
-            const uint bin = min((uint)(t * 255.0 + 0.5), 255u);
-            InterlockedAdd(gSharedHist[bin], contribution);
+        InterlockedAdd(gFullHistogram[bin], 1u);
+        if (kGameTuningOn) {
+            const uint contribution = FilteredContribution(
+                kGameFilterFlags, kGameDepthNear, kGameDepthFar,
+                mask_value, depth_value);
+            if (contribution > 0u)
+                InterlockedAdd(gGameHistogram[bin], contribution);
         }
+        const uint adaptive_contribution = FilteredContribution(
+            kAdaptiveFilterFlags, kAdaptiveDepthNear, kAdaptiveDepthFar,
+            mask_value, depth_value);
+        if (adaptive_contribution > 0u)
+            InterlockedAdd(gAdaptiveHistogram[bin], adaptive_contribution);
     }
 
     GroupMemoryBarrierWithGroupSync();
     for (uint index = local_index; index < 256u; index += 64u) {
-        if (gSharedHist[index] > 0u) {
-            InterlockedAdd(
-                gHistogram[index + (uint)(kHistogramOffset + 0.5)],
-                gSharedHist[index]);
-        }
+        if (gFullHistogram[index] > 0u)
+            InterlockedAdd(gHistogram[index], gFullHistogram[index]);
+        if (gGameHistogram[index] > 0u)
+            InterlockedAdd(gHistogram[256u + index], gGameHistogram[index]);
+        if (gAdaptiveHistogram[index] > 0u)
+            InterlockedAdd(gHistogram[512u + index], gAdaptiveHistogram[index]);
     }
 }

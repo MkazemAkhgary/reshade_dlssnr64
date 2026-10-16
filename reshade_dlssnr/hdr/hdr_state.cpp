@@ -37,7 +37,7 @@ namespace {
 
 constexpr uint32_t kHistogramBins = 256;
 constexpr uint32_t kHistogramBytes = kHistogramBins * sizeof(uint32_t);
-constexpr uint32_t kHistogramLayerCount = 4;
+constexpr uint32_t kHistogramLayerCount = 3;
 constexpr uint32_t kCombinedHistogramBytes = kHistogramLayerCount * kHistogramBytes;
 constexpr float kLumaMinLog2 = -12.0f;
 constexpr float kLumaMaxLog2 = 12.0f;
@@ -257,13 +257,11 @@ void HdrState::Shutdown() {
     last_histogram_[i] = 0;
     last_full_histogram_[i] = 0;
     last_game_histogram_[i] = 0;
-    last_local_histogram_[i] = 0;
   }
   p_hi_luma_ = 0.0f;
   last_samples_ = 0;
   last_full_samples_ = 0;
   last_game_samples_ = 0;
-  last_local_samples_ = 0;
   have_measurement_time_ = false;
   last_measurement_time_ = {};
   have_gain_stats_ = false;
@@ -423,41 +421,35 @@ void HdrState::BeginFrame(CommandContext& cmd,
   constants.shader.Params0.y = kLumaMinLog2;
   constants.shader.Params0.z = kLumaMaxLog2;
   constants.shader.Params0.w = 0.0f;
-  const ExposureFilterSettings* filters[kHistogramLayerCount] = {
-      nullptr, &hdr_settings.game_exposure.filters,
-      &hdr_settings.adaptive_exposure.filters, nullptr};
-
-  for (uint32_t layer = 0; layer < kHistogramLayerCount; ++layer) {
-    constants.shader.Params0.w = 0.0f;
-    constants.shader.Params1.x = 0.0f;
-    constants.shader.Params1.y = 1.0f;
-    constants.shader.Params1.z = 0.0f;
-    constants.shader.Params1.w = static_cast<float>(layer * kHistogramBins);
-    if (!codec.Dispatch("ZeroHistogram", command_list, constants, srvs, uavs,
-                        1, 1, 1)) {
-      ++frame_counter_;
-      return;
-    }
-    if (layer + 1 < kHistogramLayerCount)
-      cmd.UavBarrier(command_list, histogram_.Get());
-  }
-
-  for (uint32_t layer = 0; layer < kHistogramLayerCount; ++layer) {
-    const ExposureFilterSettings* filter = filters[layer];
+  const auto filter_flags = [&](const ExposureFilterSettings& filter) {
     uint32_t flags = 0;
-    if (filter != nullptr && filter->importance_mask && have_mask) flags |= 1u;
-    if (filter != nullptr && filter->depth && have_depth) flags |= 2u;
-    constants.shader.Params0.w = static_cast<float>(flags);
-    constants.shader.Params1.x = filter != nullptr ? filter->depth_near : 0.0f;
-    constants.shader.Params1.y = filter != nullptr ? filter->depth_far : 1.0f;
-    constants.shader.Params1.z = depth_inverted ? 1.0f : 0.0f;
-    constants.shader.Params1.w = static_cast<float>(layer * kHistogramBins);
-    if (!codec.Dispatch("BuildHistogram", command_list, constants, srvs, uavs)) {
-      ++frame_counter_;
-      return;
-    }
-    if (layer + 1 < kHistogramLayerCount)
-      cmd.UavBarrier(command_list, histogram_.Get());
+    if (filter.importance_mask && have_mask) flags |= 1u;
+    if (filter.depth && have_depth) flags |= 2u;
+    return flags;
+  };
+  const auto& game_filter = hdr_settings.game_exposure.filters;
+  const auto& adaptive_filter = hdr_settings.adaptive_exposure.filters;
+  constants.histogram.GameFilter.x =
+      static_cast<float>(filter_flags(game_filter));
+  constants.histogram.GameFilter.y = game_filter.depth_near;
+  constants.histogram.GameFilter.z = game_filter.depth_far;
+  constants.histogram.GameFilter.w =
+      hdr_settings.game_exposure.bounded_tuning ? 1.0f : 0.0f;
+  constants.histogram.AdaptiveFilter.x =
+      static_cast<float>(filter_flags(adaptive_filter));
+  constants.histogram.AdaptiveFilter.y = adaptive_filter.depth_near;
+  constants.histogram.AdaptiveFilter.z = adaptive_filter.depth_far;
+  constants.histogram.AdaptiveFilter.w = depth_inverted ? 1.0f : 0.0f;
+
+  if (!codec.Dispatch("ZeroHistogram", command_list, constants, srvs, uavs,
+                      3, 1, 1)) {
+    ++frame_counter_;
+    return;
+  }
+  cmd.UavBarrier(command_list, histogram_.Get());
+  if (!codec.Dispatch("BuildHistogram", command_list, constants, srvs, uavs)) {
+    ++frame_counter_;
+    return;
   }
 
   const uint64_t next = fence_value_ + 1u;
@@ -529,8 +521,7 @@ void HdrState::PollReadback(ID3D12Fence* fence, const HdrSettings& settings) {
     if (mapped != nullptr && bytes >= kCombinedHistogramBytes) {
       const uint32_t* bins = static_cast<const uint32_t*>(mapped);
       UpdateExposure(bins, bins + kHistogramBins,
-                     bins + 2 * kHistogramBins,
-                     bins + 3 * kHistogramBins, settings);
+                     bins + 2 * kHistogramBins, settings);
       ++measurement_generation_;
       frames_since_measure_ = 0;
     }
@@ -561,7 +552,6 @@ void HdrState::PollReadback(ID3D12Fence* fence, const HdrSettings& settings) {
 void HdrState::UpdateExposure(const uint32_t* full_bins,
                               const uint32_t* game_bins,
                               const uint32_t* adaptive_bins,
-                              const uint32_t* local_bins,
                               const HdrSettings& settings) {
   const auto now = std::chrono::steady_clock::now();
   const float dt = have_measurement_time_
@@ -578,15 +568,8 @@ void HdrState::UpdateExposure(const uint32_t* full_bins,
   const uint32_t full_total = total_of(full_bins);
   const uint32_t game_total = total_of(game_bins);
   const uint32_t adaptive_total = total_of(adaptive_bins);
-  const uint32_t local_total = total_of(local_bins);
   last_full_samples_ = full_total;
   last_game_samples_ = game_total;
-  last_local_samples_ = local_total;
-  for (uint32_t i = 0; i < kHistogramBins; ++i) {
-    last_full_histogram_[i] = full_bins[i];
-    last_game_histogram_[i] = game_bins[i];
-    last_local_histogram_[i] = local_bins[i];
-  }
 
   const auto& adaptive_settings = settings.adaptive_exposure;
   ExposureParams adaptive_params;

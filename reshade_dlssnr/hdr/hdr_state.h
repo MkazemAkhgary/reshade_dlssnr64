@@ -121,7 +121,7 @@ class HdrState {
  private:
   void PollReadback(ID3D12Fence* fence, const HdrSettings& settings);
   void UpdateExposure(const uint32_t* full_bins, const uint32_t* game_bins,
-                      const uint32_t* adaptive_bins, const uint32_t* local_bins,
+                      const uint32_t* adaptive_bins,
                       const HdrSettings& settings);
   void ResolveExposureStack(const HdrSettings& settings);
 
@@ -163,12 +163,10 @@ class HdrState {
   uint32_t last_histogram_[256] = {};
   uint32_t last_full_histogram_[256] = {};
   uint32_t last_game_histogram_[256] = {};
-  uint32_t last_local_histogram_[256] = {};
   float p_hi_luma_ = 0.0f;
   uint32_t last_samples_ = 0;
   uint32_t last_full_samples_ = 0;
   uint32_t last_game_samples_ = 0;
-  uint32_t last_local_samples_ = 0;
   std::chrono::steady_clock::time_point last_measurement_time_{};
   bool have_measurement_time_ = false;
 
