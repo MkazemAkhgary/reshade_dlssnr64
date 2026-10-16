@@ -391,7 +391,7 @@ The project selects the latest installed Windows 10 SDK using `ToolLocationHelpe
 
 The static sampler is linear-filtered and clamp-addressed. There is no `s1`.
 
-Every `Dispatch` provides exactly `kSrvCount` SRVs and `kUavCount` UAV slots. A pass that uses fewer resources repeats a valid SRV; an unused UAV slot may be null and is bound to the same resource as `u0`. `BindAndDispatch` owns the descriptor and constant-buffer ring mechanics; individual passes only choose the resources and constants.
+Every `Dispatch` provides exactly `kSrvCount` SRVs and `kUavCount` UAV slots. A pass that uses fewer resources repeats a valid SRV; an unused UAV slot may be null and is bound to the same resource as `u0`. `BindAndDispatch` owns the descriptor and constant-buffer ring mechanics; individual passes only choose the resources and constants. The 256-byte-aligned constant upload buffer remains persistently mapped, and one CBV per ring slot is created during initialization rather than mapping/unmapping and recreating the CBV on every dispatch.
 
 The descriptor table shape and register assignment are fixed. A shader must not invent a new register or sampler contract locally. `GainMapSplit` uses both UAVs to generate the local and global HDR carriers in one dispatch.
 

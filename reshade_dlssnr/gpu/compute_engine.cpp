@@ -124,22 +124,6 @@ void ComputeEngine::CreateUnorderedAccessView(ID3D12Resource* resource, D3D12_CP
   device_->CreateUnorderedAccessView(resource, nullptr, &desc, handle);
 }
 
-void ComputeEngine::CreateConstantBufferView(ID3D12Resource* resource, uint64_t offset, const void* data, size_t size, D3D12_CPU_DESCRIPTOR_HANDLE handle) {
-  void* mapped = nullptr;
-  D3D12_RANGE read_range = {};
-  if (SUCCEEDED(resource->Map(0, &read_range, &mapped))) {
-    memcpy(static_cast<uint8_t*>(mapped) + offset, data, size);
-    D3D12_RANGE write_range = {static_cast<SIZE_T>(offset),
-                               static_cast<SIZE_T>(offset + size)};
-    resource->Unmap(0, &write_range);
-  }
-
-  D3D12_CONSTANT_BUFFER_VIEW_DESC desc = {};
-  desc.BufferLocation = resource->GetGPUVirtualAddress() + offset;
-  desc.SizeInBytes = kConstantStride;
-  device_->CreateConstantBufferView(&desc, handle);
-}
-
 bool ComputeEngine::BindAndDispatch(
     ID3D12GraphicsCommandList* command_list,
     ID3D12PipelineState* pipeline_state,
@@ -180,11 +164,9 @@ bool ComputeEngine::BindAndDispatch(
     CreateUnorderedAccessView(resource, handle);
   }
 
-  D3D12_CPU_DESCRIPTOR_HANDLE cbv_handle = cpu_handle;
-  cbv_handle.ptr += static_cast<SIZE_T>(kSrvCount + kUavCount) *
-                    descriptor_size_;
-  CreateConstantBufferView(constants_.Get(), slot * kConstantStride, &constants,
-                           sizeof(constants), cbv_handle);
+  std::memcpy(constants_mapped_ +
+                  static_cast<size_t>(slot) * kConstantStride,
+              &constants, sizeof(constants));
 
   // Thread-group grid. Callers can override for passes whose grid is not
   // tied to the frame size; the built-in 8×8 group passes use the default.
@@ -612,6 +594,32 @@ bool ComputeEngine::Init(ID3D12Device* device) {
     return false;
   }
 
+  void* mapped_constants = nullptr;
+  D3D12_RANGE read_range = {0, 0};
+  if (FAILED(constants_->Map(0, &read_range, &mapped_constants))) {
+    constants_.Reset();
+    descriptor_heap_.Reset();
+    root_signature_.Reset();
+    descriptor_size_ = 0;
+    return false;
+  }
+  constants_mapped_ = static_cast<uint8_t*>(mapped_constants);
+
+  D3D12_CPU_DESCRIPTOR_HANDLE heap_start =
+      descriptor_heap_->GetCPUDescriptorHandleForHeapStart();
+  for (uint32_t slot = 0; slot < kDescriptorRingSize; ++slot) {
+    D3D12_CPU_DESCRIPTOR_HANDLE cbv_handle = heap_start;
+    cbv_handle.ptr += static_cast<SIZE_T>(slot) *
+        kDescriptorsPerDispatch * descriptor_size_;
+    cbv_handle.ptr += static_cast<SIZE_T>(kSrvCount + kUavCount) *
+        descriptor_size_;
+    D3D12_CONSTANT_BUFFER_VIEW_DESC cbv = {};
+    cbv.BufferLocation = constants_->GetGPUVirtualAddress() +
+                         static_cast<uint64_t>(slot) * kConstantStride;
+    cbv.SizeInBytes = kConstantStride;
+    device->CreateConstantBufferView(&cbv, cbv_handle);
+  }
+
   ready_.store(false, std::memory_order_relaxed);
 
   {
@@ -649,6 +657,12 @@ void ComputeEngine::Destroy() {
     worker_.join();
   }
 
+  if (constants_ != nullptr && constants_mapped_ != nullptr) {
+    D3D12_RANGE written_range = {
+        0, static_cast<SIZE_T>(kDescriptorRingSize) * kConstantStride};
+    constants_->Unmap(0, &written_range);
+    constants_mapped_ = nullptr;
+  }
   constants_.Reset();
 
   {

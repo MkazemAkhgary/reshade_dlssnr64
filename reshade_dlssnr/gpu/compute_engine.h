@@ -46,7 +46,7 @@ constexpr uint32_t kDescriptorRingSize =
     kMaxFramesInFlight * kMaxDispatchesPerFrame;
 
 constexpr uint32_t kSrvCount = 4;
-constexpr uint32_t kUavCount = 1;
+constexpr uint32_t kUavCount = 2;
 constexpr uint32_t kCbvCount = 1;
 constexpr uint32_t kDescriptorsPerDispatch = kSrvCount + kUavCount + kCbvCount;
 
@@ -115,6 +115,7 @@ class ComputeEngine {
   // One upload buffer holds a 512-byte, 256-byte-aligned constant record per dispatch.
   static constexpr uint32_t kConstantStride = 512;
   Microsoft::WRL::ComPtr<ID3D12Resource> constants_;
+  uint8_t* constants_mapped_ = nullptr;
 
   struct CachedPass {
     Microsoft::WRL::ComPtr<ID3D12PipelineState> pso;
@@ -152,9 +153,7 @@ class ComputeEngine {
                        ID3D12PipelineState** out_pso);
   void CreateShaderResourceView(ID3D12Resource* resource, D3D12_CPU_DESCRIPTOR_HANDLE handle);
   void CreateUnorderedAccessView(ID3D12Resource* resource, D3D12_CPU_DESCRIPTOR_HANDLE handle);
-  void CreateConstantBufferView(ID3D12Resource* resource, uint64_t offset,
-                                const void* data, size_t size,
-                                D3D12_CPU_DESCRIPTOR_HANDLE handle);
+
   DXGI_FORMAT TypedFormat(DXGI_FORMAT format) const;
 
   bool BindAndDispatch(
