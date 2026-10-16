@@ -50,6 +50,9 @@ class ImportanceMask {
                        uint32_t destination_index);
 
   Microsoft::WRL::ComPtr<ID3D12Resource> masks_[2];
+  Microsoft::WRL::ComPtr<ID3D12Resource> classifier_;
+  unsigned int classifier_width_ = 0;
+  unsigned int classifier_height_ = 0;
   uint32_t frame_index_ = 0;
   uint32_t latest_index_ = 0;
   unsigned int mask_width_[2] = {};

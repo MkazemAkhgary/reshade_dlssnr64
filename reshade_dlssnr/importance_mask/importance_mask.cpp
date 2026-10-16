@@ -114,6 +114,9 @@ static_assert(
 void ImportanceMask::Shutdown() {
   RetireSlot(masks_[0]);
   RetireSlot(masks_[1]);
+  RetireSlot(classifier_);
+  classifier_width_ = 0;
+  classifier_height_ = 0;
   frame_index_ = 0;
   latest_index_ = 0;
   mask_width_[0] = mask_width_[1] = 0;
@@ -185,6 +188,15 @@ bool ImportanceMask::EnsureResources(ID3D12Device* device,
   // the destination is replaced on a working-resolution change; the shader
   // maps the previous mask by normalized coordinates for temporal filtering.
   if (!ensure_slot(destination_index)) return false;
+  if (classifier_ == nullptr || classifier_width_ != width ||
+      classifier_height_ != height) {
+    Microsoft::WRL::ComPtr<ID3D12Resource> next_classifier;
+    if (!CreateMaskResource(device, width, height, next_classifier)) return false;
+    RetireSlot(classifier_);
+    classifier_ = std::move(next_classifier);
+    classifier_width_ = width;
+    classifier_height_ = height;
+  }
 
   // Before a valid snapshot exists, keep a matching resource for the unused
   // history binding. Once frame_valid_ is true, this slot is immutable until
@@ -244,27 +256,49 @@ bool ImportanceMask::Build(CommandContext& command,
   command.Transition(command_list, destination,
                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-  ComputeConstants constants = {};
-  constants.Width = width;
-  constants.Height = height;
-  constants.shader.Params0.x = settings.luma_threshold;
-  constants.shader.Params0.y = settings.luma_relative;
-  constants.shader.Params0.z = settings.chroma_threshold;
-  constants.shader.Params1.x = settings.edit_strength;
-  constants.shader.Params1.y = settings.mask_smoothing;
-  constants.shader.Params1.z = 0.02f + settings.mask_response * 0.98f;
-  constants.shader.Params1.w = frame_valid_ ? 1.0f : 0.0f;
+  ComputeConstants classify_constants = {};
+  classify_constants.Width = width;
+  classify_constants.Height = height;
+  classify_constants.shader.Params0.x = settings.luma_threshold;
+  classify_constants.shader.Params0.y = settings.luma_relative;
+  classify_constants.shader.Params0.z = settings.chroma_threshold;
+  classify_constants.shader.Params1.x = settings.edit_strength;
+  classify_constants.shader.Params1.w = frame_valid_ ? 1.0f : 0.0f;
 
-  ID3D12Resource* srvs[kSrvCount] = {
+  command.SetResourceState(classifier_.Get(),
+                           D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  command.Transition(command_list, classifier_.Get(),
+                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  ID3D12Resource* classify_srvs[kSrvCount] = {
       model_input, model_output, previous, model_input};
-  ID3D12Resource* uavs[kUavCount] = {destination};
-  if (!codec.Dispatch("BuildImportanceMask", command_list, constants, srvs,
-                      uavs)) {
+  ID3D12Resource* classify_uavs[kUavCount] = {classifier_.Get()};
+  if (!codec.Dispatch("ClassifyImportanceMask", command_list,
+                      classify_constants, classify_srvs, classify_uavs)) {
+    command.Transition(command_list, classifier_.Get(),
+                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     command.Transition(command_list, destination,
                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     return false;
   }
+  command.UavBarrier(command_list, classifier_.Get());
+  command.Transition(command_list, classifier_.Get(),
+                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
+  ComputeConstants smooth_constants = {};
+  smooth_constants.Width = width;
+  smooth_constants.Height = height;
+  smooth_constants.shader.Params1.y = settings.mask_smoothing;
+  smooth_constants.shader.Params1.z = 0.02f + settings.mask_response * 0.98f;
+  smooth_constants.shader.Params1.w = frame_valid_ ? 1.0f : 0.0f;
+  ID3D12Resource* smooth_srvs[kSrvCount] = {
+      classifier_.Get(), classifier_.Get(), previous, classifier_.Get()};
+  ID3D12Resource* smooth_uavs[kUavCount] = {destination};
+  if (!codec.Dispatch("BuildImportanceMask", command_list,
+                      smooth_constants, smooth_srvs, smooth_uavs)) {
+    command.Transition(command_list, destination,
+                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    return false;
+  }
   command.UavBarrier(command_list, destination);
   command.Transition(command_list, destination,
                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
