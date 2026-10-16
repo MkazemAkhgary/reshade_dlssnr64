@@ -70,3 +70,5 @@
 #define kTemporalMotionSubrectSize      temporal.MotionReferenceSize.zw
 #define kTemporalGuideBase              temporal.GuideBaseSize.xy
 #define kTemporalGuideSize              temporal.GuideBaseSize.zw
+
+#define kTemporalUseValidatedHistory temporal.HistoryControl.x

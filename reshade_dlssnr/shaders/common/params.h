@@ -113,6 +113,7 @@ DLSSNR_BLOCK(TemporalBlock)
     float4 MotionScaleBase;      // motion scale xy, motion subrect origin zw
     float4 MotionReferenceSize;  // reference dimensions xy, motion subrect size zw
     float4 GuideBaseSize;        // guide subrect origin xy, guide subrect size zw
+    float4 HistoryControl;       // x = reuse validated history instead of extracting fresh edit
 };
 
 DLSSNR_CBUFFER(ComputeConstants)

@@ -5,25 +5,42 @@ Texture2D<float2> gMotion : register(t1);
 Texture2D<float> gCurrentDepth : register(t2);
 Texture2D<float> gPreviousDepth : register(t3);
 RWTexture2D<float4> gValidated : register(u0);
+RWBuffer<uint> gStats : register(u1);
+
+void WriteValidated(uint2 pixel, float4 value)
+{
+    gValidated[pixel] = value;
+    if (value.a != 1.0)
+    {
+        uint ignored;
+        InterlockedAdd(gStats[0], 1u, ignored);
+    }
+    if (pixel.x == 0u && pixel.y == 0u)
+    {
+        uint ignored;
+        InterlockedOr(gStats[1], 1u, ignored);
+    }
+}
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= Width || id.y >= Height) return;
-    const float4 candidate = gCandidate.Load(int3(id.xy, 0));
+    const uint2 pixel = id.xy;
+    const float4 candidate = gCandidate.Load(int3(pixel, 0));
     if (candidate.a < 0.5)
     {
-        gValidated[id.xy] = float4(0.0, 0.0, 0.0, 0.0);
+        WriteValidated(pixel, float4(0.0, 0.0, 0.0, 0.0));
         return;
     }
 
-    const float2 uv = (float2(id.xy) + 0.5) / float2(Width, Height);
+    const float2 uv = (float2(pixel) + 0.5) / float2(Width, Height);
     uint mw, mh, cw, ch;
     gMotion.GetDimensions(mw, mh);
     gCurrentDepth.GetDimensions(cw, ch);
     if (mw == 0 || mh == 0 || cw == 0 || ch == 0)
     {
-        gValidated[id.xy] = float4(0.0, 0.0, 0.0, 3.0);
+        WriteValidated(pixel, float4(0.0, 0.0, 0.0, 3.0));
         return;
     }
     const float2 motion_base = kTemporalMotionBase;
@@ -31,7 +48,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     const float2 motion_pixel = motion_base + uv * motion_size;
     if (any(motion_pixel < 0.0) || any(motion_pixel >= float2(mw, mh)))
     {
-        gValidated[id.xy] = float4(0.0, 0.0, 0.0, 0.0);
+        WriteValidated(pixel, float4(0.0, 0.0, 0.0, 0.0));
         return;
     }
     const uint2 mxy = min(uint2(motion_pixel), uint2(mw - 1u, mh - 1u));
@@ -42,7 +59,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     if (!all(isfinite(mv)) || !all(isfinite(previous_uv)) ||
         any(previous_uv < 0.0) || any(previous_uv >= 1.0))
     {
-        gValidated[id.xy] = float4(0.0, 0.0, 0.0, 0.0);
+        WriteValidated(pixel, float4(0.0, 0.0, 0.0, 0.0));
         return;
     }
     const float2 guide_base = kTemporalGuideBase;
@@ -51,7 +68,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     if (any(current_depth_pixel < 0.0) ||
         any(current_depth_pixel >= float2(cw, ch)))
     {
-        gValidated[id.xy] = float4(0.0, 0.0, 0.0, 3.0);
+        WriteValidated(pixel, float4(0.0, 0.0, 0.0, 3.0));
         return;
     }
     const uint2 cxy = min(uint2(current_depth_pixel), uint2(cw - 1u, ch - 1u));
@@ -68,11 +85,9 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     const float threshold = max(abs_threshold, relative_allowance);
     if (!isfinite(d_now) || !isfinite(d_old) || abs(d_now - d_old) > threshold)
     {
-        // Depth-invalid edits are not applied; identity is committed as valid
-        // history after the frame to avoid a stuck history-validity hole.
-        gValidated[id.xy] = float4(0.0, 0.0, 0.0, 3.0);
+        WriteValidated(pixel, float4(0.0, 0.0, 0.0, 3.0));
         return;
     }
-    gValidated[id.xy] = float4(clamp(candidate.rgb, -0.69314718056, 0.69314718056),
-                               candidate.a >= 1.5 ? 2.0 : 1.0);
+    WriteValidated(pixel, float4(clamp(candidate.rgb, -0.69314718056, 0.69314718056),
+                                candidate.a >= 1.5 ? 2.0 : 1.0));
 }

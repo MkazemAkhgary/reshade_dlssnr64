@@ -19,13 +19,10 @@ std::size_t BytecodeSize(const char* root) {
 
 const ComputePassDef kComputePasses[] = {
     {"TemporalClearStats", "temporal/clear_stats.hlsl", BytecodeData("temporal/clear_stats.hlsl"), BytecodeSize("temporal/clear_stats.hlsl")},
-    {"TemporalExtractEdit", "temporal/extract_edit.hlsl", BytecodeData("temporal/extract_edit.hlsl"), BytecodeSize("temporal/extract_edit.hlsl")},
     {"TemporalReprojectEdit", "temporal/reproject_edit.hlsl", BytecodeData("temporal/reproject_edit.hlsl"), BytecodeSize("temporal/reproject_edit.hlsl")},
     {"TemporalValidateDepth", "temporal/validate_depth.hlsl", BytecodeData("temporal/validate_depth.hlsl"), BytecodeSize("temporal/validate_depth.hlsl")},
-    {"TemporalCountInvalid", "temporal/count_invalid.hlsl", BytecodeData("temporal/count_invalid.hlsl"), BytecodeSize("temporal/count_invalid.hlsl")},
+    {"TemporalCommitHistory", "temporal/commit_history.hlsl", BytecodeData("temporal/commit_history.hlsl"), BytecodeSize("temporal/commit_history.hlsl")},
     {"TemporalApplyEdit", "temporal/apply_edit.hlsl", BytecodeData("temporal/apply_edit.hlsl"), BytecodeSize("temporal/apply_edit.hlsl")},
-    {"TemporalCommitEdit", "temporal/commit_edit.hlsl", BytecodeData("temporal/commit_edit.hlsl"), BytecodeSize("temporal/commit_edit.hlsl")},
-    {"TemporalStoreDepth", "temporal/store_depth.hlsl", BytecodeData("temporal/store_depth.hlsl"), BytecodeSize("temporal/store_depth.hlsl")},
     {"ZeroHistogram",         "hdr/zero_histogram.hlsl",        BytecodeData("hdr/zero_histogram.hlsl"),        BytecodeSize("hdr/zero_histogram.hlsl")},
     {"BuildHistogram",        "hdr/build_histogram.hlsl",       BytecodeData("hdr/build_histogram.hlsl"),       BytecodeSize("hdr/build_histogram.hlsl")},
     {"GainMapSplit",          "hdr/gain_map_split.hlsl",        BytecodeData("hdr/gain_map_split.hlsl"),        BytecodeSize("hdr/gain_map_split.hlsl")},

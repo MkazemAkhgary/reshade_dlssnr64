@@ -1650,7 +1650,7 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
 
     ID3D12Resource* validate_srvs[kSrvCount] = {
         candidate, run.guides.motion, run.guides.depth, previous_depth};
-    ID3D12Resource* validated_uavs[kUavCount] = {validated};
+    ID3D12Resource* validated_uavs[kUavCount] = {validated, stats};
     if (!run.codec->Dispatch("TemporalValidateDepth", list, constants,
                              validate_srvs, validated_uavs)) {
       self->temporal_history_valid_ = false;
@@ -1660,21 +1660,10 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
       return PipelineStatus::Ok;
     }
     self->command_.UavBarrier(list, validated);
+    self->command_.UavBarrier(list, stats);
     self->command_.Transition(list, validated,
                               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     run.temporal_candidate_ready = true;
-
-    ID3D12Resource* count_srvs[kSrvCount] = {
-        validated, validated, validated, validated};
-    if (!run.codec->Dispatch("TemporalCountInvalid", list, constants,
-                             count_srvs, stats_uavs)) {
-      self->temporal_history_valid_ = false;
-      self->temporal_feedback_valid_ = false;
-      run.temporal_active = false;
-      TRACE_EVT(self, "temporal fallback pass=%u reason=count_invalid", self->pass_id_);
-      return PipelineStatus::Ok;
-    }
-    self->command_.UavBarrier(list, stats);
   }
 
   // Enqueue the current validation sample for a later frame. The fence value
@@ -2011,40 +2000,43 @@ PipelineStatus PassSession::StepModelOutputBarrier(PassRun& run) {
   ComputeConstants constants = {};
   constants.Width = run.work_width;
   constants.Height = run.work_height;
-  ID3D12Resource* edit_srvs[kSrvCount] = {
-      run.model_color, run.model_output, run.model_output, run.model_output};
-  ID3D12Resource* edit_uavs[kUavCount] = {previous_edit};
-
+  self->command_.Transition(list, run.model_color,
+                            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  self->command_.Transition(list, run.model_output,
+                            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   if (run.temporal_reuse) {
     self->command_.Transition(list, validated,
                               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    self->command_.Transition(list, previous_edit,
-                              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    ID3D12Resource* commit_srvs[kSrvCount] = {
-        validated, validated, validated, validated};
-    if (!run.codec->Dispatch("TemporalCommitEdit", list, constants,
-                             commit_srvs, edit_uavs)) {
-      self->temporal_history_valid_ = false;
-      return PipelineStatus::Ok;
-    }
-  } else {
-    self->command_.Transition(list, run.model_color,
-                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    self->command_.Transition(list, run.model_output,
-                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    self->command_.Transition(list, previous_edit,
-                              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    if (!run.codec->Dispatch("TemporalExtractEdit", list, constants,
-                             edit_srvs, edit_uavs)) {
-      self->temporal_history_valid_ = false;
-      return PipelineStatus::Ok;
-    }
+  }
+  self->command_.Transition(list, run.guides.depth,
+                            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  self->command_.Transition(list, previous_edit,
+                            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  self->command_.Transition(list, previous_depth,
+                            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+  constants.temporal.GuideBaseSize.x =
+      static_cast<float>(run.guides.guide_base_x);
+  constants.temporal.GuideBaseSize.y =
+      static_cast<float>(run.guides.guide_base_y);
+  constants.temporal.GuideBaseSize.z =
+      static_cast<float>(run.guides.guide_subrect_width);
+  constants.temporal.GuideBaseSize.w =
+      static_cast<float>(run.guides.guide_subrect_height);
+  constants.temporal.HistoryControl.x = run.temporal_reuse ? 1.0f : 0.0f;
+  ID3D12Resource* history_srvs[kSrvCount] = {
+      run.model_color, run.model_output, validated, run.guides.depth};
+  ID3D12Resource* history_uavs[kUavCount] = {previous_edit, previous_depth};
+  if (!run.codec->Dispatch("TemporalCommitHistory", list, constants,
+                           history_srvs, history_uavs)) {
+    self->temporal_history_valid_ = false;
+    return PipelineStatus::Ok;
   }
   self->command_.UavBarrier(list, previous_edit);
+  self->command_.UavBarrier(list, previous_depth);
 
   // Advance the photometric reference on every processed frame. The source is
-  // exactly the input seen by NGX (after preparation and input grade), not a
-  // prior model output that would freeze old lighting and scene content.
+  // exactly the input seen by NGX (after preparation and input grade).
   const D3D12_RESOURCE_STATES input_state =
       self->command_.GetResourceState(run.model_color);
   self->command_.Transition(list, run.model_color,
@@ -2059,27 +2051,6 @@ PipelineStatus PassSession::StepModelOutputBarrier(PassRun& run) {
   self->command_.Transition(list, previous_input,
                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-  self->command_.Transition(list, run.guides.depth,
-                            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  self->command_.Transition(list, previous_depth,
-                            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  constants.temporal.GuideBaseSize.x =
-      static_cast<float>(run.guides.guide_base_x);
-  constants.temporal.GuideBaseSize.y =
-      static_cast<float>(run.guides.guide_base_y);
-  constants.temporal.GuideBaseSize.z =
-      static_cast<float>(run.guides.guide_subrect_width);
-  constants.temporal.GuideBaseSize.w =
-      static_cast<float>(run.guides.guide_subrect_height);
-  ID3D12Resource* depth_srvs[kSrvCount] = {
-      run.guides.depth, run.guides.depth, run.guides.depth, run.guides.depth};
-  ID3D12Resource* depth_uavs[kUavCount] = {previous_depth};
-  if (!run.codec->Dispatch("TemporalStoreDepth", list, constants,
-                           depth_srvs, depth_uavs)) {
-    self->temporal_history_valid_ = false;
-    return PipelineStatus::Ok;
-  }
-  self->command_.UavBarrier(list, previous_depth);
   self->temporal_history_valid_ = true;
   if (!run.temporal_reuse) {
     self->temporal_last_refresh_frame_ = run.frame_id;
