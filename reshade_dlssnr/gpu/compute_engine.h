@@ -88,6 +88,13 @@ class ComputeEngine {
   ~ComputeEngine();
 
   void Destroy();
+  // External NGX/game calls and command-list resets invalidate the remembered
+  // compute bindings. Call at each stage boundary and after external dispatch.
+  void InvalidateBindings() noexcept {
+    bound_command_list_ = nullptr;
+    descriptor_heap_bound_ = false;
+    root_signature_bound_ = false;
+  }
 
   bool IsInit() const { return device_ != nullptr; }
 
@@ -111,6 +118,9 @@ class ComputeEngine {
   Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptor_heap_;
   uint32_t descriptor_size_ = 0;
   uint32_t heap_index_ = 0;
+  ID3D12GraphicsCommandList* bound_command_list_ = nullptr;
+  bool descriptor_heap_bound_ = false;
+  bool root_signature_bound_ = false;
 
   // One upload buffer holds a 512-byte, 256-byte-aligned constant record per dispatch.
   static constexpr uint32_t kConstantStride = 512;

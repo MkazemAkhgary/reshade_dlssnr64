@@ -748,3 +748,8 @@ GenerateEmbeddedShaders
 The build selects the latest installed Windows 10 SDK with `ToolLocationHelper`. `verify_shaders.ps1` can independently locate `fxc.exe` from `WindowsSdkDir`/`WindowsSdkVerBinPath` when `FxcPath` is not passed explicitly.
 
 The project expects the ReShade SDK/ImGui sources, FidelityFX-FSR sources, NVIDIA NGX headers and the local Detours/D3DX12 dependencies under `third_party/`. A clean checkout needs those repository dependencies present before building.
+
+
+### Runtime dispatch overhead
+
+`ComputeEngine` retains root-signature and descriptor-heap binding state only within a known command-list recording interval. `PassSession::RunStage`, HDR shared-frame preparation, and every external NGX evaluation invalidate that cache, so a game/NGX mutation or command-list reset cannot inherit stale state. `CommandContext::TransitionBatch` updates the same tracked resource-state map as `Transition`, but submits adjacent transition barriers as one `ResourceBarrier` call; UAV barriers and per-resource before/after tracking remain explicit.

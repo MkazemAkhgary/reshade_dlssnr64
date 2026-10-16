@@ -45,17 +45,20 @@ bool ApplyGrade(CommandContext& state,
   constants.grade.Format = static_cast<float>(format_code);
   constants.grade.RestoreExposure = restore_exposure ? 1.0f : 0.0f;
 
-  state.Transition(command_list, target, D3D12_RESOURCE_STATE_COPY_SOURCE);
-  state.Transition(command_list, scratch, D3D12_RESOURCE_STATE_COPY_DEST);
+  const ResourceTransition before_copy[] = {
+      {target, D3D12_RESOURCE_STATE_COPY_SOURCE},
+      {scratch, D3D12_RESOURCE_STATE_COPY_DEST},
+  };
+  state.TransitionBatch(command_list, before_copy, 2);
   command_list->CopyResource(scratch, target);
-  state.Transition(command_list, scratch,
-                   D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  state.Transition(command_list, target, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-  if (restore_exposure) {
-    state.Transition(command_list, exposure_map,
-                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  }
+  ResourceTransition after_copy[] = {
+      {scratch, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE},
+      {target, D3D12_RESOURCE_STATE_UNORDERED_ACCESS},
+      {restore_exposure ? exposure_map : nullptr,
+       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE},
+  };
+  state.TransitionBatch(command_list, after_copy, 3);
   // Every slot must hold a valid resource; the source stands in for the
   // unused exposure slot when the flag is off.
   ID3D12Resource* exposure_srv = restore_exposure ? exposure_map : scratch;

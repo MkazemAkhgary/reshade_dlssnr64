@@ -758,6 +758,7 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
              frame_id, temporal_feedback_fence,
              temporal_feedback_fence_value);
 
+  codec.InvalidateBindings();
   const PipelineStatus status = PipelineRunner::RunStage(stage, run);
 
   // Direct Post-DLSS mode transitions the game's output to SRV before model
@@ -1299,17 +1300,18 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
       return PipelineStatus::Fail;
     }
     constants.shader.Params1.x = 1.0f;
-    self->command_.Transition(run.list, global_carrier,
-                              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   }
 
   ID3D12Resource* srvs[kSrvCount] = {};
   BindLocalExposureInputs(run, constants, source, srvs);
   ID3D12Resource* uavs[kUavCount] = {packed, global_carrier};
-  self->command_.Transition(run.list, source,
-                            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  self->command_.Transition(run.list, packed,
-                            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  ResourceTransition split_transitions[] = {
+      {source, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE},
+      {packed, D3D12_RESOURCE_STATE_UNORDERED_ACCESS},
+      {global_carrier, D3D12_RESOURCE_STATE_UNORDERED_ACCESS},
+  };
+  self->command_.TransitionBatch(run.list, split_transitions,
+                                 3);
   if (!run.codec->Dispatch("GainMapSplit", run.list, constants, srvs, uavs)) {
     self->FailForStep("failed to split HDR into SDR + gain map");
     return PipelineStatus::Fail;
@@ -2007,12 +2009,14 @@ PipelineStatus PassSession::StepEvaluateFeature(PassRun& run) {
     run.eval_result = run.runtime->EvaluateFeature(
         self->StageList(run, self->command_), self->feature_.FeatureHandle(),
         run.runtime->Parameters().Get(), nullptr);
+    run.codec->InvalidateBindings();
     return PipelineStatus::Ok;
   }
 
   run.eval_result = run.runtime->EvaluateFeature(
       self->StageList(run, self->command_), self->feature_.FeatureHandle(),
       run.runtime->Parameters().Get(), nullptr);
+  run.codec->InvalidateBindings();
   return PipelineStatus::Ok;
 }
 

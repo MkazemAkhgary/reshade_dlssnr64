@@ -239,6 +239,58 @@ void CommandContext::Transition(
   resource_states_[resource] = after;
 }
 
+void CommandContext::TransitionBatch(
+    ID3D12GraphicsCommandList* command_list,
+    const ResourceTransition* transitions,
+    size_t count) {
+  if (command_list == nullptr || transitions == nullptr || count == 0) return;
+
+  std::array<D3D12_RESOURCE_BARRIER, 16> barriers = {};
+  UINT barrier_count = 0;
+  auto flush = [&]() {
+    if (barrier_count == 0) return;
+    command_list->ResourceBarrier(barrier_count, barriers.data());
+    barrier_count = 0;
+  };
+
+  for (size_t i = 0; i < count; ++i) {
+    ID3D12Resource* resource = transitions[i].resource;
+    if (resource == nullptr) continue;
+
+    auto it = resource_states_.find(resource);
+    const bool tracked = it != resource_states_.end();
+    const D3D12_RESOURCE_STATES before =
+        tracked ? it->second : InferResourceState(resource);
+    const D3D12_RESOURCE_STATES after = transitions[i].after;
+
+    if (before == after) {
+      resource_states_[resource] = after;
+      TRACE_CMD(this, "transition res=%d(%s) %s SKIP(same) tracked=%d",
+                trace::ResourceId(resource),
+                trace::ResourceNameOr(resource, "-"),
+                trace::StateName(before), tracked ? 1 : 0);
+      continue;
+    }
+
+    D3D12_RESOURCE_BARRIER& barrier = barriers[barrier_count++];
+    barrier = {};
+    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier.Transition.pResource = resource;
+    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barrier.Transition.StateBefore = before;
+    barrier.Transition.StateAfter = after;
+
+    TRACE_CMD(this, "transition res=%d(%s) %s tracked=%d",
+              trace::ResourceId(resource),
+              trace::ResourceNameOr(resource, "-"),
+              trace::StatePairName(before, after), tracked ? 1 : 0);
+    resource_states_[resource] = after;
+
+    if (barrier_count == static_cast<UINT>(barriers.size())) flush();
+  }
+  flush();
+}
+
 void CommandContext::SetResourceState(
     ID3D12Resource* resource,
     D3D12_RESOURCE_STATES state) {

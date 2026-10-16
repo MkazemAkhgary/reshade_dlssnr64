@@ -176,9 +176,20 @@ bool ComputeEngine::BindAndDispatch(
       threads_y != 0 ? threads_y : (constants.Height + 7) / 8;
   const uint32_t grid_z = threads_z != 0 ? threads_z : 1;
 
-  ID3D12DescriptorHeap* heaps[] = {descriptor_heap_.Get()};
-  command_list->SetDescriptorHeaps(1, heaps);
-  command_list->SetComputeRootSignature(root_signature_.Get());
+  if (bound_command_list_ != command_list) {
+    bound_command_list_ = command_list;
+    descriptor_heap_bound_ = false;
+    root_signature_bound_ = false;
+  }
+  if (!descriptor_heap_bound_) {
+    ID3D12DescriptorHeap* heaps[] = {descriptor_heap_.Get()};
+    command_list->SetDescriptorHeaps(1, heaps);
+    descriptor_heap_bound_ = true;
+  }
+  if (!root_signature_bound_) {
+    command_list->SetComputeRootSignature(root_signature_.Get());
+    root_signature_bound_ = true;
+  }
   command_list->SetPipelineState(pipeline_state);
   command_list->SetComputeRootDescriptorTable(0, gpu_handle);
   command_list->Dispatch(grid_x, grid_y, grid_z);
@@ -676,6 +687,7 @@ void ComputeEngine::Destroy() {
   }
   root_signature_.Reset();
   descriptor_heap_.Reset();
+  InvalidateBindings();
 
   device_ = nullptr;
 }

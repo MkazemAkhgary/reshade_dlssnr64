@@ -12,6 +12,11 @@
 
 namespace reshade_dlssnr {
 
+struct ResourceTransition {
+  ID3D12Resource* resource = nullptr;
+  D3D12_RESOURCE_STATES after = D3D12_RESOURCE_STATE_COMMON;
+};
+
 class CommandContext {
  public:
   bool Ensure(ID3D12Device* device);
@@ -41,6 +46,10 @@ class CommandContext {
       ID3D12GraphicsCommandList* command_list,
       ID3D12Resource* resource,
       D3D12_RESOURCE_STATES after);
+  void TransitionBatch(
+      ID3D12GraphicsCommandList* command_list,
+      const ResourceTransition* transitions,
+      size_t count);
 
   // Copies a source texture into the swapchain backbuffer, handling the
   // common COPY_SOURCE/COPY_DEST/PRESENT/UNORDERED_ACCESS transitions.

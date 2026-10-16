@@ -154,6 +154,7 @@ PipelineStatus AddonController::RunSingleStage(
     run.mask_state = feature::importance_mask::Read(store, shared);
   }
 
+  codec_.InvalidateBindings();
   const PipelineStatus status = PipelineRunner::RunStage(stage, run);
 
   // This is the single submit point for the Release list. OnPresent may have

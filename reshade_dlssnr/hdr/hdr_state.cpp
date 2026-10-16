@@ -320,6 +320,7 @@ void HdrState::BeginFrame(CommandContext& cmd,
   if (!enabled_ || command_list == nullptr || source == nullptr || width == 0 || height == 0)
     return;
 
+  codec.InvalidateBindings();
   ++frames_since_measure_;
   PollReadback(fence_.Get(), hdr_settings);
 
