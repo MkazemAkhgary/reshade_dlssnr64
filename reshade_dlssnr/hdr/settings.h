@@ -55,13 +55,10 @@ struct LocalExposureLayerSettings {
   float max_brighten = 1.75f;
   float max_darken = 1.75f;
   float midtone = 0.18f;
-  float block_size_px = 24.0f;
-  // Number of neighborhood taps used to estimate the local log-luminance base.
-  // More taps fill spatial gaps within the same radius, at additional GPU cost.
-  int sample_count = 24;
   // Restores the global exposure after model inference by applying the
   // inverse local exposure multiplier in linear light.
   bool restore_global_exposure = false;
+  bool precomputed_luma = false;
 };
 
 // Encoding code consumed by the shaders: 0 sRGB, 1 scRGB, 2 HDR10.

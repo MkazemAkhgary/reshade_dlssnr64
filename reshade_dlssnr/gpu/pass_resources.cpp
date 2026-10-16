@@ -182,6 +182,35 @@ bool PassResources::EnsureGainStats(ID3D12Device* device) {
   return true;
 }
 
+bool PassResources::EnsureLocalExposureLuma(
+    ID3D12Device* device, unsigned int width, unsigned int height) {
+  if (device == nullptr || width == 0 || height == 0) return false;
+  if (local_exposure_luma != nullptr && local_exposure_luma_width == width &&
+      local_exposure_luma_height == height &&
+      local_exposure_luma->GetDesc().Format == DXGI_FORMAT_R32_FLOAT) {
+    return true;
+  }
+  Dispose(local_exposure_luma);
+  D3D12_RESOURCE_DESC desc = {};
+  desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+  desc.Width = width;
+  desc.Height = height;
+  desc.DepthOrArraySize = 1;
+  desc.MipLevels = 1;
+  desc.Format = DXGI_FORMAT_R32_FLOAT;
+  desc.SampleDesc.Count = 1;
+  desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+  ID3D12Resource* raw = nullptr;
+  if (!CreateUavTexture(device, desc, &raw)) return false;
+  local_exposure_luma.Attach(raw);
+  local_exposure_luma_width = width;
+  local_exposure_luma_height = height;
+  trace::NameResource(local_exposure_luma.Get(), "local_exposure_luma");
+  TRACE_CMD(this, "create local_exposure_luma res=%d %ux%u",
+            trace::ResourceId(local_exposure_luma.Get()), width, height);
+  return true;
+}
+
 bool PassResources::EnsureEffectiveExposureMap(
     ID3D12Device* device, unsigned int width, unsigned int height) {
   if (device == nullptr || width == 0 || height == 0) return false;
@@ -222,6 +251,8 @@ bool PassResources::EnsureEffectiveExposureMap(
 
 void PassResources::ReleaseEffectiveExposureMap() {
   Dispose(effective_exposure_map);
+  local_exposure_luma_width = 0;
+  local_exposure_luma_height = 0;
   effective_exposure_width = 0;
   effective_exposure_height = 0;
 }
@@ -514,6 +545,7 @@ void PassResources::Shutdown() {
   working_input.Reset();
   working_output.Reset();
   unlifted_working_input.Reset();
+  local_exposure_luma.Reset();
   effective_exposure_map.Reset();
   local_exposure_partial_sums.Reset();
   local_exposure_mean.Reset();
@@ -539,6 +571,8 @@ void PassResources::Shutdown() {
   packed_width = 0;
   packed_height = 0;
   gain_stats_bytes = 0;
+  local_exposure_luma_width = 0;
+  local_exposure_luma_height = 0;
   effective_exposure_width = 0;
   effective_exposure_height = 0;
   local_exposure_partial_width = 0;

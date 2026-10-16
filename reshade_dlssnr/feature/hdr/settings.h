@@ -59,9 +59,8 @@ inline constexpr const char* kLocalStrength = "strength";
 inline constexpr const char* kLocalMaxBrighten = "max_brighten";
 inline constexpr const char* kLocalMaxDarken = "max_darken";
 inline constexpr const char* kLocalMidtone = "midtone";
-inline constexpr const char* kLocalBlockSize = "block_size_px";
-inline constexpr const char* kLocalSampleCount = "sample_count";
 inline constexpr const char* kLocalRestoreGlobalExposure = "restore_global_exposure";
+inline constexpr const char* kLocalPrecomputedLuma = "precomputed_luma";
 
 }  // namespace hdr
 }  // namespace feature

@@ -42,8 +42,7 @@ struct HdrUniforms {
   float local_max_brighten = 2.0f;
   float local_max_darken = 2.0f;
   float midtone = 0.18f;
-  float local_block_size_px = 24.0f;
-  uint32_t local_sample_count = 24;
+  bool local_precomputed_luma = false;
 };
 
 // The source is already in the model domain (gain-map split happens in its

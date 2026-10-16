@@ -25,6 +25,7 @@ const ComputePassDef kComputePasses[] = {
     {"TemporalApplyEdit", "temporal/apply_edit.hlsl", BytecodeData("temporal/apply_edit.hlsl"), BytecodeSize("temporal/apply_edit.hlsl")},
     {"ZeroHistogram",         "hdr/zero_histogram.hlsl",        BytecodeData("hdr/zero_histogram.hlsl"),        BytecodeSize("hdr/zero_histogram.hlsl")},
     {"BuildHistogram",        "hdr/build_histogram.hlsl",       BytecodeData("hdr/build_histogram.hlsl"),       BytecodeSize("hdr/build_histogram.hlsl")},
+    {"BuildLocalExposureLuma", "hdr/build_local_exposure_luma.hlsl", BytecodeData("hdr/build_local_exposure_luma.hlsl"), BytecodeSize("hdr/build_local_exposure_luma.hlsl")},
     {"GainMapSplit",          "hdr/gain_map_split.hlsl",        BytecodeData("hdr/gain_map_split.hlsl"),        BytecodeSize("hdr/gain_map_split.hlsl")},
     {"BuildEffectiveLocalExposure", "hdr/build_effective_local_exposure.hlsl", BytecodeData("hdr/build_effective_local_exposure.hlsl"), BytecodeSize("hdr/build_effective_local_exposure.hlsl")},
     {"ReduceLocalExposureTiles", "hdr/reduce_local_exposure_tiles.hlsl", BytecodeData("hdr/reduce_local_exposure_tiles.hlsl"), BytecodeSize("hdr/reduce_local_exposure_tiles.hlsl")},

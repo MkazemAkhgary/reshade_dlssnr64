@@ -88,8 +88,7 @@ HdrSnapshotView Read(const ctl::ValueStore& store,
     l.max_brighten = store.Read(sec, key, kLocalMaxBrighten).as_float;
     l.max_darken = store.Read(sec, key, kLocalMaxDarken).as_float;
     l.midtone = store.Read(sec, key, kLocalMidtone).as_float;
-    l.block_size_px = store.Read(sec, key, kLocalBlockSize).as_float;
-    l.sample_count = store.Read(sec, key, kLocalSampleCount).as_int;
+    l.precomputed_luma = store.Read(sec, key, kLocalPrecomputedLuma).as_bool;
     l.restore_global_exposure =
         store.Read(sec, key, kLocalRestoreGlobalExposure).as_bool;
   }

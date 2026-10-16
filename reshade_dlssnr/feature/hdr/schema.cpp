@@ -196,19 +196,10 @@ void RegisterHdrSchema(ctl::Schema& schema) {
       .Range(0.01f, 0.5f)
       .Tooltip("Reference luminance for the local base/detail operator.")
       .EnableWhen(&LayerEnabled, kLocalEnabled);
-  local.Add<ctl::FloatSetting>(kLocalBlockSize, "Neighborhood Block Size (px)",
-                               24.0f)
-      .Range(4.0f, 512.0f)
-      .Tooltip("Neighborhood diameter (4-512 px). Larger sizes spread the "
-               "local-base taps farther apart. Effective diameter is capped at "
-               "half the shorter source dimension; the field stays continuous "
-               "per pixel to avoid visible block boundaries.")
-      .EnableWhen(&LayerEnabled, kLocalEnabled);
-  local.Add<ctl::IntSetting>(kLocalSampleCount, "Neighborhood Samples", 24)
-      .Range(4, 48)
-      .Tooltip("Number of neighborhood taps (4-48). Higher counts fill gaps in "
-               "the same neighborhood and cost more GPU time; this does not "
-               "increase the block radius.")
+  local.Add<ctl::BoolSetting>(kLocalPrecomputedLuma, "Precomputed Luma", false)
+      .Tooltip("Precompute HDR-to-SDR luminance once per source pixel instead of "
+               "repeating the transfer at every local-exposure tap. Slightly "
+               "changes interpolation order; useful for performance comparison.")
       .EnableWhen(&LayerEnabled, kLocalEnabled);
   local.Add<ctl::BoolSetting>(kLocalRestoreGlobalExposure, "Restore Global Exposure", false)
       .Tooltip("Apply the inverse local-exposure multiplier to the model output "
