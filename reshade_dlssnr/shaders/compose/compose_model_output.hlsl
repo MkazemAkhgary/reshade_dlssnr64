@@ -80,10 +80,9 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         // the model's per-channel edit — chroma included — is preserved.
         const int2 full_size_int = int2((int)Width, (int)Height);
         const int2 full_xy = int2((int)id.x, (int)id.y);
-        in_rgb  = JointBilateralUpsample(
-            full_xy, full_size_int, gLowInput,  gOriginal, 8.0);
-        out_rgb = JointBilateralUpsample(
-            full_xy, full_size_int, gLowEnhanced, gOriginal, kUpsampleSharpness);
+        JointBilateralUpsamplePair(
+            full_xy, full_size_int, gLowInput, gLowEnhanced, gOriginal,
+            8.0, kUpsampleSharpness, in_rgb, out_rgb);
     } else {
         // FSR 1.0 EASU. The original upsampler. Designed for roughly
         // 2x reconstruction; at working scales far from that the

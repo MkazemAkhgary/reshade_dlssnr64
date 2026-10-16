@@ -105,10 +105,9 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         // ComposeHdrInverse is unchanged and still receives low_in / low_out.
         const int2 full_size_int = int2((int)Width, (int)Height);
         const int2 full_xy = int2((int)id.x, (int)id.y);
-        low_in  = JointBilateralUpsample(
-            full_xy, full_size_int, gLowInput,  gOriginal, 8.0);
-        low_out = JointBilateralUpsample(
-            full_xy, full_size_int, gLowEnhanced, gOriginal, kUpsampleSharpness);
+        JointBilateralUpsamplePair(
+            full_xy, full_size_int, gLowInput, gLowEnhanced, gOriginal,
+            8.0, kUpsampleSharpness, low_in, low_out);
     } else {
         // FSR 1.0 EASU. The original upsampler. Designed for roughly
         // 2x reconstruction; at working scales far from that the
