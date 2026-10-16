@@ -147,6 +147,9 @@ bool DebugViewNeedsPreGradeInput(int debug_view);
 // Same, for the pre-grade model-output snapshot.
 bool DebugViewNeedsPreGradeOutput(int debug_view);
 
+// True when rendering the selected view requires the full-resolution local-exposure map.
+bool DebugViewNeedsEffectiveExposureMap(int debug_view);
+
 // Renders the selected debug view into `target`, which the caller owns and
 // must have sized to `target_width × target_height`. `debug_view` follows
 // the settings convention: 0 = off, N = kDebugViews[N-1].

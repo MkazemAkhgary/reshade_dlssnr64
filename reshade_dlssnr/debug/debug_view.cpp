@@ -220,6 +220,15 @@ bool DebugViewNeedsPreGradeOutput(int debug_view) {
   return kDebugViews[index].needs_pre_grade_output;
 }
 
+bool DebugViewNeedsEffectiveExposureMap(int debug_view) {
+  if (debug_view <= 0) return false;
+  const uint32_t index = static_cast<uint32_t>(debug_view) - 1;
+  if (index >= CountDebugViews()) return false;
+  const DebugDisplayMode mode = kDebugViews[index].display_mode;
+  return mode == DebugDisplayMode::HdrLocalExposure ||
+         mode == DebugDisplayMode::HdrRoundtripDiagnostic;
+}
+
 bool RenderDebugView(
     CommandContext& state,
     ComputeEngine& codec,

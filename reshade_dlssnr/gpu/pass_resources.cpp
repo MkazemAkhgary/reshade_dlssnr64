@@ -214,6 +214,12 @@ bool PassResources::EnsureEffectiveExposureMap(
   return true;
 }
 
+void PassResources::ReleaseEffectiveExposureMap() {
+  Dispose(effective_exposure_map);
+  effective_exposure_width = 0;
+  effective_exposure_height = 0;
+}
+
 bool PassResources::EnsureLocalExposureMeanResources(
     ID3D12Device* device, unsigned int width, unsigned int height) {
   if (device == nullptr || width == 0 || height == 0) return false;

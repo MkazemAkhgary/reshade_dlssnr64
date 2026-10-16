@@ -118,6 +118,7 @@ class PassResources {
       unsigned int work_height);
   bool EnsureEffectiveExposureMap(
       ID3D12Device* device, unsigned int width, unsigned int height);
+  void ReleaseEffectiveExposureMap();
   bool EnsureLocalExposureMeanResources(
       ID3D12Device* device, unsigned int width, unsigned int height);
   // `input_desc` is the actual model-domain input (which may be the game

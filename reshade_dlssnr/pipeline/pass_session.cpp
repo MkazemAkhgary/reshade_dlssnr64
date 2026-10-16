@@ -10,6 +10,7 @@
 
 #include <reshade.hpp>
 
+#include "debug/debug_view.h"
 #include "feature/settings_store.h"
 #include "ctl/values.h"
 #include "d3d12_utils.h"
@@ -1733,14 +1734,20 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
 // pair and does not use this extra texture in its descriptor table.
 PipelineStatus PassSession::StepBuildEffectiveLocalExposure(PassRun& run) {
   PassSession* self = run.session;
-  if (self == nullptr || run.codec == nullptr || run.hdr == nullptr ||
-      !run.hdr_uniforms_ready || run.hdr->ResolvedFormat() == HdrFormat::Sdr ||
-      run.model_input == nullptr ||
-      run.hdr_uniforms.local_exposure_strength <= 0.0f) {
+  if (self == nullptr) return PipelineStatus::Ok;
+
+  const bool selected_active_view = run.settings != nullptr &&
+      run.settings->active_pass_id == self->pass_id_ &&
+      DebugViewNeedsEffectiveExposureMap(run.debug_view);
+  const bool local_hdr_active = run.codec != nullptr && run.hdr != nullptr &&
+      run.hdr_uniforms_ready && run.hdr->ResolvedFormat() != HdrFormat::Sdr &&
+      run.model_input != nullptr &&
+      run.hdr_uniforms.local_exposure_strength > 0.0f;
+  if (!selected_active_view || !local_hdr_active) {
+    self->resources_.ReleaseEffectiveExposureMap();
     return PipelineStatus::Ok;
   }
 
-  ID3D12Resource* source = run.model_input;
   if (!self->resources_.EnsureEffectiveExposureMap(
           run.device, run.width, run.height)) {
     self->FailForStep("failed to create HDR effective exposure map");
@@ -1767,24 +1774,22 @@ PipelineStatus PassSession::StepBuildEffectiveLocalExposure(PassRun& run) {
 
   ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
   ID3D12Resource* srvs[kSrvCount] = {};
-  BindLocalExposureInputs(run, constants, source, srvs);
-  ID3D12Resource* uavs[kUavCount] = {
-      self->resources_.GetEffectiveExposureMap()};
-  self->command_.Transition(list, source,
+  BindLocalExposureInputs(run, constants, run.model_input, srvs);
+  ID3D12Resource* exposure_map = self->resources_.GetEffectiveExposureMap();
+  ID3D12Resource* uavs[kUavCount] = {exposure_map};
+  self->command_.Transition(list, run.model_input,
                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  self->command_.Transition(
-      list, self->resources_.GetEffectiveExposureMap(),
-      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  self->command_.Transition(list, exposure_map,
+                            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
   if (!run.codec->Dispatch("BuildEffectiveLocalExposure", list, constants,
                            srvs, uavs)) {
     self->FailForStep("failed to build HDR effective local exposure map");
     return PipelineStatus::Fail;
   }
-  self->command_.UavBarrier(list, self->resources_.GetEffectiveExposureMap());
-  self->command_.Transition(
-      list, self->resources_.GetEffectiveExposureMap(),
-      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  self->command_.UavBarrier(list, exposure_map);
+  self->command_.Transition(list, exposure_map,
+                            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   return PipelineStatus::Ok;
 }
 

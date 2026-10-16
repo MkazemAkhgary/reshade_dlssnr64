@@ -159,8 +159,10 @@ PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
       run.hdr_uniforms_ready && run.hdr != nullptr &&
       run.hdr->ResolvedFormat() != HdrFormat::Sdr &&
       run.hdr_uniforms.local_exposure_strength > 0.0f &&
-      self->resources_.GetEffectiveExposureMap() != nullptr) {
-    ID3D12Resource* local_map = self->resources_.GetEffectiveExposureMap();
+      self->resources_.GetPackedOutput() != nullptr &&
+      self->resources_.GetGlobalHdrCarrier() != nullptr) {
+    ID3D12Resource* local_carrier = self->resources_.GetPackedOutput();
+    ID3D12Resource* global_carrier = self->resources_.GetGlobalHdrCarrier();
     if (!self->resources_.EnsureLocalExposureMeanResources(
             run.device, run.width, run.height)) {
       self->FailForStep("failed to create local exposure reduction resources");
@@ -177,11 +179,13 @@ PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
 
     ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
     ID3D12Resource* source_srvs[kSrvCount] = {
-        local_map, local_map, local_map, local_map};
+        local_carrier, global_carrier, local_carrier, local_carrier};
     ID3D12Resource* partial_sums =
         self->resources_.GetLocalExposurePartialSums();
     ID3D12Resource* partial_uavs[kUavCount] = {partial_sums};
-    self->command_.Transition(list, local_map,
+    self->command_.Transition(list, local_carrier,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    self->command_.Transition(list, global_carrier,
                               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     self->command_.Transition(list, partial_sums,
                               D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
