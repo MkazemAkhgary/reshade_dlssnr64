@@ -109,15 +109,38 @@ static ID3D12Resource* GetResourceParameter(NVSDK_NGX_Parameter* parameters,
   return nullptr;
 }
 
-static bool IsSupportedPreDlssColor(ID3D12Resource* color,
-                                    NVSDK_NGX_Parameter* parameters) {
-  if (color == nullptr || parameters == nullptr) return false;
+enum class PreDlssColorRejection : size_t {
+  None,
+  MissingColor,
+  MissingParameters,
+  NotTexture2D,
+  ArraySize,
+  MipCount,
+  SampleCount,
+  EmptyExtent,
+  NonZeroSubrectOrigin,
+  WidthMismatch,
+  HeightMismatch,
+  Count,
+};
+
+static PreDlssColorRejection GetPreDlssColorRejection(
+    ID3D12Resource* color,
+    NVSDK_NGX_Parameter* parameters) {
+  if (color == nullptr) return PreDlssColorRejection::MissingColor;
+  if (parameters == nullptr) return PreDlssColorRejection::MissingParameters;
+
   const D3D12_RESOURCE_DESC desc = color->GetDesc();
-  if (desc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D ||
-      desc.DepthOrArraySize != 1 || desc.MipLevels != 1 ||
-      desc.SampleDesc.Count != 1 || desc.Width == 0 || desc.Height == 0) {
-    return false;
-  }
+  if (desc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D)
+    return PreDlssColorRejection::NotTexture2D;
+  if (desc.DepthOrArraySize != 1)
+    return PreDlssColorRejection::ArraySize;
+  if (desc.MipLevels != 1)
+    return PreDlssColorRejection::MipCount;
+  if (desc.SampleDesc.Count != 1)
+    return PreDlssColorRejection::SampleCount;
+  if (desc.Width == 0 || desc.Height == 0)
+    return PreDlssColorRejection::EmptyExtent;
 
   unsigned int input_width = 0;
   unsigned int input_height = 0;
@@ -128,11 +151,40 @@ static bool IsSupportedPreDlssColor(ID3D12Resource* color,
   parameters->Get(NVSDK_NGX_Parameter_DLSS_Input_Color_Subrect_Base_X, &base_x);
   parameters->Get(NVSDK_NGX_Parameter_DLSS_Input_Color_Subrect_Base_Y, &base_y);
 
-  // Writing the whole Color resource is only safe when NGX consumes the whole
-  // texture. Never overwrite unrelated pixels in an atlas/subrect allocation.
-  return base_x == 0 && base_y == 0 &&
-         (input_width == 0 || input_width == desc.Width) &&
-         (input_height == 0 || input_height == desc.Height);
+  if (base_x != 0 || base_y != 0)
+    return PreDlssColorRejection::NonZeroSubrectOrigin;
+  if (input_width != 0 && input_width != desc.Width)
+    return PreDlssColorRejection::WidthMismatch;
+  if (input_height != 0 && input_height != desc.Height)
+    return PreDlssColorRejection::HeightMismatch;
+  return PreDlssColorRejection::None;
+}
+
+static void LogPreDlssColorRejection(PreDlssColorRejection rejection) {
+  static bool logged[static_cast<size_t>(PreDlssColorRejection::Count)] = {};
+  static const char* const messages[] = {
+      "",
+      "Pre-DLSS skipped: NGX Color resource is null",
+      "Pre-DLSS skipped: NGX parameter block is null",
+      "Pre-DLSS skipped: NGX Color must be a Texture2D resource",
+      "Pre-DLSS skipped: NGX Color texture array size must be 1",
+      "Pre-DLSS skipped: NGX Color mip count must be 1",
+      "Pre-DLSS skipped: NGX Color sample count must be 1",
+      "Pre-DLSS skipped: NGX Color has zero width or height",
+      "Pre-DLSS skipped: NGX Color subrect origin must be (0,0)",
+      "Pre-DLSS skipped: NGX Color width differs from allocated texture width",
+      "Pre-DLSS skipped: NGX Color height differs from allocated texture height",
+  };
+
+  const size_t index = static_cast<size_t>(rejection);
+  if (rejection == PreDlssColorRejection::None ||
+      index >= static_cast<size_t>(PreDlssColorRejection::Count) ||
+      logged[index]) {
+    return;
+  }
+
+  logged[index] = true;
+  reshade::log::message(reshade::log::level::warning, messages[index]);
 }
 
 static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
@@ -196,10 +248,10 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
     } else {
       ID3D12Resource* color =
           GetResourceParameter(parameters, NVSDK_NGX_Parameter_Color);
-      if (!IsSupportedPreDlssColor(color, parameters)) {
-        static bool logged_pre_color_unsupported = false;
-        LogOnce(logged_pre_color_unsupported, reshade::log::level::warning,
-                "Pre-DLSS skipped: NGX Color must be a full-resource, single-sample 2D texture");
+      const PreDlssColorRejection rejection =
+          GetPreDlssColorRejection(color, parameters);
+      if (rejection != PreDlssColorRejection::None) {
+        LogPreDlssColorRejection(rejection);
       } else {
         AddonController::Get().OnPreDlssEvaluate(
             work_list, color, exposure_texture);
