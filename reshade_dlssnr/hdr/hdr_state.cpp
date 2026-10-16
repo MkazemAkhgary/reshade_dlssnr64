@@ -440,6 +440,7 @@ void HdrState::BeginFrame(CommandContext& cmd,
   constants.histogram.AdaptiveFilter.y = adaptive_filter.depth_near;
   constants.histogram.AdaptiveFilter.z = adaptive_filter.depth_far;
   constants.histogram.AdaptiveFilter.w = depth_inverted ? 1.0f : 0.0f;
+  constants.histogram.Settings.x = hdr_settings.faster_metering ? 1.0f : 0.0f;
 
   if (!codec.Dispatch("ZeroHistogram", command_list, constants, srvs, uavs,
                       3, 1, 1)) {

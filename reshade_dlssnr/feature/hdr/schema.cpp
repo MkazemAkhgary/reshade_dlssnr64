@@ -63,6 +63,9 @@ void RegisterHdrSchema(ctl::Schema& schema) {
   hdr.Add<ctl::IntSetting>(kMeasureInterval, "Measure Interval", 4)
       .Range(1, 32)
       .Tooltip("How often exposure histograms are measured, in frames.");
+  hdr.Add<ctl::BoolSetting>(kFasterMetering, "Faster HDR Metering", false)
+      .Tooltip("Sample one pixel from each 2x2 block during histogram metering. "
+               "Lower GPU cost, but small isolated highlights may be missed.");
   hdr.Add<ctl::FloatSetting>(kHighlightHeadroom, "Highlight Headroom", 8.0f)
       .Range(0.25f, 16.0f)
       .Tooltip("Scales the effective HDR peak used by BT.2446C. This does not "

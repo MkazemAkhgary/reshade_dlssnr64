@@ -1,5 +1,6 @@
 #include "common/cbuffer.hlsli"
 #include "common/registers.hlsli"
+#include "common/bindings.hlsli"
 #include "common/color.hlsli"
 #include "common/luma.hlsli"
 
@@ -56,7 +57,11 @@ void CSMain(uint3 gtid : SV_GroupThreadID,
     }
     GroupMemoryBarrierWithGroupSync();
 
-    if (dtid.x < Width && dtid.y < Height) {
+    const bool within_frame = dtid.x < Width && dtid.y < Height;
+    const bool sampled_pixel =
+        ! (kFasterHdrMetering > 0.5) ||
+        ((dtid.x & 1u) == 0u && (dtid.y & 1u) == 0u);
+    if (within_frame && sampled_pixel) {
         const float3 encoded = gSource.Load(int3(dtid.xy, 0)).rgb;
         const float3 linear_rgb = DecodeToLinear(
             encoded, (int)(kHistogramFormat + 0.5), kSdrReferenceWhiteNits);

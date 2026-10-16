@@ -10,7 +10,7 @@ static_assert(sizeof(ResidualBlock) == 32);
 static_assert(sizeof(HdrBlock) == 80);
 static_assert(sizeof(EasuBlock) == 48);
 static_assert(sizeof(RcasBlock) == 16);
-static_assert(sizeof(HistogramBlock) == 32);
+static_assert(sizeof(HistogramBlock) == 48);
 static_assert(sizeof(TemporalBlock) == 96);
 
 constexpr size_t kHeaderSize = 16;
@@ -33,5 +33,5 @@ static_assert(offsetof(ComputeConstants, histogram) == kHistogramOffset);
 static_assert(offsetof(ComputeConstants, temporal) == kTemporalOffset);
 
 static_assert(kHistogramOffset == 272);
-static_assert(kTemporalOffset == 304);
+static_assert(kTemporalOffset == 320);
 static_assert(sizeof(ComputeConstants) == 512);

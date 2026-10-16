@@ -72,3 +72,5 @@
 #define kTemporalGuideSize              temporal.GuideBaseSize.zw
 
 #define kTemporalUseValidatedHistory temporal.HistoryControl.x
+
+#define kFasterHdrMetering histogram.Settings.x
