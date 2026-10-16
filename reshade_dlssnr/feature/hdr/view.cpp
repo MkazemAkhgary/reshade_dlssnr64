@@ -40,6 +40,7 @@ HdrSnapshotView Read(const ctl::ValueStore& store,
   s.format = static_cast<HdrFormat>(store.Read(hdr, key, kFormat).as_int);
   s.measure_interval = store.Read(hdr, key, kMeasureInterval).as_int;
   s.highlight_headroom = store.Read(hdr, key, kHighlightHeadroom).as_float;
+  s.detailed_statistics = store.Read(hdr, key, kDetailedStatistics).as_bool;
   s.bt2446_k1 = store.Read(hdr, key, kBt2446K1).as_float;
   s.bt2446_k2 = store.Read(hdr, key, kBt2446K2).as_float;
   s.bt2446_k3 = store.Read(hdr, key, kBt2446K3).as_float;

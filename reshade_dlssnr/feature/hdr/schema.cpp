@@ -94,6 +94,8 @@ void RegisterHdrSchema(ctl::Schema& schema) {
   hdr.Add<ctl::FloatSetting>(kGainMaxLog2, "Gain Max", 6.0f)
       .Range(0.0f, 32.0f)
       .Tooltip("Configured log2 gain metadata maximum.");
+  hdr.Add<ctl::BoolSetting>(kDetailedStatistics, "Detailed HDR Statistics", false)
+      .Tooltip("Collect full-frame gain-map range and excursion statistics. Adds two GPU dispatches when enabled.");
 
   // Live HDR measurement readout. Placed after the tuning rows so the
   // section reads top-to-bottom as "configure, then observe".

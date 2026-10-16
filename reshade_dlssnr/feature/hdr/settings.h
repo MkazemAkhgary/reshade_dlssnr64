@@ -33,6 +33,7 @@ inline constexpr const char* kBt2446K4 = "bt2446_k4";
 inline constexpr const char* kBt2446Crosstalk = "bt2446_crosstalk";
 inline constexpr const char* kGainMinLog2 = "gain_min_log2";
 inline constexpr const char* kGainMaxLog2 = "gain_max_log2";
+inline constexpr const char* kDetailedStatistics = "detailed_statistics";
 
 // Section "HDR Game Exposure".
 inline constexpr const char* kGameEnabled = "enabled";

@@ -80,6 +80,7 @@ struct HdrSettings {
   HdrFormat format = HdrFormat::Auto;
   int measure_interval = 4;
   float highlight_headroom = 8.0f;
+  bool detailed_statistics = false;
 
   GameExposureLayerSettings game_exposure = {};
   AdaptiveExposureLayerSettings adaptive_exposure = {};

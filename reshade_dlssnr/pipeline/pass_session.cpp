@@ -1218,7 +1218,7 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
   ID3D12Resource* source = run.model_input;
   ID3D12Resource* packed = self->resources_.GetPackedOutput();
   ID3D12Resource* stats = self->resources_.GetGainStats();
-  if (source == nullptr || packed == nullptr || stats == nullptr) {
+  if (source == nullptr || packed == nullptr) {
     self->FailForStep("HDR gain-map resources are unavailable");
     return PipelineStatus::Fail;
   }
@@ -1274,9 +1274,16 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
                               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   }
 
-  // Statistics are intentionally a second pass. The RGBA32F carrier's RGB can
-  // legitimately contain super-white SDR values. Those excursions and the
-  // multiplier's log2 range are reported separately; neither alters the carrier.
+  // Only the first active pass publishes frame-level statistics, and the
+  // expensive diagnostic work is opt-in. The shader reduces each thread group
+  // before touching the global counters.
+  if (!run.hdr_state.detailed_statistics || !run.is_first_pass) {
+    return PipelineStatus::Ok;
+  }
+  if (stats == nullptr) {
+    self->FailForStep("HDR gain-map statistics resource is unavailable");
+    return PipelineStatus::Fail;
+  }
   ID3D12Resource* stats_srvs[kSrvCount] = {packed, packed, packed, packed};
   ID3D12Resource* stats_uavs[kUavCount] = {stats};
   self->command_.Transition(run.list, stats,
