@@ -1,5 +1,7 @@
 #include "model/model_input.h"
 
+#include "grade/grade.h"
+
 namespace reshade_dlssnr::model_pipeline {
 
 bool PrepareInput(
@@ -15,7 +17,8 @@ bool PrepareInput(
     unsigned int work_width,
     unsigned int work_height,
     bool gain_map_source,
-    bool allow_identity) {
+    bool allow_identity,
+    const GradeSettings* fused_grade) {
   if (out_model_color == nullptr || out_model_output == nullptr ||
       codec == nullptr || command_list == nullptr || full_input == nullptr) {
     return false;
@@ -40,6 +43,8 @@ bool PrepareInput(
   constants.Width = work_width;
   constants.Height = work_height;
   constants.shader.Params0.w = gain_map_source ? 1.0f : 0.0f;
+  if (fused_grade != nullptr && fused_grade->enabled)
+    SetGradeConstants(constants, *fused_grade);
   const char* pass_name = "PrepareModelInput";
 
   state.Transition(command_list, full_input,

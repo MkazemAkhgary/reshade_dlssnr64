@@ -219,6 +219,7 @@ struct PassRun {
   const Settings* settings = nullptr;
   int debug_view = 0;
   bool pass_bound = false;
+  bool input_grade_fused = false;
   // The pass this run belongs to, set once by PrepareRun. Steps that
   // need to correlate with the store or with pass_order read this.
   feature::pass::PassId pass_id = 0;

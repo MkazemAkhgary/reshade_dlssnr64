@@ -10,6 +10,11 @@
 
 namespace reshade_dlssnr::model_pipeline {
 
+// Writes the grade transform to the shared compute constants. The caller
+// supplies its own domain-specific format/exposure flags.
+void SetGradeConstants(ComputeConstants& constants, const GradeSettings& grade);
+
+
 // In place because every call site wants the result where the original was.
 // A compute dispatch cannot read and write one resource, so the source is
 // copied into `scratch` first and the dispatch reads that. Leaves `target`

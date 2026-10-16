@@ -3,6 +3,9 @@
 #include "common/registers.hlsli"
 #include "common/color.hlsli"
 #include "common/box_filter.hlsli"
+#include "common/luma.hlsli"
+#include "common/math.hlsli"
+#include "common/grade.hlsli"
 
 Texture2D<float4> gSource : register(t0);
 RWTexture2D<float4> gOutput : register(u0);
@@ -40,6 +43,17 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         // SDR path: the source is already in the target (sRGB) space, so pass
         // it through without an extra transfer-function conversion.
         result = color.rgb;
+    }
+
+    if (kGradeEnabled >= 0.5)
+    {
+        float3 linear_result = SrgbToLinearExt(result);
+        linear_result = GradeLinearFwd(linear_result);
+        const float peak = max(linear_result.r,
+                               max(linear_result.g, linear_result.b));
+        if (peak > 1.0)
+            linear_result *= 1.0 / peak;
+        result = LinearToSrgbExt(linear_result);
     }
 
     gOutput[id.xy] = float4(result, 1.0);

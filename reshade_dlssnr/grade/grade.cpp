@@ -4,6 +4,21 @@
 
 namespace reshade_dlssnr::model_pipeline {
 
+void SetGradeConstants(ComputeConstants& constants, const GradeSettings& grade) {
+  constants.grade.Enabled = grade.enabled ? 1.0f : 0.0f;
+  constants.grade.Luma = grade.luma;
+  constants.grade.Chroma = grade.chroma;
+  constants.grade.LumaMode = static_cast<float>(static_cast<int>(grade.luma_mode));
+  constants.grade.ChromaMode = static_cast<float>(static_cast<int>(grade.chroma_mode));
+  constants.grade.BlackLevel = grade.black_level;
+  constants.grade.WhiteLevel = grade.white_level;
+  constants.grade.Contrast = grade.contrast;
+  constants.grade.Shadows = grade.shadows;
+  constants.grade.Highlights = grade.highlights;
+  constants.grade.Format = 0.0f;
+  constants.grade.RestoreExposure = 0.0f;
+}
+
 bool ApplyGrade(CommandContext& state,
                 ID3D12GraphicsCommandList* command_list,
                 ComputeEngine* codec,
@@ -26,20 +41,8 @@ bool ApplyGrade(CommandContext& state,
   constants.Width = width;
   constants.Height = height;
   // This path also runs when only exposure restoration is enabled.
-  constants.grade.Enabled = grade.enabled ? 1.0f : 0.0f;
-  constants.grade.Luma = grade.luma;
-  constants.grade.Chroma = grade.chroma;
-  constants.grade.LumaMode =
-      static_cast<float>(static_cast<int>(grade.luma_mode));
-  constants.grade.ChromaMode =
-      static_cast<float>(static_cast<int>(grade.chroma_mode));
-  constants.grade.BlackLevel = grade.black_level;
-  constants.grade.WhiteLevel = grade.white_level;
-  constants.grade.Contrast = grade.contrast;
-  constants.grade.Shadows = grade.shadows;
-  constants.grade.Highlights = grade.highlights;
-  constants.grade.Format =
-      static_cast<float>(format_code);
+  SetGradeConstants(constants, grade);
+  constants.grade.Format = static_cast<float>(format_code);
   constants.grade.RestoreExposure = restore_exposure ? 1.0f : 0.0f;
 
   state.Transition(command_list, target, D3D12_RESOURCE_STATE_COPY_SOURCE);

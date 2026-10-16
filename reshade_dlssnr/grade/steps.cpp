@@ -93,7 +93,7 @@ PipelineStatus PassSession::StepGradeModelInput(PassRun& run) {
   }
 
   const GradeSettings& grade = run.grade_input;
-  if (!grade.enabled) return PipelineStatus::Ok;
+  if (run.input_grade_fused || !grade.enabled) return PipelineStatus::Ok;
 
   TRACE_EVT(run.session, "grade_model_input pass=%u luma=%.3f chroma=%.3f",
             self->pass_id_, grade.luma, grade.chroma);

@@ -6,6 +6,7 @@
 #include <cstdint>
 
 #include "command_context.h"
+#include "grade/settings.h"
 #include "compute_engine.h"
 #include "pass_resources.h"
 #include "shaders/common/color_constants.h"
@@ -60,6 +61,7 @@ bool PrepareInput(
     unsigned int work_width,
     unsigned int work_height,
     bool gain_map_source,
-    bool allow_identity = false);
+    bool allow_identity = false,
+    const GradeSettings* fused_grade = nullptr);
 
 }  // namespace reshade_dlssnr::model_pipeline

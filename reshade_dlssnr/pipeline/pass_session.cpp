@@ -1348,6 +1348,15 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
   unsigned int eval_width = run.width;
   unsigned int eval_height = run.height;
 
+  const bool needs_pre_grade_snapshot =
+      run.grade_input.enabled && run.settings != nullptr &&
+      DebugViewNeedsPreGradeInput(run.debug_view) &&
+      self->pass_id_ == run.settings->active_pass_id;
+  const GradeSettings* fused_grade =
+      run.grade_input.enabled && !needs_pre_grade_snapshot
+          ? &run.grade_input : nullptr;
+  run.input_grade_fused = fused_grade != nullptr;
+
   if (!model_pipeline::PrepareInput(
           self->command_, self->StageList(run, self->command_),
           self->resources_, run.codec, model_input,
@@ -1355,7 +1364,7 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
           run.work_width, run.work_height,
           run.hdr_uniforms_ready && run.hdr != nullptr &&
               run.hdr->ResolvedFormat() != HdrFormat::Sdr,
-          run.pass_bound && !run.grade_input.enabled)) {
+          run.pass_bound && !run.grade_input.enabled, fused_grade)) {
     self->FailForStep("failed to prepare model input");
     return PipelineStatus::Fail;
   }
@@ -1384,6 +1393,8 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
     reference_constants.Width = run.work_width;
     reference_constants.Height = run.work_height;
     reference_constants.shader.Params0.w = 1.0f;
+    if (run.input_grade_fused)
+      model_pipeline::SetGradeConstants(reference_constants, run.grade_input);
     ID3D12Resource* reference_srvs[kSrvCount] = {
         global_carrier, global_carrier, global_carrier, global_carrier};
     ID3D12Resource* reference_uavs[kUavCount] = {unlifted_input};
