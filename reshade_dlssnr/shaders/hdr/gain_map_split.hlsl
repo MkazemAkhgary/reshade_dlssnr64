@@ -8,7 +8,10 @@
 
 Texture2D<float4> gSource : register(t0);
 RWTexture2D<float4> gOutput : register(u0);
+RWTexture2D<float4> gGlobalOutput : register(u1);
 SamplerState s0 : register(s0);
+
+#define kWriteGlobalCarrier shader.Params1.x
 
 #include "common/hdr_local_exposure.hlsli"
 
@@ -57,4 +60,10 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         ? rcp(carrier_scale)
         : 1.0;
     gOutput[id.xy] = float4(sdr, carrier_to_hdr_scale);
+    if (kWriteGlobalCarrier > 0.5) {
+        const float global_to_hdr_scale = global_scale > 0.0
+            ? rcp(global_scale)
+            : 1.0;
+        gGlobalOutput[id.xy] = float4(global_sdr, global_to_hdr_scale);
+    }
 }

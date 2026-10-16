@@ -176,7 +176,8 @@ bool ComputeEngine::BindAndDispatch(
     D3D12_CPU_DESCRIPTOR_HANDLE handle = cpu_handle;
     handle.ptr += static_cast<SIZE_T>(kSrvCount + i) *
                   descriptor_size_;
-    CreateUnorderedAccessView(uavs[i], handle);
+    ID3D12Resource* resource = uavs[i] != nullptr ? uavs[i] : uavs[0];
+    CreateUnorderedAccessView(resource, handle);
   }
 
   D3D12_CPU_DESCRIPTOR_HANDLE cbv_handle = cpu_handle;
@@ -483,9 +484,7 @@ bool ComputeEngine::Dispatch(
   for (uint32_t i = 0; i < kSrvCount; ++i) {
     if (srvs[i] == nullptr) return false;
   }
-  for (uint32_t i = 0; i < kUavCount; ++i) {
-    if (uavs[i] == nullptr) return false;
-  }
+  if (uavs[0] == nullptr) return false;
 
   ID3D12PipelineState* pso = nullptr;
 

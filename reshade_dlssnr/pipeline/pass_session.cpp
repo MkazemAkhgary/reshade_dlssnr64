@@ -1242,9 +1242,21 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
   constants.hdr.LocalExposure.z = run.hdr_uniforms.local_max_darken;
   constants.hdr.LocalExposure.w = run.hdr_uniforms.midtone;
 
+  ID3D12Resource* global_carrier = nullptr;
+  if (run.hdr_uniforms.local_exposure_strength > 0.0f) {
+    global_carrier = self->resources_.GetGlobalHdrCarrier();
+    if (global_carrier == nullptr) {
+      self->FailForStep("unlifted HDR carrier resource is unavailable");
+      return PipelineStatus::Fail;
+    }
+    constants.shader.Params1.x = 1.0f;
+    self->command_.Transition(run.list, global_carrier,
+                              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  }
+
   ID3D12Resource* srvs[kSrvCount] = {};
   BindLocalExposureInputs(run, constants, source, srvs);
-  ID3D12Resource* uavs[kUavCount] = {packed};
+  ID3D12Resource* uavs[kUavCount] = {packed, global_carrier};
   self->command_.Transition(run.list, source,
                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   self->command_.Transition(run.list, packed,
@@ -1256,24 +1268,7 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
   self->command_.UavBarrier(run.list, packed);
   self->command_.Transition(run.list, packed,
                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-  if (run.hdr_uniforms.local_exposure_strength > 0.0f) {
-    ID3D12Resource* global_carrier = self->resources_.GetGlobalHdrCarrier();
-    if (global_carrier == nullptr) {
-      self->FailForStep("unlifted HDR carrier resource is unavailable");
-      return PipelineStatus::Fail;
-    }
-
-    ComputeConstants global_constants = constants;
-    global_constants.hdr.LocalExposure.x = 0.0f;
-    self->command_.Transition(run.list, global_carrier,
-                              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    ID3D12Resource* global_uavs[kUavCount] = {global_carrier};
-    if (!run.codec->Dispatch("GainMapSplit", run.list, global_constants,
-                             srvs, global_uavs)) {
-      self->FailForStep("failed to build unlifted HDR reference carrier");
-      return PipelineStatus::Fail;
-    }
+  if (global_carrier != nullptr) {
     self->command_.UavBarrier(run.list, global_carrier);
     self->command_.Transition(run.list, global_carrier,
                               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
