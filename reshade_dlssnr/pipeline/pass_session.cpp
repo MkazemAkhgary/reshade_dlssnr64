@@ -60,6 +60,7 @@ uint64_t TemporalSettingsSignature(const PassRun& run) {
   HashTemporalValue(&hash, p.temporal_depth_rel_threshold);
   HashTemporalValue(&hash, p.temporal_max_displacement);
   HashTemporalValue(&hash, p.temporal_max_invalid_percent);
+  HashTemporalValue(&hash, p.temporal_fp16_history);
   HashTemporalValue(&hash, p.local_tone);
   HashTemporalValue(&hash, p.local_structure);
   HashTemporalValue(&hash, p.skin_structure);
@@ -1477,7 +1478,7 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
   bool resources_reset = false;
   if (!self->resources_.EnsureTemporalResources(
           run.device, input_desc, run.work_width, run.work_height,
-          &resources_reset)) {
+          run.pass_state.temporal_fp16_history, &resources_reset)) {
     // The feature is optional; do not turn a failed temporal allocation into
     // a pass failure. Fresh NGX evaluation remains the rendering fallback.
     self->temporal_history_valid_ = false;

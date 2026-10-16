@@ -45,6 +45,7 @@ inline constexpr const char* kTemporalDepthAbsThreshold = "temporal_depth_abs_th
 inline constexpr const char* kTemporalDepthRelThreshold = "temporal_depth_rel_threshold";
 inline constexpr const char* kTemporalMaxDisplacement = "temporal_max_displacement";
 inline constexpr const char* kTemporalMaxInvalidPercent = "temporal_max_invalid_percent";
+inline constexpr const char* kTemporalFp16History = "temporal_fp16_history";
 
 // Category "Advanced".
 inline constexpr const char* kSoftCompressionEnabled = "soft_compression_enabled";

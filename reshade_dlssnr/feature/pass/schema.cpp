@@ -291,6 +291,11 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .Category(kCatTemporal)
       .Tooltip("Maximum invalid or photometrically mismatched pixel fraction "
                "allowed before refreshing the model.");
+  pass.Add<ctl::BoolSetting>(kTemporalFp16History, "FP16 Edit History", false)
+      .EnableWhen(&TemporalEnabled)
+      .Category(kCatTemporal)
+      .Tooltip("Store temporal edit/candidate textures in FP16. Reduces history "
+               "bandwidth and memory with small quantization differences on reused edits.");
 
   // --- Advanced ----------------------------------------------------------
   pass.Add<ctl::BoolSetting>(kSoftCompressionEnabled, "Soft Compression", false)

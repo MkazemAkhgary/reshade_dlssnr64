@@ -33,6 +33,7 @@ PassSnapshot Read(const ctl::ValueStore& store, const ctl::InstanceKey& key) {
       store.Read(section, key, kTemporalMaxDisplacement).as_float;
   p.temporal_max_invalid_percent =
       store.Read(section, key, kTemporalMaxInvalidPercent).as_float;
+  p.temporal_fp16_history = store.Read(section, key, kTemporalFp16History).as_bool;
   p.local_tone = store.Read(section, key, kLocalTone).as_float;
   p.local_structure = store.Read(section, key, kLocalStructure).as_float;
   p.skin_structure = store.Read(section, key, kSkinStructure).as_float;

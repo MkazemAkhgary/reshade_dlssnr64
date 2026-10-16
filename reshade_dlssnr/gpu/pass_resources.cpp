@@ -395,15 +395,19 @@ bool PassResources::EnsureUnliftedWorkingInput(
 
 bool PassResources::EnsureTemporalResources(
     ID3D12Device* device, const D3D12_RESOURCE_DESC& input_desc,
-    unsigned int width, unsigned int height, bool* out_reset_history) {
+    unsigned int width, unsigned int height, bool use_fp16_history,
+    bool* out_reset_history) {
   if (out_reset_history != nullptr) *out_reset_history = false;
   if (device == nullptr || width == 0 || height == 0) return false;
 
+  const DXGI_FORMAT requested_edit_format = use_fp16_history
+      ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R32G32B32A32_FLOAT;
   const bool matches = temporal_previous_input != nullptr &&
       temporal_previous_edit != nullptr && temporal_previous_depth != nullptr &&
       temporal_candidate != nullptr && temporal_validated_candidate != nullptr &&
       temporal_stats != nullptr && temporal_width == width &&
       temporal_height == height && temporal_input_format == input_desc.Format &&
+      temporal_edit_format == requested_edit_format &&
       temporal_previous_input->GetDesc().Width == input_desc.Width &&
       temporal_previous_input->GetDesc().Height == input_desc.Height;
   if (matches) return true;
@@ -444,7 +448,7 @@ bool PassResources::EnsureTemporalResources(
   edit_desc.Height = height;
   edit_desc.DepthOrArraySize = 1;
   edit_desc.MipLevels = 1;
-  edit_desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+  edit_desc.Format = requested_edit_format;
   edit_desc.SampleDesc.Count = 1;
   edit_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
   if (!CreateUavTexture(device, edit_desc, temporal_previous_edit.GetAddressOf()) ||
@@ -482,6 +486,7 @@ bool PassResources::EnsureTemporalResources(
   temporal_width = width;
   temporal_height = height;
   temporal_input_format = input_desc.Format;
+  temporal_edit_format = requested_edit_format;
   trace::NameResource(temporal_previous_input.Get(), "temporal_previous_input");
   trace::NameResource(temporal_previous_edit.Get(), "temporal_previous_edit");
   trace::NameResource(temporal_previous_depth.Get(), "temporal_previous_depth");
@@ -579,6 +584,7 @@ void PassResources::Shutdown() {
   local_exposure_partial_height = 0;
   temporal_width = temporal_height = 0;
   temporal_input_format = DXGI_FORMAT_UNKNOWN;
+  temporal_edit_format = DXGI_FORMAT_UNKNOWN;
   working_width = 0;
   working_height = 0;
   working_format = DXGI_FORMAT_UNKNOWN;

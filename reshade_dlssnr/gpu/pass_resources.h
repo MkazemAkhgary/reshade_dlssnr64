@@ -88,6 +88,7 @@ class PassResources {
   unsigned int temporal_width = 0;
   unsigned int temporal_height = 0;
   DXGI_FORMAT temporal_input_format = DXGI_FORMAT_UNKNOWN;
+  DXGI_FORMAT temporal_edit_format = DXGI_FORMAT_UNKNOWN;
   unsigned int effective_exposure_width = 0;
   unsigned int effective_exposure_height = 0;
   unsigned int working_width = 0;
@@ -132,7 +133,8 @@ class PassResources {
   // any temporal resource had to be recreated.
   bool EnsureTemporalResources(
       ID3D12Device* device, const D3D12_RESOURCE_DESC& input_desc,
-      unsigned int width, unsigned int height, bool* out_reset_history);
+      unsigned int width, unsigned int height, bool use_fp16_history,
+      bool* out_reset_history);
 
   // Ensures scratch slot `index` matches the given size and format.
   bool EnsureScratch(
