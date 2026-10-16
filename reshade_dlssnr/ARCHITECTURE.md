@@ -423,7 +423,7 @@ The layout intentionally avoids `float2`, `float3`, `packoffset`, platform heade
 
 Local Exposure uses a fixed 4-pixel neighborhood and four taps. The optional precomputed-luma path transforms each source pixel once and bilinearly filters the resulting scalar field; this changes the order of filtering and nonlinear transfer, so it is disabled by default.
 
-The model input downsample is `BoxAreaAverage` from `shaders/common/box_filter.hlsli`. It uses the exact source footprint covered by each destination pixel, including fractional edge coverage, and fetches with `Texture2D.Load`. It does not rely on the global linear sampler.
+The model input downsample is `BoxAreaAverage` from `shaders/common/box_filter.hlsli`. It uses exact source footprints and `Texture2D.Load`. Common exact integer ratios up to 4:1 use fixed equal-weight loads; arbitrary scales and fractional edge coverage retain the general footprint path. The integer path is mathematically equivalent, with only summation-order rounding differences.
 
 The non-HDR `PrepareModelInput` path therefore treats the source as already in the model's target sRGB space and passes the averaged RGB through unchanged. The HDR carrier path averages the linear carrier, applies the reversible model highlight/gamut fit, and applies `LinearToSrgb` before the model sees it. Normal colors are unchanged; super-whites are smoothly compressed toward white so emissive highlights keep a white/yellow core.
 

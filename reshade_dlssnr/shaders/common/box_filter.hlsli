@@ -5,6 +5,32 @@ float4 BoxAreaAverage(Texture2D<float4> source,
                       uint2 dst_size,
                       uint2 src_size)
 {
+    // Exact integer downscales have equal-area footprints. Handle the common
+    // 1:1 through 4:1 ratios with fixed-load paths before the fractional path.
+    if (dst_size.x > 0u && dst_size.y > 0u &&
+        src_size.x % dst_size.x == 0u && src_size.y % dst_size.y == 0u)
+    {
+        const uint ratio_x = src_size.x / dst_size.x;
+        const uint ratio_y = src_size.y / dst_size.y;
+        if (ratio_x >= 1u && ratio_x <= 4u &&
+            ratio_y >= 1u && ratio_y <= 4u)
+        {
+            float4 exact_sum = 0.0;
+            const uint2 base = dst_xy * uint2(ratio_x, ratio_y);
+            [unroll]
+            for (uint y = 0u; y < 4u; ++y)
+            {
+                [unroll]
+                for (uint x = 0u; x < 4u; ++x)
+                {
+                    if (x < ratio_x && y < ratio_y)
+                        exact_sum += source.Load(int3(base + uint2(x, y), 0));
+                }
+            }
+            return exact_sum / (float)(ratio_x * ratio_y);
+        }
+    }
+
     const float2 src_min = float2(dst_xy) *
                            (float2(src_size) / float2(dst_size));
     const float2 src_max = (float2(dst_xy) + 1.0) *
