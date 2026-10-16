@@ -87,6 +87,8 @@ uint64_t TemporalSettingsSignature(const PassRun& run) {
   HashTemporalValue(&hash, run.hdr_state.bt2446_crosstalk);
   HashTemporalValue(&hash, run.hdr_uniforms.format);
   HashTemporalValue(&hash, run.hdr_uniforms.local_exposure_strength);
+  HashTemporalValue(&hash, run.hdr_uniforms.local_precomputed_luma);
+  HashTemporalValue(&hash, run.hdr_uniforms.fp16_unlifted_reference);
   return hash;
 }
 
@@ -1406,10 +1408,13 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
 
   if (hdr_source && run.hdr_uniforms.local_exposure_strength > 0.0f) {
     ID3D12Resource* global_carrier = self->resources_.GetGlobalHdrCarrier();
+    D3D12_RESOURCE_DESC reference_desc =
+        self->resources_.GetWorkingInput()->GetDesc();
+    if (run.hdr_uniforms.fp16_unlifted_reference)
+      reference_desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
     if (global_carrier == nullptr ||
         !self->resources_.EnsureUnliftedWorkingInput(
-            run.device, self->resources_.GetWorkingInput()->GetDesc(),
-            run.work_width, run.work_height)) {
+            run.device, reference_desc, run.work_width, run.work_height)) {
       self->FailForStep("failed to create unlifted HDR composition reference");
       return PipelineStatus::Fail;
     }

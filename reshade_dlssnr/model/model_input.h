@@ -43,6 +43,7 @@ struct HdrUniforms {
   float local_max_darken = 2.0f;
   float midtone = 0.18f;
   bool local_precomputed_luma = false;
+  bool fp16_unlifted_reference = false;
 };
 
 // The source is already in the model domain (gain-map split happens in its

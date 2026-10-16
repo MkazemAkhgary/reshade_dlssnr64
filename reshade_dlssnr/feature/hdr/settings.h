@@ -61,6 +61,7 @@ inline constexpr const char* kLocalMaxDarken = "max_darken";
 inline constexpr const char* kLocalMidtone = "midtone";
 inline constexpr const char* kLocalRestoreGlobalExposure = "restore_global_exposure";
 inline constexpr const char* kLocalPrecomputedLuma = "precomputed_luma";
+inline constexpr const char* kLocalFp16Reference = "fp16_reference";
 
 }  // namespace hdr
 }  // namespace feature

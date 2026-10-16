@@ -29,6 +29,7 @@ PipelineStatus PassSession::StepBuildHdrUniforms(PassRun& run) {
   run.hdr_uniforms.local_max_darken = local.max_darken;
   run.hdr_uniforms.midtone = local.midtone;
   run.hdr_uniforms.local_precomputed_luma = local.precomputed_luma;
+  run.hdr_uniforms.fp16_unlifted_reference = local.fp16_reference;
   run.hdr_uniforms_ready = true;
   return PipelineStatus::Ok;
 }

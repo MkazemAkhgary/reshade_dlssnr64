@@ -59,6 +59,7 @@ struct LocalExposureLayerSettings {
   // inverse local exposure multiplier in linear light.
   bool restore_global_exposure = false;
   bool precomputed_luma = false;
+  bool fp16_reference = false;
 };
 
 // Encoding code consumed by the shaders: 0 sRGB, 1 scRGB, 2 HDR10.
