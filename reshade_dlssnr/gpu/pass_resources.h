@@ -103,6 +103,7 @@ class PassResources {
   }
 
   bool EnsureOutput(ID3D12Device* device, const D3D12_RESOURCE_DESC& desc);
+  void ReleaseOutput();
   bool EnsureCompositeOutput(ID3D12Device* device, const D3D12_RESOURCE_DESC& desc);
   bool EnsurePackedOutput(ID3D12Device* device, const D3D12_RESOURCE_DESC& desc);
   bool EnsureGainStats(ID3D12Device* device);
@@ -110,7 +111,8 @@ class PassResources {
       ID3D12Device* device,
       const D3D12_RESOURCE_DESC& desc,
       unsigned int work_width,
-      unsigned int work_height);
+      unsigned int work_height,
+      bool need_input);
   bool EnsureUnliftedWorkingInput(
       ID3D12Device* device,
       const D3D12_RESOURCE_DESC& desc,

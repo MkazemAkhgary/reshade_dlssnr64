@@ -73,6 +73,12 @@ bool PassResources::EnsureOutput(
   return true;
 }
 
+void PassResources::ReleaseOutput() {
+  Dispose(output);
+  output_width = 0;
+  output_height = 0;
+}
+
 bool PassResources::EnsureCompositeOutput(
     ID3D12Device* device,
     const D3D12_RESOURCE_DESC& desc) {
@@ -274,17 +280,19 @@ bool PassResources::EnsureWorkingResources(
     ID3D12Device* device,
     const D3D12_RESOURCE_DESC& desc,
     unsigned int work_width,
-    unsigned int work_height) {
-  if (working_input != nullptr &&
-      working_width == work_width &&
-      working_height == work_height &&
-      working_format == desc.Format) {
+    unsigned int work_height,
+    bool need_input) {
+  const bool output_matches = working_output != nullptr &&
+      working_width == work_width && working_height == work_height &&
+      working_format == desc.Format;
+  const bool input_matches = !need_input || working_input != nullptr;
+  if (output_matches && input_matches) {
+    if (!need_input && working_input != nullptr) {
+      Dispose(working_input);
+    }
     return true;
   }
 
-  // These are the resources most likely to be replaced on every slider
-  // drag, so they must go through the retire path rather than being
-  // released immediately (the GPU may still be reading them).
   Dispose(working_input);
   Dispose(working_output);
 
@@ -292,11 +300,13 @@ bool PassResources::EnsureWorkingResources(
   working_desc.Width = work_width;
   working_desc.Height = work_height;
 
-  ID3D12Resource* raw_input = nullptr;
-  if (!CreateUavTexture(device, working_desc, &raw_input)) {
-    return false;
+  if (need_input) {
+    ID3D12Resource* raw_input = nullptr;
+    if (!CreateUavTexture(device, working_desc, &raw_input)) {
+      return false;
+    }
+    working_input.Attach(raw_input);
   }
-  working_input.Attach(raw_input);
 
   ID3D12Resource* raw_output = nullptr;
   if (!CreateUavTexture(device, working_desc, &raw_output)) {
@@ -308,12 +318,14 @@ bool PassResources::EnsureWorkingResources(
   working_width = work_width;
   working_height = work_height;
   working_format = desc.Format;
-  trace::NameResource(working_input.Get(), "working_input");
+  if (working_input != nullptr) {
+    trace::NameResource(working_input.Get(), "working_input");
+  }
   trace::NameResource(working_output.Get(), "working_output");
-  TRACE_CMD(this, "create working res=%d/%d %ux%u",
-            trace::ResourceId(working_input.Get()),
-            trace::ResourceId(working_output.Get()),
-            working_width, working_height);
+  TRACE_CMD(this, "create working res=%d/%d %ux%u input=%d",
+            working_input != nullptr ? trace::ResourceId(working_input.Get()) : -1,
+            trace::ResourceId(working_output.Get()), working_width,
+            working_height, working_input != nullptr ? 1 : 0);
   return true;
 }
 

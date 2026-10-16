@@ -293,7 +293,8 @@ bool PassSession::EnsureFrameResources(
     ID3D12Device* device,
     const D3D12_RESOURCE_DESC& desc,
     unsigned int work_width,
-    unsigned int work_height) {
+    unsigned int work_height,
+    bool allow_identity_input) {
   if (!resources_.EnsureCompositeOutput(device, desc)) {
     reason_ = "failed to create DLSSNR composite resource";
     return false;
@@ -313,10 +314,18 @@ bool PassSession::EnsureFrameResources(
     model_desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
   }
 
-  if (!resources_.EnsureOutput(device, model_desc) ||
-      !resources_.EnsureWorkingResources(device, model_desc,
-                                         work_width, work_height)) {
-    reason_ = "failed to create DLSSNR model resources";
+  const bool identity_input = allow_identity_input && !hdr_frame &&
+      desc.Width == work_width && desc.Height == work_height;
+  if (identity_input) {
+    resources_.ReleaseOutput();
+  } else if (!resources_.EnsureOutput(device, model_desc)) {
+    reason_ = "failed to create DLSSNR model output";
+    return false;
+  }
+  if (!resources_.EnsureWorkingResources(device, model_desc,
+                                         work_width, work_height,
+                                         !identity_input)) {
+    reason_ = "failed to create DLSSNR working resources";
     return false;
   }
 
@@ -983,8 +992,11 @@ PipelineStatus PassSession::StepEnsureFrameResources(PassRun& run) {
 
   self->resources_.SetRetireCallback(&PassSession::RetireResourceCallback, self->guides_);
 
+  const bool allow_identity_input = run.pass_bound &&
+      !run.grade_input.enabled && run.hdr_state.format != HdrFormat::ScRgb &&
+      run.hdr_state.format != HdrFormat::Hdr10;
   if (!self->EnsureFrameResources(run.device, run.desc, run.work_width,
-                            run.work_height)) {
+                                  run.work_height, allow_identity_input)) {
     self->FailForStep(self->reason_);
     return PipelineStatus::Fail;
   }

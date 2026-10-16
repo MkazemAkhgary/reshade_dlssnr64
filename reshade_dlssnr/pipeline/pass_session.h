@@ -176,7 +176,8 @@ class PassSession {
       ID3D12Device* device,
       const D3D12_RESOURCE_DESC& desc,
       unsigned int work_width,
-      unsigned int work_height);
+      unsigned int work_height,
+      bool allow_identity_input);
 
   // Fills the real NGX parameter block with tuning values, resources, and
   // subrects for the current evaluation.
