@@ -210,20 +210,24 @@ There are three trace streams: Pre-DLSS evaluate work, Post-DLSS evaluate work, 
 
 ### Pre-DLSS injection
 
-The NGX hook resolves the feature handle and identifies DLSS Super Sampling before the real `EvaluateFeature` call. When any enabled pass targets Pre-DLSS, it reads `NVSDK_NGX_Parameter_Color` and accepts only a full-resource, single-sample 2D texture whose NGX render dimensions match the resource. Non-zero Color subrects and mismatched extents are skipped safely rather than overwriting unrelated pixels.
+The NGX hook resolves the feature handle and identifies DLSS Super Sampling before the real `EvaluateFeature` call. When any enabled pass targets Pre-DLSS, it reads the active Color region from the NGX render-subrect dimensions (falling back to Width/Height) and Color subrect base. A full-resource, single-sample, single-mip texture can be processed directly. Mip chains, multisampled textures, nonzero subrect origins, or render extents smaller than the allocation are normalized into a compact single-sample texture containing only the active region. Mip zero is used because NGX does not expose a Color mip selector here. MSAA Color is region-resolved to one sample before processing. If a nonzero subrect origin is supplied without a usable active width or height, the hook skips that input instead of guessing that the rest of the allocation is rendered content. The compact resource and temporary NGX parameter overrides remain valid through the real evaluation, and the original parameter block is restored immediately afterward. The original allocation is preserved for adapted inputs; when MSAA is resolved, the original per-sample contents cannot be reconstructed from the averaged image.
 
 ```text
 Game -> hooked NVSDK_NGX_D3D12_EvaluateFeature
-  -> capture the current NGX ExposureTexture pointer and Color input resource
-  -> AddonController::OnPreDlssEvaluate(native_list, color, exposure_texture)
-     -> shared HDR metering on Color using the published previous-frame Importance Mask
+  -> capture the current NGX ExposureTexture pointer and guide resources
+  -> resolve the active Color region and adapt it when needed
+     -> copy mip zero/subrect into a compact texture, or resolve MSAA into one sample
+     -> temporarily bind the compact texture and zero-based region to NGX parameters
+  -> AddonController::OnPreDlssEvaluate(native_list, active_color, exposure_texture)
+     -> shared HDR metering on only the active Color region
      -> one PassSession::RunStage(PreDLSS) per enabled Pre-DLSS pass
-        -> write the composed result back to the NGX Color input
+        -> write the composed result into the active-region texture NGX will consume
   -> restore the game's tracked command-list bindings
-  -> real NGX EvaluateFeature (game upscales the modified input)
+  -> real NGX EvaluateFeature (game upscales the processed active region)
+  -> restore the original NGX parameter values and retire the adapter after a queue fence
 ```
 
-Pre-DLSS records inline on the game's command list and never closes, submits, or waits on it. Its output resource is the game's input Color texture, and `WriteToGameResource` restores it to `NON_PIXEL_SHADER_RESOURCE` before NGX consumes it. At hook entry the game has already populated the current evaluation's depth and motion resources, so `CaptureGuides` publishes those exact guides before Pre-DLSS runs. With the shared advanced **Clone Game Resources** option off (default), the addon retains direct references and performs no guide copies; when on, it copies current depth/motion into reusable addon-owned textures. The option is latched at the next NGX evaluation and applies to all stages. When Pre-DLSS is the first active target, the shared preparation stage meters the current input Color using only the published previous-frame Importance Mask. The first successful model pass builds the new mask after model evaluation.
+Pre-DLSS records inline on the game's command list and never closes, submits, or waits on it. For the direct-compatible case, its output resource is the game's input Color texture. For mip-chain, MSAA, or subrect allocations, it operates on a compact single-sample adapter sized exactly to the active region; no pixels outside that region enter the model. The game resource is left unchanged in this adapted path, and the real NGX call consumes the temporary processed input. Adapter resources are retired behind the present-queue fence rather than released while the game's command list may still be in flight. `WriteToGameResource` leaves the direct input or compact adapter in `NON_PIXEL_SHADER_RESOURCE` before NGX consumes it. At hook entry the game has already populated the current evaluation's depth and motion resources, so `CaptureGuides` publishes those exact guides before Pre-DLSS runs. With the shared advanced **Clone Game Resources** option off (default), the addon retains direct references and performs no guide copies; when on, it copies current depth/motion into reusable addon-owned textures. The option is latched at the next NGX evaluation and applies to all stages. When Pre-DLSS is the first active target, the shared preparation stage meters the current input Color using only the published previous-frame Importance Mask. The first successful model pass builds the new mask after model evaluation.
 
 ### Post-DLSS injection
 
