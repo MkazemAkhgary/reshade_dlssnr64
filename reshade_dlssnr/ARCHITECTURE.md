@@ -410,8 +410,9 @@ The 512-byte CBV is:
 | 128 | `HdrBlock` | 80 |
 | 208 | `EasuBlock` | 48 |
 | 256 | `RcasBlock` | 16 |
-| 272 | `TemporalBlock` | 80 |
-| 352 | alignment padding | 160 |
+| 272 | `HistogramBlock` | 48 |
+| 320 | `TemporalBlock` | 96 |
+| 416 | alignment padding | 96 |
 
 The resulting `ComputeConstants` size and `BindAndDispatch` stride are both 512 bytes, rounded to the D3D12 constant-buffer alignment. `TemporalBlock` owns the photometric/depth thresholds, maximum motion displacement, motion-vector coordinate metadata, and guide subrect metadata. Temporal kernels use a dedicated `TemporalBlock`; they do not borrow HDR or generic shader-parameter slots. `HdrBlock.LocalExposureParams.x/y` carry the fixed 4-pixel neighborhood and four-tap configuration; `.z` selects the optional precomputed-luma path.
 
@@ -753,3 +754,8 @@ The project expects the ReShade SDK/ImGui sources, FidelityFX-FSR sources, NVIDI
 ### Runtime dispatch overhead
 
 `ComputeEngine` retains root-signature and descriptor-heap binding state only within a known command-list recording interval. `PassSession::RunStage`, HDR shared-frame preparation, and every external NGX evaluation invalidate that cache, so a game/NGX mutation or command-list reset cannot inherit stale state. `CommandContext::TransitionBatch` updates the same tracked resource-state map as `Transition`, but submits adjacent transition barriers as one `ResourceBarrier` call; UAV barriers and per-resource before/after tracking remain explicit.
+
+
+### Runtime redundancy cleanup
+
+The SDR and HDR composition shaders share `JointBilateralUpsamplePair`; the older single-output helper has been removed so the common include contains only the paired path. Unconsumed full/game histogram copies and sample counters are no longer retained on the CPU. `ComputeEngine` uses transparent string lookup for registered and failed shader names, avoiding temporary owning-string construction during dispatch lookup. Trace parameter dumps include the Histogram and Temporal blocks. The shared constant-buffer table above reflects the complete current 512-byte contract.

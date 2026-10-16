@@ -8,8 +8,10 @@
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
@@ -20,6 +22,20 @@
 namespace reshade_dlssnr {
 
 struct ComputePassDef;
+
+struct TransparentStringHash {
+  using is_transparent = void;
+  std::size_t operator()(std::string_view value) const noexcept {
+    return std::hash<std::string_view>{}(value);
+  }
+};
+
+struct TransparentStringEqual {
+  using is_transparent = void;
+  bool operator()(std::string_view lhs, std::string_view rhs) const noexcept {
+    return lhs == rhs;
+  }
+};
 
 // Binding contract: shaders/common/registers.hlsli.
 // Register assignment code is implemented in CreateRootSignature/BindAndDispatch.
@@ -134,11 +150,11 @@ class ComputeEngine {
   // `device_` and `root_signature_` are set before the worker starts and
   // reset after it joins, so they need no additional protection.
   std::mutex passes_mutex_;
-  std::unordered_map<std::string, CachedPass> passes_;
+  std::unordered_map<std::string, CachedPass, TransparentStringHash, TransparentStringEqual> passes_;
   // Passes that were attempted by the background compiler but could not
   // produce a usable pipeline. Remembering them prevents a bad shader from
   // being recompiled and logged once per frame after IsReady() becomes true.
-  std::unordered_set<std::string> failed_passes_;
+  std::unordered_set<std::string, TransparentStringHash, TransparentStringEqual> failed_passes_;
 
   // Compiler diagnostics are deduplicated independently of pass state because
   // both the worker and a post-ready fallback compile can surface the same

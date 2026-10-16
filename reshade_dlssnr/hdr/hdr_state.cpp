@@ -255,13 +255,9 @@ void HdrState::Shutdown() {
   have_histogram_ = false;
   for (uint32_t i = 0; i < kHistogramBins; ++i) {
     last_histogram_[i] = 0;
-    last_full_histogram_[i] = 0;
-    last_game_histogram_[i] = 0;
   }
   p_hi_luma_ = 0.0f;
   last_samples_ = 0;
-  last_full_samples_ = 0;
-  last_game_samples_ = 0;
   have_measurement_time_ = false;
   last_measurement_time_ = {};
   have_gain_stats_ = false;
@@ -570,8 +566,6 @@ void HdrState::UpdateExposure(const uint32_t* full_bins,
   const uint32_t full_total = total_of(full_bins);
   const uint32_t game_total = total_of(game_bins);
   const uint32_t adaptive_total = total_of(adaptive_bins);
-  last_full_samples_ = full_total;
-  last_game_samples_ = game_total;
 
   const auto& adaptive_settings = settings.adaptive_exposure;
   ExposureParams adaptive_params;

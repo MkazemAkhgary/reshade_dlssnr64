@@ -161,12 +161,8 @@ class HdrState {
 
   bool have_histogram_ = false;
   uint32_t last_histogram_[256] = {};
-  uint32_t last_full_histogram_[256] = {};
-  uint32_t last_game_histogram_[256] = {};
   float p_hi_luma_ = 0.0f;
   uint32_t last_samples_ = 0;
-  uint32_t last_full_samples_ = 0;
-  uint32_t last_game_samples_ = 0;
   std::chrono::steady_clock::time_point last_measurement_time_{};
   bool have_measurement_time_ = false;
 
