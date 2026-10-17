@@ -27,6 +27,9 @@ const char* const kFormatTips[] = {
     "Treat the source as linear scRGB (1.0 = 80 nits).",
     "Treat the source as HDR10 PQ (ST.2084)."};
 
+constexpr const char* kCatAdvanced = "Advanced";
+constexpr const char* kCatDiagnostics = "Diagnostics";
+
 // The three layer toggles are the gates for everything after them, so they are
 // declared once and their predicates read the section they are drawn in.
 bool LayerEnabled(const void* context, const ctl::ValueStore& store,
@@ -49,54 +52,65 @@ void RegisterHdrSchema(ctl::Schema& schema) {
       .Tooltip("Prepares the current Pre-DLSS or Post-DLSS source before the "
                "first pass. Backbuffer-only configurations do not use HDR "
                "measurement.");
-  hdr.Add<ctl::EnumSetting>(kFormat, "Format", 0)
-      .Items(kFormatNames, kFormatTips, 4)
-      .AsGroup()
-      .Tooltip("How the source image is encoded. Auto detects from the DLSS "
-               "output's DXGI format.");
-  hdr.Add<ctl::IntSetting>(kMeasureInterval, "Measure Interval", 4)
-      .Range(1, 32)
-      .Tooltip("How often exposure histograms are measured, in frames.");
-  hdr.Add<ctl::BoolSetting>(kFasterMetering, "Faster HDR Metering", false)
-      .Tooltip("Sample one pixel from each 2x2 block during histogram metering. "
-               "Lower GPU cost, but small isolated highlights may be missed.");
   hdr.Add<ctl::FloatSetting>(kHighlightHeadroom, "Highlight Headroom", 1.0f)
       .Range(0.25f, 16.0f)
       .Tooltip("Scales the effective HDR peak used by BT.2446C. This does not "
                "change how exposure is interpreted.");
 
-  // The exposure layers are tabs, and a tab bar is rendering, not a setting:
-  // it is a hook. The three layer sections hold the settings; this draws the
-  // bar and each open tab's body, then the stack-order note.
-  hdr.AddHookAfter(kHighlightHeadroom, "ExposureTabs", &DrawExposureTabs);
-
+  hdr.Add<ctl::EnumSetting>(kFormat, "Format", 0)
+      .Items(kFormatNames, kFormatTips, 4)
+      .AsGroup()
+      .Category(kCatAdvanced)
+      .Tooltip("How the source image is encoded. Auto detects from the DLSS "
+               "output's DXGI format.");
+  hdr.Add<ctl::IntSetting>(kMeasureInterval, "Measure Interval", 4)
+      .Range(1, 32)
+      .Category(kCatAdvanced)
+      .Tooltip("How often exposure histograms are measured, in frames.");
+  hdr.Add<ctl::BoolSetting>(kFasterMetering, "Faster HDR Metering", false)
+      .Category(kCatAdvanced)
+      .Tooltip("Sample one pixel from each 2x2 block during histogram metering. "
+               "Lower GPU cost, but small isolated highlights may be missed.");
   hdr.Add<ctl::FloatSetting>(kBt2446K1, "BT.2446C k1", 0.83802f)
       .Range(0.001f, 2.0f)
+      .Category(kCatAdvanced)
       .Tooltip("Linear-region slope.");
   hdr.Add<ctl::FloatSetting>(kBt2446K2, "BT.2446C k2", 15.09968f)
       .Range(0.001f, 32.0f)
+      .Category(kCatAdvanced)
       .Tooltip("Log-region slope.");
   hdr.Add<ctl::FloatSetting>(kBt2446K3, "BT.2446C k3", 0.74204f)
       .Range(0.001f, 1.0f)
+      .Category(kCatAdvanced)
       .Tooltip("Reference construction parameter retained for parity/trace.");
   hdr.Add<ctl::FloatSetting>(kBt2446K4, "BT.2446C k4", 78.99439f)
       .Range(0.001f, 200.0f)
+      .Category(kCatAdvanced)
       .Tooltip("Log-region intercept in nits.");
   hdr.Add<ctl::FloatSetting>(kBt2446Crosstalk, "Crosstalk", 0.04f)
       .Range(0.0f, 0.33f)
+      .Category(kCatAdvanced)
       .Tooltip("BT.2446C pre-desaturation amount.");
   hdr.Add<ctl::FloatSetting>(kGainMinLog2, "Gain Min", -4.0f)
       .Range(-32.0f, 0.0f)
+      .Category(kCatAdvanced)
       .Tooltip("Configured log2 gain metadata minimum.");
   hdr.Add<ctl::FloatSetting>(kGainMaxLog2, "Gain Max", 6.0f)
       .Range(0.0f, 32.0f)
+      .Category(kCatAdvanced)
       .Tooltip("Configured log2 gain metadata maximum.");
-  hdr.Add<ctl::BoolSetting>(kDetailedStatistics, "Detailed HDR Statistics", false)
-      .Tooltip("Collect full-frame gain-map range and excursion statistics. Adds two GPU dispatches when enabled.");
 
-  // Live HDR measurement readout. Placed after the tuning rows so the
-  // section reads top-to-bottom as "configure, then observe".
-  hdr.AddHookAfter(kGainMaxLog2, "HdrDiagnostics", &DrawHdrDiagnostics);
+  // Layer collapsibles are rendered by the HdrLayers hook (defined in
+  // feature/hdr/ui.cpp). Category(nullptr) closes the Advanced group so
+  // the layers render at the top level of the HDR section.
+  hdr.AddHookAfter(kGainMaxLog2, "ExposureTabs", &DrawExposureTabs)
+      .Category(nullptr);
+
+  hdr.Add<ctl::BoolSetting>(kDetailedStatistics, "Detailed HDR Statistics", false)
+      .Category(kCatDiagnostics)
+      .Tooltip("Collect full-frame gain-map range and excursion statistics. Adds two GPU dispatches when enabled.");
+  hdr.AddHookAfter(kDetailedStatistics, "HdrDiagnostics", &DrawHdrDiagnostics)
+      .Category(kCatDiagnostics);
 
   // --- HDR Game Exposure -------------------------------------------------
   ctl::Section& game =
@@ -109,7 +123,7 @@ void RegisterHdrSchema(ctl::Schema& schema) {
       .Tooltip("Manual bias relative to the game's exposure, in stops. Zero "
                "leaves the game's value untouched.")
       .EnableWhen(&LayerEnabled, kGameEnabled);
-  hdr_filter_rows::Declare(game);
+  hdr_filter_rows::Declare(game, "Filters");
 
   // --- HDR Adaptive Exposure ---------------------------------------------
   ctl::Section& adaptive =
@@ -144,7 +158,7 @@ void RegisterHdrSchema(ctl::Schema& schema) {
       .Tooltip("Maximum adjustment around Game Exposure when both layers are "
                "enabled.")
       .EnableWhen(&LayerEnabled, kAdaptiveEnabled);
-  hdr_filter_rows::Declare(adaptive);
+  hdr_filter_rows::Declare(adaptive, "Filters");
 
   // --- HDR Local Exposure ------------------------------------------------
   ctl::Section& local = schema.AddSection(kLocalSection, ctl::SectionKind::Single);
