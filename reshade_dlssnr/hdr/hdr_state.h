@@ -120,7 +120,7 @@ class HdrState {
 
  private:
   void PollReadback(ID3D12Fence* fence, const HdrSettings& settings);
-  void UpdateExposure(const uint32_t* full_bins, const uint32_t* game_bins,
+  void UpdateExposure(const uint32_t* full_bins,
                       const uint32_t* adaptive_bins,
                       const HdrSettings& settings);
   void ResolveExposureStack(const HdrSettings& settings);
@@ -152,7 +152,6 @@ class HdrState {
   HdrFormat resolved_format_ = HdrFormat::Sdr;
   ExposureTracker regular_;
   ExposureTracker adaptive_;
-  ExposureTracker game_tuning_;
   uint32_t frame_counter_ = 0;
   uint32_t frames_until_measure_ = 0;
   uint32_t frames_since_measure_ = 0;

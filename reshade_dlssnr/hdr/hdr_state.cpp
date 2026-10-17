@@ -246,7 +246,6 @@ void HdrState::Shutdown() {
   enabled_ = false;
   regular_.Reset();
   adaptive_.Reset();
-  game_tuning_.Reset();
   frame_counter_ = 0;
   frames_until_measure_ = 0;
   frames_since_measure_ = 0;
@@ -430,8 +429,11 @@ void HdrState::BeginFrame(CommandContext& cmd,
       static_cast<float>(filter_flags(game_filter));
   constants.histogram.GameFilter.y = game_filter.depth_near;
   constants.histogram.GameFilter.z = game_filter.depth_far;
-  constants.histogram.GameFilter.w =
-      hdr_settings.game_exposure.bounded_tuning ? 1.0f : 0.0f;
+  // Bounded tuning over Game Exposure was removed in favour of the
+  // Adaptive layer's strength_over_game; the game histogram band is
+  // no longer consumed. Leaving the flag at zero makes the shader
+  // skip populating it.
+  constants.histogram.GameFilter.w = 0.0f;
   constants.histogram.AdaptiveFilter.x =
       static_cast<float>(filter_flags(adaptive_filter));
   constants.histogram.AdaptiveFilter.y = adaptive_filter.depth_near;
@@ -518,8 +520,7 @@ void HdrState::PollReadback(ID3D12Fence* fence, const HdrSettings& settings) {
     pending_measurement_ = false;
     if (mapped != nullptr && bytes >= kCombinedHistogramBytes) {
       const uint32_t* bins = static_cast<const uint32_t*>(mapped);
-      UpdateExposure(bins, bins + kHistogramBins,
-                     bins + 2 * kHistogramBins, settings);
+      UpdateExposure(bins, bins + 2 * kHistogramBins, settings);
       ++measurement_generation_;
       frames_since_measure_ = 0;
     }
@@ -548,7 +549,6 @@ void HdrState::PollReadback(ID3D12Fence* fence, const HdrSettings& settings) {
 }
 
 void HdrState::UpdateExposure(const uint32_t* full_bins,
-                              const uint32_t* game_bins,
                               const uint32_t* adaptive_bins,
                               const HdrSettings& settings) {
   const auto now = std::chrono::steady_clock::now();
@@ -564,7 +564,6 @@ void HdrState::UpdateExposure(const uint32_t* full_bins,
     return total;
   };
   const uint32_t full_total = total_of(full_bins);
-  const uint32_t game_total = total_of(game_bins);
   const uint32_t adaptive_total = total_of(adaptive_bins);
 
   const auto& adaptive_settings = settings.adaptive_exposure;
@@ -584,21 +583,6 @@ void HdrState::UpdateExposure(const uint32_t* full_bins,
         ? MeteringSource::FilteredPopulation : MeteringSource::FullFrame;
   }
 
-  const auto& game_settings = settings.game_exposure;
-  if (game_settings.bounded_tuning) {
-    ExposureParams game_params;
-    game_params.midtone = game_settings.tuning_midtone;
-    game_params.percentile_low = game_settings.filters.percentile_low;
-    game_params.percentile_high = game_settings.filters.percentile_high;
-    game_params.use_percentile_range = game_settings.filters.percentile_range;
-    game_params.speed_up = game_settings.tuning_speed_up;
-    game_params.speed_down = game_settings.tuning_speed_down;
-    if (game_total != 0)
-      game_tuning_.Update(game_bins, game_params, dt);
-  }
-
-
-
   const uint32_t chosen_total = adaptive_total != 0 ? adaptive_total : full_total;
   const uint32_t* chosen = adaptive_total != 0 ? adaptive_bins : full_bins;
   for (uint32_t i = 0; i < kHistogramBins; ++i) last_histogram_[i] = chosen[i];
@@ -617,15 +601,6 @@ void HdrState::ResolveExposureStack(const HdrSettings& settings) {
 
   if (use_game) {
     exposure = game_exposure_value_ * std::exp2(settings.game_exposure.bias_stops);
-    if (settings.game_exposure.bounded_tuning && game_tuning_.have_measurement) {
-      const float delta = std::log2(std::max(game_tuning_.exposure, 1e-6f) /
-                                    std::max(exposure, 1e-6f));
-      const float correction = std::clamp(
-          delta * settings.game_exposure.tuning_strength,
-          -settings.game_exposure.max_tuning_stops,
-          settings.game_exposure.max_tuning_stops);
-      exposure *= std::exp2(correction);
-    }
     if (use_adaptive) {
       const float delta = std::log2(std::max(adaptive_.exposure, 1e-6f) /
                                     std::max(exposure, 1e-6f));

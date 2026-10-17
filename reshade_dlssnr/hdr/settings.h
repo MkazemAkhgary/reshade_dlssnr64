@@ -28,12 +28,6 @@ struct ExposureFilterSettings {
 struct GameExposureLayerSettings {
   bool enabled = true;
   float bias_stops = 0.0f;
-  bool bounded_tuning = false;
-  float tuning_strength = 0.25f;
-  float max_tuning_stops = 0.5f;
-  float tuning_midtone = 0.18f;
-  float tuning_speed_up = 3.0f;
-  float tuning_speed_down = 1.0f;
   ExposureFilterSettings filters = {};
 };
 
