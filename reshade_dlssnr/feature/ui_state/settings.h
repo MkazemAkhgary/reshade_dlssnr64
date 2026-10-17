@@ -14,7 +14,6 @@ inline constexpr const char* kDebugOpen = "debug_open";
 inline constexpr const char* kHdrOpen = "hdr_open";
 inline constexpr const char* kGradeOpen = "grade_open";
 inline constexpr const char* kHdrDiagnosticsOpen = "hdr_diagnostics_open";
-inline constexpr const char* kBoundedTuningOpen = "bounded_tuning_open";
 inline constexpr const char* kImportanceMaskOpen = "importance_mask_open";
 inline constexpr const char* kModelOpen = "model_open";
 inline constexpr const char* kStrengthOpen = "strength_open";

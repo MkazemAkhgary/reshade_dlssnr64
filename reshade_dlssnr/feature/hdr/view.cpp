@@ -56,12 +56,6 @@ HdrSnapshotView Read(const ctl::ValueStore& store,
     GameExposureLayerSettings& g = s.game_exposure;
     g.enabled = store.Read(sec, key, kGameEnabled).as_bool;
     g.bias_stops = store.Read(sec, key, kGameBiasStops).as_float;
-    g.bounded_tuning = store.Read(sec, key, kGameBoundedTuning).as_bool;
-    g.tuning_strength = store.Read(sec, key, kGameTuningStrength).as_float;
-    g.max_tuning_stops = store.Read(sec, key, kGameTuningStops).as_float;
-    g.tuning_midtone = store.Read(sec, key, kGameTuningMidtone).as_float;
-    g.tuning_speed_up = store.Read(sec, key, kGameTuningSpeedUp).as_float;
-    g.tuning_speed_down = store.Read(sec, key, kGameTuningSpeedDown).as_float;
     g.filters = ReadFilters(store, key, sec);
   }
 

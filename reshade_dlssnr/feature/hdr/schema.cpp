@@ -35,12 +35,6 @@ bool LayerEnabled(const void* context, const ctl::ValueStore& store,
   return store.Read(section, key, toggle).as_bool;
 }
 
-// A sub-header gate: bounded tuning gates its own parameter rows.
-bool TuningEnabled(const void*, const ctl::ValueStore& store,
-                   const ctl::InstanceKey& key, const std::string& section) {
-  return store.Read(section, key, kGameBoundedTuning).as_bool;
-}
-
 }  // namespace
 
 }  // namespace hdr
@@ -115,32 +109,6 @@ void RegisterHdrSchema(ctl::Schema& schema) {
       .Tooltip("Manual bias relative to the game's exposure, in stops. Zero "
                "leaves the game's value untouched.")
       .EnableWhen(&LayerEnabled, kGameEnabled);
-  game.Add<ctl::BoolSetting>(kGameBoundedTuning, "Bounded Adaptive Tuning",
-                             false)
-      .Tooltip("Allow the adaptive measurement to suggest a small correction, "
-               "clipped to Max Tuning Stops. The game remains the global "
-               "exposure anchor.")
-      .EnableWhen(&LayerEnabled, kGameEnabled);
-  game.Add<ctl::FloatSetting>(kGameTuningStrength, "Tuning Strength", 0.25f)
-      .Range(0.0f, 1.0f)
-      .Tooltip("Blend toward the adaptive exposure suggestion.")
-      .EnableWhen(&TuningEnabled);
-  game.Add<ctl::FloatSetting>(kGameTuningStops, "Max Tuning Stops", 0.5f)
-      .Range(0.0f, 2.0f)
-      .Tooltip("Maximum absolute correction away from the game's value.")
-      .EnableWhen(&TuningEnabled);
-  game.Add<ctl::FloatSetting>(kGameTuningMidtone, "Tuning Midtone", 0.18f)
-      .Range(0.01f, 0.5f)
-      .Tooltip("Target luminance used only to estimate the bounded correction.")
-      .EnableWhen(&TuningEnabled);
-  game.Add<ctl::FloatSetting>(kGameTuningSpeedUp, "Brighten Speed", 3.0f)
-      .Range(0.0f, 20.0f)
-      .Tooltip("Maximum brighten correction change in stops per second.")
-      .EnableWhen(&TuningEnabled);
-  game.Add<ctl::FloatSetting>(kGameTuningSpeedDown, "Darken Speed", 1.0f)
-      .Range(0.0f, 20.0f)
-      .Tooltip("Maximum darken correction change in stops per second.")
-      .EnableWhen(&TuningEnabled);
   hdr_filter_rows::Declare(game);
 
   // --- HDR Adaptive Exposure ---------------------------------------------

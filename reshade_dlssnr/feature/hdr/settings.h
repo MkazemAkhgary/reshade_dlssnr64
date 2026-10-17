@@ -39,12 +39,6 @@ inline constexpr const char* kFasterMetering = "faster_metering";
 // Section "HDR Game Exposure".
 inline constexpr const char* kGameEnabled = "enabled";
 inline constexpr const char* kGameBiasStops = "bias_stops";
-inline constexpr const char* kGameBoundedTuning = "bounded_tuning";
-inline constexpr const char* kGameTuningStrength = "tuning_strength";
-inline constexpr const char* kGameTuningStops = "max_tuning_stops";
-inline constexpr const char* kGameTuningMidtone = "tuning_midtone";
-inline constexpr const char* kGameTuningSpeedUp = "tuning_speed_up";
-inline constexpr const char* kGameTuningSpeedDown = "tuning_speed_down";
 
 // Section "HDR Adaptive Exposure".
 inline constexpr const char* kAdaptiveEnabled = "enabled";
