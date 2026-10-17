@@ -57,30 +57,65 @@ bool DrawHdrLayers(const void* context, ctl::ValueStore& store,
     const char* tooltip;
     const char* section;
     const char* open_key;
+    const char* enabled_key;
   };
   const Layer layers[] = {
       {"Game Exposure",
        "Configure the game's exposure as the base layer.",
        hdr::kGameSection,
-       feature::ui_state::kHdrGameOpen},
+       feature::ui_state::kHdrGameOpen,
+       hdr::kGameEnabled},
       {"Adaptive Exposure",
        "Histogram-based global exposure or a bounded correction over Game "
        "Exposure.",
        hdr::kAdaptiveSection,
-       feature::ui_state::kHdrAdaptiveOpen},
+       feature::ui_state::kHdrAdaptiveOpen,
+       hdr::kAdaptiveEnabled},
       {"Local Exposure",
        "Spatially varying exposure correction applied after the global "
        "layers.",
        hdr::kLocalSection,
-       feature::ui_state::kHdrLocalOpen},
+       feature::ui_state::kHdrLocalOpen,
+       hdr::kLocalEnabled},
   };
   constexpr int kLayerCount = 3;
 
   for (int i = 0; i < kLayerCount; ++i) {
+    // Layer on/off is a header checkbox. HeaderToggle on the section keeps
+    // the drawer from rendering the same `enabled` row inside the body
+    // (draw_headers = false skips header rendering, but IsHeaderToggle
+    // still runs). HeaderControls drives a plain bool, so the value is
+    // read from the store, mutated by the checkbox, and written back when
+    // it changed -- the body's EnableWhen predicates and the runtime Read
+    // both consult the store and must see the new value this same frame.
+    const bool before =
+        store.Read(layers[i].section, key, layers[i].enabled_key).as_bool;
+    bool enabled = before;
+
+    const char* enabled_tooltip = nullptr;
+    if (const ctl::Section* layer_section =
+            store.schema().FindSection(layers[i].section)) {
+      for (const auto& setting : layer_section->settings()) {
+        if (setting->meta().name == layers[i].enabled_key) {
+          enabled_tooltip = setting->meta().tooltip.c_str();
+          break;
+        }
+      }
+    }
+
+    HeaderControls controls;
+    controls.enabled = &enabled;
+    controls.enabled_tooltip = enabled_tooltip;
+
     bool layer_changed = false;
     const bool open = PersistentSettingHeader(
         layers[i].label, layers[i].open_key, layer_changed,
-        layers[i].tooltip);
+        layers[i].tooltip, controls);
+    if (enabled != before) {
+      store.Write(layers[i].section, key, layers[i].enabled_key,
+                  ctl::Value::Bool(enabled), /*from_user=*/true);
+      layer_changed = true;
+    }
     local_changed |= layer_changed;
     if (open) {
       IndentScope body_indent;
@@ -112,13 +147,11 @@ bool DrawHdrDiagnostics(const void* context, ctl::ValueStore& store,
   (void)section;
   (void)key;
 
-  if (!PersistentSettingHeader(
-          "HDR Diagnostics", feature::ui_state::kHdrDiagnosticsOpen, changed,
-          "Live HDR measurement state. Read-only; reflects the current "
-          "exposure, histogram, and gain-map values the pipeline is using.")) {
-    return false;
-  }
-
+  // The Diagnostics collapsible is owned by the schema (the hook carries
+  // Category(kCatDiagnostics)) and persisted via kHdrDiagnosticsOpen. The
+  // hook renders the body inline when the category is open; the IndentScope
+  // below matches the extra indent applied to setting rows that carry a
+  // category.
   IndentScope indent;
   const StatusSnapshot snap = AddonController::Get().GetStatus();
   const HdrSnapshot hdr = AddonController::Get().GetHdrSnapshot();
@@ -133,6 +166,9 @@ bool DrawHdrDiagnostics(const void* context, ctl::ValueStore& store,
 
   ImGui::Text("Format: %s - resolved=%s", format_name,
               hdr.ready ? "yes" : "no");
+  if (hdr.enabled && !hdr.ready) {
+    ImGui::TextDisabled("  Warming up - no exposure measurement yet.");
+  }
   ImGui::Text("Exposure: %.4f", hdr.exposure);
   ImGui::Text("Scene white: %.4f", hdr.scene_white);
   if (hdr.exposure_reference_luma > 0.0f) {
@@ -149,9 +185,12 @@ bool DrawHdrDiagnostics(const void* context, ctl::ValueStore& store,
   }
   ImGui::Text("Samples: %u - frames since measure: %u",
               hdr.samples, hdr.frames_since_measure);
-  ImGui::Text("Measurement generation: %llu",
-              static_cast<unsigned long long>(hdr.measurement_generation));
   ImGui::Text("Metering source: %s", source_name);
+  ImGui::Text("DLSS guides: %s",
+              snap.guides_valid ? "valid" : "not seen");
+  if (snap.post_dlss_blocked) {
+    ImGui::Text("Post-DLSS blocked: %s", snap.post_dlss_block_reason);
+  }
 
   ImGui::Separator();
   ImGui::Text("Game exposure: %s",
@@ -192,7 +231,6 @@ bool DrawHdrDiagnostics(const void* context, ctl::ValueStore& store,
       "Values update asynchronously. Exposure and histogram reflect the "
       "most recent measurement the GPU has finished writing back.");
 
-  (void)snap;
   return false;
 }
 

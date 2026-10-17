@@ -53,7 +53,9 @@ void RegisterHdrSchema(ctl::Schema& schema) {
   hdr.Add<ctl::BoolSetting>(kEnable, "Enable", true)
       .Tooltip("Prepares the current Pre-DLSS or Post-DLSS source before the "
                "first pass. Backbuffer-only configurations do not use HDR "
-               "measurement.");
+               "measurement. Also gates the Importance Mask section; "
+               "disabling HDR turns off exposure metering, the exposure "
+               "stack, and the mask.");
   hdr.Add<ctl::FloatSetting>(kHighlightHeadroom, "Highlight Headroom", 1.0f)
       .Range(0.25f, 16.0f)
       .Tooltip("Scales the effective HDR peak used by BT.2446C. This does not "
@@ -117,9 +119,11 @@ void RegisterHdrSchema(ctl::Schema& schema) {
   // --- HDR Game Exposure -------------------------------------------------
   ctl::Section& game =
       schema.AddSection(kGameSection, ctl::SectionKind::Single);
+  game.HeaderToggle(kGameEnabled);
   game.Add<ctl::BoolSetting>(kGameEnabled, "Game Exposure", true)
-      .Tooltip("Use the game's NGX ExposureTexture as the base exposure for "
-               "the stack.");
+      .Tooltip("Use the game's NGX ExposureTexture as the base exposure. "
+               "If the game does not provide one, this layer falls through "
+               "and Adaptive Exposure can supply the base instead.");
   game.Add<ctl::FloatSetting>(kGameBiasStops, "Exposure Bias", 0.0f)
       .Range(-4.0f, 4.0f)
       .Tooltip("Manual bias relative to the game's exposure, in stops. Zero "
@@ -129,10 +133,12 @@ void RegisterHdrSchema(ctl::Schema& schema) {
   // --- HDR Adaptive Exposure ---------------------------------------------
   ctl::Section& adaptive =
       schema.AddSection(kAdaptiveSection, ctl::SectionKind::Single);
+  adaptive.HeaderToggle(kAdaptiveEnabled);
   adaptive.Add<ctl::BoolSetting>(kAdaptiveEnabled, "Adaptive Exposure", false)
       .Tooltip("With Game Exposure off, provides global exposure from a "
                "histogram measurement. With Game Exposure on, applies "
-               "Strength Over Game as a bounded correction (no effect at 0).");
+               "Strength Over Game as a bounded correction (no effect at "
+               "0). Has no effect until the first measurement arrives.");
   adaptive.Add<ctl::FloatSetting>(kAdaptiveMidtone, "Midtone Target", 0.18f)
       .Range(0.01f, 0.5f)
       .Tooltip("Target luminance for the selected population.")
@@ -164,9 +170,10 @@ void RegisterHdrSchema(ctl::Schema& schema) {
 
   // --- HDR Local Exposure ------------------------------------------------
   ctl::Section& local = schema.AddSection(kLocalSection, ctl::SectionKind::Single);
+  local.HeaderToggle(kLocalEnabled);
   local.Add<ctl::BoolSetting>(kLocalEnabled, "Local Exposure", false)
-      .Tooltip("Apply spatially varying exposure correction after the global "
-               "exposure layers.");
+      .Tooltip("Apply spatially varying exposure correction after the Game "
+               "and Adaptive layers.");
   local.Add<ctl::FloatSetting>(kLocalStrength, "Strength", 0.50f)
       .Range(0.0f, 1.0f)
       .Tooltip("Blend factor for the spatial exposure adjustment.")
@@ -196,10 +203,11 @@ void RegisterHdrSchema(ctl::Schema& schema) {
   local.Add<ctl::FloatSetting>(kLocalRestoreGlobalExposure,
                                "Restore Global Exposure", 0.0f)
       .Range(0.0f, 1.0f)
-      .Tooltip("How much of the local-exposure multiplier to undo on the model "
-               "output, in linear light, before the Output Grade. 1 restores "
-               "the full global exposure scale and preserves chromaticity; "
-               "0 leaves the model output untouched.")
+      .Tooltip("Fraction of the local-exposure multiplier to undo on the "
+               "model output before the Output Grade. 0 = off (the local "
+               "exposure is left in place); 1 = full correction (divide by "
+               "the mean local scale, keeping the model's spatial shading). "
+               "Intermediate values blend between the two.")
       .EnableWhen(&LayerEnabled, kLocalEnabled);
 
 }
