@@ -62,6 +62,9 @@ const char* SectionOpenSetting(const std::string& name) {
   if (name == feature::pass::kGradeInputSection) return feature::ui_state::kGradeInputOpen;
   if (name == feature::pass::kGradeOutputSection) return feature::ui_state::kGradeOutputOpen;
   if (name == feature::hdr::kSection) return feature::ui_state::kHdrOpen;
+  if (name == feature::hdr::kGameSection) return feature::ui_state::kHdrGameOpen;
+  if (name == feature::hdr::kAdaptiveSection) return feature::ui_state::kHdrAdaptiveOpen;
+  if (name == feature::hdr::kLocalSection) return feature::ui_state::kHdrLocalOpen;
   if (name == feature::pass::kSection) return feature::ui_state::kPassesOpen;
   if (name == feature::importance_mask::kSection) return feature::ui_state::kImportanceMaskOpen;
   return nullptr;
@@ -79,6 +82,15 @@ void WriteSectionOpen(void* /*context*/, const std::string& name, bool open) {
 
 const char* CategoryOpenSetting(const std::string& section,
                                 const std::string& category) {
+  if (section == feature::hdr::kSection) {
+    if (category == "Advanced") return feature::ui_state::kHdrAdvancedOpen;
+    if (category == "Diagnostics") return feature::ui_state::kHdrDiagnosticsOpen;
+    return nullptr;
+  }
+  if (section == feature::hdr::kLocalSection &&
+      category == "Advanced") {
+    return feature::ui_state::kHdrLocalAdvancedOpen;
+  }
   if (section != feature::pass::kSection) return nullptr;
   if (category == "Model") return feature::ui_state::kModelOpen;
   if (category == "Strength") return feature::ui_state::kStrengthOpen;

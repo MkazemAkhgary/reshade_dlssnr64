@@ -194,11 +194,13 @@ void RegisterHdrSchema(ctl::Schema& schema) {
       .Tooltip("Precompute HDR-to-SDR luminance once per source pixel instead of "
                "repeating the transfer at every local-exposure tap. Slightly "
                "changes interpolation order; useful for performance comparison.")
+      .Category(kCatAdvanced)
       .EnableWhen(&LayerEnabled, kLocalEnabled);
   local.Add<ctl::BoolSetting>(kLocalFp16Reference, "FP16 Reference", false)
       .Tooltip("Store only the unlifted working-resolution composition reference "
                "in FP16. It does not change NGX input/output or the HDR carrier; "
                "small reference quantization differences are possible.")
+      .Category(kCatAdvanced)
       .EnableWhen(&LayerEnabled, kLocalEnabled);
   local.Add<ctl::FloatSetting>(kLocalRestoreGlobalExposure,
                                "Restore Global Exposure", 0.0f)
