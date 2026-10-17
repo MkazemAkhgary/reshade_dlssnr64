@@ -103,7 +103,7 @@ void RegisterHdrSchema(ctl::Schema& schema) {
   // Layer collapsibles are rendered by the HdrLayers hook (defined in
   // feature/hdr/ui.cpp). Category(nullptr) closes the Advanced group so
   // the layers render at the top level of the HDR section.
-  hdr.AddHookAfter(kGainMaxLog2, "ExposureTabs", &DrawExposureTabs)
+  hdr.AddHookAfter(kGainMaxLog2, "HdrLayers", &DrawHdrLayers)
       .Category(nullptr);
 
   hdr.Add<ctl::BoolSetting>(kDetailedStatistics, "Detailed HDR Statistics", false)

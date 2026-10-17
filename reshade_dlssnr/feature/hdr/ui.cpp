@@ -42,67 +42,48 @@ bool DrawLayerBody(ctl::ValueStore& store, const ctl::DrawOptions& options,
 
 }  // namespace
 
-bool DrawExposureTabs(const void* context, ctl::ValueStore& store,
-                      const ctl::DrawOptions& options,
-                      const std::string& section,
-                      const ctl::InstanceKey& key, bool& changed) {
+bool DrawHdrLayers(const void* context, ctl::ValueStore& store,
+                   const ctl::DrawOptions& options,
+                   const std::string& section,
+                   const ctl::InstanceKey& key, bool& changed) {
   (void)context;
   (void)section;
   bool local_changed = false;
-
-  // Which layer body is showing. A function-local static is fine: the hook
-  // itself stays captureless (as ctl requires), and the value is process-wide
-  // like the token in ui/ui.cpp. ImGuiTabBar would own this state for us, but
-  // it carries a cross-frame ID cache that rebuilds (and briefly blanks) the
-  // bar after any ID change, and it is the symbol that would not link here.
-  static int g_active_layer = 0;
 
   struct Layer {
     const char* label;
     const char* tooltip;
     const char* section;
+    const char* open_key;
   };
   const Layer layers[] = {
       {"Game Exposure",
        "Configure the game's exposure as the base layer.",
-       hdr::kGameSection},
+       hdr::kGameSection,
+       "hdr_game_open"},
       {"Adaptive Exposure",
-       "Configure histogram-based global exposure or a correction over Game "
+       "Histogram-based global exposure or a bounded correction over Game "
        "Exposure.",
-       hdr::kAdaptiveSection},
+       hdr::kAdaptiveSection,
+       "hdr_adaptive_open"},
       {"Local Exposure",
-       "Configure local spatial exposure correction and its independent "
-       "filters.",
-       hdr::kLocalSection},
+       "Spatially varying exposure correction applied after the global "
+       "layers.",
+       hdr::kLocalSection,
+       "hdr_local_open"},
   };
   constexpr int kLayerCount = 3;
 
-  const ImVec4 active_color = ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive);
-  const ImVec4 hovered_color = ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered);
-  const ImVec4 inactive_color = ImGui::GetStyleColorVec4(ImGuiCol_Button);
-  ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-
   for (int i = 0; i < kLayerCount; ++i) {
-    if (i > 0) ImGui::SameLine();
-    const bool is_active = (i == g_active_layer);
-    ImGui::PushStyleColor(ImGuiCol_Button,
-                          is_active ? active_color : inactive_color);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hovered_color);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, active_color);
-    ImGui::PushID(i);
-    if (ImGui::Button(layers[i].label)) g_active_layer = i;
-    ImGui::PopID();
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-      Tip("%s", layers[i].tooltip);
+    bool layer_changed = false;
+    const bool open = PersistentSettingHeader(
+        layers[i].label, layers[i].open_key, layer_changed,
+        layers[i].tooltip);
+    local_changed |= layer_changed;
+    if (open) {
+      IndentScope body_indent;
+      local_changed |= DrawLayerBody(store, options, layers[i].section, key);
     }
-    ImGui::PopStyleColor(3);
-  }
-  ImGui::PopStyleVar();
-
-  {
-    IndentScope tab_indent;
-    local_changed |= DrawLayerBody(store, options,
-                                   layers[g_active_layer].section, key);
   }
 
   ImGui::TextDisabled(
