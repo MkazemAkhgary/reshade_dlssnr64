@@ -60,17 +60,17 @@ bool DrawHdrLayers(const void* context, ctl::ValueStore& store,
       {"Game Exposure",
        "Configure the game's exposure as the base layer.",
        hdr::kGameSection,
-       "hdr_game_open"},
+       feature::ui_state::kHdrGameOpen},
       {"Adaptive Exposure",
        "Histogram-based global exposure or a bounded correction over Game "
        "Exposure.",
        hdr::kAdaptiveSection,
-       "hdr_adaptive_open"},
+       feature::ui_state::kHdrAdaptiveOpen},
       {"Local Exposure",
        "Spatially varying exposure correction applied after the global "
        "layers.",
        hdr::kLocalSection,
-       "hdr_local_open"},
+       feature::ui_state::kHdrLocalOpen},
   };
   constexpr int kLayerCount = 3;
 
