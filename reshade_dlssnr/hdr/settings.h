@@ -55,9 +55,10 @@ struct LocalExposureLayerSettings {
   float max_brighten = 1.75f;
   float max_darken = 1.75f;
   float midtone = 0.18f;
-  // Restores the global exposure after model inference by applying the
-  // inverse local exposure multiplier in linear light.
-  bool restore_global_exposure = false;
+  // 0 = no restore, 1 = full restore. The grade pass divides the model
+  // output by lerp(1, mean local scale, strength) in linear light, so an
+  // intermediate value blends partway back toward the global exposure.
+  float restore_global_exposure = 0.0f;
   bool precomputed_luma = false;
   bool fp16_reference = false;
 };

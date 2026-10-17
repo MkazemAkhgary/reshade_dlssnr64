@@ -28,8 +28,12 @@ bool ApplyGrade(CommandContext& state,
                 unsigned int height,
                 int format_code,
                 const GradeSettings& grade,
-                ID3D12Resource* exposure_map) {
-  const bool restore_exposure = exposure_map != nullptr;
+                ID3D12Resource* exposure_map,
+                float restore_exposure_strength) {
+  // A strength of zero is "no restore" even if a map was bound: the caller
+  // can therefore share a single grade path and let the setting decide.
+  const bool restore_exposure =
+      exposure_map != nullptr && restore_exposure_strength > 0.0f;
   if (!grade.enabled && !restore_exposure) return true;
 
   if (codec == nullptr || command_list == nullptr || target == nullptr ||
@@ -43,7 +47,8 @@ bool ApplyGrade(CommandContext& state,
   // This path also runs when only exposure restoration is enabled.
   SetGradeConstants(constants, grade);
   constants.grade.Format = static_cast<float>(format_code);
-  constants.grade.RestoreExposure = restore_exposure ? 1.0f : 0.0f;
+  constants.grade.RestoreExposure =
+      restore_exposure ? restore_exposure_strength : 0.0f;
 
   const ResourceTransition before_copy[] = {
       {target, D3D12_RESOURCE_STATE_COPY_SOURCE},

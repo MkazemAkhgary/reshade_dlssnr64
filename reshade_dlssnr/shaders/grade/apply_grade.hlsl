@@ -69,12 +69,16 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float3 lin = DecodeSource(src.rgb);
 
     // The 1x1 texture stores the mean local multiplier. Apply one uniform
-    // correction so the model's pixel-level shading remains intact.
-    if (kRestoreExposureFlag > 0.5) {
+    // correction so the model's pixel-level shading remains intact. The
+    // strength blends between no correction (divisor 1) and the full inverse
+    // local-exposure correction (divisor = mean scale).
+    if (kRestoreExposureFlag > 0.0) {
         float mean_local_scale = gExposure.SampleLevel(s0, float2(0.5, 0.5), 0);
         const float minimum_local_scale = 1.0e-6;
         mean_local_scale = max(mean_local_scale, minimum_local_scale);
-        lin /= mean_local_scale;
+        const float strength = saturate(kRestoreExposureFlag);
+        const float divisor = lerp(1.0, mean_local_scale, strength);
+        lin /= divisor;
     }
 
     float3 graded = GradeLinearFwd(lin);

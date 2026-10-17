@@ -209,10 +209,13 @@ void RegisterHdrSchema(ctl::Schema& schema) {
                "in FP16. It does not change NGX input/output or the HDR carrier; "
                "small reference quantization differences are possible.")
       .EnableWhen(&LayerEnabled, kLocalEnabled);
-  local.Add<ctl::BoolSetting>(kLocalRestoreGlobalExposure, "Restore Global Exposure", false)
-      .Tooltip("Apply the inverse local-exposure multiplier to the model output "
-               "in linear light before the Output Grade. This returns the "
-               "output to the global exposure scale and preserves chromaticity.")
+  local.Add<ctl::FloatSetting>(kLocalRestoreGlobalExposure,
+                               "Restore Global Exposure", 0.0f)
+      .Range(0.0f, 1.0f)
+      .Tooltip("How much of the local-exposure multiplier to undo on the model "
+               "output, in linear light, before the Output Grade. 1 restores "
+               "the full global exposure scale and preserves chromaticity; "
+               "0 leaves the model output untouched.")
       .EnableWhen(&LayerEnabled, kLocalEnabled);
 
 }

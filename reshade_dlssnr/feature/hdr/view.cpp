@@ -92,7 +92,7 @@ HdrSnapshotView Read(const ctl::ValueStore& store,
     l.precomputed_luma = store.Read(sec, key, kLocalPrecomputedLuma).as_bool;
     l.fp16_reference = store.Read(sec, key, kLocalFp16Reference).as_bool;
     l.restore_global_exposure =
-        store.Read(sec, key, kLocalRestoreGlobalExposure).as_bool;
+        store.Read(sec, key, kLocalRestoreGlobalExposure).as_float;
   }
 
   return s;

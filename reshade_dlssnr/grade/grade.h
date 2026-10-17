@@ -21,8 +21,10 @@ void SetGradeConstants(ComputeConstants& constants, const GradeSettings& grade);
 // in UNORDERED_ACCESS.
 //
 // A disabled grade is a no-op unless exposure_map is supplied.
-// When supplied, the decoded source is divided by the local exposure
-// multiplier in linear light before grading.
+// When supplied, the decoded source is divided by
+// lerp(1, local exposure multiplier, restore_exposure_strength) in linear
+// light before grading. A strength of 0 is a no-op even when a map is
+// supplied, so callers can share the grade path without a separate flag.
 bool ApplyGrade(CommandContext& state,
                 ID3D12GraphicsCommandList* command_list,
                 ComputeEngine* codec,
@@ -32,6 +34,7 @@ bool ApplyGrade(CommandContext& state,
                 unsigned int height,
                 int format_code,
                 const GradeSettings& grade,
-                ID3D12Resource* exposure_map = nullptr);
+                ID3D12Resource* exposure_map = nullptr,
+                float restore_exposure_strength = 1.0f);
 
 }  // namespace reshade_dlssnr::model_pipeline
