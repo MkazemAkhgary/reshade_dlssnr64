@@ -31,6 +31,8 @@ void RegisterUiStateSchema(ctl::Schema& schema) {
                                 "HDR Advanced Open", false).GlobalOnly();
   section.Add<ctl::BoolSetting>(ui_state::kHdrGameOpen,
                                 "HDR Game Exposure Open", true).GlobalOnly();
+  section.Add<ctl::BoolSetting>(ui_state::kHdrAdaptiveFiltersOpen,
+                                "HDR Adaptive Filters Open", false).GlobalOnly();
   section.Add<ctl::BoolSetting>(ui_state::kHdrAdaptiveOpen,
                                 "HDR Adaptive Exposure Open", false).GlobalOnly();
   section.Add<ctl::BoolSetting>(ui_state::kHdrLocalOpen,

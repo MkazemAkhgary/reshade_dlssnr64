@@ -17,6 +17,7 @@ inline constexpr const char* kHdrDiagnosticsOpen = "hdr_diagnostics_open";
 inline constexpr const char* kImportanceMaskOpen = "importance_mask_open";
 inline constexpr const char* kHdrAdvancedOpen = "hdr_advanced_open";
 inline constexpr const char* kHdrGameOpen = "hdr_game_open";
+inline constexpr const char* kHdrAdaptiveFiltersOpen = "hdr_adaptive_filters_open";
 inline constexpr const char* kHdrAdaptiveOpen = "hdr_adaptive_open";
 inline constexpr const char* kHdrLocalOpen = "hdr_local_open";
 inline constexpr const char* kHdrLocalAdvancedOpen = "hdr_local_advanced_open";

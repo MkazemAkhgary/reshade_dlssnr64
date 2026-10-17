@@ -91,6 +91,10 @@ const char* CategoryOpenSetting(const std::string& section,
       category == "Advanced") {
     return feature::ui_state::kHdrLocalAdvancedOpen;
   }
+  if (section == feature::hdr::kAdaptiveSection &&
+      category == "Filters") {
+    return feature::ui_state::kHdrAdaptiveFiltersOpen;
+  }
   if (section != feature::pass::kSection) return nullptr;
   if (category == "Model") return feature::ui_state::kModelOpen;
   if (category == "Strength") return feature::ui_state::kStrengthOpen;
