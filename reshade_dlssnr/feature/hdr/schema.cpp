@@ -1,11 +1,13 @@
 // HDR schema: source preparation and the three exposure layers.
 //
-// One translation unit per feature, declared whole here. Game and Adaptive
-// Exposure have histogram filters; Local Exposure uses spatial-neighborhood
+// One translation unit per feature, declared whole here. Only Adaptive
+// Exposure has histogram filters; Game Exposure is a scalar bias on the
+// game's NGX ExposureTexture, and Local Exposure uses spatial-neighborhood
 // controls only.
 //
-// The tab bar and the diagnostics block are hooks: they are rendering, not
-// settings, and a hook's identity is data so it is declared where it belongs.
+// The layer collapsibles and the diagnostics block are hooks: they are
+// rendering, not settings, and a hook's identity is data so it is declared
+// where it belongs.
 
 #include "ctl/builtin_settings.h"
 #include "ctl/schema.h"

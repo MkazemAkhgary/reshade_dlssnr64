@@ -1,6 +1,6 @@
 // HDR non-row UI.
 //
-// The settings are rows; the tab bar, its bodies and the diagnostics readout
+// The settings are rows; the layer collapsibles and the diagnostics readout
 // are not. They are declared as hooks in schema.cpp and implemented here, so
 // the HDR feature owns its rendering the same way it owns its settings.
 

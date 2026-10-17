@@ -62,14 +62,10 @@ DLSSNR_BLOCK(HdrBlock)
     float Bt2446K2;
     float Bt2446K4;
     float Crosstalk;
-    // Compose upsample selection. These two slots occupy the cbuffer
-    // positions previously held by ReservedGain0/ReservedGain1; the
-    // layout is byte-for-byte identical to before, only the names and
-    // usage changed.
-    //
-    // UpsampleMode: 0 = FSR 1.0 EASU, 1 = joint bilateral.
-    // UpsampleSharpness: guide-difference exponent for the bilateral
-    // path; ignored when mode selects EASU.
+    // Compose upsample selection.
+    //   UpsampleMode: 0 = FSR 1.0 EASU, 1 = joint bilateral.
+    //   UpsampleSharpness: guide-difference exponent for the bilateral
+    //     path; ignored when mode selects EASU.
     float UpsampleMode;
     float UpsampleSharpness;
     float GainMinLog2;

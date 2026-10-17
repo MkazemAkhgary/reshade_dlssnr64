@@ -1,12 +1,12 @@
-// HDR non-row UI: the exposure-layer tab bar and its bodies.
+// HDR non-row UI: the exposure-layer collapsibles and the diagnostics
+// readout.
 //
-// The three layers are separate sections, so each tab body is just
-// DrawSection on that section. That is the whole reason the layers are
-// sections and not categories: a tab body has to be able to draw a block of
-// settings on its own, and only a section can.
-//
-// The layer bodies draw with `draw_headers = false` -- the tab label is the
-// header -- and the caller already indented, so the drawer must not.
+// The three layers are separate sections. Each layer header is rendered by
+// PersistentSettingHeader (with the section's HeaderToggle providing the
+// row-skip for the `enabled` setting) and its body by DrawSection with
+// draw_headers = false. That is the whole reason the layers are sections and
+// not categories: a body has to be able to draw a block of settings on its
+// own, and only a section can.
 
 #include "feature/hdr/ui.h"
 
@@ -26,7 +26,9 @@ namespace hdr {
 
 namespace {
 
-// Draw one layer section inside its tab, without a header, for the same
+// Draw one layer section's body, without a header row of its own. The
+// layer header is rendered by PersistentSettingHeader; the body must use
+// draw_headers = false so a second header does not appear. For the same
 // instance the HDR section is being drawn for. The key is forwarded whole --
 // no hash, no re-derivation -- so a string-keyed instance survives the trip.
 bool DrawLayerBody(ctl::ValueStore& store, const ctl::DrawOptions& options,
@@ -88,7 +90,7 @@ bool DrawHdrLayers(const void* context, ctl::ValueStore& store,
 
   ImGui::TextDisabled(
       "Stack order: Game Exposure base, Adaptive correction, then Local "
-      "Exposure. Each layer's filters are independent.");
+      "Exposure. Each layer's controls are independent.");
 
   changed |= local_changed;
   return local_changed;

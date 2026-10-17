@@ -12,8 +12,8 @@ namespace hdr {
 
 namespace {
 
-// Read the filter rows shared by every layer. Each layer is its own section,
-// so the names are bare and cannot collide.
+// Read the filter rows. Only Adaptive Exposure declares them; the rows are
+// bare because the layer is its own section, so there is nothing to prefix.
 ExposureFilterSettings ReadFilters(const ctl::ValueStore& store,
                                    const ctl::InstanceKey& key,
                                    const std::string& section) {

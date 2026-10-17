@@ -1,6 +1,7 @@
 // The exposure-filter rows. See rows.h.
 //
-// Every exposure layer owns an independent filter set, and the parameter rows
+// Only Adaptive Exposure declares these; the Game layer is a scalar bias. The
+// parameter rows
 // are gated by the checkbox that enables them. The gate reads a checkbox in
 // the section it is drawn in; the framework hands the predicate that section
 // name, so the only thing this file has to remember is which checkbox -- and

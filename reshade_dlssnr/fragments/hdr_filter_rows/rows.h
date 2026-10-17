@@ -1,9 +1,9 @@
 // The exposure-filter rows, as a reusable fragment.
 //
-// Same shape and same reason as grade_rows: every exposure layer owns an
-// independent ExposureFilterSettings, so this appends the rows and the layers
-// do not depend on each other. Each layer is its own section, so the names are
-// bare and cannot collide.
+// Same shape and same reason as grade_rows: the Adaptive Exposure layer owns
+// an ExposureFilterSettings, so this appends the rows and the layer does not
+// depend on the schema translation unit. The rows are bare because the layer
+// is its own section, so there is nothing to prefix.
 //
 // Adding a filter row touches this file and nobody else.
 

@@ -31,7 +31,7 @@ struct GameExposureLayerSettings {
 };
 
 struct AdaptiveExposureLayerSettings {
-  bool enabled = true;
+  bool enabled = false;
   float midtone = 0.18f;
   float speed_up = 3.0f;
   float speed_down = 1.0f;
@@ -39,7 +39,7 @@ struct AdaptiveExposureLayerSettings {
   // target, still limited by max_correction_stops.
   float strength_over_game = 0.0f;
   float max_correction_stops = 0.75f;
-  ExposureFilterSettings filters = {false, false, true};
+  ExposureFilterSettings filters = {};
 };
 
 struct LocalExposureLayerSettings {
@@ -82,6 +82,7 @@ struct HdrSettings {
   // These change the transfer curve, not the interpretation of exposure.
   float bt2446_k1 = 0.83802f;
   float bt2446_k2 = 15.09968f;
+  // Reserved for the pending BT.2446C completion; not read by any shader.
   float bt2446_k3 = 0.74204f;
   float bt2446_k4 = 78.99439f;
   float bt2446_crosstalk = 0.04f;
