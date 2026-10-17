@@ -72,7 +72,7 @@ struct HdrSettings {
   bool enable = true;
   HdrFormat format = HdrFormat::Auto;
   int measure_interval = 4;
-  float highlight_headroom = 8.0f;
+  float highlight_headroom = 1.0f;
   bool detailed_statistics = false;
   bool faster_metering = false;
 

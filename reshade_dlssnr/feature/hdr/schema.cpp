@@ -128,9 +128,10 @@ void RegisterHdrSchema(ctl::Schema& schema) {
   // --- HDR Adaptive Exposure ---------------------------------------------
   ctl::Section& adaptive =
       schema.AddSection(kAdaptiveSection, ctl::SectionKind::Single);
-  adaptive.Add<ctl::BoolSetting>(kAdaptiveEnabled, "Adaptive Exposure", true)
-      .Tooltip("Use histogram-derived global exposure or a bounded correction "
-               "over Game Exposure.");
+  adaptive.Add<ctl::BoolSetting>(kAdaptiveEnabled, "Adaptive Exposure", false)
+      .Tooltip("With Game Exposure off, provides global exposure from a "
+               "histogram measurement. With Game Exposure on, applies "
+               "Strength Over Game as a bounded correction (no effect at 0).");
   adaptive.Add<ctl::FloatSetting>(kAdaptiveMidtone, "Midtone Target", 0.18f)
       .Range(0.01f, 0.5f)
       .Tooltip("Target luminance for the selected population.")
