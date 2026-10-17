@@ -174,7 +174,6 @@ void ExposureTracker::Update(const uint32_t* bins,
     target = std::exp2(current_log + delta);
   }
 
-  target_exposure = target;
   exposure = target;
   exposure_reference_luma = std::max(reference, 1e-6f);
   const float white_fraction = params.use_percentile_range
@@ -255,7 +254,6 @@ void HdrState::Shutdown() {
   for (uint32_t i = 0; i < kHistogramBins; ++i) {
     last_histogram_[i] = 0;
   }
-  p_hi_luma_ = 0.0f;
   last_samples_ = 0;
   have_measurement_time_ = false;
   last_measurement_time_ = {};
@@ -280,8 +278,7 @@ HdrSnapshot HdrState::GetSnapshot() const {
       snapshot.histogram[i] = last_histogram_[i];
   }
   snapshot.exposure_reference_luma = regular_.exposure_reference_luma;
-  snapshot.p_hi_luma = p_hi_luma_;
-  snapshot.target_exposure = regular_.target_exposure;
+  snapshot.adaptive_scene_white = adaptive_.scene_white;
   snapshot.samples = last_samples_;
   snapshot.measurement_generation = measurement_generation_;
   snapshot.game_exposure_available = game_exposure_available_;
@@ -488,6 +485,7 @@ void HdrState::SignalAtPresent(ID3D12CommandQueue* queue) {
 void HdrState::PollReadback(ID3D12Fence* fence, const HdrSettings& settings) {
   if (fence == nullptr) return;
   const uint64_t completed = fence->GetCompletedValue();
+  bool stack_dirty = false;
 
   if (pending_game_exposure_ && completed >= pending_game_exposure_fence_value_) {
     uint32_t bytes = 0;
@@ -501,7 +499,7 @@ void HdrState::PollReadback(ID3D12Fence* fence, const HdrSettings& settings) {
         game_exposure_available_ = true;
       }
     }
-    ResolveExposureStack(settings);
+    stack_dirty = true;
   }
 
   if (pending_measurement_ && completed >= pending_fence_value_) {
@@ -513,6 +511,7 @@ void HdrState::PollReadback(ID3D12Fence* fence, const HdrSettings& settings) {
       UpdateExposure(bins, bins + kHistogramBins, settings);
       ++measurement_generation_;
       frames_since_measure_ = 0;
+      stack_dirty = true;
     }
   }
 
@@ -535,6 +534,10 @@ void HdrState::PollReadback(ID3D12Fence* fence, const HdrSettings& settings) {
       if (std::isfinite(gain_min_log2_) && std::isfinite(gain_max_log2_))
         have_gain_stats_ = true;
     }
+  }
+
+  if (stack_dirty) {
+    ResolveExposureStack(settings);
   }
 }
 
@@ -578,8 +581,6 @@ void HdrState::UpdateExposure(const uint32_t* full_bins,
   for (uint32_t i = 0; i < kHistogramBins; ++i) last_histogram_[i] = chosen[i];
   last_samples_ = chosen_total;
   have_histogram_ = chosen_total != 0;
-  p_hi_luma_ = adaptive_.scene_white;
-  ResolveExposureStack(settings);
 }
 
 void HdrState::ResolveExposureStack(const HdrSettings& settings) {
@@ -601,7 +602,7 @@ void HdrState::ResolveExposureStack(const HdrSettings& settings) {
       exposure *= std::exp2(correction);
     }
     scene_white = 1.0f;
-    source = MeteringSource::GameExposureBuffer;
+    source = MeteringSource::GameExposureSource;
   } else if (use_adaptive) {
     exposure = adaptive_.exposure;
     scene_white = adaptive_.scene_white;
@@ -609,9 +610,9 @@ void HdrState::ResolveExposureStack(const HdrSettings& settings) {
   }
 
   regular_.exposure = std::clamp(exposure, 1e-5f, 4096.0f);
-  regular_.target_exposure = regular_.exposure;
   regular_.scene_white = std::max(scene_white, 1e-6f);
-  regular_.exposure_reference_luma = adaptive_.exposure_reference_luma;
+  regular_.exposure_reference_luma =
+      use_adaptive ? adaptive_.exposure_reference_luma : 0.0f;
   regular_.have_measurement = use_game || use_adaptive;
   regular_.metering_source = source;
   regular_.warmup_frames = std::max(regular_.warmup_frames, adaptive_.warmup_frames);

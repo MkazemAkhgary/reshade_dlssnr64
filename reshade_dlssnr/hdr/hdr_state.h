@@ -17,7 +17,7 @@ namespace reshade_dlssnr {
 enum class MeteringSource {
   FullFrame = 0,
   FilteredPopulation = 1,
-  GameExposureBuffer = 2,
+  GameExposureSource = 2,  // the game's 1x1 NGX exposure, not a histogram band
 };
 
 struct ExposureParams {
@@ -32,7 +32,6 @@ struct ExposureParams {
 struct ExposureTracker {
   float exposure = 1.0f;
   float scene_white = 1.0f;
-  float target_exposure = 1.0f;
   float exposure_reference_luma = 0.0f;
   float warmup_frames = 0.0f;
   bool have_measurement = false;
@@ -53,8 +52,7 @@ struct HdrSnapshot {
   bool has_histogram = false;
   uint32_t histogram[256] = {};
   float exposure_reference_luma = 0.0f;
-  float p_hi_luma = 0.0f;
-  float target_exposure = 1.0f;
+  float adaptive_scene_white = 0.0f;
   uint32_t samples = 0;
 
   bool game_exposure_available = false;
@@ -160,7 +158,6 @@ class HdrState {
 
   bool have_histogram_ = false;
   uint32_t last_histogram_[256] = {};
-  float p_hi_luma_ = 0.0f;
   uint32_t last_samples_ = 0;
   std::chrono::steady_clock::time_point last_measurement_time_{};
   bool have_measurement_time_ = false;

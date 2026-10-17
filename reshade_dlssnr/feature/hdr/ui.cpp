@@ -129,15 +129,24 @@ bool DrawHdrDiagnostics(const void* context, ctl::ValueStore& store,
   const char* source_name =
       hdr.metering_source == 0 ? "Full frame" :
       hdr.metering_source == 1 ? "Filtered population" :
-      hdr.metering_source == 2 ? "Game exposure buffer" : "Unknown";
+      hdr.metering_source == 2 ? "Game exposure (NGX)" : "Unknown";
 
   ImGui::Text("Format: %s - resolved=%s", format_name,
               hdr.ready ? "yes" : "no");
-  ImGui::Text("Exposure: %.4f (target %.4f)",
-              hdr.exposure, hdr.target_exposure);
-  ImGui::Text("Scene white: %.4f - reference luma: %.4f",
-              hdr.scene_white, hdr.exposure_reference_luma);
-  ImGui::Text("P_hi luma: %.4f", hdr.p_hi_luma);
+  ImGui::Text("Exposure: %.4f", hdr.exposure);
+  ImGui::Text("Scene white: %.4f", hdr.scene_white);
+  if (hdr.exposure_reference_luma > 0.0f) {
+    ImGui::Text("  reference luma: %.4f",
+                hdr.exposure_reference_luma);
+  }
+  {
+    const float diff = hdr.adaptive_scene_white - hdr.scene_white;
+    if (hdr.adaptive_scene_white > 0.0f &&
+        (diff > 1e-4f || diff < -1e-4f)) {
+      ImGui::Text("  adaptive scene white: %.4f",
+                  hdr.adaptive_scene_white);
+    }
+  }
   ImGui::Text("Samples: %u - frames since measure: %u",
               hdr.samples, hdr.frames_since_measure);
   ImGui::Text("Measurement generation: %llu",
