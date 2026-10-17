@@ -37,7 +37,7 @@ namespace {
 
 constexpr uint32_t kHistogramBins = 256;
 constexpr uint32_t kHistogramBytes = kHistogramBins * sizeof(uint32_t);
-constexpr uint32_t kHistogramLayerCount = 3;
+constexpr uint32_t kHistogramLayerCount = 2;
 constexpr uint32_t kCombinedHistogramBytes = kHistogramLayerCount * kHistogramBytes;
 constexpr float kLumaMinLog2 = -12.0f;
 constexpr float kLumaMaxLog2 = 12.0f;
@@ -423,17 +423,7 @@ void HdrState::BeginFrame(CommandContext& cmd,
     if (filter.depth && have_depth) flags |= 2u;
     return flags;
   };
-  const auto& game_filter = hdr_settings.game_exposure.filters;
   const auto& adaptive_filter = hdr_settings.adaptive_exposure.filters;
-  constants.histogram.GameFilter.x =
-      static_cast<float>(filter_flags(game_filter));
-  constants.histogram.GameFilter.y = game_filter.depth_near;
-  constants.histogram.GameFilter.z = game_filter.depth_far;
-  // Bounded tuning over Game Exposure was removed in favour of the
-  // Adaptive layer's strength_over_game; the game histogram band is
-  // no longer consumed. Leaving the flag at zero makes the shader
-  // skip populating it.
-  constants.histogram.GameFilter.w = 0.0f;
   constants.histogram.AdaptiveFilter.x =
       static_cast<float>(filter_flags(adaptive_filter));
   constants.histogram.AdaptiveFilter.y = adaptive_filter.depth_near;
@@ -442,7 +432,7 @@ void HdrState::BeginFrame(CommandContext& cmd,
   constants.histogram.Settings.x = hdr_settings.faster_metering ? 1.0f : 0.0f;
 
   if (!codec.Dispatch("ZeroHistogram", command_list, constants, srvs, uavs,
-                      3, 1, 1)) {
+                      2, 1, 1)) {
     ++frame_counter_;
     return;
   }
@@ -520,7 +510,7 @@ void HdrState::PollReadback(ID3D12Fence* fence, const HdrSettings& settings) {
     pending_measurement_ = false;
     if (mapped != nullptr && bytes >= kCombinedHistogramBytes) {
       const uint32_t* bins = static_cast<const uint32_t*>(mapped);
-      UpdateExposure(bins, bins + 2 * kHistogramBins, settings);
+      UpdateExposure(bins, bins + kHistogramBins, settings);
       ++measurement_generation_;
       frames_since_measure_ = 0;
     }

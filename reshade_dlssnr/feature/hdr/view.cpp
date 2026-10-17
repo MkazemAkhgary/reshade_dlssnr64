@@ -56,7 +56,6 @@ HdrSnapshotView Read(const ctl::ValueStore& store,
     GameExposureLayerSettings& g = s.game_exposure;
     g.enabled = store.Read(sec, key, kGameEnabled).as_bool;
     g.bias_stops = store.Read(sec, key, kGameBiasStops).as_float;
-    g.filters = ReadFilters(store, key, sec);
   }
 
   // Adaptive layer.

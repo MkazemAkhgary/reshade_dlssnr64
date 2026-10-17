@@ -7,10 +7,6 @@
 #define kHistogramFormat shader.Params0.x
 #define kLumaMinLog2     shader.Params0.y
 #define kLumaMaxLog2     shader.Params0.z
-#define kGameFilterFlags ((uint)(histogram.GameFilter.x + 0.5))
-#define kGameDepthNear   histogram.GameFilter.y
-#define kGameDepthFar    histogram.GameFilter.z
-#define kGameTuningOn    (histogram.GameFilter.w > 0.5)
 #define kAdaptiveFilterFlags ((uint)(histogram.AdaptiveFilter.x + 0.5))
 #define kAdaptiveDepthNear histogram.AdaptiveFilter.y
 #define kAdaptiveDepthFar  histogram.AdaptiveFilter.z
@@ -23,7 +19,6 @@ RWBuffer<uint> gHistogram : register(u0);
 SamplerState s0 : register(s0);
 
 groupshared uint gFullHistogram[256];
-groupshared uint gGameHistogram[256];
 groupshared uint gAdaptiveHistogram[256];
 
 uint2 ToResourcePixel(uint2 pixel, uint2 source_size, uint2 resource_size)
@@ -52,7 +47,6 @@ void CSMain(uint3 gtid : SV_GroupThreadID,
     const uint local_index = gtid.x + gtid.y * 8u;
     for (uint i = local_index; i < 256u; i += 64u) {
         gFullHistogram[i] = 0u;
-        gGameHistogram[i] = 0u;
         gAdaptiveHistogram[i] = 0u;
     }
     GroupMemoryBarrierWithGroupSync();
@@ -74,7 +68,7 @@ void CSMain(uint3 gtid : SV_GroupThreadID,
         const uint bin = min((uint)(t * 255.0 + 0.5), 255u);
 
         float mask_value = 1.0;
-        if (((kGameFilterFlags | kAdaptiveFilterFlags) & 1u) != 0u) {
+        if ((kAdaptiveFilterFlags & 1u) != 0u) {
             uint mask_width, mask_height;
             gMask.GetDimensions(mask_width, mask_height);
             if (mask_width > 0u && mask_height > 0u) {
@@ -87,7 +81,7 @@ void CSMain(uint3 gtid : SV_GroupThreadID,
         }
 
         float depth_value = 0.5;
-        if (((kGameFilterFlags | kAdaptiveFilterFlags) & 2u) != 0u) {
+        if ((kAdaptiveFilterFlags & 2u) != 0u) {
             uint depth_width, depth_height;
             gDepth.GetDimensions(depth_width, depth_height);
             if (depth_width > 0u && depth_height > 0u) {
@@ -101,13 +95,6 @@ void CSMain(uint3 gtid : SV_GroupThreadID,
         }
 
         InterlockedAdd(gFullHistogram[bin], 1u);
-        if (kGameTuningOn) {
-            const uint contribution = FilteredContribution(
-                kGameFilterFlags, kGameDepthNear, kGameDepthFar,
-                mask_value, depth_value);
-            if (contribution > 0u)
-                InterlockedAdd(gGameHistogram[bin], contribution);
-        }
         const uint adaptive_contribution = FilteredContribution(
             kAdaptiveFilterFlags, kAdaptiveDepthNear, kAdaptiveDepthFar,
             mask_value, depth_value);
@@ -119,9 +106,7 @@ void CSMain(uint3 gtid : SV_GroupThreadID,
     for (uint index = local_index; index < 256u; index += 64u) {
         if (gFullHistogram[index] > 0u)
             InterlockedAdd(gHistogram[index], gFullHistogram[index]);
-        if (gGameHistogram[index] > 0u)
-            InterlockedAdd(gHistogram[256u + index], gGameHistogram[index]);
         if (gAdaptiveHistogram[index] > 0u)
-            InterlockedAdd(gHistogram[512u + index], gAdaptiveHistogram[index]);
+            InterlockedAdd(gHistogram[256u + index], gAdaptiveHistogram[index]);
     }
 }

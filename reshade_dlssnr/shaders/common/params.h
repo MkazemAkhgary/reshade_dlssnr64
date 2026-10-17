@@ -100,8 +100,6 @@ DLSSNR_BLOCK(RcasBlock)
 
 DLSSNR_BLOCK(HistogramBlock)
 {
-    // x = filter flags, y/z = depth range, w = whether game tuning is active.
-    float4 GameFilter;
     // x = filter flags, y/z = depth range, w = depth inversion.
     float4 AdaptiveFilter;
     float4 Settings;        // x = use 2x2-stride metering samples

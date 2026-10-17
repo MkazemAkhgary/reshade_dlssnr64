@@ -123,7 +123,6 @@ void RegisterHdrSchema(ctl::Schema& schema) {
       .Tooltip("Manual bias relative to the game's exposure, in stops. Zero "
                "leaves the game's value untouched.")
       .EnableWhen(&LayerEnabled, kGameEnabled);
-  hdr_filter_rows::Declare(game, "Filters");
 
   // --- HDR Adaptive Exposure ---------------------------------------------
   ctl::Section& adaptive =

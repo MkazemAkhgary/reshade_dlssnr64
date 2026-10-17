@@ -28,7 +28,6 @@ struct ExposureFilterSettings {
 struct GameExposureLayerSettings {
   bool enabled = true;
   float bias_stops = 0.0f;
-  ExposureFilterSettings filters = {};
 };
 
 struct AdaptiveExposureLayerSettings {
