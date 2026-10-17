@@ -251,26 +251,29 @@ bool PassResources::EnsureEffectiveExposureMap(
 
 void PassResources::ReleaseEffectiveExposureMap() {
   Dispose(effective_exposure_map);
-  local_exposure_luma_width = 0;
-  local_exposure_luma_height = 0;
   effective_exposure_width = 0;
   effective_exposure_height = 0;
 }
 
-bool PassResources::EnsureLocalExposureMeanResources(
+bool PassResources::EnsureLocalExposureRestoreResources(
     ID3D12Device* device, unsigned int width, unsigned int height) {
   if (device == nullptr || width == 0 || height == 0) return false;
 
   const unsigned int partial_width = (width + 7u) / 8u;
   const unsigned int partial_height = (height + 7u) / 8u;
+  const D3D12_RESOURCE_DESC existing_global_desc =
+      local_exposure_global_scale != nullptr
+          ? local_exposure_global_scale->GetDesc() : D3D12_RESOURCE_DESC{};
   const bool matches = local_exposure_partial_sums != nullptr &&
-      local_exposure_mean != nullptr &&
+      local_exposure_global_scale != nullptr &&
       local_exposure_partial_width == partial_width &&
-      local_exposure_partial_height == partial_height;
+      local_exposure_partial_height == partial_height &&
+      existing_global_desc.Width == 1 && existing_global_desc.Height == 1 &&
+      existing_global_desc.Format == DXGI_FORMAT_R32_FLOAT;
   if (matches) return true;
 
   Dispose(local_exposure_partial_sums);
-  Dispose(local_exposure_mean);
+  Dispose(local_exposure_global_scale);
 
   D3D12_RESOURCE_DESC desc = {};
   desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -286,23 +289,25 @@ bool PassResources::EnsureLocalExposureMeanResources(
   if (!CreateUavTexture(device, desc, &partial_raw)) return false;
   local_exposure_partial_sums.Attach(partial_raw);
 
-  desc.Width = 1;
-  desc.Height = 1;
-  ID3D12Resource* mean_raw = nullptr;
-  if (!CreateUavTexture(device, desc, &mean_raw)) {
+  D3D12_RESOURCE_DESC global_desc = desc;
+  global_desc.Width = 1;
+  global_desc.Height = 1;
+  ID3D12Resource* global_raw = nullptr;
+  if (!CreateUavTexture(device, global_desc, &global_raw)) {
     Dispose(local_exposure_partial_sums);
     return false;
   }
-  local_exposure_mean.Attach(mean_raw);
+  local_exposure_global_scale.Attach(global_raw);
 
   local_exposure_partial_width = partial_width;
   local_exposure_partial_height = partial_height;
   trace::NameResource(local_exposure_partial_sums.Get(),
-                      "local_exposure_partial_sums");
-  trace::NameResource(local_exposure_mean.Get(), "local_exposure_mean");
-  TRACE_CMD(this, "create local exposure reduction res=%d/%d %ux%u -> 1x1",
+                      "local_exposure_tile_log_scales");
+  trace::NameResource(local_exposure_global_scale.Get(),
+                      "local_exposure_global_scale");
+  TRACE_CMD(this, "create local exposure restore res=%d/%d tiles=%ux%u",
             trace::ResourceId(local_exposure_partial_sums.Get()),
-            trace::ResourceId(local_exposure_mean.Get()),
+            trace::ResourceId(local_exposure_global_scale.Get()),
             partial_width, partial_height);
   return true;
 }
@@ -553,7 +558,7 @@ void PassResources::Shutdown() {
   local_exposure_luma.Reset();
   effective_exposure_map.Reset();
   local_exposure_partial_sums.Reset();
-  local_exposure_mean.Reset();
+  local_exposure_global_scale.Reset();
   temporal_previous_input.Reset();
   temporal_previous_edit.Reset();
   temporal_previous_depth.Reset();

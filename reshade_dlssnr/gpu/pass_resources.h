@@ -73,7 +73,10 @@ class PassResources {
   unsigned int local_exposure_luma_height = 0;
   Microsoft::WRL::ComPtr<ID3D12Resource> effective_exposure_map;
   Microsoft::WRL::ComPtr<ID3D12Resource> local_exposure_partial_sums;
-  Microsoft::WRL::ComPtr<ID3D12Resource> local_exposure_mean;
+  // One R32_FLOAT scalar holding the geometric-mean local multiplier for
+  // global restoration. The per-pixel multiplier is read directly from the
+  // local/global carrier alpha channels in the grade shader.
+  Microsoft::WRL::ComPtr<ID3D12Resource> local_exposure_global_scale;
   unsigned int local_exposure_partial_width = 0;
   unsigned int local_exposure_partial_height = 0;
 
@@ -126,7 +129,7 @@ class PassResources {
   bool EnsureEffectiveExposureMap(
       ID3D12Device* device, unsigned int width, unsigned int height);
   void ReleaseEffectiveExposureMap();
-  bool EnsureLocalExposureMeanResources(
+  bool EnsureLocalExposureRestoreResources(
       ID3D12Device* device, unsigned int width, unsigned int height);
   // `input_desc` is the actual model-domain input (which may be the game
   // resource in identity-scale SDR mode). `out_reset_history` is true when
@@ -164,8 +167,8 @@ class PassResources {
   ID3D12Resource* GetLocalExposurePartialSums() const {
     return local_exposure_partial_sums.Get();
   }
-  ID3D12Resource* GetLocalExposureMean() const {
-    return local_exposure_mean.Get();
+  ID3D12Resource* GetLocalExposureGlobalScale() const {
+    return local_exposure_global_scale.Get();
   }
   unsigned int LocalExposurePartialWidth() const {
     return local_exposure_partial_width;

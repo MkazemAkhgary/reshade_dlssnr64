@@ -414,6 +414,8 @@
     <None Include="shaders\hdr\build_gain_map_stats.hlsl" />
     <None Include="shaders\hdr\build_histogram.hlsl" />
     <None Include="shaders\hdr\gain_map_split.hlsl" />
+    <None Include="shaders\hdr\reduce_local_exposure_tiles.hlsl" />
+    <None Include="shaders\hdr\reduce_local_exposure_global.hlsl" />
     <None Include="shaders\hdr\read_game_exposure.hlsl" />
     <None Include="shaders\hdr\zero_gain_map_stats.hlsl" />
     <None Include="shaders\hdr\zero_histogram.hlsl" />

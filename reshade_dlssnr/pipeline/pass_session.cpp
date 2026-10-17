@@ -87,6 +87,19 @@ uint64_t TemporalSettingsSignature(const PassRun& run) {
   HashTemporalValue(&hash, run.hdr_state.bt2446_crosstalk);
   HashTemporalValue(&hash, run.hdr_uniforms.format);
   HashTemporalValue(&hash, run.hdr_uniforms.local_exposure_strength);
+  HashTemporalValue(&hash, run.hdr_uniforms.local_max_brighten);
+  HashTemporalValue(&hash, run.hdr_uniforms.local_max_darken);
+  HashTemporalValue(&hash, run.hdr_uniforms.midtone);
+  HashTemporalValue(&hash, run.hdr_uniforms.local_shadow_strength);
+  HashTemporalValue(&hash, run.hdr_uniforms.local_highlight_strength);
+  HashTemporalValue(&hash, run.hdr_uniforms.local_shadow_range);
+  HashTemporalValue(&hash, run.hdr_uniforms.local_highlight_range);
+  HashTemporalValue(&hash, run.hdr_uniforms.local_highlight_protection);
+  HashTemporalValue(&hash, run.hdr_uniforms.local_shadow_protection);
+  HashTemporalValue(&hash, run.hdr_uniforms.local_detail_retention);
+  HashTemporalValue(&hash, run.hdr_uniforms.local_edge_protection);
+  HashTemporalValue(&hash, run.hdr_uniforms.local_radius_px);
+  HashTemporalValue(&hash, run.hdr_uniforms.local_samples);
   HashTemporalValue(&hash, run.hdr_uniforms.local_precomputed_luma);
   HashTemporalValue(&hash, run.hdr_uniforms.fp16_unlifted_reference);
   return hash;
@@ -157,8 +170,9 @@ void LogPresentInterfacesOnce(bool device_is_proxy, ID3D12CommandQueue* queue) {
 
 void BindLocalExposureInputs(const PassRun& run, ComputeConstants& constants,
                              ID3D12Resource* source, ID3D12Resource** srvs) {
-  constants.hdr.LocalExposureParams.x = 4.0f;
-  constants.hdr.LocalExposureParams.y = 4.0f;
+  constants.hdr.LocalExposureParams.x = run.hdr_uniforms.local_radius_px;
+  constants.hdr.LocalExposureParams.y =
+      static_cast<float>(run.hdr_uniforms.local_samples);
   ID3D12Resource* luma = run.resources != nullptr
       ? run.resources->GetLocalExposureLuma() : nullptr;
   const bool use_precomputed = run.hdr_uniforms.local_precomputed_luma && luma != nullptr;
@@ -1256,10 +1270,7 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
   constants.hdr.GainMinLog2 = run.hdr_uniforms.gain_min_log2;
   constants.hdr.GainMaxLog2 = run.hdr_uniforms.gain_max_log2;
   constants.hdr.EffectiveSceneWhiteNits = run.hdr_uniforms.effective_scene_white_nits;
-  constants.hdr.LocalExposure.x = run.hdr_uniforms.local_exposure_strength;
-  constants.hdr.LocalExposure.y = run.hdr_uniforms.local_max_brighten;
-  constants.hdr.LocalExposure.z = run.hdr_uniforms.local_max_darken;
-  constants.hdr.LocalExposure.w = run.hdr_uniforms.midtone;
+  model_pipeline::SetLocalExposureConstants(constants, run.hdr_uniforms);
 
   if (run.hdr_uniforms.local_exposure_strength > 0.0f &&
       run.hdr_uniforms.local_precomputed_luma) {
@@ -1823,10 +1834,7 @@ PipelineStatus PassSession::StepBuildEffectiveLocalExposure(PassRun& run) {
   constants.hdr.GainMaxLog2 = run.hdr_uniforms.gain_max_log2;
   constants.hdr.EffectiveSceneWhiteNits =
       run.hdr_uniforms.effective_scene_white_nits;
-  constants.hdr.LocalExposure.x = run.hdr_uniforms.local_exposure_strength;
-  constants.hdr.LocalExposure.y = run.hdr_uniforms.local_max_brighten;
-  constants.hdr.LocalExposure.z = run.hdr_uniforms.local_max_darken;
-  constants.hdr.LocalExposure.w = run.hdr_uniforms.midtone;
+  model_pipeline::SetLocalExposureConstants(constants, run.hdr_uniforms);
 
   ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
   ID3D12Resource* srvs[kSrvCount] = {};

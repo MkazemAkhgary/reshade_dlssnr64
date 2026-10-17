@@ -304,10 +304,8 @@ bool RenderDebugView(
     constants.hdr.GainMinLog2 = hdr->gain_min_log2;
     constants.hdr.GainMaxLog2 = hdr->gain_max_log2;
     constants.hdr.EffectiveSceneWhiteNits = hdr->effective_scene_white_nits;
-    constants.hdr.LocalExposure.x = hdr->local_exposure_strength;
-    constants.hdr.LocalExposure.y = hdr->local_max_brighten;
-    constants.hdr.LocalExposure.z = hdr->local_max_darken;
-    constants.hdr.LocalExposure.w = hdr->midtone;
+    model_pipeline::SetLocalExposureConstants(constants, *hdr);
+    constants.hdr.LocalExposureParams.z = 0.0f;
 
     const GradeSettings& grade = snapshot.input_grade;
     constants.grade.Enabled = grade.enabled ? 1.0f : 0.0f;

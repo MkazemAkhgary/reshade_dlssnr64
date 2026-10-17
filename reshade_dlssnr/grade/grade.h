@@ -20,11 +20,11 @@ void SetGradeConstants(ComputeConstants& constants, const GradeSettings& grade);
 // copied into `scratch` first and the dispatch reads that. Leaves `target`
 // in UNORDERED_ACCESS.
 //
-// A disabled grade is a no-op unless exposure_map is supplied.
-// When supplied, the decoded source is divided by
-// lerp(1, local exposure multiplier, restore_exposure_strength) in linear
-// light before grading. A strength of 0 is a no-op even when a map is
-// supplied, so callers can share the grade path without a separate flag.
+// A disabled grade is a no-op unless local/global carriers are supplied.
+// When local/global carriers are supplied, the decoded source is divided by
+// a multiplier interpolated in log exposure space between the exact per-pixel
+// local multiplier and an optional 1x1 global multiplier before grading.
+// restore_mode 0 uses per-pixel restoration; 1 uses the global scalar.
 bool ApplyGrade(CommandContext& state,
                 ID3D12GraphicsCommandList* command_list,
                 ComputeEngine* codec,
@@ -34,7 +34,10 @@ bool ApplyGrade(CommandContext& state,
                 unsigned int height,
                 int format_code,
                 const GradeSettings& grade,
-                ID3D12Resource* exposure_map = nullptr,
-                float restore_exposure_strength = 1.0f);
+                ID3D12Resource* local_carrier = nullptr,
+                ID3D12Resource* global_carrier = nullptr,
+                ID3D12Resource* global_scale = nullptr,
+                float restore_mode = 1.0f,
+                float restore_strength = 1.0f);
 
 }  // namespace reshade_dlssnr::model_pipeline

@@ -82,10 +82,21 @@ HdrSnapshotView Read(const ctl::ValueStore& store,
     l.max_brighten = store.Read(sec, key, kLocalMaxBrighten).as_float;
     l.max_darken = store.Read(sec, key, kLocalMaxDarken).as_float;
     l.midtone = store.Read(sec, key, kLocalMidtone).as_float;
+    l.shadow_strength = store.Read(sec, key, kLocalShadowStrength).as_float;
+    l.highlight_strength = store.Read(sec, key, kLocalHighlightStrength).as_float;
+    l.shadow_range = store.Read(sec, key, kLocalShadowRange).as_float;
+    l.highlight_range = store.Read(sec, key, kLocalHighlightRange).as_float;
+    l.highlight_protection = store.Read(sec, key, kLocalHighlightProtection).as_float;
+    l.shadow_protection = store.Read(sec, key, kLocalShadowProtection).as_float;
+    l.detail_retention = store.Read(sec, key, kLocalDetailRetention).as_float;
+    l.edge_protection = store.Read(sec, key, kLocalEdgeProtection).as_float;
+    l.radius_px = store.Read(sec, key, kLocalRadius).as_float;
+    l.samples = store.Read(sec, key, kLocalSamples).as_int;
+    l.restore_exposure = store.Read(sec, key, kLocalRestoreEnabled).as_bool;
+    l.restore_mode = store.Read(sec, key, kLocalRestoreMode).as_float;
+    l.restore_strength = store.Read(sec, key, kLocalRestoreStrength).as_float;
     l.precomputed_luma = store.Read(sec, key, kLocalPrecomputedLuma).as_bool;
     l.fp16_reference = store.Read(sec, key, kLocalFp16Reference).as_bool;
-    l.restore_global_exposure =
-        store.Read(sec, key, kLocalRestoreGlobalExposure).as_float;
   }
 
   return s;

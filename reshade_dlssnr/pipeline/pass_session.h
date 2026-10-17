@@ -138,8 +138,11 @@ class PassSession {
                                      const GradeSettings& grade,
                                      uint32_t scratch_slot,
                                      bool model_sdr_domain = false,
-                                     ID3D12Resource* exposure_map = nullptr,
-                                     float restore_exposure_strength = 1.0f);
+                                     ID3D12Resource* local_carrier = nullptr,
+                                     ID3D12Resource* global_carrier = nullptr,
+                                     ID3D12Resource* global_scale = nullptr,
+                                     float restore_mode = 1.0f,
+                                     float restore_strength = 1.0f);
 
   // Fills `run` with this session's owners and the pass-level frame inputs.
   // The runner supplies the rest as steps run.

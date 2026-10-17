@@ -7,9 +7,9 @@
 #include "common/grade.hlsli"
 
 Texture2D<float4> gSource : register(t0);
-// Only sampled when kRestoreExposureFlag is set. The caller binds gSource otherwise
-// so the fixed kSrvCount descriptor contract still holds.
-Texture2D<float>  gExposure : register(t1);
+Texture2D<float4> gLocalCarrier : register(t1);
+Texture2D<float4> gGlobalCarrier : register(t2);
+Texture2D<float> gGlobalScale : register(t3);
 RWTexture2D<float4> gOutput : register(u0);
 SamplerState s0 : register(s0);
 
@@ -68,17 +68,23 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     float3 lin = DecodeSource(src.rgb);
 
-    // The 1x1 texture stores the mean local multiplier. Apply one uniform
-    // correction so the model's pixel-level shading remains intact. The
-    // strength blends between no correction (divisor 1) and the full inverse
-    // local-exposure correction (divisor = mean scale).
-    if (kRestoreExposureFlag > 0.0) {
-        float mean_local_scale = gExposure.SampleLevel(s0, float2(0.5, 0.5), 0);
-        const float minimum_local_scale = 1.0e-6;
-        mean_local_scale = max(mean_local_scale, minimum_local_scale);
-        const float strength = saturate(kRestoreExposureFlag);
-        const float divisor = lerp(1.0, mean_local_scale, strength);
-        lin /= divisor;
+    // Negative means restoration is disabled. Zero selects the exact local
+    // multiplier; one selects a uniform global multiplier. Interpolation is
+    // performed in stops so both ends remain perceptually meaningful.
+    if (kRestoreExposureFlag >= 0.0) {
+        const float local_inverse_scale = gLocalCarrier.SampleLevel(s0, uv, 0).a;
+        const float global_inverse_scale = gGlobalCarrier.SampleLevel(s0, uv, 0).a;
+        const float local_scale = max(
+            global_inverse_scale / max(local_inverse_scale, 1.0e-8), 1.0e-6);
+        const float mode = saturate(kRestoreExposureFlag);
+        float restore_scale = local_scale;
+        if (mode > 0.0) {
+            const float global_scale = max(gGlobalScale.Load(int3(0, 0, 0)), 1.0e-6);
+            restore_scale = exp2(lerp(log2(local_scale), log2(global_scale), mode));
+        }
+        const float restore_strength = saturate(hdr.LocalExposureParams.w);
+        restore_scale = exp2(log2(max(restore_scale, 1.0e-6)) * restore_strength);
+        lin /= restore_scale;
     }
 
     float3 graded = GradeLinearFwd(lin);

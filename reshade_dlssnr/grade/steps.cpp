@@ -1,5 +1,7 @@
 #include "pipeline/pass_session.h"
 
+#include <algorithm>
+
 #include "grade/grade.h"
 #include "hdr/hdr_state.h"
 #include "pipeline/pipeline_graph.h"
@@ -30,14 +32,17 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
                                          const GradeSettings& grade,
                                          uint32_t scratch_slot,
                                          bool model_sdr_domain,
-                                         ID3D12Resource* exposure_map,
-                                         float restore_exposure_strength) {
+                                         ID3D12Resource* local_carrier,
+                                         ID3D12Resource* global_carrier,
+                                         ID3D12Resource* global_scale,
+                                         float restore_mode,
+                                         float restore_strength) {
   PassSession* self = run.session;
   if (self == nullptr) return PipelineStatus::Ok;
   if (target == nullptr) return PipelineStatus::Ok;
   // Runs even when the grade is disabled; exposure restoration is separate.
-  const bool restoring = exposure_map != nullptr &&
-                         restore_exposure_strength > 0.0f;
+  const bool restoring = local_carrier != nullptr &&
+                         global_carrier != nullptr;
   if (!grade.enabled && !restoring) return PipelineStatus::Ok;
   if (run.device == nullptr || run.codec == nullptr) return PipelineStatus::Ok;
 
@@ -56,7 +61,7 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
           self->command_, list, run.codec, target,
           self->resources_.GetScratch(scratch_slot), width, height,
           GradeFormatCode(run, target, model_sdr_domain), grade,
-          exposure_map, restore_exposure_strength)) {
+          local_carrier, global_carrier, global_scale, restore_mode, restore_strength)) {
     self->FailForStep("failed to apply the grade");
     return PipelineStatus::Fail;
   }
@@ -154,85 +159,92 @@ PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
 
   const GradeSettings& grade = run.grade_output;
 
-  // Restore global exposure using the local exposure map. This is independent
-  // of whether the Output Grade itself is enabled.
-  ID3D12Resource* exposure_map = nullptr;
-  const float restore_strength =
-      run.hdr_state.local_exposure.restore_global_exposure;
-  if (run.hdr_state.enable && run.hdr_state.local_exposure.enabled &&
-      restore_strength > 0.0f &&
+  // Restore model exposure after the model has reconstructed local shading.
+  // The local multiplier is read per pixel from the carrier pair. Only the
+  // global endpoint needs a reduction; there is no blurred tile map.
+  ID3D12Resource* local_carrier = nullptr;
+  ID3D12Resource* global_carrier = nullptr;
+  ID3D12Resource* global_scale = nullptr;
+  const LocalExposureLayerSettings& local = run.hdr_state.local_exposure;
+  const float restore_mode = std::clamp(local.restore_mode, 0.0f, 1.0f);
+  const float restore_strength = std::clamp(local.restore_strength, 0.0f, 1.0f);
+  if (run.hdr_state.enable && local.enabled && local.restore_exposure &&
       run.hdr_uniforms_ready && run.hdr != nullptr &&
       run.hdr->ResolvedFormat() != HdrFormat::Sdr &&
       run.hdr_uniforms.local_exposure_strength > 0.0f &&
+      restore_strength > 0.0f &&
       self->resources_.GetPackedOutput() != nullptr &&
       self->resources_.GetGlobalHdrCarrier() != nullptr) {
-    ID3D12Resource* local_carrier = self->resources_.GetPackedOutput();
-    ID3D12Resource* global_carrier = self->resources_.GetGlobalHdrCarrier();
-    if (!self->resources_.EnsureLocalExposureMeanResources(
-            run.device, run.width, run.height)) {
-      self->FailForStep("failed to create local exposure reduction resources");
-      return PipelineStatus::Fail;
-    }
+    local_carrier = self->resources_.GetPackedOutput();
+    global_carrier = self->resources_.GetGlobalHdrCarrier();
 
-    ComputeConstants constants = {};
-    constants.Width = run.width;
-    constants.Height = run.height;
-    constants.shader.Params0.x = static_cast<float>(
-        self->resources_.LocalExposurePartialWidth());
-    constants.shader.Params0.y = static_cast<float>(
-        self->resources_.LocalExposurePartialHeight());
+    if (restore_mode > 0.0f) {
+      if (!self->resources_.EnsureLocalExposureRestoreResources(
+              run.device, run.width, run.height)) {
+        self->FailForStep("failed to create local exposure restore resources");
+        return PipelineStatus::Fail;
+      }
 
-    ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
-    ID3D12Resource* source_srvs[kSrvCount] = {
-        local_carrier, global_carrier, local_carrier, local_carrier};
-    ID3D12Resource* partial_sums =
-        self->resources_.GetLocalExposurePartialSums();
-    ID3D12Resource* partial_uavs[kUavCount] = {partial_sums};
-    self->command_.Transition(list, local_carrier,
-                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    self->command_.Transition(list, global_carrier,
-                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    self->command_.Transition(list, partial_sums,
-                              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    if (run.codec == nullptr || !run.codec->Dispatch(
-            "ReduceLocalExposureTiles", list, constants, source_srvs,
-            partial_uavs)) {
-      self->FailForStep("failed to reduce local exposure tiles");
-      return PipelineStatus::Fail;
-    }
-    self->command_.UavBarrier(list, partial_sums);
-    self->command_.Transition(list, partial_sums,
-                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+      ID3D12Resource* tile_log_scales =
+          self->resources_.GetLocalExposurePartialSums();
+      global_scale = self->resources_.GetLocalExposureGlobalScale();
+      ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
+      ComputeConstants reduce_constants = {};
+      reduce_constants.Width = run.width;
+      reduce_constants.Height = run.height;
+      ID3D12Resource* reduce_srvs[kSrvCount] = {
+          local_carrier, global_carrier, local_carrier, global_carrier};
+      ID3D12Resource* reduce_uavs[kUavCount] = {tile_log_scales};
+      self->command_.Transition(list, local_carrier,
+                                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+      self->command_.Transition(list, global_carrier,
+                                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+      self->command_.Transition(list, tile_log_scales,
+                                D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+      if (run.codec == nullptr || !run.codec->Dispatch(
+              "ReduceLocalExposureTiles", list, reduce_constants,
+              reduce_srvs, reduce_uavs)) {
+        self->FailForStep("failed to reduce local exposure multipliers");
+        return PipelineStatus::Fail;
+      }
+      self->command_.UavBarrier(list, tile_log_scales);
+      self->command_.Transition(list, tile_log_scales,
+                                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-    ID3D12Resource* reduce_srvs[kSrvCount] = {
-        partial_sums, partial_sums, partial_sums, partial_sums};
-    ID3D12Resource* mean = self->resources_.GetLocalExposureMean();
-    ID3D12Resource* mean_uavs[kUavCount] = {mean};
-    self->command_.Transition(list, mean,
-                              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    if (!run.codec->Dispatch("ReduceLocalExposureMean", list, constants,
-                             reduce_srvs, mean_uavs, 1, 1)) {
-      self->FailForStep("failed to compute mean local exposure");
-      return PipelineStatus::Fail;
+      ComputeConstants global_constants = {};
+      global_constants.Width = self->resources_.LocalExposurePartialWidth();
+      global_constants.Height = self->resources_.LocalExposurePartialHeight();
+      global_constants.shader.Params0.x = static_cast<float>(run.width);
+      global_constants.shader.Params0.y = static_cast<float>(run.height);
+      ID3D12Resource* global_srvs[kSrvCount] = {
+          tile_log_scales, tile_log_scales, tile_log_scales, tile_log_scales};
+      ID3D12Resource* global_uavs[kUavCount] = {global_scale};
+      self->command_.Transition(list, global_scale,
+                                D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+      if (!run.codec->Dispatch("ReduceLocalExposureGlobal", list,
+                               global_constants, global_srvs, global_uavs,
+                               1, 1, 1)) {
+        self->FailForStep("failed to compute global local-exposure scale");
+        return PipelineStatus::Fail;
+      }
+      self->command_.UavBarrier(list, global_scale);
+      self->command_.Transition(list, global_scale,
+                                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     }
-    self->command_.UavBarrier(list, mean);
-    self->command_.Transition(list, mean,
-                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    exposure_map = mean;
   }
 
-  if (!grade.enabled && exposure_map == nullptr) return PipelineStatus::Ok;
+  if (!grade.enabled && local_carrier == nullptr) return PipelineStatus::Ok;
 
   if (grade.enabled) {
     TRACE_EVT(run.session, "grade_model_output pass=%u luma=%.3f chroma=%.3f",
               self->pass_id_, grade.luma, grade.chroma);
   }
-  if (exposure_map != nullptr) {
-    TRACE_EVT(run.session, "restore_global_exposure pass=%u strength=%.3f",
-              self->pass_id_, restore_strength);
+  if (local_carrier != nullptr) {
+    TRACE_EVT(run.session, "restore_model_exposure pass=%u mode=%.3f strength=%.3f",
+              self->pass_id_, restore_mode, restore_strength);
   }
   return GradeInPlace(run, run.model_output, grade, kGradeScratchSlotB, true,
-                      exposure_map, restore_strength);
+                      local_carrier, global_carrier, global_scale, restore_mode, restore_strength);
 }
 
 }  // namespace reshade_dlssnr

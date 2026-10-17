@@ -44,14 +44,25 @@ struct AdaptiveExposureLayerSettings {
 
 struct LocalExposureLayerSettings {
   bool enabled = false;
-  float strength = 0.50f;
-  float max_brighten = 1.75f;
-  float max_darken = 1.75f;
+  float strength = 1.0f;
+  float max_brighten = 2.50f;
+  float max_darken = 2.50f;
   float midtone = 0.18f;
-  // 0 = no restore, 1 = full restore. The grade pass divides the model
-  // output by lerp(1, mean local scale, strength) in linear light, so an
-  // intermediate value blends partway back toward the global exposure.
-  float restore_global_exposure = 0.0f;
+  float shadow_strength = 1.0f;
+  float highlight_strength = 1.0f;
+  float shadow_range = 1.0f;
+  float highlight_range = 1.0f;
+  float highlight_protection = 1.0f;
+  float shadow_protection = 1.0f;
+  float detail_retention = 1.0f;
+  float edge_protection = 0.5f;
+  float radius_px = 32.0f;
+  int samples = 12;
+  bool restore_exposure = false;
+  // 0 = exact per-pixel restoration; 1 = uniform global restoration.
+  // Intermediate values interpolate the correction in log exposure space.
+  float restore_mode = 1.0f;
+  float restore_strength = 1.0f;
   bool precomputed_luma = false;
   bool fp16_reference = false;
 };

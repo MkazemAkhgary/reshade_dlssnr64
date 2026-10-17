@@ -75,7 +75,7 @@ DLSSNR_BLOCK(HdrBlock)
     // x = local exposure strength, y = max brighten stops, z = max darken
     // stops, w = model midtone target. Zero strength disables local exposure.
     float4 LocalExposure;
-    // x = neighborhood diameter in source pixels, y = neighborhood tap count.
+    // x = neighborhood radius in source pixels, y = neighborhood tap count.
     float4 LocalExposureParams;
 };
 
@@ -111,6 +111,12 @@ DLSSNR_BLOCK(TemporalBlock)
     float4 HistoryControl;       // x = reuse validated history instead of extracting fresh edit
 };
 
+DLSSNR_BLOCK(LocalExposureControlBlock)
+{
+    float4 Shape;  // shadow transition, highlight transition, bright protection, dark protection
+    float4 Detail; // detail retention, shadow strength, highlight strength, reserved
+};
+
 DLSSNR_CBUFFER(ComputeConstants)
 {
     DLSSNR_UINT Width;
@@ -126,4 +132,5 @@ DLSSNR_CBUFFER(ComputeConstants)
     RcasBlock rcas;
     HistogramBlock histogram;
     TemporalBlock temporal;
+    LocalExposureControlBlock localExposure;
 };

@@ -39,12 +39,27 @@ struct HdrUniforms {
 
   // Local-exposure controls are shared by carrier split and inverse map.
   float local_exposure_strength = 0.0f;
-  float local_max_brighten = 2.0f;
-  float local_max_darken = 2.0f;
+  float local_max_brighten = 2.50f;
+  float local_max_darken = 2.50f;
   float midtone = 0.18f;
+  float local_shadow_strength = 1.0f;
+  float local_highlight_strength = 1.0f;
+  float local_shadow_range = 1.0f;
+  float local_highlight_range = 1.0f;
+  float local_highlight_protection = 1.0f;
+  float local_shadow_protection = 1.0f;
+  float local_detail_retention = 1.0f;
+  float local_edge_protection = 0.5f;
+  float local_radius_px = 32.0f;
+  int local_samples = 12;
+  bool restore_local_exposure = false;
+  float restore_local_mode = 1.0f;
   bool local_precomputed_luma = false;
   bool fp16_unlifted_reference = false;
 };
+
+void SetLocalExposureConstants(ComputeConstants& constants,
+                              const HdrUniforms& hdr);
 
 // The source is already in the model domain (gain-map split happens in its
 // own pipeline step for HDR). This pass only downsamples it to working scale.

@@ -4,6 +4,25 @@
 
 namespace reshade_dlssnr::model_pipeline {
 
+void SetLocalExposureConstants(ComputeConstants& constants,
+                               const HdrUniforms& hdr) {
+  constants.hdr.LocalExposure.x = hdr.local_exposure_strength;
+  constants.hdr.LocalExposure.y = hdr.local_max_brighten;
+  constants.hdr.LocalExposure.z = hdr.local_max_darken;
+  constants.hdr.LocalExposure.w = hdr.midtone;
+  constants.hdr.LocalExposureParams.x = hdr.local_radius_px;
+  constants.hdr.LocalExposureParams.y = static_cast<float>(hdr.local_samples);
+  constants.hdr.LocalExposureParams.z = hdr.local_precomputed_luma ? 1.0f : 0.0f;
+  constants.localExposure.Shape.x = hdr.local_shadow_range;
+  constants.localExposure.Shape.y = hdr.local_highlight_range;
+  constants.localExposure.Shape.z = hdr.local_highlight_protection;
+  constants.localExposure.Shape.w = hdr.local_shadow_protection;
+  constants.localExposure.Detail.x = hdr.local_detail_retention;
+  constants.localExposure.Detail.y = hdr.local_shadow_strength;
+  constants.localExposure.Detail.z = hdr.local_highlight_strength;
+  constants.localExposure.Detail.w = hdr.local_edge_protection;
+}
+
 bool PrepareInput(
     CommandContext& state,
     ID3D12GraphicsCommandList* command_list,

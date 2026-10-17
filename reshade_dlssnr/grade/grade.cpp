@@ -1,5 +1,7 @@
 #include "grade/grade.h"
 
+#include <algorithm>
+
 #include "hdr/settings.h"
 
 namespace reshade_dlssnr::model_pipeline {
@@ -16,7 +18,8 @@ void SetGradeConstants(ComputeConstants& constants, const GradeSettings& grade) 
   constants.grade.Shadows = grade.shadows;
   constants.grade.Highlights = grade.highlights;
   constants.grade.Format = 0.0f;
-  constants.grade.RestoreExposure = 0.0f;
+  constants.grade.RestoreExposure = -1.0f;
+  constants.hdr.LocalExposureParams.w = 1.0f;
 }
 
 bool ApplyGrade(CommandContext& state,
@@ -28,12 +31,13 @@ bool ApplyGrade(CommandContext& state,
                 unsigned int height,
                 int format_code,
                 const GradeSettings& grade,
-                ID3D12Resource* exposure_map,
-                float restore_exposure_strength) {
-  // A strength of zero is "no restore" even if a map was bound: the caller
-  // can therefore share a single grade path and let the setting decide.
+                ID3D12Resource* local_carrier,
+                ID3D12Resource* global_carrier,
+                ID3D12Resource* global_scale,
+                float restore_mode,
+                float restore_strength) {
   const bool restore_exposure =
-      exposure_map != nullptr && restore_exposure_strength > 0.0f;
+      local_carrier != nullptr && global_carrier != nullptr;
   if (!grade.enabled && !restore_exposure) return true;
 
   if (codec == nullptr || command_list == nullptr || target == nullptr ||
@@ -48,7 +52,9 @@ bool ApplyGrade(CommandContext& state,
   SetGradeConstants(constants, grade);
   constants.grade.Format = static_cast<float>(format_code);
   constants.grade.RestoreExposure =
-      restore_exposure ? restore_exposure_strength : 0.0f;
+      restore_exposure ? std::clamp(restore_mode, 0.0f, 1.0f) : -1.0f;
+  constants.hdr.LocalExposureParams.w =
+      restore_exposure ? std::clamp(restore_strength, 0.0f, 1.0f) : 1.0f;
 
   const ResourceTransition before_copy[] = {
       {target, D3D12_RESOURCE_STATE_COPY_SOURCE},
@@ -60,15 +66,20 @@ bool ApplyGrade(CommandContext& state,
   ResourceTransition after_copy[] = {
       {scratch, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE},
       {target, D3D12_RESOURCE_STATE_UNORDERED_ACCESS},
-      {restore_exposure ? exposure_map : nullptr,
+      {restore_exposure ? local_carrier : nullptr,
+       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE},
+      {restore_exposure ? global_carrier : nullptr,
+       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE},
+      {restore_exposure && global_scale != nullptr ? global_scale : nullptr,
        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE},
   };
-  state.TransitionBatch(command_list, after_copy, 3);
-  // Every slot must hold a valid resource; the source stands in for the
-  // unused exposure slot when the flag is off.
-  ID3D12Resource* exposure_srv = restore_exposure ? exposure_map : scratch;
+  state.TransitionBatch(command_list, after_copy, 5);
 
-  ID3D12Resource* srvs[kSrvCount] = {scratch, exposure_srv, scratch, scratch};
+  ID3D12Resource* local_srv = restore_exposure ? local_carrier : scratch;
+  ID3D12Resource* global_srv = restore_exposure ? global_carrier : scratch;
+  ID3D12Resource* scale_srv =
+      restore_exposure && global_scale != nullptr ? global_scale : scratch;
+  ID3D12Resource* srvs[kSrvCount] = {scratch, local_srv, global_srv, scale_srv};
   ID3D12Resource* uavs[kUavCount] = {target};
 
   return codec->Dispatch("ApplyGrade", command_list, constants, srvs, uavs);

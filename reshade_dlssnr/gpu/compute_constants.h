@@ -12,6 +12,7 @@ static_assert(sizeof(EasuBlock) == 48);
 static_assert(sizeof(RcasBlock) == 16);
 static_assert(sizeof(HistogramBlock) == 32);
 static_assert(sizeof(TemporalBlock) == 96);
+static_assert(sizeof(LocalExposureControlBlock) == 32);
 
 constexpr size_t kHeaderSize = 16;
 constexpr size_t kShaderOffset = kHeaderSize;
@@ -22,6 +23,7 @@ constexpr size_t kEasuOffset = kHdrOffset + sizeof(HdrBlock);
 constexpr size_t kRcasOffset = kEasuOffset + sizeof(EasuBlock);
 constexpr size_t kHistogramOffset = kRcasOffset + sizeof(RcasBlock);
 constexpr size_t kTemporalOffset = kHistogramOffset + sizeof(HistogramBlock);
+constexpr size_t kLocalExposureOffset = kTemporalOffset + sizeof(TemporalBlock);
 
 static_assert(offsetof(ComputeConstants, shader) == kShaderOffset);
 static_assert(offsetof(ComputeConstants, grade) == kGradeOffset);
@@ -31,6 +33,7 @@ static_assert(offsetof(ComputeConstants, easu) == kEasuOffset);
 static_assert(offsetof(ComputeConstants, rcas) == kRcasOffset);
 static_assert(offsetof(ComputeConstants, histogram) == kHistogramOffset);
 static_assert(offsetof(ComputeConstants, temporal) == kTemporalOffset);
+static_assert(offsetof(ComputeConstants, localExposure) == kLocalExposureOffset);
 
 static_assert(kHistogramOffset == 272);
 static_assert(kTemporalOffset == 304);
