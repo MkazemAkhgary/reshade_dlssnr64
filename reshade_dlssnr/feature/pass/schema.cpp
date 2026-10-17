@@ -36,8 +36,8 @@ bool NeverVisible(const void*, const ctl::ValueStore&,
 // -- which is why the two grades cannot share one.
 constexpr const char* kCatModel = "Model";
 constexpr const char* kCatStrength = "Strength";
-constexpr const char* kCatSoftCompression = "Advanced/Soft Compression";
-constexpr const char* kCatResidualEdits = "Advanced/Residual Edits";
+constexpr const char* kCatSoftCompression = "Soft Compression";
+constexpr const char* kCatResidualEdits = "Residual Edits";
 constexpr const char* kCatTemporal = "Temporal Reprojection";
 
 // Grade is the only part of the pass that the pass does not gate itself: the

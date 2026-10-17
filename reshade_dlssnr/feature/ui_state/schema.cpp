@@ -37,8 +37,6 @@ void RegisterUiStateSchema(ctl::Schema& schema) {
                                 "Temporal Reprojection Open", true).GlobalOnly();
   section.Add<ctl::BoolSetting>(ui_state::kSoftCompressionOpen,
                                 "Soft Compression Open", true).GlobalOnly();
-  section.Add<ctl::BoolSetting>(ui_state::kAdvancedOpen, "Advanced Open", false)
-      .GlobalOnly();
   section.Add<ctl::BoolSetting>(ui_state::kResidualOpen, "Residual Edits Open",
                                 false).GlobalOnly();
   section.Add<ctl::BoolSetting>(ui_state::kRcasOpen, "RCAS Open", false)

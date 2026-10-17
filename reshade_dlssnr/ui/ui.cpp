@@ -82,9 +82,8 @@ const char* CategoryOpenSetting(const std::string& section,
   if (category == "Model") return feature::ui_state::kModelOpen;
   if (category == "Strength") return feature::ui_state::kStrengthOpen;
   if (category == "Temporal Reprojection") return feature::ui_state::kTemporalOpen;
-  if (category == "Advanced/Soft Compression") return feature::ui_state::kSoftCompressionOpen;
-  if (category == "Advanced") return feature::ui_state::kAdvancedOpen;
-  if (category == "Advanced/Residual Edits") return feature::ui_state::kResidualOpen;
+  if (category == "Soft Compression") return feature::ui_state::kSoftCompressionOpen;
+  if (category == "Residual Edits") return feature::ui_state::kResidualOpen;
   return nullptr;
 }
 
