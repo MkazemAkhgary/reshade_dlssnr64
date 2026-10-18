@@ -47,11 +47,6 @@ struct TransparentStringEqual {
 // used it has run. The passes record onto the *game's* command list, which is
 // submitted whenever the game gets round to it, so the ring has to cover every
 // frame the CPU can be ahead of the GPU.
-//
-// At 16 slots it covered barely two frames' worth: two passes fitted (6
-// dispatches per frame, 8 with the HDR histogram) and three did not (9 and 11),
-// so the third pass made the ring overwrite constants a pending dispatch was
-// still going to read.
 constexpr uint32_t kMaxFramesInFlight = 16;  // DXGI's maximum swapchain buffers
 // The ring covers the prior twelve per-pass dispatches plus up to seven
 // temporal edit/reprojection/validation/history dispatches, one game-exposure
