@@ -28,8 +28,6 @@ namespace ctl {
 
 // The storage a setting's value lives in. Values own their data so copies in
 // the resolved cache, write path and snapshots remain valid.
-using EnumValue = int;
-
 struct Value {
   enum class Kind : uint8_t { Float, Int, Bool, Enum, String, IntList };
 
