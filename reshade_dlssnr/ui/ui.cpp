@@ -33,12 +33,6 @@
 
 namespace reshade_dlssnr {
 
-// Set by ApplyPassReorder and consumed by DrawOverlay on the next frame. Tab
-// IDs are positional, so after a reorder ImGui still has the tab at the old
-// position selected and would overwrite active_pass_id back to it. This forces
-// the tab that now holds the active pass to be selected instead.
-int g_force_select_tab = -1;
-
 // The overlay's per-frame scratch state. It is handed to the framework as an
 // opaque pointer so the open-state callbacks can share one context.
 namespace {
