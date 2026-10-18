@@ -33,7 +33,23 @@ class FloatSetting : public Setting {
     SetVisible(visible, context);
     return *this;
   }
-  FloatSetting& Range(float lo, float hi) { lo_ = lo; hi_ = hi; return *this; }
+  // Slider drag range. Typed input may exceed this; use ClampRange for
+  // the absolute bounds.
+  FloatSetting& Range(float lo, float hi) {
+    ui_lo_ = lo;
+    ui_hi_ = hi;
+    if (!has_clamp_range_) { lo_ = lo; hi_ = hi; }
+    return *this;
+  }
+  // Absolute clamp bounds, applied to typed input, programmatic writes, and
+  // loads. Set this wider than Range when the slider should cover only the
+  // common range while the type still accepts edge values.
+  FloatSetting& ClampRange(float lo, float hi) {
+    lo_ = lo;
+    hi_ = hi;
+    has_clamp_range_ = true;
+    return *this;
+  }
   FloatSetting& Format(const char* fmt) { format_ = CStrToString(fmt); return *this; }
   FloatSetting& NoSave() { meta_.persist = false; return *this; }
   FloatSetting& NoPersist() { meta_.persist = false; return *this; }
@@ -48,8 +64,11 @@ class FloatSetting : public Setting {
 
  private:
   float default_ = 0.0f;
+  float ui_lo_ = 0.0f;
+  float ui_hi_ = 1.0f;
   float lo_ = 0.0f;
   float hi_ = 1.0f;
+  bool has_clamp_range_ = false;
   std::string format_ = "%.3f";
 };
 
@@ -72,7 +91,23 @@ class IntSetting : public Setting {
     SetVisible(visible, context);
     return *this;
   }
-  IntSetting& Range(int lo, int hi) { lo_ = lo; hi_ = hi; return *this; }
+  // Slider drag range. Typed input may exceed this; use ClampRange for
+  // the absolute bounds.
+  IntSetting& Range(int lo, int hi) {
+    ui_lo_ = lo;
+    ui_hi_ = hi;
+    if (!has_clamp_range_) { lo_ = lo; hi_ = hi; }
+    return *this;
+  }
+  // Absolute clamp bounds, applied to typed input, programmatic writes, and
+  // loads. Set this wider than Range when the slider should cover only the
+  // common range while the type still accepts edge values.
+  IntSetting& ClampRange(int lo, int hi) {
+    lo_ = lo;
+    hi_ = hi;
+    has_clamp_range_ = true;
+    return *this;
+  }
   IntSetting& NoSave() { meta_.persist = false; return *this; }
 
   Value DefaultValue() const override;
@@ -85,8 +120,11 @@ class IntSetting : public Setting {
 
  private:
   int default_ = 0;
+  int ui_lo_ = 0;
+  int ui_hi_ = 100;
   int lo_ = 0;
   int hi_ = 100;
+  bool has_clamp_range_ = false;
 };
 
 // ---------------------------------------------------------------------------

@@ -91,8 +91,10 @@ bool FloatSetting::Draw(const SettingContext& ctx, const Value& resolved,
   bool changed = false;
   {
     const std::string id = std::string("##") + meta_.name;
-    // Editing writes the value on this instance.
-    changed = ImGui::SliderFloat(id.c_str(), &display, lo_, hi_, format_.c_str());
+    // The slider drags within the UI range; typed input is limited only by
+    // the clamp range applied below.
+    changed = ImGui::SliderFloat(id.c_str(), &display, ui_lo_, ui_hi_,
+                                 format_.c_str());
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("%s", meta_.tooltip.empty() ? meta_.label.c_str() : meta_.tooltip.c_str());
@@ -192,8 +194,9 @@ bool IntSetting::Draw(const SettingContext& ctx, const Value& resolved,
   bool changed = false;
   {
     const std::string id = std::string("##") + meta_.name;
-    // Editing writes the value on this instance.
-    changed = ImGui::SliderInt(id.c_str(), &display, lo_, hi_);
+    // The slider drags within the UI range; typed input is limited only by
+    // the clamp range applied below.
+    changed = ImGui::SliderInt(id.c_str(), &display, ui_lo_, ui_hi_);
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("%s", meta_.tooltip.empty() ? meta_.label.c_str() : meta_.tooltip.c_str());
