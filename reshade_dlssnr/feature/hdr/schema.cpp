@@ -78,17 +78,24 @@ void RegisterHdrSchema(ctl::Schema& schema) {
   hdr.Add<ctl::FloatSetting>(kBt2446K1, "BT.2446C k1", 0.83802f)
       .Range(0.001f, 2.0f)
       .Category(kCatAdvanced)
-      .Tooltip("Linear-region slope: Y_SDR = k1 * Y_HDR below the knee.");
+      .Tooltip("Linear-region slope: Y_SDR = k1 * Y_HDR for content below "
+               "the inflection point. Also the slope the log branch matches "
+               "at the knee.");
   hdr.Add<ctl::FloatSetting>(kBt2446K3, "BT.2446C k3", 0.74204f)
       .Range(0.0f, 0.95f)
       .Category(kCatAdvanced)
-      .Tooltip("Shoulder compression. Larger values pull the log branch "
-               "down harder for bright input.");
+      .Tooltip("Shoulder compression strength. Larger values pull the log "
+               "branch down harder, darkening highlights more. k2 and k4 "
+               "are derived from this so the curve stays smooth at the "
+               "knee.");
   hdr.Add<ctl::FloatSetting>(kBt2446Ip, "BT.2446C Inflection", 94.26f)
-      .Range(0.001f, 10000.0f)
+      .Range(10.0f, 4000.0f)
+      .ClampRange(0.001f, 10000.0f)
       .Category(kCatAdvanced)
-      .Tooltip("HDR inflection point in nits where the curve switches from "
-               "linear to log.");
+      .Tooltip("Knee position in the BT.2446C curve domain. Content above "
+               "this point is log-compressed; content below is linear. The "
+               "slider covers the useful range for real HDR content. Values "
+               "outside it can still be typed: 10000 disables compression.");
   hdr.AddHookAfter(kBt2446Ip, "Bt2446Derived", &DrawBt2446Derived)
       .Category(kCatAdvanced);
   hdr.Add<ctl::FloatSetting>(kBt2446Crosstalk, "Crosstalk", 0.04f)

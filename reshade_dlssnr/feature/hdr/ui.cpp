@@ -155,8 +155,9 @@ bool DrawBt2446Derived(const void* context, ctl::ValueStore& store,
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("BT.2446C k2 (derived)");
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("k2 = k1 * ip * (1 - k3). Derived to match the linear branch's "
-        "slope at the knee; not editable.");
+    Tip("Log-region slope of the BT.2446C curve. Derived from k1, k3, and "
+        "the inflection point so the log branch matches the linear "
+        "branch's slope at the knee.");
   }
   ImGui::SameLine(kControlLabelWidth);
   ImGui::TextDisabled("%.5f", static_cast<double>(k2));
@@ -164,8 +165,9 @@ bool DrawBt2446Derived(const void* context, ctl::ValueStore& store,
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("BT.2446C k4 (derived)");
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("k4 = k1 * ip * (1 - (1 - k3) * log(1 - k3)). Derived to match the "
-        "linear branch's value at the knee; not editable.");
+    Tip("Log-region intercept of the BT.2446C curve. Derived from k1, k3, "
+        "and the inflection point so the log branch matches the linear "
+        "branch's value at the knee.");
   }
   ImGui::SameLine(kControlLabelWidth);
   ImGui::TextDisabled("%.5f", static_cast<double>(k4));
