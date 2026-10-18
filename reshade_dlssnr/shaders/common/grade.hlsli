@@ -378,31 +378,6 @@ float3 GradeLinearCoreInv(float3 lin)
 }
 
 // -----------------------------------------------------------------------------
-// sRGB-domain wrappers.
-//
-// These retain the old names for callers that actually have sRGB values,
-// but the grade itself is still performed in linear light.
-// -----------------------------------------------------------------------------
-
-float3 GradeSdrFwd(float3 sdr)
-{
-    return LinearToSrgbExt(
-        GradeLinearCoreFwd(
-            SrgbToLinearExt(sdr)
-        )
-    );
-}
-
-float3 GradeSdrInv(float3 sdr)
-{
-    return LinearToSrgbExt(
-        GradeLinearCoreInv(
-            SrgbToLinearExt(sdr)
-        )
-    );
-}
-
-// -----------------------------------------------------------------------------
 // Public linear entry points
 // -----------------------------------------------------------------------------
 
