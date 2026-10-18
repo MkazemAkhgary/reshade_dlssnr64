@@ -195,7 +195,7 @@ void RegisterPassSchema(ctl::Schema& schema) {
                "default, \"Pass N\".");
 
   pass.Add<ctl::FloatSetting>(kWorkingScale, "Working Scale", 1.0f)
-      .Range(0.10f, 1.0f)
+      .ClampRange(0.10f, 1.0f)
       .Tooltip("The resolution the model runs at, as a fraction of the frame.");
 
   // --- Model -------------------------------------------------------------
@@ -205,16 +205,16 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .Category(kCatModel)
       .Tooltip("Select the model quality/behavior preset for this pass.");
   pass.Add<ctl::FloatSetting>(kIntensity, "Intensity", 1.0f)
-      .Range(0.0f, 2.0f)
+      .ClampRange(0.0f, 2.0f)
       .Category(kCatModel)
       .Tooltip("How strongly the model is instructed to edit the image. 0 "
                "turns the model's edits off entirely.");
   pass.Add<ctl::FloatSetting>(kLocalTone, "Local Tone", 1.0f)
-      .Range(0.0f, 2.0f)
+      .ClampRange(0.0f, 2.0f)
       .Category(kCatModel)
       .Tooltip("How much of the model's local tone adjustments to apply.");
   pass.Add<ctl::FloatSetting>(kLocalStructure, "Local Structure", 1.0f)
-      .Range(0.0f, 2.0f)
+      .ClampRange(0.0f, 2.0f)
       .Category(kCatModel)
       .Tooltip("How much of the model's local structure detail to apply.");
   pass.Add<ctl::BoolSetting>(kAutoMask, "Auto Mask", true)
@@ -222,7 +222,7 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .Tooltip("Lets the model detect character skin and apply its edits to it "
                "separately.");
   pass.Add<ctl::FloatSetting>(kSkinStructure, "Skin Structure", 1.0f)
-      .Range(0.0f, 1.0f)
+      .ClampRange(0.0f, 1.0f)
       .EnableWhen(&AutoMaskOn)
       .Category(kCatModel)
       .Tooltip("Controls how strongly the model applies its skin-specific "
@@ -233,11 +233,11 @@ void RegisterPassSchema(ctl::Schema& schema) {
 
   // --- Strength ----------------------------------------------------------
   pass.Add<ctl::FloatSetting>(kLumaStrength, "Luma Strength", 1.0f)
-      .Range(0.0f, 1.0f)
+      .ClampRange(0.0f, 1.0f)
       .Category(kCatStrength)
       .Tooltip("Blend between original and edited luminance.");
   pass.Add<ctl::FloatSetting>(kChromaStrength, "Chroma Strength", 1.0f)
-      .Range(0.0f, 1.0f)
+      .ClampRange(0.0f, 1.0f)
       .Category(kCatStrength)
       .Tooltip("Blend between original and edited chroma.");
 
@@ -252,41 +252,41 @@ void RegisterPassSchema(ctl::Schema& schema) {
                "evaluation.");
   pass.Add<ctl::FloatSetting>(kTemporalPhotometricAbsThreshold,
                               "Photo Abs.", 0.06f)
-      .Range(0.001f, 0.25f)
+      .ClampRange(0.001f, 0.25f)
       .EnableWhen(&TemporalEnabled)
       .Category(kCatTemporal)
       .Tooltip("Absolute model-input luma difference allowed between the "
                "current pixel and its motion-reprojected previous-frame match.");
   pass.Add<ctl::FloatSetting>(kTemporalPhotometricRelThreshold,
                               "Photo Rel.", 0.10f)
-      .Range(0.0f, 0.50f)
+      .ClampRange(0.0f, 0.50f)
       .EnableWhen(&TemporalEnabled)
       .Category(kCatTemporal)
       .Tooltip("Relative luma-difference allowance, scaled by the larger "
                "absolute current or previous luma. Added to Photo Abs.");
   pass.Add<ctl::FloatSetting>(kTemporalDepthAbsThreshold,
                               "Depth Abs.", 0.005f)
-      .Range(0.0001f, 0.05f)
+      .ClampRange(0.0001f, 0.05f)
       .EnableWhen(&TemporalEnabled)
       .Category(kCatTemporal)
       .Tooltip("Absolute depth difference allowed after motion reprojection.");
   pass.Add<ctl::FloatSetting>(kTemporalDepthRelThreshold,
                               "Depth Rel.", 0.03f)
-      .Range(0.0f, 0.20f)
+      .ClampRange(0.0f, 0.20f)
       .EnableWhen(&TemporalEnabled)
       .Category(kCatTemporal)
       .Tooltip("Relative depth-difference allowance. Threshold is the larger "
                "of this allowance and Depth Abs.");
   pass.Add<ctl::FloatSetting>(kTemporalMaxDisplacement,
                               "Max Motion", 40.0f)
-      .Range(1.0f, 128.0f)
+      .ClampRange(1.0f, 128.0f)
       .EnableWhen(&TemporalEnabled)
       .Category(kCatTemporal)
       .Tooltip("Reject reprojection when motion exceeds this many working-" 
                "resolution pixels.");
   pass.Add<ctl::FloatSetting>(kTemporalMaxInvalidPercent,
                               "Max Invalid %", 5.0f)
-      .Range(1.0f, 50.0f)
+      .ClampRange(1.0f, 50.0f)
       .EnableWhen(&TemporalEnabled)
       .Category(kCatTemporal)
       .Tooltip("Maximum invalid or photometrically mismatched pixel fraction "
@@ -303,45 +303,45 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .CategoryToggle()
       .Tooltip("Enable rational soft clamp of log residuals.");
   pass.Add<ctl::FloatSetting>(kSoftMaxBrighten, "Max Brighten", 0.5f)
-      .Range(0.0f, 2.0f)
+      .ClampRange(0.0f, 2.0f)
       .EnableWhen(&SoftCompressionOn)
       .Category(kCatSoftCompression)
       .Tooltip("Maximum allowed log-luma brightening.");
   pass.Add<ctl::FloatSetting>(kSoftMaxDarken, "Max Darken", 0.5f)
-      .Range(0.0f, 2.0f)
+      .ClampRange(0.0f, 2.0f)
       .EnableWhen(&SoftCompressionOn)
       .Category(kCatSoftCompression)
       .Tooltip("Maximum allowed log-luma darkening.");
   pass.Add<ctl::FloatSetting>(kSoftMaxChroma, "Max Chroma", 0.5f)
-      .Range(0.0f, 2.0f)
+      .ClampRange(0.0f, 2.0f)
       .EnableWhen(&SoftCompressionOn)
       .Category(kCatSoftCompression)
       .Tooltip("Maximum allowed log-chroma change per channel.");
   pass.Add<ctl::FloatSetting>(kSoftKnee, "Knee", 1.0f)
-      .Range(0.0f, 4.0f)
+      .ClampRange(0.0f, 4.0f)
       .EnableWhen(&SoftCompressionOn)
       .Category(kCatSoftCompression)
       .Tooltip("Controls how early compression starts (linear range).");
 
   pass.Add<ctl::FloatSetting>(kEditStrength, "Edit Strength", 1.0f)
-      .Range(0.0f, 2.0f)
+      .ClampRange(0.0f, 2.0f)
       .Category(kCatResidualEdits)
       .Tooltip("Scales the model's edit before it is carried onto the source.");
   pass.Add<ctl::FloatSetting>(kResidualChroma, "Chroma Strength", 1.0f)
-      .Range(0.0f, 1.0f)
+      .ClampRange(0.0f, 1.0f)
       .Category(kCatResidualEdits)
       .Tooltip("How much of the edit's chroma lands relative to its "
                "brightness.");
   pass.Add<ctl::FloatSetting>(kResidualGamma, "Edit Gamma", 1.0f)
-      .Range(0.25f, 4.0f)
+      .ClampRange(0.25f, 4.0f)
       .Category(kCatResidualEdits)
       .Tooltip("Shapes the edit's response curve.");
   pass.Add<ctl::FloatSetting>(kResidualHighlight, "Highlight Protect", 0.0f)
-      .Range(0.0f, 1.0f)
+      .ClampRange(0.0f, 1.0f)
       .Category(kCatResidualEdits)
       .Tooltip("Fades the edit out above mid-to-high brightness.");
   pass.Add<ctl::FloatSetting>(kResidualShadow, "Shadow Protect", 0.0f)
-      .Range(0.0f, 1.0f)
+      .ClampRange(0.0f, 1.0f)
       .Category(kCatResidualEdits)
       .Tooltip("Fades the edit out below mid-to-low brightness.");
 
@@ -354,7 +354,7 @@ void RegisterPassSchema(ctl::Schema& schema) {
                "FSR 1.0 path; Joint Bilateral uses the full-resolution "
                "original as an edge guide.");
   pass.Add<ctl::FloatSetting>(kUpsampleSharpness, "Upsample Sharpness", 8.0f)
-      .Range(0.5f, 32.0f)
+      .ClampRange(0.5f, 32.0f)
       .VisibleWhen(&JointBilateral)
       .Category(kCatResidualEdits)
       .Tooltip("Edge-preservation exponent for the guided upsample of the "
@@ -377,20 +377,20 @@ void RegisterPassSchema(ctl::Schema& schema) {
   // section -- so the gate reads it exactly like every other "follows that
   // checkbox" rule, with no hook.
   pass.Add<ctl::FloatSetting>(kRatioEps, "Ratio Eps", 1e-2f)
-      .Range(1e-6f, 0.5f)
+      .ClampRange(1e-6f, 0.5f)
       .VisibleWhen(&BackbufferTarget)
       .Category(kCatResidualEdits)
       .Tooltip("Backbuffer passes only: denominator floor for the per-channel "
                "ratio. This has no effect on Pre-DLSS or Post-DLSS passes.");
   pass.Add<ctl::FloatSetting>(kRatioBrighten, "Ratio Brighten", 64.0f)
-      .Range(1.0f, 256.0f)
+      .ClampRange(1.0f, 256.0f)
       .VisibleWhen(&BackbufferTarget)
       .Category(kCatResidualEdits)
       .Tooltip("Backbuffer passes only: upper bound on per-channel ratio "
                "brightening. This has no effect on Pre-DLSS or Post-DLSS "
                "passes.");
   pass.Add<ctl::FloatSetting>(kRatioDarken, "Ratio Darken", 1.0f / 16.0f)
-      .Range(1.0f / 256.0f, 1.0f)
+      .ClampRange(1.0f / 256.0f, 1.0f)
       .VisibleWhen(&BackbufferTarget)
       .Category(kCatResidualEdits)
       .Tooltip("Backbuffer passes only: lower bound on per-channel ratio "
@@ -401,7 +401,7 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .Category(kCatResidualEdits)
       .Tooltip("Sharpen the model's upsampled output with FSR RCAS.");
   pass.Add<ctl::FloatSetting>(kRcasStrength, "Strength", 0.5f)
-      .Range(0.0f, 1.0f)
+      .ClampRange(0.0f, 1.0f)
       .VisibleWhen(&RcasOn)
       .Category(kCatResidualEdits)
       .Tooltip("How aggressively to sharpen.");

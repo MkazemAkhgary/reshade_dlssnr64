@@ -43,30 +43,30 @@ void RegisterImportanceMaskSchema(ctl::Schema& schema) {
                "the next frame.");
 
   mask.Add<ctl::FloatSetting>(kEditStrength, "Edit Strength", 1.0f)
-      .Range(0.1f, 8.0f)
+      .ClampRange(0.1f, 8.0f)
       .Tooltip("Scale the measured model-input/output difference before "
                "thresholding.")
       .EnableWhen(&MaskEditable);
   mask.Add<ctl::FloatSetting>(kSmoothing, "Spatial Smoothing", 0.5f)
-      .Range(0.0f, 1.0f)
+      .ClampRange(0.0f, 1.0f)
       .Tooltip("Majority-filter the binary importance votes in a small "
                "neighborhood.")
       .EnableWhen(&MaskEditable);
   mask.Add<ctl::FloatSetting>(kResponse, "Temporal Response", 0.15f)
-      .Range(0.0f, 1.0f)
+      .ClampRange(0.0f, 1.0f)
       .Tooltip("Blend new mask votes with the previous frame's mask.")
       .EnableWhen(&MaskEditable);
   mask.Add<ctl::FloatSetting>(kLumaThreshold, "Luma Threshold", 0.02f)
-      .Range(0.0f, 0.5f)
+      .ClampRange(0.0f, 0.5f)
       .Tooltip("Minimum absolute luma difference to mark a model edit.")
       .EnableWhen(&MaskEditable);
   mask.Add<ctl::FloatSetting>(kLumaRelative, "Relative Luma", 0.05f)
-      .Range(0.0f, 1.0f)
+      .ClampRange(0.0f, 1.0f)
       .Tooltip("Minimum luma difference relative to the brighter input/output "
                "luma.")
       .EnableWhen(&MaskEditable);
   mask.Add<ctl::FloatSetting>(kChromaThreshold, "Chroma Threshold", 0.02f)
-      .Range(0.0f, 0.5f)
+      .ClampRange(0.0f, 0.5f)
       .Tooltip("Minimum chroma-only difference to mark a model edit.")
       .EnableWhen(&MaskEditable);
 }

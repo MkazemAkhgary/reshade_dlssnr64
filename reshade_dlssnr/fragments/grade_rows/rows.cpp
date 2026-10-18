@@ -48,29 +48,29 @@ void Declare(ctl::Section& section, const std::string& prefix,
 
   group(section.Add<ctl::FloatSetting>(named(names::kBlackLevel).c_str(),
                                        "Black Level", 0.0f))
-      .Range(kGradeBlackLevelMin, kGradeBlackLevelMax)
+      .ClampRange(kGradeBlackLevelMin, kGradeBlackLevelMax)
       .Tooltip("The linear value mapped to black. Raising crushes the "
                "shadows; lowering lifts black.");
 
   group(section.Add<ctl::FloatSetting>(named(names::kWhiteLevel).c_str(),
                                        "White Level", 1.0f))
-      .Range(kGradeWhiteLevelMin, kGradeWhiteLevelMax)
+      .ClampRange(kGradeWhiteLevelMin, kGradeWhiteLevelMax)
       .Tooltip("The linear value mapped to white.");
 
   group(section.Add<ctl::FloatSetting>(named(names::kContrast).c_str(), "Contrast",
                                        0.0f))
-      .Range(-1.0f, 1.0f)
+      .ClampRange(-1.0f, 1.0f)
       .Tooltip("Stretches the image around mid grey. Positive steepens, "
                "negative flattens.");
 
   group(section.Add<ctl::FloatSetting>(named(names::kShadows).c_str(), "Shadows",
                                        0.0f))
-      .Range(-1.0f, 1.0f)
+      .ClampRange(-1.0f, 1.0f)
       .Tooltip("Scales the dark end. Fades out before it reaches white.");
 
   group(section.Add<ctl::FloatSetting>(named(names::kHighlights).c_str(),
                                        "Highlights", 0.0f))
-      .Range(-1.0f, 1.0f)
+      .ClampRange(-1.0f, 1.0f)
       .Tooltip("Scales the bright end. Fades out before it reaches black.");
 
   group(section.Add<ctl::EnumSetting>(named(names::kLumaMode).c_str(), "Brightness Mode",
@@ -81,7 +81,7 @@ void Declare(ctl::Section& section, const std::string& prefix,
 
   group(section.Add<ctl::FloatSetting>(named(names::kLuma).c_str(), "Brightness",
                                        0.0f))
-      .Range(-1.0f, 1.0f)
+      .ClampRange(-1.0f, 1.0f)
       .Tooltip("In Exposure mode, the value is in stops (-1 halves linear light; +1 doubles it). Other modes use their own brightness curve.");
 
   group(section.Add<ctl::EnumSetting>(named(names::kChromaMode).c_str(),
@@ -92,7 +92,7 @@ void Declare(ctl::Section& section, const std::string& prefix,
 
   group(section.Add<ctl::FloatSetting>(named(names::kChroma).c_str(), "Saturation",
                                        0.0f))
-      .Range(-0.95f, 1.0f)
+      .ClampRange(-0.95f, 1.0f)
       .Tooltip("Negative desaturates, positive saturates.");
 }
 

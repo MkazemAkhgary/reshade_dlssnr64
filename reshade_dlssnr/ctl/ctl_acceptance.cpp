@@ -170,16 +170,16 @@ struct Fixture {
     // Every setting is owned by its instance; the store keeps no parent links.
     Section& model = schema.AddSection("Model", SectionKind::Instanced);
     model.Add<FloatSetting>("intensity", "Intensity", 1.0f)
-        .Range(0.0f, 2.0f)
+        .ClampRange(0.0f, 2.0f)
         .Tooltip("How strongly the model edits the image.");
     model.Add<FloatSetting>("working_scale", "Working Scale", 1.0f)
-        .Range(0.1f, 1.0f);
+        .ClampRange(0.1f, 1.0f);
     // The upsample mode is a per-pass choice, never shared.
     model.Add<EnumSetting>("upsample", "Upsample Mode", 1)
         .Items(kUpsampleNames, nullptr, 2);
     // Never written to config.
     model.Add<FloatSetting>("live_metric", "Live Metric", 0.0f)
-        .Range(0.0f, 1.0f)
+        .ClampRange(0.0f, 1.0f)
         .NoSave();
 
     // A hook between the settings, before `working_scale`.
@@ -403,7 +403,7 @@ int main() {
     Schema schema;
     Section& s = schema.AddSection("S", SectionKind::Single);
     FloatSetting& f = s.Add<FloatSetting>("v", "V", 0.5f);
-    f.Range(0.0f, 1.0f);
+    f.ClampRange(0.0f, 1.0f);
     std::string err;
     schema.Build(&err);
     ValueStore store(schema);
@@ -934,7 +934,7 @@ int main() {
     Schema schema;
     Section& model = schema.AddSection("Model", SectionKind::Instanced);
     model.Add<FloatSetting>("intensity", "Intensity", 1.0f)
-        .Range(0.0f, 2.0f);
+        .ClampRange(0.0f, 2.0f);
     model.Add<BoolSetting>("toggle", "Toggle", true);
 
     std::string err;
@@ -1172,7 +1172,7 @@ int main() {
     Section& settings = schema.AddSection("Settings", SectionKind::Single);
     settings.Add<IntListSetting>("order", "Order", std::vector<int64_t>{1})
         .MinItems(1).MaxItems(4).RangeEach(1, 99).UniqueItems();
-    settings.Add<FloatSetting>("amount", "Amount", 0.25f).Range(0.0f, 1.0f);
+    settings.Add<FloatSetting>("amount", "Amount", 0.25f).ClampRange(0.0f, 1.0f);
     std::string error;
     Check(schema.Build(&error), "integer-list and global-only metadata build");
 
@@ -1213,9 +1213,9 @@ int main() {
     Schema schema;
     Section& preferences = schema.AddSection("Preferences", SectionKind::Single);
     preferences.Add<BoolSetting>("enabled", "Enabled", true);
-    preferences.Add<FloatSetting>("gain", "Gain", 0.5f).Range(0.0f, 2.0f);
+    preferences.Add<FloatSetting>("gain", "Gain", 0.5f).ClampRange(0.0f, 2.0f);
     Section& model = schema.AddSection("Model", SectionKind::Instanced);
-    model.Add<IntSetting>("quality", "Quality", 2).Range(0, 5);
+    model.Add<IntSetting>("quality", "Quality", 2).ClampRange(0, 5);
     std::string error;
     Check(schema.Build(&error), "trace test schema builds without application registrations");
 

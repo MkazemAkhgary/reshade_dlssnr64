@@ -44,24 +44,24 @@ void Declare(ctl::Section& section, const char* category) {
       .Category(category);
 
   section.Add<ctl::FloatSetting>(kDepthNear, "Depth Near", 0.0f)
-      .Range(0.0f, 1.0f)
+      .ClampRange(0.0f, 1.0f)
       .Tooltip("Near end of the accepted normalized depth interval.")
       .EnableWhen(&Checked, kDepth)
       .Category(category);
   section.Add<ctl::FloatSetting>(kDepthFar, "Depth Far", 1.0f)
-      .Range(0.0f, 1.0f)
+      .ClampRange(0.0f, 1.0f)
       .Tooltip("Far end of the accepted normalized depth interval.")
       .EnableWhen(&Checked, kDepth)
       .Category(category);
 
   section.Add<ctl::FloatSetting>(kPercentileLow, "Low Percentile", 0.70f)
-      .Range(0.0f, 0.99f)
+      .ClampRange(0.0f, 0.99f)
       .Tooltip("Lower percentile boundary. Game/Adaptive use the band for "
                "metering; Local uses it as a luminance protection band.")
       .EnableWhen(&Checked, kPercentileRange)
       .Category(category);
   section.Add<ctl::FloatSetting>(kPercentileHigh, "High Percentile", 0.90f)
-      .Range(0.01f, 1.0f)
+      .ClampRange(0.01f, 1.0f)
       .Tooltip("Upper percentile boundary for this layer.")
       .EnableWhen(&Checked, kPercentileRange)
       .Category(category);
