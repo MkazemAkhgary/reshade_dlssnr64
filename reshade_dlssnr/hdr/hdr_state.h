@@ -105,14 +105,6 @@ class HdrState {
   float EffectiveSceneWhiteNits(const HdrSettings& hdr) const {
     return CalcEffectiveSceneWhiteNits(SceneWhite(), hdr);
   }
-  float FallbackExposure() const { return regular_.exposure; }
-  float FallbackSceneWhite() const { return regular_.scene_white; }
-  float FallbackEffectiveSceneWhite(const HdrSettings& hdr) const {
-    return CalcEffectiveSceneWhite(SceneWhite(), hdr);
-  }
-  float FallbackEffectiveSceneWhiteNits(const HdrSettings& hdr) const {
-    return CalcEffectiveSceneWhiteNits(SceneWhite(), hdr);
-  }
 
   HdrSnapshot GetSnapshot() const;
 
