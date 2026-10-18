@@ -81,9 +81,8 @@ uint64_t TemporalSettingsSignature(const PassRun& run) {
   // measurements are deliberately excluded so adaptation does not reset history.
   HashTemporalValue(&hash, run.hdr_state.format);
   HashTemporalValue(&hash, run.hdr_state.bt2446_k1);
-  HashTemporalValue(&hash, run.hdr_state.bt2446_k2);
   HashTemporalValue(&hash, run.hdr_state.bt2446_k3);
-  HashTemporalValue(&hash, run.hdr_state.bt2446_k4);
+  HashTemporalValue(&hash, run.hdr_state.bt2446_ip);
   HashTemporalValue(&hash, run.hdr_state.bt2446_crosstalk);
   HashTemporalValue(&hash, run.hdr_uniforms.format);
   HashTemporalValue(&hash, run.hdr_uniforms.local_exposure_strength);
