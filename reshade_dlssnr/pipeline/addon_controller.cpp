@@ -592,11 +592,10 @@ void AddonController::PrepareFrameForPass(
   if (!settings.enabled || command_list == nullptr || source_resource == nullptr)
     return;
 
-  // This utility stage contains the one HDR measurement and one Structure
-  // Detection dispatch for the current frame. Its target metadata is switched
-  // to match the earliest enabled stage, so HDR reads the same source color
-  // that the first pass will see and detection uses that same current-frame
-  // image instead of a stale DLSS output from the previous evaluation.
+  // This utility stage performs the HDR measurement for the current frame.
+  // Its target metadata is switched to match the earliest enabled stage, so
+  // HDR reads the same source color that the first pass will see instead of
+  // a stale DLSS output from the previous evaluation.
   PipelineStageDef stage = PipelineHdrPreparationStage();
   stage.is_pre_dlss = pre_dlss;
   stage.is_post_dlss = !pre_dlss;
