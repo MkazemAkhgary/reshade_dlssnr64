@@ -84,29 +84,3 @@ float3 ShapeResidual(float3 delta, float luma) {
 
     return delta * protect * kEditStrength;
 }
-
-
-float SoftClampRatio(float r, float lo, float hi) {
-    if (r >= 1.0) {
-        float span = max(hi - 1.0, 1e-6);
-        return 1.0 + (hi - 1.0) * (r - 1.0) / (r - 1.0 + span);
-    } else {
-        float span = max(1.0 - lo, 1e-6);
-        return 1.0 - (1.0 - lo) * (1.0 - r) / ((1.0 - r) + span);
-    }
-}
-
-// The residual is dimensionless: measure the model's change in its linear
-// SDR domain, undo only the deterministic input grade, then apply that gain
-// directly to the original HDR linear pixel. Do not round-trip the HDR pixel
-// through the SDR tone mapper; doing that makes the same model edit depend on
-// the HDR brightness and can damage headroom around highlights.
-float3 ComposeRatioDelta(float3 low_in_lin, float3 low_out_lin) {
-    const float eps = max(kRatioEps, 1e-8);
-    float3 ratio = (max(low_out_lin, 0.0) + eps) /
-                   (max(low_in_lin, 0.0) + eps);
-    ratio.r = SoftClampRatio(ratio.r, kRatioDarken, kRatioBrighten);
-    ratio.g = SoftClampRatio(ratio.g, kRatioDarken, kRatioBrighten);
-    ratio.b = SoftClampRatio(ratio.b, kRatioDarken, kRatioBrighten);
-    return ratio - 1.0;
-}
