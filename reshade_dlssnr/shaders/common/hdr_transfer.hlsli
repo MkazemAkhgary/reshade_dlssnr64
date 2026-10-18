@@ -16,14 +16,35 @@ float3 HdrPreDesaturate(float3 c, float a)
                   d * c.b + a * (sum - c.b));
 }
 
+// BT.2446C tone curve, C1-continuous and invertible. k2 and k4 are
+// derived from k1, k3, and the HDR inflection point so the two branches
+// meet with matching value and slope at the knee. Larger k3 pulls the log
+// branch down harder, compressing highlights more.
 float HdrBt2446Forward(float y_nits)
 {
     float y = max(y_nits, 0.0);
-    float y_ip = kBt2446K4 / max(kBt2446K1, 1e-6);
-    float result = kBt2446K1 * y;
-    if (y >= y_ip)
-        result = kBt2446K2 * log(max(y / y_ip, 1e-6)) + kBt2446K4;
+    float ip = max(kBt2446Ip, 1e-6);
+    float k1 = max(kBt2446K1, 1e-6);
+    float k3 = saturate(kBt2446K3);
+    float k2 = k1 * ip * (1.0 - k3);
+    float k4 = k1 * ip * (1.0 - (1.0 - k3) * log(1.0 - k3));
+    float result = k1 * y;
+    if (y >= ip)
+        result = k2 * log(max(y / ip - k3, 1e-6)) + k4;
     return result;
+}
+
+// Exact inverse of HdrBt2446Forward. Both branches are strictly monotonic
+// and meet at y_sdr = k1 * ip.
+float HdrBt2446Inverse(float y_sdr)
+{
+    float ip = max(kBt2446Ip, 1e-6);
+    float k1 = max(kBt2446K1, 1e-6);
+    float k3 = saturate(kBt2446K3);
+    float k2 = k1 * ip * (1.0 - k3);
+    float k4 = k1 * ip * (1.0 - (1.0 - k3) * log(1.0 - k3));
+    if (y_sdr < k1 * ip) return y_sdr / k1;
+    return ip * (exp((y_sdr - k4) / max(k2, 1e-6)) + k3);
 }
 
 // Reconstructs HDR from the SDR carrier for diagnostics. Alpha is the direct

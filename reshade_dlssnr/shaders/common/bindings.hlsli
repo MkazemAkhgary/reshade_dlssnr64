@@ -31,8 +31,8 @@
 #define kFormat              hdr.Format
 #define kExposure            hdr.Exposure
 #define kBt2446K1            hdr.Bt2446K1
-#define kBt2446K2            hdr.Bt2446K2
-#define kBt2446K4            hdr.Bt2446K4
+#define kBt2446K3            hdr.Bt2446K3
+#define kBt2446Ip            hdr.Bt2446Ip
 #define kCrosstalk           hdr.Crosstalk
 #define kGainMinLog2         hdr.GainMinLog2
 #define kGainMaxLog2         hdr.GainMaxLog2

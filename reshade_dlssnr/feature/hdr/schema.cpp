@@ -78,19 +78,17 @@ void RegisterHdrSchema(ctl::Schema& schema) {
   hdr.Add<ctl::FloatSetting>(kBt2446K1, "BT.2446C k1", 0.83802f)
       .Range(0.001f, 2.0f)
       .Category(kCatAdvanced)
-      .Tooltip("Linear-region slope.");
-  hdr.Add<ctl::FloatSetting>(kBt2446K2, "BT.2446C k2", 15.09968f)
-      .Range(0.001f, 32.0f)
-      .Category(kCatAdvanced)
-      .Tooltip("Log-region slope.");
+      .Tooltip("Linear-region slope: Y_SDR = k1 * Y_HDR below the knee.");
   hdr.Add<ctl::FloatSetting>(kBt2446K3, "BT.2446C k3", 0.74204f)
-      .Range(0.001f, 1.0f)
+      .Range(0.0f, 0.95f)
       .Category(kCatAdvanced)
-      .Tooltip("Reference construction parameter retained for parity/trace.");
-  hdr.Add<ctl::FloatSetting>(kBt2446K4, "BT.2446C k4", 78.99439f)
-      .Range(0.001f, 200.0f)
+      .Tooltip("Shoulder compression. Larger values pull the log branch "
+               "down harder for bright input.");
+  hdr.Add<ctl::FloatSetting>(kBt2446Ip, "BT.2446C Inflection", 94.26f)
+      .Range(0.001f, 10000.0f)
       .Category(kCatAdvanced)
-      .Tooltip("Log-region intercept in nits.");
+      .Tooltip("HDR inflection point in nits where the curve switches from "
+               "linear to log.");
   hdr.Add<ctl::FloatSetting>(kBt2446Crosstalk, "Crosstalk", 0.04f)
       .Range(0.0f, 0.33f)
       .Category(kCatAdvanced)

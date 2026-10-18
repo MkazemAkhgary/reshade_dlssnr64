@@ -20,11 +20,11 @@ struct HdrUniforms {
   float format = 0.0f;
   float exposure = 1.0f;
 
-  // BT.2446 Method C. k2/k4 are derived from k1/k3 when settings are loaded.
+  // BT.2446 Method C. k2 and k4 are derived in the shader from k1, k3,
+  // and the HDR inflection point so the curve is C1-continuous.
   float bt2446_k1 = 0.83802f;
-  float bt2446_k2 = 15.09968f;
   float bt2446_k3 = 0.74204f;
-  float bt2446_k4 = 78.99439f;
+  float bt2446_ip = 94.26f;
   float bt2446_crosstalk = 0.04f;
 
   // packed.a stores the direct linear HDR-to-SDR-carrier luminance multiplier.

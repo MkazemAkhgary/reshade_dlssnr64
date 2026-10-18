@@ -298,8 +298,8 @@ bool RenderDebugView(
     constants.hdr.Format = hdr->format;
     constants.hdr.Exposure = hdr->exposure;
     constants.hdr.Bt2446K1 = hdr->bt2446_k1;
-    constants.hdr.Bt2446K2 = hdr->bt2446_k2;
-    constants.hdr.Bt2446K4 = hdr->bt2446_k4;
+    constants.hdr.Bt2446K3 = hdr->bt2446_k3;
+    constants.hdr.Bt2446Ip = hdr->bt2446_ip;
     constants.hdr.Crosstalk = hdr->bt2446_crosstalk;
     constants.hdr.GainMinLog2 = hdr->gain_min_log2;
     constants.hdr.GainMaxLog2 = hdr->gain_max_log2;

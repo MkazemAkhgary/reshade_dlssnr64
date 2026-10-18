@@ -59,8 +59,8 @@ DLSSNR_BLOCK(HdrBlock)
     float Format;
     float Exposure;
     float Bt2446K1;
-    float Bt2446K2;
-    float Bt2446K4;
+    float Bt2446K3;
+    float Bt2446Ip;
     float Crosstalk;
     // Compose upsample selection.
     //   UpsampleMode: 0 = FSR 1.0 EASU, 1 = joint bilateral.

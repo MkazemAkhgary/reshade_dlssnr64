@@ -1256,10 +1256,8 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
   constants.hdr.Format = run.hdr_uniforms.format;
   constants.hdr.Exposure = run.hdr_uniforms.exposure;
   constants.hdr.Bt2446K1 = run.hdr_uniforms.bt2446_k1;
-  constants.hdr.Bt2446K2 = run.hdr_uniforms.bt2446_k2;
-  // k3 remains a persisted BT.2446C construction parameter for trace/UI parity,
-  // but the direct Method-C evaluation uses k1, k2 and k4 plus Y_ip = k4/k1.
-  constants.hdr.Bt2446K4 = run.hdr_uniforms.bt2446_k4;
+  constants.hdr.Bt2446K3 = run.hdr_uniforms.bt2446_k3;
+  constants.hdr.Bt2446Ip = run.hdr_uniforms.bt2446_ip;
   constants.hdr.Crosstalk = run.hdr_uniforms.bt2446_crosstalk;
   constants.hdr.GainMinLog2 = run.hdr_uniforms.gain_min_log2;
   constants.hdr.GainMaxLog2 = run.hdr_uniforms.gain_max_log2;
@@ -1280,8 +1278,8 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
     luma_constants.hdr.Format = run.hdr_uniforms.format;
     luma_constants.hdr.Exposure = run.hdr_uniforms.exposure;
     luma_constants.hdr.Bt2446K1 = run.hdr_uniforms.bt2446_k1;
-    luma_constants.hdr.Bt2446K2 = run.hdr_uniforms.bt2446_k2;
-    luma_constants.hdr.Bt2446K4 = run.hdr_uniforms.bt2446_k4;
+    luma_constants.hdr.Bt2446K3 = run.hdr_uniforms.bt2446_k3;
+    luma_constants.hdr.Bt2446Ip = run.hdr_uniforms.bt2446_ip;
     luma_constants.hdr.Crosstalk = run.hdr_uniforms.bt2446_crosstalk;
     luma_constants.hdr.EffectiveSceneWhiteNits = run.hdr_uniforms.effective_scene_white_nits;
     ID3D12Resource* luma_srvs[kSrvCount] = {source, source, source, source};
@@ -1821,8 +1819,8 @@ PipelineStatus PassSession::StepBuildEffectiveLocalExposure(PassRun& run) {
   constants.hdr.Format = run.hdr_uniforms.format;
   constants.hdr.Exposure = run.hdr_uniforms.exposure;
   constants.hdr.Bt2446K1 = run.hdr_uniforms.bt2446_k1;
-  constants.hdr.Bt2446K2 = run.hdr_uniforms.bt2446_k2;
-  constants.hdr.Bt2446K4 = run.hdr_uniforms.bt2446_k4;
+  constants.hdr.Bt2446K3 = run.hdr_uniforms.bt2446_k3;
+  constants.hdr.Bt2446Ip = run.hdr_uniforms.bt2446_ip;
   constants.hdr.Crosstalk = run.hdr_uniforms.bt2446_crosstalk;
   constants.hdr.GainMinLog2 = run.hdr_uniforms.gain_min_log2;
   constants.hdr.GainMaxLog2 = run.hdr_uniforms.gain_max_log2;
