@@ -12,10 +12,10 @@ namespace reshade_dlssnr {
 // are active at a time; stacking two would make them fight.
 
 enum class GradeLumaMode : int {
-  Gain = 0,   // x2^amount; symmetric, clips at white
-  Gamma = 1,  // power on normalized luma; midtone-weighted, never clips
-  Lift = 2,   // offset scaled by headroom; moves shadows
-  Soft = 3,   // parabolic lift; strongest at mid grey
+  Gain = 0,      // x2^amount on luminance; symmetric, clips at white
+  Gamma = 1,     // power on normalized luma; midtone-weighted, never clips
+  Exposure = 2,  // x2^amount on linear RGB; preserves chromaticity until clipping
+  Soft = 3,      // parabolic lift; strongest at mid grey
 };
 
 enum class GradeChromaMode : int {
