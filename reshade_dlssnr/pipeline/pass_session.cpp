@@ -989,7 +989,6 @@ PipelineStatus PassSession::StepEnsureComputeEngine(PassRun& run) {
 // Compute the per-pass working resolution from the frame extent and the pass's
 // working-scale setting.
 PipelineStatus PassSession::StepResolveWorkingScale(PassRun& run) {
-  PassSession* self = run.session;
   if (!run.pass_bound) return PipelineStatus::SkipFrame;
 
   const float working_scale =
