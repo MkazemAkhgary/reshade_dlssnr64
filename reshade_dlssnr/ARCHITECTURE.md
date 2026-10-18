@@ -8,7 +8,7 @@ HDR is handled by the Pre-DLSS and Post-DLSS paths. The source is converted into
 
 ## Repository layout
 
-The source tree is organized by ownership rather than by pipeline stage. `ctl` is domain-agnostic: it defines schemas, values, persistence, generic drawing, and tracing, but does not include or register application features. `feature/register_all.cpp` owns the application schema composition, and `feature/settings_store.cpp` builds the live store from that registration. This dependency runs from the feature layer into `ctl`, never the reverse. The only host-specific `ctl/usage` adapter is the ReShade config reader/writer. `ctl` is domain-agnostic: it defines schemas, values, persistence, generic drawing, and tracing, but does not include or register application features. `feature/register_all.cpp` owns the application schema composition, and `feature/settings_store.cpp` builds the live store from that registration. This dependency runs from the feature layer into `ctl`, never the reverse. The only host-specific `ctl/usage` adapter is the ReShade config reader/writer.
+The source tree is organized by ownership rather than by pipeline stage. `ctl` is domain-agnostic: it defines schemas, values, persistence, generic drawing, and tracing, but does not include or register application features. `feature/register_all.cpp` owns the application schema composition, and `feature/settings_store.cpp` builds the live store from that registration. This dependency runs from the feature layer into `ctl`, never the reverse. The only host-specific `ctl/usage` adapter is the ReShade config reader/writer.
 
 ```text
 reshade_dlssnr/
