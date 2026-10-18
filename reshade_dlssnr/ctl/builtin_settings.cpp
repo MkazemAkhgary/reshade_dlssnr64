@@ -91,9 +91,11 @@ bool FloatSetting::Draw(const SettingContext& ctx, const Value& resolved,
   bool changed = false;
   {
     const std::string id = std::string("##") + meta_.name;
-    // The slider drags within the UI range; typed input is limited only by
-    // the clamp range applied below.
-    changed = ImGui::SliderFloat(id.c_str(), &display, ui_lo_, ui_hi_,
+    // Range, narrowed by ClampRange when the latter is set. Typed input is
+    // always clamped to [lo_, hi_].
+    const float eff_lo = has_clamp_range_ ? std::max(ui_lo_, lo_) : lo_;
+    const float eff_hi = has_clamp_range_ ? std::min(ui_hi_, hi_) : hi_;
+    changed = ImGui::SliderFloat(id.c_str(), &display, eff_lo, eff_hi,
                                  format_.c_str());
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -194,9 +196,11 @@ bool IntSetting::Draw(const SettingContext& ctx, const Value& resolved,
   bool changed = false;
   {
     const std::string id = std::string("##") + meta_.name;
-    // The slider drags within the UI range; typed input is limited only by
-    // the clamp range applied below.
-    changed = ImGui::SliderInt(id.c_str(), &display, ui_lo_, ui_hi_);
+    // Range, narrowed by ClampRange when the latter is set. Typed input is
+    // always clamped to [lo_, hi_].
+    const int eff_lo = has_clamp_range_ ? std::max(ui_lo_, lo_) : lo_;
+    const int eff_hi = has_clamp_range_ ? std::min(ui_hi_, hi_) : hi_;
+    changed = ImGui::SliderInt(id.c_str(), &display, eff_lo, eff_hi);
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("%s", meta_.tooltip.empty() ? meta_.label.c_str() : meta_.tooltip.c_str());

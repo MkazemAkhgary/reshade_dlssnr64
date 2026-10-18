@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -33,17 +34,19 @@ class FloatSetting : public Setting {
     SetVisible(visible, context);
     return *this;
   }
-  // Slider drag range. Typed input may exceed this; use ClampRange for
-  // the absolute bounds.
+  // Slider drag range. When ClampRange has not been set, this is also the
+  // accepted input range.
   FloatSetting& Range(float lo, float hi) {
     ui_lo_ = lo;
     ui_hi_ = hi;
-    if (!has_clamp_range_) { lo_ = lo; hi_ = hi; }
+    if (!has_clamp_range_) {
+      lo_ = lo;
+      hi_ = hi;
+    }
     return *this;
   }
-  // Absolute clamp bounds, applied to typed input, programmatic writes, and
-  // loads. Set this wider than Range when the slider should cover only the
-  // common range while the type still accepts edge values.
+  // Absolute bounds for typed input, programmatic writes, and loads. Takes
+  // authority over Range: the slider is narrowed to fit.
   FloatSetting& ClampRange(float lo, float hi) {
     lo_ = lo;
     hi_ = hi;
@@ -64,8 +67,11 @@ class FloatSetting : public Setting {
 
  private:
   float default_ = 0.0f;
-  float ui_lo_ = 0.0f;
-  float ui_hi_ = 1.0f;
+  // Slider bounds. Unbounded by default so ClampRange alone decides the
+  // slider until Range is called.
+  float ui_lo_ = std::numeric_limits<float>::lowest();
+  float ui_hi_ = std::numeric_limits<float>::max();
+  // Accepted input bounds. Range populates these when ClampRange is absent.
   float lo_ = 0.0f;
   float hi_ = 1.0f;
   bool has_clamp_range_ = false;
@@ -91,17 +97,19 @@ class IntSetting : public Setting {
     SetVisible(visible, context);
     return *this;
   }
-  // Slider drag range. Typed input may exceed this; use ClampRange for
-  // the absolute bounds.
+  // Slider drag range. When ClampRange has not been set, this is also the
+  // accepted input range.
   IntSetting& Range(int lo, int hi) {
     ui_lo_ = lo;
     ui_hi_ = hi;
-    if (!has_clamp_range_) { lo_ = lo; hi_ = hi; }
+    if (!has_clamp_range_) {
+      lo_ = lo;
+      hi_ = hi;
+    }
     return *this;
   }
-  // Absolute clamp bounds, applied to typed input, programmatic writes, and
-  // loads. Set this wider than Range when the slider should cover only the
-  // common range while the type still accepts edge values.
+  // Absolute bounds for typed input, programmatic writes, and loads. Takes
+  // authority over Range: the slider is narrowed to fit.
   IntSetting& ClampRange(int lo, int hi) {
     lo_ = lo;
     hi_ = hi;
@@ -120,10 +128,13 @@ class IntSetting : public Setting {
 
  private:
   int default_ = 0;
-  int ui_lo_ = 0;
-  int ui_hi_ = 100;
+  // Slider bounds. Unbounded by default so ClampRange alone decides the
+  // slider until Range is called.
+  int ui_lo_ = std::numeric_limits<int>::lowest();
+  int ui_hi_ = std::numeric_limits<int>::max();
+  // Accepted input bounds. Range populates these when ClampRange is absent.
   int lo_ = 0;
-  int hi_ = 100;
+  int hi_ = 1;
   bool has_clamp_range_ = false;
 };
 
