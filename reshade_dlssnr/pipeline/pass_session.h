@@ -38,9 +38,8 @@ class PassSession {
   // the controller supplies the frame inputs, and the runner walks the stage's
   // step table. Returns the stage status.
   //
-  // The per-stage guards that the pre-refactor OnPresent / OnPostDlssEvaluate
-  // applied before their first real work (`settings.enabled`, `failed_`, null
-  // inputs) live here, so every caller gets them without repeating them.
+  // Per-stage guards (`settings.enabled`, `failed_`, null inputs) live here,
+  // so every caller gets them without repeating them.
   PipelineStatus RunStage(const PipelineStageDef& stage,
                           const Settings& settings,
                           ComputeEngine& codec,

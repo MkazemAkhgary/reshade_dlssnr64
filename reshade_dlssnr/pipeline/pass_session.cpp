@@ -738,13 +738,12 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
                                      uint64_t frame_id,
                                      ID3D12Fence* temporal_feedback_fence,
                                      uint64_t temporal_feedback_fence_value) {
-  // The pre-refactor entry points were serialized against each other with this
-  // mutex; the runner walk replaces them, so it has to hold the same lock.
+  // Serializes stage execution across passes.
   std::lock_guard<std::mutex> lock(g_session_mutex);
 
-  // Guards common to both stages. They were the first four lines of each
-  // stage method. A disabled addon or a failed pass does nothing at all; a
-  // missing input is likewise not an error, just nothing to do.
+  // Guards common to both stages. A disabled addon or a failed pass does
+  // nothing at all; a missing input is likewise not an error, just nothing
+  // to do.
   if (!settings.enabled) return PipelineStatus::SkipFrame;
   if (failed_) return PipelineStatus::SkipFrame;
 
@@ -815,9 +814,8 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
 // Pipeline step bodies
 // ---------------------------------------------------------------------------
 //
-// These are the extracted bodies of the steps that used to be inline in
-// OnPresent and OnPostDlssEvaluate. The step order lives in
-// runtime/pipeline_graph.cpp; this file says how each step runs.
+// The step order lives in pipeline_graph.cpp; this file says how each step
+// runs.
 //
 // They are static members of PassSession rather than free functions because
 // they are the session's own work: they touch resources_, feature_, command_
@@ -852,7 +850,7 @@ void PassSession::FailForStep(const char* reason) {
 // ---------------------------------------------------------------------------
 
 // Backbuffer only: acquire the swapchain backbuffer and the device behind the
-// command queue. Replaces the block at the top of the old OnPresent.
+// command queue.
 PipelineStatus PassSession::StepAcquireBackbuffer(PassRun& run) {
   PassSession* self = run.session;
   IDXGISwapChain* swapchain = run.swapchain;
@@ -886,10 +884,9 @@ PipelineStatus PassSession::StepAcquireBackbuffer(PassRun& run) {
 // the NGX runtime and this session's own command list.
 //
 // Backbuffer gets the device from the queue; PreDLSS/PostDLSS from the game's
-// command list. The difference in failure handling is deliberate and matches
-// the pre-refactor code: Present treats both failures as fatal, PostDLSS
-// treats a missing device as transient (the game may not have loaded the DLSS
-// model yet) and a failing runtime.Initialize as transient too.
+// command list. A missing device is transient for the game-list stages
+// because the game may not have loaded the DLSS model yet, and is fatal for
+// Backbuffer.
 PipelineStatus PassSession::StepResolveDevice(PassRun& run) {
   PassSession* self = run.session;
   const bool uses_game_list = run.stage != nullptr && !run.stage->owns_submit;
@@ -1168,8 +1165,6 @@ PipelineStatus PassSession::StepResolveModelInput(PassRun& run) {
   constexpr uint32_t kSnapshotSlot = kInputSnapshotSlot;
   if (!self->resources_.EnsureScratch(run.device, run.desc, run.width, run.height,
                                 kSnapshotSlot)) {
-    // Pre-refactor set failed_ directly here without a reason string; keep
-    // that shape but give it a reason so the status UI is not blank.
     self->FailForStep("failed to create input snapshot");
     TRACE_EVT(self, "FAIL pass=%u reason=ensure_scratch", self->pass_id_);
     return PipelineStatus::Fail;
@@ -2229,9 +2224,9 @@ PipelineStatus PassSession::StepSubmitBackbuffer(PassRun& run) {
   self->CleanupFrameState(self->command_.GetCommandList());
   self->SubmitBackbuffer();
 
-  // Backbuffer reports the NGX result after the frame is on the GPU, matching the
-  // pre-refactor ordering: the frame is never dropped because the model
-  // failed, but the pass is marked so the user sees it.
+  // Backbuffer reports the NGX result after the frame is on the GPU: the frame
+  // is never dropped because the model failed, but the pass is marked so the
+  // user sees it.
   //
   // The numeric result is logged as well as named. "EvaluateFeature failed" on
   // its own is not diagnosable - the code distinguishes a missing input from a
@@ -2263,12 +2258,6 @@ PipelineStatus PassSession::StepSubmitBackbuffer(PassRun& run) {
 // Step table
 // ---------------------------------------------------------------------------
 
-// Prerequisites are deliberately empty for now. The runner checks them and
-// logs at error level when one is missing, so populating them is a genuine
-// safety net rather than decoration — but it has to be done against a running
-// pipeline to be worth anything, which is Stage 4. The flat, depth-ordered
-// PipelineNodeId enum is what makes a cycle impossible to express when that
-// happens.
 constexpr PipelineNodeId kNoDeps[] = {PipelineNodeId::Count};
 
 // Step table.
@@ -2391,12 +2380,10 @@ static_assert(PrerequisitesPrecedeSteps(kPostDlssStepNodes,
               "that runs after it");
 
 // The Backbuffer stage is not HDR-capable, so no step listed there may be marked
-// `requires_hdr_aware`: the runner would skip it silently. This is the guard
-// for a bug that shipped — PrepareModelInput and ComposeModelOutput were
-// flagged HDR-only, got skipped in Backbuffer, and left the model to be evaluated
-// with null inputs (NGX: FAIL_InvalidParameter).
+// `requires_hdr_aware`: the runner would skip it silently.
 //
-// Those two steps are not HDR-only: they pick the HDR shader when
+// PrepareModelInput and ComposeModelOutput are not HDR-only: they pick the HDR
+// shader when
 // `hdr_uniforms_ready` is set and the SDR shader otherwise. Only BuildHdrUniforms
 // genuinely needs `run.hdr`, and it is listed in PostDLSS alone.
 static_assert(NoHdrAwareSteps(kPresentStepNodes, ArrayCount(kPresentStepNodes),
