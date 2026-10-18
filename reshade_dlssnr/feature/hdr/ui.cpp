@@ -12,6 +12,9 @@
 
 #include <imgui.h>
 
+#include <algorithm>
+#include <cmath>
+
 #include "ctl/draw.h"
 #include "ctl/values.h"
 #include "feature/hdr/settings.h"
@@ -129,6 +132,44 @@ bool DrawHdrLayers(const void* context, ctl::ValueStore& store,
 
   changed |= local_changed;
   return local_changed;
+}
+
+
+// BT.2446C derived k2/k4 readout. Not settings: both are computed from
+// k1, k3, and the inflection point so the curve stays C1-continuous.
+bool DrawBt2446Derived(const void* context, ctl::ValueStore& store,
+                       const ctl::DrawOptions& options,
+                       const std::string& section,
+                       const ctl::InstanceKey& key, bool& changed) {
+  (void)context;
+  (void)options;
+  (void)changed;
+  const float k1 = store.Read(section, key, kBt2446K1).as_float;
+  const float k3 = store.Read(section, key, kBt2446K3).as_float;
+  const float ip = store.Read(section, key, kBt2446Ip).as_float;
+  const float k2 = k1 * ip * (1.0f - k3);
+  const float k4 = k1 * ip *
+      (1.0f - (1.0f - k3) * std::log(std::max(1.0f - k3, 1e-6f)));
+
+  IndentScope indent;
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted("BT.2446C k2 (derived)");
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("k2 = k1 * ip * (1 - k3). Derived to match the linear branch's "
+        "slope at the knee; not editable.");
+  }
+  ImGui::SameLine(kControlLabelWidth);
+  ImGui::TextDisabled("%.5f", static_cast<double>(k2));
+
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted("BT.2446C k4 (derived)");
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("k4 = k1 * ip * (1 - (1 - k3) * log(1 - k3)). Derived to match the "
+        "linear branch's value at the knee; not editable.");
+  }
+  ImGui::SameLine(kControlLabelWidth);
+  ImGui::TextDisabled("%.5f", static_cast<double>(k4));
+  return false;
 }
 
 

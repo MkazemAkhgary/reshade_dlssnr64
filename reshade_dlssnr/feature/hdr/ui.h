@@ -35,6 +35,12 @@ bool DrawHdrDiagnostics(const void* context, ctl::ValueStore& store,
                         const std::string& section,
                         const ctl::InstanceKey& key, bool& changed);
 
+// Read-only k2/k4 readout, drawn under the k1/k3/inflection sliders.
+bool DrawBt2446Derived(const void* context, ctl::ValueStore& store,
+                       const ctl::DrawOptions& options,
+                       const std::string& section,
+                       const ctl::InstanceKey& key, bool& changed);
+
 }  // namespace hdr
 }  // namespace feature
 }  // namespace reshade_dlssnr

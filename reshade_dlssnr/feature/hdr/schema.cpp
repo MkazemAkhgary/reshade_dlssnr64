@@ -89,6 +89,8 @@ void RegisterHdrSchema(ctl::Schema& schema) {
       .Category(kCatAdvanced)
       .Tooltip("HDR inflection point in nits where the curve switches from "
                "linear to log.");
+  hdr.AddHookAfter(kBt2446Ip, "Bt2446Derived", &DrawBt2446Derived)
+      .Category(kCatAdvanced);
   hdr.Add<ctl::FloatSetting>(kBt2446Crosstalk, "Crosstalk", 0.04f)
       .Range(0.0f, 0.33f)
       .Category(kCatAdvanced)
