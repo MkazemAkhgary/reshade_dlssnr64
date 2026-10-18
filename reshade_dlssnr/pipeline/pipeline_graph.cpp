@@ -109,9 +109,7 @@ const PipelineStepDef* const* StepIndex() {
 
   built = true;
 
-  // Sources, in the order FindPipelineStep used to consult them. The order is
-  // load bearing: on a duplicate the first registry wins, exactly as the
-  // previous if-chain did, so the resolution does not change.
+  // Sources, in precedence order. On a duplicate the first registry wins.
   struct Source {
     const char* name;
     const PipelineStepDef* (*lookup)(PipelineNodeId);
@@ -171,9 +169,8 @@ const PipelineStepDef* FindPipelineStep(PipelineNodeId id) {
 // ---------------------------------------------------------------------------
 //
 // -- Present stage ----------------------------------------------------------
-// Was: PassSession::OnPresent (pass_session.cpp)
 //
-// The two stages also differ inside their early-exit guards, and those guards
+// The two stages differ inside their early-exit guards, and those guards
 // are NOT steps - they abandon the frame, so they live inside EnsureFeature:
 //   - Present, on ConsumeJustRebuilt, submits (SubmitBackbuffer) and then returns
 //     SkipFrame.
@@ -260,7 +257,6 @@ constexpr PipelinePhaseDef kPreDlssPhases[] = {
 };
 
 // -- Post-DLSS stage --------------------------------------------------------
-// Was: PassSession::OnPostDlssEvaluate (pass_session.cpp)
 constexpr PipelineNodeId kPostDlssSteps[] = {
     PipelineNodeId::ResolveDevice,        // GetDevice + runtime.Initialize
     // HDR measurement is completed by the shared frame-preparation stage.
@@ -329,7 +325,6 @@ const PipelineStageDef kHdrPreparationStage = {
 };
 
 // -- Release stage ----------------------------------------------------------
-// Was: the tail of AddonController::OnPresent.
 constexpr PipelineNodeId kReleaseSteps[] = {
     PipelineNodeId::GradeBackbuffer,
     PipelineNodeId::WriteDebugToBackbuffer,
