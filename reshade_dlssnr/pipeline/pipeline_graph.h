@@ -16,10 +16,6 @@
 // The two entry points in AddonController are no longer parallel copies of the
 // same loop; they both call RunStage() with a different stage definition.
 //
-// Fidelity note: this graph is a description of the EXISTING pipeline, not a
-// redesign. Step order, barrier order, dispatch order, and submit points all
-// match the pre-refactor code exactly. Any deliberate divergence is called out
-// at the step that diverges.
 #pragma once
 
 #include <cstddef>
@@ -159,13 +155,11 @@ bool PipelineNodeValid(PipelineNodeId id);
 
 // How the runner should treat a step that reports failure.
 enum class FailurePolicy {
-  // Mark the pass failed and stop running the stage. The pre-refactor
-  // Present path used this for nearly everything.
+  // Mark the pass failed and stop running the stage.
   Fail,
-  // Note it and stop this stage, but leave the pass healthy. The
-  // pre-refactor PostDLSS path used this for device acquisition and for
-  // runtime.Initialize, which can legitimately fail on frames where the game
-  // has not loaded the DLSS model yet.
+  // Note it and stop this stage, but leave the pass healthy. Used for
+  // conditions that can legitimately fail on some frames, such as the game
+  // not having loaded the DLSS model yet.
   Transient,
   // Ignore the result entirely and keep going.
   Ignore,
@@ -214,8 +208,7 @@ struct PassRun {
   // diagnostic and by the few steps that have not moved to a snapshot. What
   // the render path reads about the pass comes from `pass_state` / `grade_*`,
   // about HDR from `hdr_state`, about the mask from `mask_state`, and
-  // `pass_bound` says whether a pass instance was bound at all, which is what
-  // the old `pass != nullptr` test meant.
+  // `pass_bound` says whether a pass instance was bound at all.
   const Settings* settings = nullptr;
   int debug_view = 0;
   bool pass_bound = false;
@@ -289,9 +282,8 @@ struct PassRun {
   int eval_result = 0;
 
   // HDR gain-map uniforms, built by BuildHdrUniforms and consumed by the
-  // split / compose steps. `hdr_uniforms_ready` false
-  // means the SDR variant of each pass is selected, which is what the
-  // pre-refactor `hdr_ptr == nullptr` test expressed.
+  // split / compose steps. `hdr_uniforms_ready` false means the SDR variant
+  // of each pass is selected.
   model_pipeline::HdrUniforms hdr_uniforms = {};
   bool hdr_uniforms_ready = false;
 
@@ -404,9 +396,7 @@ struct PipelineStepDef {
   // It does NOT mean "this step has an HDR variant". PrepareModelInput and
   // ComposeModelOutput each select an HDR shader when `hdr_uniforms_ready` is
   // set and fall back to the SDR shader otherwise, so they run in both kinds of
-  // stage. Flagging them with this was a real bug: Present is not HDR-capable,
-  // so both were skipped and the model was evaluated with null inputs, which
-  // NGX reported as FAIL_InvalidParameter.
+  // stage.
   bool requires_hdr_aware = false;
 };
 
@@ -609,10 +599,8 @@ constexpr bool NodeListsEqual(const PipelineNodeId (&a)[N],
 // `requires_hdr_aware`.
 //
 // Use this to assert that a stage which is not HDR-capable carries no
-// HDR-only step. The runner silently skips such a step, so the mistake shows up
-// as a step that never runs rather than as a compile or runtime error — which
-// is exactly how PrepareModelInput and ComposeModelOutput came to be skipped in
-// the Backbuffer stage, leaving the model to be evaluated with null inputs.
+// HDR-only step. The runner silently skips such a step, so the mistake shows
+// up as a step that never runs rather than as a compile or runtime error.
 //
 // Steps not listed in `steps` are ignored, mirroring PrerequisitesPrecedeSteps.
 constexpr bool NoHdrAwareSteps(const PipelineNodeId* steps, size_t step_count,
