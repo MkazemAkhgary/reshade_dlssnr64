@@ -550,20 +550,10 @@ size_t DlssGuides::ReleaseCompletedLocked(
   return released;
 }
 
-void DlssGuides::ReleaseRetiredResources() {
-  std::lock_guard<std::mutex> lock(lock_);
-  ReleaseRetiredResourcesLocked();
-}
-
 void DlssGuides::RetireGameResource(ID3D12Resource* resource) {
   if (resource == nullptr) return;
   std::lock_guard<std::mutex> lock(lock_);
   retired_game_resources_.push_back({resource, 0});
-}
-
-void DlssGuides::ReleaseRetiredGameResources() {
-  std::lock_guard<std::mutex> lock(lock_);
-  ReleaseRetiredGameResourcesLocked();
 }
 
 void DlssGuides::TagRetiredResources(uint64_t fence_value) {

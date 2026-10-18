@@ -71,9 +71,7 @@ class DlssGuides {
       NVSDK_NGX_Feature feature_id);
 
   DlssGuideState GetState() const;
-  void ReleaseRetiredResources();
   void RetireGameResource(ID3D12Resource* resource);
-  void ReleaseRetiredGameResources();
   // Bind all resources retired before this present to a queue-ordered fence.
   // ReleaseRetiredResourcesCompleted() later frees only the completed prefix.
   void TagRetiredResources(uint64_t fence_value);
