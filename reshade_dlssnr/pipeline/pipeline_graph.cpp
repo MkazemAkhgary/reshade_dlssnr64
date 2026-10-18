@@ -170,23 +170,8 @@ const PipelineStepDef* FindPipelineStep(PipelineNodeId id) {
 // Stage tables
 // ---------------------------------------------------------------------------
 //
-// FIDELITY: the step lists below mirror the pre-refactor sequences exactly.
-// Read them against the original PassSession::OnPresent and
-// OnPostDlssEvaluate to confirm order.
-//
-// Phase conditionals are all nullptr in the current table, meaning "always
-// run". The gated phases (HDR measurement, the active-pass debug view) move
-// behind conditionals in Stage 4, when the runner becomes the path of
-// execution and the gates have to live in the table rather than inline.
-
 // -- Present stage ----------------------------------------------------------
 // Was: PassSession::OnPresent (pass_session.cpp)
-//
-// FIDELITY: this order is transcribed from the pre-refactor method, including
-// the places where the two stages legitimately differ. Present builds the
-// feature BEFORE the codec check and BEFORE the guide states are seeded;
-// PostDLSS does the opposite (see below). That asymmetry is a property of the
-// existing code, so the tables reproduce it rather than tidying it away.
 //
 // The two stages also differ inside their early-exit guards, and those guards
 // are NOT steps - they abandon the frame, so they live inside EnsureFeature:

@@ -1975,9 +1975,7 @@ bool PassSession::EvalKeysDiffer(const EvalLogKey& a, const EvalLogKey& b) {
 // Invoke NGX.
 //
 // Backbuffer captures the result and reports a failure after the frame has been
-// submitted (see StepSubmitBackbuffer); PostDLSS ignores the result entirely,
-// which is what the pre-refactor code did — deliberately or not, it is the
-// behaviour this refactor preserves. The Stage 5 bug list records it.
+// submitted (see StepSubmitBackbuffer); PostDLSS ignores the result entirely.
 PipelineStatus PassSession::StepEvaluateFeature(PassRun& run) {
   PassSession* self = run.session;
   if (run.temporal_reuse) {
