@@ -89,10 +89,6 @@ using PFN_SetComputeRootShaderResourceView = void(STDMETHODCALLTYPE*)(ID3D12Grap
 using PFN_SetComputeRootUnorderedAccessView = void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, UINT, D3D12_GPU_VIRTUAL_ADDRESS);
 using PFN_CreateRootSignature = HRESULT(STDMETHODCALLTYPE*)(ID3D12Device*, UINT, const void*, SIZE_T, REFIID, void**);
 
-struct RootRestoreHook {
-  void* original = nullptr;
-};
-
 PFN_SetDescriptorHeaps g_original_set_descriptor_heaps = nullptr;
 PFN_SetPipelineState g_original_set_pipeline_state = nullptr;
 PFN_SetPipelineState1 g_original_set_pipeline_state1 = nullptr;
