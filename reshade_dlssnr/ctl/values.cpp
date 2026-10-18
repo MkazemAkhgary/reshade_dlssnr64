@@ -177,15 +177,6 @@ const Setting* ValueStore::SettingAt(uint32_t setting_id) const {
   return schema_->sections()[section_index]->settings()[local].get();
 }
 
-uint32_t ValueStore::SectionIndexOfSetting(uint32_t setting_id) const {
-  for (uint32_t i = 0; i < section_offset_.size(); ++i) {
-    const uint32_t count =
-        static_cast<uint32_t>(schema_->sections()[i]->settings().size());
-    if (setting_id < section_offset_[i] + count) return i;
-  }
-  return 0;
-}
-
 bool ValueStore::FindSettingId(const std::string& section,
                                const std::string& setting,
                                uint32_t* out) const {

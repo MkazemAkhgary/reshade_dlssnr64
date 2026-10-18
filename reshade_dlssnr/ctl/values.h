@@ -185,7 +185,6 @@ class ValueStore {
   // Where the global setting id space is laid out: one entry per (section,
   // setting) pair, in section order then declaration order.
   const Setting* SettingAt(uint32_t setting_id) const;
-  uint32_t SectionIndexOfSetting(uint32_t setting_id) const;
   uint32_t setting_count() const { return setting_count_; }
 
   // First global setting id of a section. Lets a caller walk a section's
