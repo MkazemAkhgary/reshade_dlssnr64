@@ -16,6 +16,10 @@
 #define kGradeHighlights grade.Highlights
 #define kGradeFormat     grade.Format
 #define kRestoreExposureFlag grade.RestoreExposure
+#define kEdgeSofteningEnabled grade.EdgeSofteningEnabled
+#define kEdgeSoftening grade.EdgeSoftening
+#define kCasEnabled grade.CasEnabled
+#define kCasSharpness grade.CasSharpness
 
 // Residual edit
 #define kEditStrength     residual.EditStrength

@@ -34,6 +34,10 @@ struct GradeSettings {
   float contrast = 0.0f;
   float shadows = 0.0f;
   float highlights = 0.0f;
+  bool edge_softening_enabled = false;
+  float edge_softening = 0.5f;
+  bool cas_enabled = false;
+  float cas_sharpness = 0.5f;
 };
 
 constexpr float kGradeBlackLevelMin = -0.25f;

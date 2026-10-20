@@ -53,7 +53,8 @@ reshade_dlssnr/
     debug_display.hlsl              Debug-view renderer
     debug_hdr_roundtrip.hlsl        HDR round-trip, error, and local-exposure diagnostic renderer
   shaders/grade/
-    apply_grade.hlsl                In-place color grade compute pass
+    apply_grade.hlsl                In-place color grade and edge-aware softening
+    apply_cas.hlsl                  FidelityFX CAS sharpening pass
   shaders/hdr/
     zero_histogram.hlsl             Clears the full-frame 256-bin histogram buffer
     build_histogram.hlsl            Builds the full-frame log2-luma histogram
@@ -411,13 +412,13 @@ The 512-byte CBV is:
 |---:|---|---:|
 | 0 | `Width`, `Height`, header padding | 16 |
 | 16 | `ShaderBlock` | 32 |
-| 48 | `GradeBlock` | 48 |
-| 96 | `ResidualBlock` | 32 |
-| 128 | `HdrBlock` | 80 |
-| 208 | `HistogramBlock` | 32 |
-| 240 | `TemporalBlock` | 96 |
-| 336 | `LocalExposureControlBlock` | 32 |
-| 368 | alignment padding | 144 |
+| 48 | `GradeBlock` | 96 |
+| 144 | `ResidualBlock` | 32 |
+| 176 | `HdrBlock` | 80 |
+| 256 | `HistogramBlock` | 32 |
+| 288 | `TemporalBlock` | 96 |
+| 384 | `LocalExposureControlBlock` | 32 |
+| 416 | alignment padding | 96 |
 
 The resulting `ComputeConstants` size and `BindAndDispatch` stride are both 512 bytes, rounded to the D3D12 constant-buffer alignment. `TemporalBlock` owns the photometric/depth thresholds, maximum motion displacement, motion-vector coordinate metadata, and guide subrect metadata. Temporal kernels use a dedicated `TemporalBlock`; they do not borrow HDR or generic shader-parameter slots. `HdrBlock.LocalExposureParams.x/y` carry the local-exposure radius and sample count; `.z` is reserved and kept zero. The `LocalExposureControlBlock` occupies previously unused trailing cbuffer space and carries the directional curve, detail-retention, and protection controls without changing existing block offsets.
 
@@ -427,13 +428,17 @@ The layout intentionally avoids `float2`, `float3`, `packoffset`, platform heade
 
 ### Shared filtering and reconstruction
 
+Each grade section can apply joint-bilateral 3x3 edge-aware softening before its grade curve and optional AMD FidelityFX CAS sharpening afterwards. CAS is deliberately limited to linear SDR inputs because the official filter expects normalized linear values; it is skipped for PQ/scRGB. CAS headers are expected at `third_party/FidelityFX-CAS/ffx-cas/ffx_a.h` and `ffx_cas.h`. The shader generator permits external includes only from that allowlisted directory. Add the FidelityFX-CAS repository as a submodule before building this feature; the addon repository does not vendor or update the dependency.
+
 Local Exposure uses an adjustable radius and 4–48 spatial taps. Its base/detail operator adapts log luminance toward the midtone pivot, with independent shadow/highlight amounts and transitions, protections for bright and dark details, and a detail-retention control. Local Exposure samples the source and evaluates the SDR luminance transfer at each neighborhood tap, preserving the established sampling order.
 
 The model input downsample is `BoxAreaAverage` from `shaders/common/box_filter.hlsli`. It uses exact source footprints and `Texture2D.Load`. Common exact integer ratios up to 4:1 use fixed equal-weight loads; arbitrary scales and fractional edge coverage retain the general footprint path. The integer path is mathematically equivalent, with only summation-order rounding differences.
 
 The non-HDR `PrepareModelInput` path therefore treats the source as already in the model's target sRGB space and passes the averaged RGB through unchanged. The HDR carrier path averages the linear carrier, applies the reversible model highlight/gamut fit, and applies `LinearToSrgb` before the model sees it. Normal colors are unchanged; super-whites are smoothly compressed toward white so emissive highlights keep a white/yellow core.
 
-Both SDR and HDR compose paths use a fixed joint-bilateral 3×3 reconstruction guided by the full-resolution source. The per-pass Upsample Sharpness setting controls guide-luma similarity; the kernel size is fixed to avoid expensive larger neighborhoods and there is no separate sharpening stage.
+Both SDR and HDR compose paths use a fixed joint-bilateral 3×3 reconstruction guided by the full-resolution source. The per-pass Upsample Sharpness setting controls guide-luma similarity; the kernel size is fixed to avoid expensive larger neighborhoods.
+
+Every grade section can apply joint-bilateral 3×3 edge-aware softening before the grade curve and optional AMD FidelityFX CAS sharpening afterwards. CAS runs as a separate dispatch so it sharpens the graded result without recomputing the softening filter per CAS tap. It is deliberately limited to SDR inputs because the official filter expects normalized linear color; it is skipped for PQ/scRGB. CAS headers are expected at `third_party/FidelityFX-CAS/ffx-cas/ffx_a.h` and `ffx_cas.h`. The shader generator permits external includes only from that allowlisted directory. Add the FidelityFX-CAS repository as a submodule before building this feature; the addon repository does not vendor or update the dependency.
 
 The common helpers are also consolidated. `math.hlsli` owns the single `safe_log`/`safe_log3` implementation; `color.hlsli` owns `NitsToPq` and `DecodeToLinear`; and `color_constants.h` is the shared C++/HLSL source of truth for color-domain constants.
 
@@ -659,7 +664,7 @@ When tracing is enabled, `ctl::TraceRecorder` enumerates registered sections, in
 ### Add a shader pass
 
 1. Add one root `.hlsl` under the appropriate `shaders/<module>/` directory with one `CSMain`.
-2. Include the shared headers it actually needs (`common/cbuffer.hlsli`, `common/bindings.hlsli`, `common/registers.hlsli`, plus functional helpers such as `color.hlsli` or `fsr.hlsli`).
+2. Include the shared headers it actually needs (`common/cbuffer.hlsli`, `common/bindings.hlsli`, `common/registers.hlsli`, plus functional helpers such as `color.hlsli` or `compose_upsample.hlsli`). External shader includes are restricted to the FidelityFX CAS submodule's `ffx-cas` directory.
 3. Add the root path to `kComputePasses[]` in `gpu/compute_passes.cpp`.
 4. Register the pass in the appropriate pipeline step if it is part of frame orchestration.
 5. Bind exactly four SRVs and one UAV at the call site; repeat unused SRV resources.

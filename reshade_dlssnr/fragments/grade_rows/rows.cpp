@@ -1,4 +1,4 @@
-// The nine colour-grade rows. See rows.h for why this is a fragment, not a
+// The colour-grade rows. See rows.h for why this is a fragment, not a
 // feature.
 
 #include "rows.h"
@@ -94,6 +94,26 @@ void Declare(ctl::Section& section, const std::string& prefix,
                                        0.0f))
       .ClampRange(-0.95f, 1.0f)
       .Tooltip("Negative desaturates, positive saturates.");
+
+  group(section.Add<ctl::BoolSetting>(named(names::kEdgeSofteningEnabled).c_str(),
+                                      "Edge-Aware Softening", false))
+      .Tooltip("Blend a joint-bilateral 3x3 neighborhood into the grade input. "
+               "Luminance similarity reduces blur across strong edges.");
+
+  group(section.Add<ctl::FloatSetting>(named(names::kEdgeSoftening).c_str(),
+                                       "Softening Strength", 0.5f))
+      .ClampRange(0.0f, 1.0f)
+      .Tooltip("Amount of edge-aware 3x3 softening.");
+
+  group(section.Add<ctl::BoolSetting>(named(names::kCasEnabled).c_str(),
+                                      "CAS Sharpening", false))
+      .Tooltip("Apply AMD FidelityFX Contrast Adaptive Sharpening after the "
+               "grade. CAS operates in linear SDR only and is skipped for HDR formats.");
+
+  group(section.Add<ctl::FloatSetting>(named(names::kCasSharpness).c_str(),
+                                       "CAS Strength", 0.5f))
+      .ClampRange(0.0f, 1.0f)
+      .Tooltip("FidelityFX CAS sharpness (0 is least, 1 is most).");
 }
 
 }  // namespace grade_rows

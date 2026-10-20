@@ -10,6 +10,7 @@ if ([string]::IsNullOrWhiteSpace($GeneratedDir)) {
 New-Item -ItemType Directory -Force -Path $GeneratedDir | Out-Null
 $shaderRoot = Join-Path $ProjectDir "shaders"
 $script:ShaderRootFull = [IO.Path]::GetFullPath($shaderRoot).TrimEnd([char]'\')
+$script:CasRootFull = [IO.Path]::GetFullPath((Join-Path $ProjectDir "third_party\FidelityFX-CAS\ffx-cas")).TrimEnd([char]'\')
 $script:Utf8NoBom = New-Object Text.UTF8Encoding($false)
 
 # Outputs that only matter to the C++ build are written through Write-IfChanged.
@@ -44,7 +45,15 @@ function ConvertTo-RawLiteral([string]$Text) {
 
 function Get-ShaderName([string]$Path) {
   $full = [IO.Path]::GetFullPath($Path)
-  return $full.Substring($script:ShaderRootFull.Length + 1).Replace('\','/')
+  $shaderPrefix = $script:ShaderRootFull + '\'
+  if ($full.StartsWith($shaderPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+    return $full.Substring($shaderPrefix.Length).Replace('\','/')
+  }
+  $casPrefix = $script:CasRootFull + '\'
+  if ($full.StartsWith($casPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+    return ('third_party/FidelityFX-CAS/ffx-cas/' + $full.Substring($casPrefix.Length).Replace('\','/'))
+  }
+  return [IO.Path]::GetFileName($full)
 }
 
 function Resolve-ShaderInclude([string]$IncludeName, [string]$IncludingFile) {
@@ -56,13 +65,18 @@ function Resolve-ShaderInclude([string]$IncludeName, [string]$IncludingFile) {
   foreach ($candidate in $candidates) {
     try {
       $full = [IO.Path]::GetFullPath($candidate)
-      $prefix = $script:ShaderRootFull + '\'
-      if ($full.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $full -PathType Leaf)) {
-        return $full
+      $allowed = $false
+      foreach ($root in @($script:ShaderRootFull, $script:CasRootFull)) {
+        $prefix = $root + '\'
+        if ($full.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+          $allowed = $true
+          break
+        }
       }
+      if ($allowed -and (Test-Path -LiteralPath $full -PathType Leaf)) { return $full }
     } catch { }
   }
-  throw ('Cannot resolve #include "{0}" from "{1}"' -f $IncludeName, (Get-ShaderName $IncludingFile))
+  throw ('Cannot resolve #include "{0}" from "{1}". External shader includes are allowed only from third_party/FidelityFX-CAS/ffx-cas.' -f $IncludeName, (Get-ShaderName $IncludingFile))
 }
 
 function Add-ShaderFileFragments([string]$Path) {

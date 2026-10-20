@@ -5,7 +5,7 @@
 #include "shaders/common/params.h"
 
 static_assert(sizeof(ShaderBlock) == 32);
-static_assert(sizeof(GradeBlock) == 48);
+static_assert(sizeof(GradeBlock) == 96);
 static_assert(sizeof(ResidualBlock) == 32);
 static_assert(sizeof(HdrBlock) == 80);
 static_assert(sizeof(HistogramBlock) == 32);
@@ -29,7 +29,7 @@ static_assert(offsetof(ComputeConstants, histogram) == kHistogramOffset);
 static_assert(offsetof(ComputeConstants, temporal) == kTemporalOffset);
 static_assert(offsetof(ComputeConstants, localExposure) == kLocalExposureOffset);
 
-static_assert(kHistogramOffset == 208);
-static_assert(kTemporalOffset == 240);
-static_assert(kLocalExposureOffset == 336);
+static_assert(kHistogramOffset == 256);
+static_assert(kTemporalOffset == 288);
+static_assert(kLocalExposureOffset == 384);
 static_assert(sizeof(ComputeConstants) == 512);

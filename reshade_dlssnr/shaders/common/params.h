@@ -12,10 +12,12 @@
 #ifdef __cplusplus
   struct alignas(16) float4 { float x, y, z, w; };
   using DLSSNR_UINT = unsigned int;
+  struct DLSSNR_UINT4 { unsigned int x, y, z, w; };
   #define DLSSNR_BLOCK(name)   struct alignas(16) name
   #define DLSSNR_CBUFFER(name) struct alignas(256) name
 #else
   #define DLSSNR_UINT uint
+  #define DLSSNR_UINT4 uint4
   #define DLSSNR_BLOCK(name)   struct name
   #define DLSSNR_CBUFFER(name) cbuffer name : register(b0)
 #endif
@@ -40,6 +42,12 @@ DLSSNR_BLOCK(GradeBlock)
     float Highlights;
     float Format;
     float RestoreExposure;
+    float EdgeSofteningEnabled;
+    float EdgeSoftening;
+    float CasEnabled;
+    float CasSharpness;
+    DLSSNR_UINT4 CasConst0;
+    DLSSNR_UINT4 CasConst1;
 };
 
 DLSSNR_BLOCK(ResidualBlock)

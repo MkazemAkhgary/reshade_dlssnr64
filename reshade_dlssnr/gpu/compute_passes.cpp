@@ -40,6 +40,7 @@ const ComputePassDef kComputePasses[] = {
     {"DebugDisplay",          "debug/debug_display.hlsl",      BytecodeData("debug/debug_display.hlsl"),      BytecodeSize("debug/debug_display.hlsl")},
     {"DebugHdrRoundtrip",    "debug/debug_hdr_roundtrip.hlsl", BytecodeData("debug/debug_hdr_roundtrip.hlsl"), BytecodeSize("debug/debug_hdr_roundtrip.hlsl")},
     {"ApplyGrade",            "grade/apply_grade.hlsl",        BytecodeData("grade/apply_grade.hlsl"),        BytecodeSize("grade/apply_grade.hlsl")},
+    {"ApplyCas",              "grade/apply_cas.hlsl",          BytecodeData("grade/apply_cas.hlsl"),          BytecodeSize("grade/apply_cas.hlsl")},
 };
 
 const uint32_t kComputePassCount =

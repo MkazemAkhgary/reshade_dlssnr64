@@ -74,25 +74,45 @@ def raw_literal(text: str) -> str:
 
 
 def shader_name(path: Path, shader_root: Path) -> str:
-    return path.relative_to(shader_root).as_posix()
+    path = path.resolve()
+    try:
+        return path.relative_to(shader_root.resolve()).as_posix()
+    except ValueError:
+        cas_root = (shader_root.parent / "third_party" / "FidelityFX-CAS" / "ffx-cas").resolve()
+        try:
+            return (Path("third_party/FidelityFX-CAS/ffx-cas") /
+                    path.relative_to(cas_root)).as_posix()
+        except ValueError:
+            return path.name
 
 
 def resolve_include(include_name: str, including_file: Path, shader_root: Path) -> Path:
-    """Resolve sibling-relative includes first, then shader-root-relative paths."""
+    """Resolve shader-local includes and the explicitly allowed FidelityFX CAS headers."""
     normalized = include_name.replace("\\", "/")
     candidates = [including_file.parent / normalized, shader_root / normalized]
-    root_resolved = shader_root.resolve()
+    allowed_roots = [
+        shader_root.resolve(),
+        (shader_root.parent / "third_party" / "FidelityFX-CAS" / "ffx-cas").resolve(),
+    ]
     for candidate in candidates:
         try:
             resolved = candidate.resolve(strict=True)
-            resolved.relative_to(root_resolved)
-        except (OSError, ValueError):
+        except OSError:
             continue
-        if resolved.is_file():
+        allowed = False
+        for root in allowed_roots:
+            try:
+                resolved.relative_to(root)
+                allowed = True
+                break
+            except ValueError:
+                continue
+        if allowed and resolved.is_file():
             return resolved
     raise FileNotFoundError(
         f'Cannot resolve #include "{include_name}" from '
-        f'"{shader_name(including_file, shader_root)}"'
+        f'"{shader_name(including_file, shader_root)}". '
+        "External shader includes are allowed only from third_party/FidelityFX-CAS/ffx-cas."
     )
 
 

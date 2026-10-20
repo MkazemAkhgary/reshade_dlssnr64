@@ -29,6 +29,10 @@ GradeSettings Read(const ctl::ValueStore& store, const ctl::InstanceKey& key,
   using grade_rows::names::kChroma;
   using grade_rows::names::kChromaMode;
   using grade_rows::names::kContrast;
+  using grade_rows::names::kEdgeSofteningEnabled;
+  using grade_rows::names::kEdgeSoftening;
+  using grade_rows::names::kCasEnabled;
+  using grade_rows::names::kCasSharpness;
   using grade_rows::names::kHighlights;
   using grade_rows::names::kLuma;
   using grade_rows::names::kLumaMode;
@@ -53,6 +57,11 @@ GradeSettings Read(const ctl::ValueStore& store, const ctl::InstanceKey& key,
   g.contrast = store.Read(section, key, Row(prefix, kContrast)).as_float;
   g.shadows = store.Read(section, key, Row(prefix, kShadows)).as_float;
   g.highlights = store.Read(section, key, Row(prefix, kHighlights)).as_float;
+  g.edge_softening_enabled =
+      store.Read(section, key, Row(prefix, kEdgeSofteningEnabled)).as_bool;
+  g.edge_softening = store.Read(section, key, Row(prefix, kEdgeSoftening)).as_float;
+  g.cas_enabled = store.Read(section, key, Row(prefix, kCasEnabled)).as_bool;
+  g.cas_sharpness = store.Read(section, key, Row(prefix, kCasSharpness)).as_float;
   return g;
 }
 

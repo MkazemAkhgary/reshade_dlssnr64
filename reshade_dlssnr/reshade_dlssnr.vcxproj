@@ -413,6 +413,7 @@
     <None Include="shaders\debug\debug_display.hlsl" />
     <None Include="shaders\debug\debug_hdr_roundtrip.hlsl" />
     <None Include="shaders\grade\apply_grade.hlsl" />
+    <None Include="shaders\grade\apply_cas.hlsl" />
     <None Include="shaders\hdr\build_effective_local_exposure.hlsl" />
     <None Include="shaders\hdr\build_gain_map_stats.hlsl" />
     <None Include="shaders\hdr\build_histogram.hlsl" />

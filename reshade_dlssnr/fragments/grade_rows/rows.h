@@ -1,4 +1,4 @@
-// The nine colour-grade rows, as a reusable fragment.
+// The reusable colour-grade rows, as a reusable fragment.
 //
 // This is not a feature. It has no section of its own, no runtime, no state
 // and no registry entry; it is a function that appends rows, like a primitive.
@@ -36,9 +36,13 @@ inline constexpr const char* kLumaMode = "luma_mode";
 inline constexpr const char* kLuma = "luma";
 inline constexpr const char* kChromaMode = "chroma_mode";
 inline constexpr const char* kChroma = "chroma";
+inline constexpr const char* kEdgeSofteningEnabled = "edge_softening_enabled";
+inline constexpr const char* kEdgeSoftening = "edge_softening";
+inline constexpr const char* kCasEnabled = "cas_enabled";
+inline constexpr const char* kCasSharpness = "cas_sharpness";
 }  // namespace names
 
-// Declare the nine rows under a name prefix.
+// Declare the grade rows under a name prefix.
 //
 // `name_prefix` is what lets two grade instances on one section coexist:
 // "grade_input." and "grade_output." produce distinct setting names, so a
