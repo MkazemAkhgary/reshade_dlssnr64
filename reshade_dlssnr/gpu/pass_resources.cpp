@@ -369,6 +369,83 @@ bool PassResources::EnsureUnliftedWorkingInput(
   return true;
 }
 
+bool PassResources::EnsureSyntheticMotionResources(
+    ID3D12Device* device, const D3D12_RESOURCE_DESC& input_desc,
+    unsigned int width, unsigned int height, bool* out_reset_history) {
+  if (out_reset_history != nullptr) *out_reset_history = false;
+  if (device == nullptr || width == 0 || height == 0) return false;
+
+  const bool matches = synthetic_previous_input != nullptr &&
+      synthetic_previous_depth != nullptr && synthetic_current_depth != nullptr &&
+      synthetic_motion != nullptr && synthetic_width == width &&
+      synthetic_height == height &&
+      synthetic_input_format == input_desc.Format &&
+      synthetic_previous_input->GetDesc().Width == input_desc.Width &&
+      synthetic_previous_input->GetDesc().Height == input_desc.Height;
+  if (matches) return true;
+
+  Dispose(synthetic_previous_input);
+  Dispose(synthetic_previous_depth);
+  Dispose(synthetic_current_depth);
+  Dispose(synthetic_motion);
+
+  D3D12_HEAP_PROPERTIES heap = {};
+  heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+  D3D12_RESOURCE_DESC input_copy_desc = {};
+  input_copy_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+  input_copy_desc.Width = input_desc.Width;
+  input_copy_desc.Height = input_desc.Height;
+  input_copy_desc.DepthOrArraySize = 1;
+  input_copy_desc.MipLevels = 1;
+  input_copy_desc.Format = input_desc.Format;
+  input_copy_desc.SampleDesc.Count = 1;
+  input_copy_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+  ID3D12Resource* input_copy = nullptr;
+  if (FAILED(device->CreateCommittedResource(
+          &heap, D3D12_HEAP_FLAG_NONE, &input_copy_desc,
+          D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, nullptr,
+          IID_PPV_ARGS(&input_copy)))) {
+    return false;
+  }
+  synthetic_previous_input.Attach(input_copy);
+
+  D3D12_RESOURCE_DESC depth_desc = {};
+  depth_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+  depth_desc.Width = width;
+  depth_desc.Height = height;
+  depth_desc.DepthOrArraySize = 1;
+  depth_desc.MipLevels = 1;
+  depth_desc.Format = DXGI_FORMAT_R32_FLOAT;
+  depth_desc.SampleDesc.Count = 1;
+  depth_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+  D3D12_RESOURCE_DESC motion_desc = depth_desc;
+  motion_desc.Format = DXGI_FORMAT_R32G32_FLOAT;
+
+  if (!CreateUavTexture(device, depth_desc,
+                       synthetic_previous_depth.GetAddressOf()) ||
+      !CreateUavTexture(device, depth_desc,
+                       synthetic_current_depth.GetAddressOf()) ||
+      !CreateUavTexture(device, motion_desc,
+                       synthetic_motion.GetAddressOf())) {
+    Dispose(synthetic_previous_input);
+    Dispose(synthetic_previous_depth);
+    Dispose(synthetic_current_depth);
+    Dispose(synthetic_motion);
+    return false;
+  }
+
+  synthetic_width = width;
+  synthetic_height = height;
+  synthetic_input_format = input_desc.Format;
+  trace::NameResource(synthetic_previous_input.Get(), "synthetic_previous_input");
+  trace::NameResource(synthetic_previous_depth.Get(), "synthetic_previous_depth");
+  trace::NameResource(synthetic_current_depth.Get(), "synthetic_current_depth");
+  trace::NameResource(synthetic_motion.Get(), "synthetic_motion");
+  if (out_reset_history != nullptr) *out_reset_history = true;
+  return true;
+}
+
 bool PassResources::EnsureTemporalResources(
     ID3D12Device* device, const D3D12_RESOURCE_DESC& input_desc,
     unsigned int width, unsigned int height, bool use_fp16_history,
@@ -535,6 +612,13 @@ void PassResources::Shutdown() {
   temporal_candidate.Reset();
   temporal_validated_candidate.Reset();
   temporal_stats.Reset();
+  synthetic_previous_input.Reset();
+  synthetic_previous_depth.Reset();
+  synthetic_current_depth.Reset();
+  synthetic_motion.Reset();
+  synthetic_width = 0;
+  synthetic_height = 0;
+  synthetic_input_format = DXGI_FORMAT_UNKNOWN;
 
   for (uint32_t i = 0; i < kScratchCount; ++i) {
     scratch_[i].Reset();

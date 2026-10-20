@@ -62,6 +62,7 @@ uint64_t TemporalSettingsSignature(const PassRun& run) {
   HashTemporalValue(&hash, p.temporal_max_displacement);
   HashTemporalValue(&hash, p.temporal_max_invalid_percent);
   HashTemporalValue(&hash, p.temporal_fp16_history);
+  HashTemporalValue(&hash, p.synthetic_motion_guides);
   HashTemporalValue(&hash, p.local_tone);
   HashTemporalValue(&hash, p.local_structure);
   HashTemporalValue(&hash, p.skin_structure);
@@ -617,6 +618,8 @@ void PassSession::Shutdown(NgxRuntime& runtime) {
 
   temporal_readback_.Shutdown();
   temporal_history_valid_ = false;
+  synthetic_motion_history_valid_ = false;
+  synthetic_motion_history_frame_ = 0;
   temporal_feedback_valid_ = false;
   temporal_invalid_fraction_ = 1.0f;
   temporal_last_refresh_frame_ = 0;
@@ -1466,6 +1469,121 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
     return PipelineStatus::Ok;
   }
 
+  // A newly available native guide or a disabled option invalidates any old
+  // synthetic-frame correspondence, preventing vectors from spanning a gap.
+  if (!run.pass_state.synthetic_motion_guides || !run.guides.valid ||
+      run.guides.depth == nullptr || run.guides.motion != nullptr) {
+    self->synthetic_motion_history_valid_ = false;
+    self->synthetic_motion_history_frame_ = 0;
+  } else if (self->synthetic_motion_history_valid_ && run.frame_id != 0 &&
+             (self->synthetic_motion_history_frame_ == run.frame_id ||
+              self->synthetic_motion_history_frame_ + 1 != run.frame_id)) {
+    self->synthetic_motion_history_valid_ = false;
+  }
+
+  // Build an optional depth-aware motion guide before NGX parameter filling.
+  // The estimator is only used when the game supplied no native motion field.
+  if (run.pass_state.synthetic_motion_guides && run.guides.valid &&
+      run.guides.depth != nullptr && run.guides.motion == nullptr &&
+      run.resources != nullptr && run.list != nullptr && run.codec != nullptr) {
+    bool reset_synthetic_history = false;
+    const D3D12_RESOURCE_DESC input_desc = run.model_color->GetDesc();
+    if (run.resources->EnsureSyntheticMotionResources(
+            run.device, input_desc, run.work_width, run.work_height,
+            &reset_synthetic_history)) {
+      ID3D12Resource* previous_input =
+          run.resources->GetSyntheticPreviousInput();
+      ID3D12Resource* previous_depth =
+          run.resources->GetSyntheticPreviousDepth();
+      ID3D12Resource* current_depth =
+          run.resources->GetSyntheticCurrentDepth();
+      ID3D12Resource* motion = run.resources->GetSyntheticMotion();
+      ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
+      if (reset_synthetic_history) {
+        self->synthetic_motion_history_valid_ = false;
+        self->command_.SetResourceState(
+            previous_input, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        self->command_.SetResourceState(
+            previous_depth, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        self->command_.SetResourceState(
+            current_depth, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        self->command_.SetResourceState(
+            motion, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+      }
+
+      self->command_.Transition(list, run.model_color,
+                                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+      self->command_.Transition(list, previous_input,
+                                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+      self->command_.Transition(list, previous_depth,
+                                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+      self->command_.Transition(list, run.guides.depth,
+                                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+      self->command_.Transition(list, current_depth,
+                                D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+      self->command_.Transition(list, motion,
+                                D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+      ComputeConstants motion_constants = {};
+      motion_constants.Width = run.work_width;
+      motion_constants.Height = run.work_height;
+      motion_constants.temporal.HistoryControl.x =
+          self->synthetic_motion_history_valid_ ? 1.0f : 0.0f;
+      motion_constants.temporal.Thresholds.z =
+          run.pass_state.temporal_depth_abs_threshold;
+      motion_constants.temporal.Thresholds.w =
+          run.pass_state.temporal_depth_rel_threshold;
+      motion_constants.temporal.GuideBaseSize.x =
+          static_cast<float>(run.guides.guide_base_x);
+      motion_constants.temporal.GuideBaseSize.y =
+          static_cast<float>(run.guides.guide_base_y);
+      motion_constants.temporal.GuideBaseSize.z = static_cast<float>(
+          run.guides.guide_subrect_width != 0 ? run.guides.guide_subrect_width
+                                              : run.guides.guide_width);
+      motion_constants.temporal.GuideBaseSize.w = static_cast<float>(
+          run.guides.guide_subrect_height != 0 ? run.guides.guide_subrect_height
+                                               : run.guides.guide_height);
+      ID3D12Resource* motion_srvs[kSrvCount] = {
+          run.model_color, previous_input, run.guides.depth, previous_depth};
+      ID3D12Resource* motion_uavs[kUavCount] = {motion, current_depth};
+      if (run.work_width != 0 && run.work_height != 0 && list != nullptr &&
+          run.codec->Dispatch("TemporalReconstructMotion", list,
+                              motion_constants, motion_srvs, motion_uavs)) {
+        self->command_.UavBarrier(list, motion);
+        self->command_.UavBarrier(list, current_depth);
+        self->command_.Transition(list, motion,
+                                  D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        self->command_.Transition(list, current_depth,
+                                  D3D12_RESOURCE_STATE_COPY_SOURCE);
+
+        run.guides.motion = motion;
+        run.guides.motion_width = run.work_width;
+        run.guides.motion_height = run.work_height;
+        run.guides.motion_base_x = 0;
+        run.guides.motion_base_y = 0;
+        run.guides.motion_subrect_width = run.work_width;
+        run.guides.motion_subrect_height = run.work_height;
+        run.guides.reference_width = run.work_width;
+        run.guides.reference_height = run.work_height;
+        run.guides.mv_scale_x = 1.0f;
+        run.guides.mv_scale_y = 1.0f;
+        run.guides.synthetic_motion = true;
+        run.synthetic_motion_ready = true;
+        TRACE_EVT(self, "synthetic motion generated pass=%u history=%d %ux%u",
+                  self->pass_id_, self->synthetic_motion_history_valid_ ? 1 : 0,
+                  run.work_width, run.work_height);
+      } else {
+        self->synthetic_motion_history_valid_ = false;
+        TRACE_EVT(self, "synthetic motion skipped pass=%u reason=dispatch",
+                  self->pass_id_);
+      }
+    } else {
+      self->synthetic_motion_history_valid_ = false;
+      TRACE_EVT(self, "synthetic motion skipped pass=%u reason=resources",
+                self->pass_id_);
+    }
+  }
+
   const int mode = std::clamp(run.pass_state.temporal_mode, 0, 3);
   if (mode == 0) {
     self->temporal_history_valid_ = false;
@@ -1550,7 +1668,8 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
       run.guides.guide_height != 0 && run.guides.motion_width != 0 &&
       run.guides.motion_height != 0 &&
       std::isfinite(run.guides.mv_scale_x) && std::isfinite(run.guides.mv_scale_y);
-  if (run.stage != nullptr && run.stage->owns_submit) {
+  if (run.stage != nullptr && run.stage->owns_submit &&
+      !run.guides.synthetic_motion) {
     guides_fresh = guides_fresh && run.guides.capture_serial != 0 &&
         run.guides.capture_serial != self->temporal_last_guide_serial_;
   }

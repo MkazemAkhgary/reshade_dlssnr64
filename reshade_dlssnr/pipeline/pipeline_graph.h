@@ -237,6 +237,7 @@ struct PassRun {
   bool temporal_store_history = false;
   bool temporal_duplicate_frame = false;
   bool temporal_candidate_ready = false;
+  bool synthetic_motion_ready = false;
 
   // Present only: the swapchain's IDXGISwapChain3 interface, kept alive for
   // the duration of the stage. The steps that need it (the backbuffer

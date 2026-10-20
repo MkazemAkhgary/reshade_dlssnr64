@@ -85,6 +85,17 @@ class PassResources {
   Microsoft::WRL::ComPtr<ID3D12Resource> temporal_candidate;
   Microsoft::WRL::ComPtr<ID3D12Resource> temporal_validated_candidate;
   Microsoft::WRL::ComPtr<ID3D12Resource> temporal_stats;
+
+  // Optional synthesized motion guides for stages with depth but no native MVec.
+  // Motion is estimated at working resolution; current depth is reduced into
+  // the same grid and committed as previous depth after model evaluation.
+  Microsoft::WRL::ComPtr<ID3D12Resource> synthetic_previous_input;
+  Microsoft::WRL::ComPtr<ID3D12Resource> synthetic_previous_depth;
+  Microsoft::WRL::ComPtr<ID3D12Resource> synthetic_current_depth;
+  Microsoft::WRL::ComPtr<ID3D12Resource> synthetic_motion;
+  unsigned int synthetic_width = 0;
+  unsigned int synthetic_height = 0;
+  DXGI_FORMAT synthetic_input_format = DXGI_FORMAT_UNKNOWN;
   unsigned int temporal_width = 0;
   unsigned int temporal_height = 0;
   DXGI_FORMAT temporal_input_format = DXGI_FORMAT_UNKNOWN;
@@ -130,6 +141,9 @@ class PassResources {
   // `input_desc` is the actual model-domain input (which may be the game
   // resource in identity-scale SDR mode). `out_reset_history` is true when
   // any temporal resource had to be recreated.
+  bool EnsureSyntheticMotionResources(
+      ID3D12Device* device, const D3D12_RESOURCE_DESC& input_desc,
+      unsigned int width, unsigned int height, bool* out_reset_history);
   bool EnsureTemporalResources(
       ID3D12Device* device, const D3D12_RESOURCE_DESC& input_desc,
       unsigned int width, unsigned int height, bool use_fp16_history,
@@ -171,6 +185,10 @@ class PassResources {
   unsigned int LocalExposurePartialHeight() const {
     return local_exposure_partial_height;
   }
+  ID3D12Resource* GetSyntheticPreviousInput() const { return synthetic_previous_input.Get(); }
+  ID3D12Resource* GetSyntheticPreviousDepth() const { return synthetic_previous_depth.Get(); }
+  ID3D12Resource* GetSyntheticCurrentDepth() const { return synthetic_current_depth.Get(); }
+  ID3D12Resource* GetSyntheticMotion() const { return synthetic_motion.Get(); }
   ID3D12Resource* GetTemporalPreviousInput() const { return temporal_previous_input.Get(); }
   ID3D12Resource* GetTemporalPreviousEdit() const { return temporal_previous_edit.Get(); }
   ID3D12Resource* GetTemporalPreviousDepth() const { return temporal_previous_depth.Get(); }

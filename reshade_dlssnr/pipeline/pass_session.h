@@ -293,6 +293,8 @@ class PassSession {
   // only feedback samples and policy bookkeeping are CPU-side.
   GpuReadback temporal_readback_;
   bool temporal_history_valid_ = false;
+  bool synthetic_motion_history_valid_ = false;
+  uint64_t synthetic_motion_history_frame_ = 0;
   bool temporal_feedback_valid_ = false;
   float temporal_invalid_fraction_ = 1.0f;
   uint64_t temporal_last_refresh_frame_ = 0;

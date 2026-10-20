@@ -18,6 +18,7 @@ std::size_t BytecodeSize(const char* root) {
 }  // namespace
 
 const ComputePassDef kComputePasses[] = {
+    {"TemporalReconstructMotion", "temporal/reconstruct_motion_vectors.hlsl", BytecodeData("temporal/reconstruct_motion_vectors.hlsl"), BytecodeSize("temporal/reconstruct_motion_vectors.hlsl")},
     {"TemporalClearStats", "temporal/clear_stats.hlsl", BytecodeData("temporal/clear_stats.hlsl"), BytecodeSize("temporal/clear_stats.hlsl")},
     {"TemporalReprojectEdit", "temporal/reproject_edit.hlsl", BytecodeData("temporal/reproject_edit.hlsl"), BytecodeSize("temporal/reproject_edit.hlsl")},
     {"TemporalValidateDepth", "temporal/validate_depth.hlsl", BytecodeData("temporal/validate_depth.hlsl"), BytecodeSize("temporal/validate_depth.hlsl")},

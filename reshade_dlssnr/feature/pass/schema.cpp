@@ -213,14 +213,19 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .Tooltip("Blend between original and edited chroma.");
 
   // --- Temporal Reprojection --------------------------------------------
+  pass.Add<ctl::BoolSetting>(kSyntheticMotionGuides, "Synthetic Motion Guides", false)
+      .Category(kCatTemporal)
+      .Tooltip("When native motion vectors are missing, estimate a current-to-previous "
+               "motion field by color matching constrained by current and previous depth. "
+               "This costs additional GPU work and needs a usable depth guide.");
   pass.Add<ctl::EnumSetting>(kTemporalMode, "Mode", 0)
       .Items(kTemporalNames, kTemporalTips, 4)
       .AsGroup()
       .Category(kCatTemporal)
       .Tooltip("Reuse a motion-reprojected multiplicative model edit instead "
                "of evaluating the model every frame. Requires current-frame "
-               "depth and motion guides; uncertain history forces a fresh "
-               "evaluation.");
+               "depth and native or synthetic motion guides; uncertain history "
+               "forces a fresh evaluation.");
   pass.Add<ctl::FloatSetting>(kTemporalPhotometricAbsThreshold,
                               "Photo Abs.", 0.06f)
       .ClampRange(0.001f, 0.25f)

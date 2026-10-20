@@ -21,6 +21,8 @@ PassSnapshot Read(const ctl::ValueStore& store, const ctl::InstanceKey& key) {
   p.working_scale = store.Read(section, key, kWorkingScale).as_float;
   p.intensity = store.Read(section, key, kIntensity).as_float;
   p.temporal_mode = store.Read(section, key, kTemporalMode).as_int;
+  p.synthetic_motion_guides =
+      store.Read(section, key, kSyntheticMotionGuides).as_bool;
   p.temporal_photometric_abs_threshold =
       store.Read(section, key, kTemporalPhotometricAbsThreshold).as_float;
   p.temporal_photometric_rel_threshold =

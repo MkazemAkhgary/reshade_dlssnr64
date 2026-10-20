@@ -46,6 +46,7 @@ struct PassSnapshot {
   float intensity = 1.0f;
   // 0=Off, 1=Adaptive, 2=Every 2, 3=Every 4.
   int temporal_mode = 0;
+  bool synthetic_motion_guides = false;
   float temporal_photometric_abs_threshold = 0.06f;
   float temporal_photometric_rel_threshold = 0.10f;
   float temporal_depth_abs_threshold = 0.005f;

@@ -430,6 +430,7 @@
     <None Include="shaders\temporal\clear_stats.hlsl" />
     <None Include="shaders\temporal\commit_history.hlsl" />
     <None Include="shaders\temporal\reproject_edit.hlsl" />
+    <None Include="shaders\temporal\reconstruct_motion_vectors.hlsl" />
     <None Include="shaders\temporal\validate_depth.hlsl" />
     <None Include="shaders\common\bindings.hlsli" />
     <None Include="shaders\common\box_filter.hlsli" />
