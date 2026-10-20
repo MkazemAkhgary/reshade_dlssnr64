@@ -27,7 +27,6 @@ bool ComposeOutput(
     const StrengthSettings& strength,
     const SoftCompressionSettings& soft_compression = {},
     const ResidualSettings& residual = {},
-    const GradeSettings* grade_input = nullptr,
     const HdrUniforms* hdr = nullptr);
 
 }  // namespace reshade_dlssnr::model_pipeline

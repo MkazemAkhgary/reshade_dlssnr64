@@ -17,7 +17,6 @@ bool ComposeOutput(
     const StrengthSettings& strength,
     const SoftCompressionSettings& soft_compression,
     const ResidualSettings& residual,
-    const GradeSettings* grade_input,
     const HdrUniforms* hdr) {
   DLSSNR_PROFILE_RENDER_L2("ComposeOutput");
   if (codec == nullptr || command_list == nullptr || packed_source == nullptr ||
@@ -65,21 +64,6 @@ bool ComposeOutput(
     constants.hdr.LocalExposure.y = hdr->local_max_brighten;
     constants.hdr.LocalExposure.z = hdr->local_max_darken;
     constants.hdr.LocalExposure.w = hdr->midtone;
-
-    if (grade_input != nullptr) {
-      constants.grade.Enabled = grade_input->enabled ? 1.0f : 0.0f;
-      constants.grade.Luma = grade_input->luma;
-      constants.grade.Chroma = grade_input->chroma;
-      constants.grade.LumaMode =
-          static_cast<float>(static_cast<int>(grade_input->luma_mode));
-      constants.grade.ChromaMode =
-          static_cast<float>(static_cast<int>(grade_input->chroma_mode));
-      constants.grade.BlackLevel = grade_input->black_level;
-      constants.grade.WhiteLevel = grade_input->white_level;
-      constants.grade.Contrast = grade_input->contrast;
-      constants.grade.Shadows = grade_input->shadows;
-      constants.grade.Highlights = grade_input->highlights;
-    }
   }
 
   state.Transition(command_list, packed_source,
