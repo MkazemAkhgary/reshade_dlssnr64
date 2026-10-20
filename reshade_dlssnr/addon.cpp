@@ -13,6 +13,7 @@
 #include "d3d12_hooks.h"
 #include "dlss_guides.h"
 #include "nvngx_hook_compat.h"
+#include "profiling/tracy_integration.h"
 #include "state/settings.h"
 #include "ui.h"
 
@@ -132,12 +133,15 @@ void OnPresent(
         reinterpret_cast<ID3D12Device*>(device->get_native()));
   }
 
+  auto* native_device = reinterpret_cast<ID3D12Device*>(device->get_native());
   auto* native_command_queue = reinterpret_cast<ID3D12CommandQueue*>(command_queue->get_native());
   auto* native_swapchain = reinterpret_cast<IDXGISwapChain*>(swapchain->get_native());
+  reshade_dlssnr::profiling::InitializeGpu(native_device, native_command_queue);
 
   reshade_dlssnr::AddonController::Get().OnPresent(
       native_command_queue,
       native_swapchain);
+  reshade_dlssnr::profiling::MarkPresent(native_swapchain);
 }
 
 void Attach(HMODULE module) {

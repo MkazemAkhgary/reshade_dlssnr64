@@ -25,6 +25,14 @@
     <DlssnrGeneratedFiles>$(DlssnrGeneratedDir)\shader_sources.cpp;$(DlssnrGeneratedDir)\shader_sources.h;$(DlssnrGeneratedDir)\shader_bytecode.cpp;$(DlssnrGeneratedDir)\shader_bytecode.h</DlssnrGeneratedFiles>
     <VerifyShaders Condition="'$(VerifyShaders)' == ''">true</VerifyShaders>
     <PrecompileShaders Condition="'$(PrecompileShaders)' == ''">false</PrecompileShaders>
+    <DlssnrProfileVerbosity Condition="'$(DlssnrProfileVerbosity)' == ''">1</DlssnrProfileVerbosity>
+    <DlssnrProfileDomainCore Condition="'$(DlssnrProfileDomainCore)' == ''">1</DlssnrProfileDomainCore>
+    <DlssnrProfileDomainRender Condition="'$(DlssnrProfileDomainRender)' == ''">1</DlssnrProfileDomainRender>
+    <DlssnrProfileDomainResource Condition="'$(DlssnrProfileDomainResource)' == ''">1</DlssnrProfileDomainResource>
+    <DlssnrProfileDomainAsync Condition="'$(DlssnrProfileDomainAsync)' == ''">1</DlssnrProfileDomainAsync>
+    <DlssnrProfileDomainUi Condition="'$(DlssnrProfileDomainUi)' == ''">1</DlssnrProfileDomainUi>
+    <DlssnrProfileDomainCtl Condition="'$(DlssnrProfileDomainCtl)' == ''">1</DlssnrProfileDomainCtl>
+    <DlssnrProfileDomainGpu Condition="'$(DlssnrProfileDomainGpu)' == ''">0</DlssnrProfileDomainGpu>
   </PropertyGroup>
   <ItemGroup>
     <ShaderSourceFiles Include="$(ProjectDir)shaders\**\*.*" />
@@ -128,13 +136,18 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;WIN32;_WINDOWS;_USRDLL;NOMINMAX;WIN32_LEAN_AND_MEAN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;WIN32;_WINDOWS;_USRDLL;NOMINMAX;WIN32_LEAN_AND_MEAN;TRACY_ENABLE;TRACY_ON_DEMAND;TRACY_NO_BROADCAST;DLSSNR_PROFILE_VERBOSITY=$(DlssnrProfileVerbosity);DLSSNR_PROFILE_DOMAIN_CORE=$(DlssnrProfileDomainCore);DLSSNR_PROFILE_DOMAIN_RENDER=$(DlssnrProfileDomainRender);DLSSNR_PROFILE_DOMAIN_RESOURCE=$(DlssnrProfileDomainResource);DLSSNR_PROFILE_DOMAIN_ASYNC=$(DlssnrProfileDomainAsync);DLSSNR_PROFILE_DOMAIN_UI=$(DlssnrProfileDomainUi);DLSSNR_PROFILE_DOMAIN_CTL=$(DlssnrProfileDomainCtl);DLSSNR_PROFILE_DOMAIN_GPU=$(DlssnrProfileDomainGpu);%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <Optimization>Disabled</Optimization>
+      <!-- Tracy requires a constexpr __LINE__. Edit And Continue (/ZI)
+           makes __LINE__ a runtime value, so Tracy's ZoneScopedN
+           macros fail with C2131 in every translation unit that uses
+           them. Program Database (/Zi) is the correct format here. -->
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <ObjectFileName>$(IntDir)%(RelativeDir)%(Filename).obj</ObjectFileName>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)generated;$(ProjectDir)third_party\reshade\include;$(ProjectDir)third_party\reshade;$(ProjectDir)third_party\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\nvngx_dlss_sdk;$(ProjectDir)third_party\d3dx;$(ProjectDir)third_party\detours;$(ProjectDir)gpu;$(ProjectDir)model;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)compose;$(ProjectDir)grade;$(ProjectDir)hdr;$(ProjectDir)importance_mask;$(ProjectDir)debug;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)generated;$(ProjectDir)third_party\reshade\include;$(ProjectDir)third_party\reshade;$(ProjectDir)third_party\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\nvngx_dlss_sdk;$(ProjectDir)third_party\d3dx;$(ProjectDir)third_party\detours;$(ProjectDir)third_party\tracy\public;$(ProjectDir)third_party\tracy\public\tracy;$(ProjectDir)gpu;$(ProjectDir)model;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)compose;$(ProjectDir)grade;$(ProjectDir)hdr;$(ProjectDir)importance_mask;$(ProjectDir)debug;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -147,16 +160,18 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>MaxSpeed</Optimization>
+      <!-- See the Debug group above: Tracy needs /Zi, not /ZI. -->
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;WIN32;_WINDOWS;_USRDLL;NOMINMAX;WIN32_LEAN_AND_MEAN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;WIN32;_WINDOWS;_USRDLL;NOMINMAX;WIN32_LEAN_AND_MEAN;TRACY_ENABLE;TRACY_ON_DEMAND;TRACY_NO_BROADCAST;DLSSNR_PROFILE_VERBOSITY=$(DlssnrProfileVerbosity);DLSSNR_PROFILE_DOMAIN_CORE=$(DlssnrProfileDomainCore);DLSSNR_PROFILE_DOMAIN_RENDER=$(DlssnrProfileDomainRender);DLSSNR_PROFILE_DOMAIN_RESOURCE=$(DlssnrProfileDomainResource);DLSSNR_PROFILE_DOMAIN_ASYNC=$(DlssnrProfileDomainAsync);DLSSNR_PROFILE_DOMAIN_UI=$(DlssnrProfileDomainUi);DLSSNR_PROFILE_DOMAIN_CTL=$(DlssnrProfileDomainCtl);DLSSNR_PROFILE_DOMAIN_GPU=$(DlssnrProfileDomainGpu);%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <ErrorLog>$(IntDir)$(MSBuildProjectName).error.log</ErrorLog>
       <ObjectFileName>$(IntDir)%(RelativeDir)%(Filename).obj</ObjectFileName>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)generated;$(ProjectDir)third_party\reshade\include;$(ProjectDir)third_party\reshade;$(ProjectDir)third_party\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\nvngx_dlss_sdk;$(ProjectDir)third_party\d3dx;$(ProjectDir)third_party\detours;$(ProjectDir)gpu;$(ProjectDir)model;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)compose;$(ProjectDir)grade;$(ProjectDir)hdr;$(ProjectDir)importance_mask;$(ProjectDir)debug;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)generated;$(ProjectDir)third_party\reshade\include;$(ProjectDir)third_party\reshade;$(ProjectDir)third_party\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\nvngx_dlss_sdk;$(ProjectDir)third_party\d3dx;$(ProjectDir)third_party\detours;$(ProjectDir)third_party\tracy\public;$(ProjectDir)third_party\tracy\public\tracy;$(ProjectDir)gpu;$(ProjectDir)model;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)compose;$(ProjectDir)grade;$(ProjectDir)hdr;$(ProjectDir)importance_mask;$(ProjectDir)debug;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -169,7 +184,11 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="project_constants.h" />
+    <ClInclude Include="profiling\tracy_integration.h" />
+    <ClInclude Include="profiling\profile.h" />
     <ClCompile Include="addon.cpp" />
+    <ClCompile Include="profiling\tracy_integration.cpp" />
+    <ClCompile Include="third_party\tracy\public\TracyClient.cpp" />
     <ClCompile Include="generated\shader_sources.cpp" />
     <ClCompile Include="generated\shader_bytecode.cpp" />
     <ClCompile Include="gpu\compute_engine.cpp" />

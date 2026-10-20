@@ -663,6 +663,10 @@ When tracing is enabled, `ctl::TraceRecorder` enumerates registered sections, in
 
 `crash_trace.h` installs a vectored exception handler and a terminate handler at addon attach time. It writes `%TEMP%\dlssnr_crash.txt`, including fault code, faulting module and offset, a short stack, x64 register context and thread id. The handler is deliberately raw Win32 and allocation-free enough for a broken process, and it chains to the game's own exception handling.
 
+### CPU/GPU profiling
+
+Profiling uses the external Tracy source tree at `third_party/tracy` (the user supplies the submodule; it is not vendored by this project). The Visual Studio project compiles `public/TracyClient.cpp` into the addon and includes `public` and `public/tracy` for headers. CPU zones are emitted through the `ZoneScopedN` family; `FrameMark` marks the end of each Present. GPU zones are recorded with `TracyD3D12Zone` against a `TracyD3D12Context` created once for the native ReShade D3D12 device and graphics queue; the context is collected at Present via `TracyD3D12Collect`. GPU profiling is opt-in at verbosity 2 or higher. Use the Tracy GUI to capture and inspect CPU/GPU timelines.
+
 ## Extending
 
 ### Add a shader pass
