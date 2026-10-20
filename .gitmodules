@@ -2,3 +2,6 @@
 	path = reshade_dlssnr/third_party/reshade
 	url = https://github.com/crosire/reshade
 	ignore = dirty
+[submodule "reshade_dlssnr/third_party/FidelityFX-CAS"]
+	path = reshade_dlssnr/third_party/FidelityFX-CAS
+	url = https://github.com/GPUOpen-Effects/FidelityFX-CAS.git
