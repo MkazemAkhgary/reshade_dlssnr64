@@ -1373,8 +1373,19 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
       run.grade_input.enabled && run.settings != nullptr &&
       DebugViewNeedsPreGradeInput(run.debug_view) &&
       self->pass_id_ == run.settings->active_pass_id;
+  // Fusion is a curve-only fast path: prepare_model_input.hlsl calls
+  // GradeLinearFwd and nothing else. Softening is a 3x3 filter over the
+  // already-downsampled image; fusing it would recompute a box average
+  // per neighbor for 9x the loads plus the Local Exposure carriers as
+  // extra bindings. CAS must run strictly after the curve, so it cannot
+  // share this shader. Route grades that use either filter through the
+  // standalone GradeInPlace path instead.
+  const bool fusion_compatible =
+      run.grade_input.enabled &&
+      !run.grade_input.edge_softening_enabled &&
+      !run.grade_input.cas_enabled;
   const GradeSettings* fused_grade =
-      run.grade_input.enabled && !needs_pre_grade_snapshot
+      fusion_compatible && !needs_pre_grade_snapshot
           ? &run.grade_input : nullptr;
   run.input_grade_fused = fused_grade != nullptr;
 
