@@ -140,6 +140,7 @@ class PassSession {
   // the scratch from anything else is exactly how a size or format mismatch
   // gets in.
   static PipelineStatus GradeInPlace(PassRun& run,
+                                     ID3D12Resource* source,
                                      ID3D12Resource* target,
                                      const GradeSettings& grade,
                                      uint32_t scratch_slot,
@@ -188,7 +189,8 @@ class PassSession {
       const D3D12_RESOURCE_DESC& desc,
       unsigned int work_width,
       unsigned int work_height,
-      bool allow_identity_input);
+      bool allow_identity_input,
+      bool need_graded_input);
 
   // Fills the real NGX parameter block with tuning values, resources, and
   // subrects for the current evaluation.

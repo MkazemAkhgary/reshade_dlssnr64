@@ -298,21 +298,28 @@ bool PassResources::EnsureWorkingResources(
     const D3D12_RESOURCE_DESC& desc,
     unsigned int work_width,
     unsigned int work_height,
-    bool need_input) {
+    bool need_input,
+    bool need_graded_input) {
   DLSSNR_PROFILE_RESOURCE_L2("PassResources::EnsureWorkingResources");
   const bool output_matches = working_output != nullptr &&
       working_width == work_width && working_height == work_height &&
       working_format == desc.Format;
   const bool input_matches = !need_input || working_input != nullptr;
-  if (output_matches && input_matches) {
+  const bool graded_matches = !need_graded_input ||
+      graded_working_input != nullptr;
+  if (output_matches && input_matches && graded_matches) {
     if (!need_input && working_input != nullptr) {
       Dispose(working_input);
+    }
+    if (!need_graded_input && graded_working_input != nullptr) {
+      Dispose(graded_working_input);
     }
     return true;
   }
 
   Dispose(working_input);
   Dispose(working_output);
+  Dispose(graded_working_input);
 
   D3D12_RESOURCE_DESC working_desc = desc;
   working_desc.Width = work_width;
@@ -326,9 +333,19 @@ bool PassResources::EnsureWorkingResources(
     working_input.Attach(raw_input);
   }
 
+  if (need_graded_input && need_input) {
+    ID3D12Resource* raw_graded = nullptr;
+    if (!CreateUavTexture(device, working_desc, &raw_graded)) {
+      Dispose(working_input);
+      return false;
+    }
+    graded_working_input.Attach(raw_graded);
+  }
+
   ID3D12Resource* raw_output = nullptr;
   if (!CreateUavTexture(device, working_desc, &raw_output)) {
     Dispose(working_input);
+    Dispose(graded_working_input);
     return false;
   }
   working_output.Attach(raw_output);
@@ -339,11 +356,16 @@ bool PassResources::EnsureWorkingResources(
   if (working_input != nullptr) {
     trace::NameResource(working_input.Get(), "working_input");
   }
+  if (graded_working_input != nullptr) {
+    trace::NameResource(graded_working_input.Get(), "graded_working_input");
+  }
   trace::NameResource(working_output.Get(), "working_output");
-  TRACE_CMD(this, "create working res=%d/%d %ux%u input=%d",
+  TRACE_CMD(this, "create working res=%d/%d/%d %ux%u input=%d graded=%d",
             working_input != nullptr ? trace::ResourceId(working_input.Get()) : -1,
+            graded_working_input != nullptr ? trace::ResourceId(graded_working_input.Get()) : -1,
             trace::ResourceId(working_output.Get()), working_width,
-            working_height, working_input != nullptr ? 1 : 0);
+            working_height, working_input != nullptr ? 1 : 0,
+            graded_working_input != nullptr ? 1 : 0);
   return true;
 }
 
@@ -618,6 +640,7 @@ void PassResources::Shutdown() {
   gain_stats.Reset();
   working_input.Reset();
   working_output.Reset();
+  graded_working_input.Reset();
   unlifted_working_input.Reset();
   effective_exposure_map.Reset();
   local_exposure_partial_sums.Reset();

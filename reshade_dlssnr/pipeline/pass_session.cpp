@@ -313,7 +313,8 @@ bool PassSession::EnsureFrameResources(
     const D3D12_RESOURCE_DESC& desc,
     unsigned int work_width,
     unsigned int work_height,
-    bool allow_identity_input) {
+    bool allow_identity_input,
+    bool need_graded_input) {
   if (!resources_.EnsureCompositeOutput(device, desc)) {
     reason_ = "failed to create DLSSNR composite resource";
     return false;
@@ -341,9 +342,10 @@ bool PassSession::EnsureFrameResources(
     reason_ = "failed to create DLSSNR model output";
     return false;
   }
+  const bool need_graded = need_graded_input && !identity_input;
   if (!resources_.EnsureWorkingResources(device, model_desc,
                                          work_width, work_height,
-                                         !identity_input)) {
+                                         !identity_input, need_graded)) {
     reason_ = "failed to create DLSSNR working resources";
     return false;
   }
@@ -445,6 +447,10 @@ void PassSession::SeedFrameState(ID3D12Resource* backbuffer) {
                             D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   command_.SetResourceState(resources_.GetWorkingOutput(),
                             D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  if (resources_.GetGradedWorkingInput() != nullptr) {
+    command_.SetResourceState(resources_.GetGradedWorkingInput(),
+                              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  }
   if (resources_.GetUnliftedWorkingInput() != nullptr) {
     command_.SetResourceState(resources_.GetUnliftedWorkingInput(),
                               D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
@@ -486,6 +492,10 @@ void PassSession::CleanupFrameState(ID3D12GraphicsCommandList* command_list) {
                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   command_.Transition(command_list, resources_.GetWorkingOutput(),
                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  if (resources_.GetGradedWorkingInput() != nullptr) {
+    command_.Transition(command_list, resources_.GetGradedWorkingInput(),
+                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  }
   if (resources_.GetUnliftedWorkingInput() != nullptr) {
     command_.Transition(command_list, resources_.GetUnliftedWorkingInput(),
                         D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
@@ -1042,7 +1052,8 @@ PipelineStatus PassSession::StepEnsureFrameResources(PassRun& run) {
       !run.grade_input.enabled && run.hdr_state.format != HdrFormat::ScRgb &&
       run.hdr_state.format != HdrFormat::Hdr10;
   if (!self->EnsureFrameResources(run.device, run.desc, run.work_width,
-                                  run.work_height, allow_identity_input)) {
+                                  run.work_height, allow_identity_input,
+                                  run.grade_input.enabled)) {
     self->FailForStep(self->reason_);
     return PipelineStatus::Fail;
   }
@@ -1395,26 +1406,6 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
   unsigned int eval_width = run.width;
   unsigned int eval_height = run.height;
 
-  const bool needs_pre_grade_snapshot =
-      run.grade_input.enabled && run.settings != nullptr &&
-      DebugViewNeedsPreGradeInput(run.debug_view) &&
-      self->pass_id_ == run.settings->active_pass_id;
-  // Fusion is a curve-only fast path: prepare_model_input.hlsl calls
-  // GradeLinearFwd and nothing else. Softening is a 3x3 filter over the
-  // already-downsampled image; fusing it would recompute a box average
-  // per neighbor for 9x the loads plus the Local Exposure carriers as
-  // extra bindings. CAS must run strictly after the curve, so it cannot
-  // share this shader. Route grades that use either filter through the
-  // standalone GradeInPlace path instead.
-  const bool fusion_compatible =
-      run.grade_input.enabled &&
-      !run.grade_input.edge_softening_enabled &&
-      !run.grade_input.cas_enabled;
-  const GradeSettings* fused_grade =
-      fusion_compatible && !needs_pre_grade_snapshot
-          ? &run.grade_input : nullptr;
-  run.input_grade_fused = fused_grade != nullptr;
-
   if (!model_pipeline::PrepareInput(
           self->command_, self->StageList(run, self->command_),
           self->resources_, run.codec, model_input,
@@ -1422,10 +1413,11 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
           run.work_width, run.work_height,
           run.hdr_uniforms_ready && run.hdr != nullptr &&
               run.hdr->ResolvedFormat() != HdrFormat::Sdr,
-          run.pass_bound && !run.grade_input.enabled, fused_grade)) {
+          run.pass_bound && !run.grade_input.enabled)) {
     self->FailForStep("failed to prepare model input");
     return PipelineStatus::Fail;
   }
+  run.compose_reference = model_color;
 
   if (hdr_source && run.hdr_uniforms.local_exposure_strength > 0.0f) {
     ID3D12Resource* global_carrier = self->resources_.GetGlobalHdrCarrier();
@@ -1454,8 +1446,6 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
     reference_constants.Width = run.work_width;
     reference_constants.Height = run.work_height;
     reference_constants.shader.Params0.w = 1.0f;
-    if (run.input_grade_fused)
-      model_pipeline::SetGradeConstants(reference_constants, run.grade_input);
     ID3D12Resource* reference_srvs[kSrvCount] = {
         global_carrier, global_carrier, global_carrier, global_carrier};
     ID3D12Resource* reference_uavs[kUavCount] = {unlifted_input};
@@ -2279,7 +2269,8 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
   ID3D12Resource* enhanced_for_compose =
       run.pass_state.intensity <= 0.0f ? run.model_color : run.model_output;
 
-  ID3D12Resource* compose_input = run.model_color;
+  ID3D12Resource* compose_input = run.compose_reference;
+  if (compose_input == nullptr) compose_input = run.model_input;
   if (hdr_active && run.pass_state.intensity > 0.0f &&
       run.hdr_uniforms.local_exposure_strength > 0.0f &&
       self->resources_.GetUnliftedWorkingInput() != nullptr) {

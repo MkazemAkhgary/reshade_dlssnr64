@@ -213,7 +213,6 @@ struct PassRun {
   const Settings* settings = nullptr;
   int debug_view = 0;
   bool pass_bound = false;
-  bool input_grade_fused = false;
   // The pass this run belongs to, set once by PrepareRun. Steps that
   // need to correlate with the store or with pass_order read this.
   feature::pass::PassId pass_id = 0;
@@ -270,6 +269,11 @@ struct PassRun {
   ID3D12Resource* model_input = nullptr;
   ID3D12Resource* model_color = nullptr;
   ID3D12Resource* model_output = nullptr;
+  // Ungraded model input at working resolution. The compose step
+  // measures the model's edit against this, so spatial preprocessing
+  // (softening, CAS) and the color curve are not amplified onto the
+  // source by a ratio against a preprocessed denominator.
+  ID3D12Resource* compose_reference = nullptr;
   unsigned int eval_width = 0;
   unsigned int eval_height = 0;
 

@@ -29,7 +29,8 @@ int GradeFormatCode(const PassRun& run, ID3D12Resource* target,
 
 }  // namespace
 
-PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
+PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* source,
+                                         ID3D12Resource* target,
                                          const GradeSettings& grade,
                                          uint32_t scratch_slot,
                                          bool model_sdr_domain,
@@ -41,7 +42,7 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
   DLSSNR_PROFILE_RENDER_L3("GradeInPlace");
   PassSession* self = run.session;
   if (self == nullptr) return PipelineStatus::Ok;
-  if (target == nullptr) return PipelineStatus::Ok;
+  if (source == nullptr || target == nullptr) return PipelineStatus::Ok;
   // Runs even when the grade is disabled; exposure restoration is separate.
   const bool restoring = local_carrier != nullptr &&
                          global_carrier != nullptr;
@@ -60,7 +61,7 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
 
   ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
   if (!model_pipeline::ApplyGrade(
-          self->command_, list, run.codec, target, target,
+          self->command_, list, run.codec, source, target,
           self->resources_.GetScratch(scratch_slot), width, height,
           GradeFormatCode(run, target, model_sdr_domain), grade,
           local_carrier, global_carrier, global_scale, restore_mode, restore_strength)) {
@@ -68,6 +69,10 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
     return PipelineStatus::Fail;
   }
 
+  if (source != target) {
+    self->command_.Transition(list, source,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
   self->command_.Transition(list, target,
                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   return PipelineStatus::Ok;
@@ -78,51 +83,23 @@ PipelineStatus PassSession::StepGradeModelInput(PassRun& run) {
   if (!run.pass_bound) return PipelineStatus::Ok;
   PassSession* self = run.session;
 
-  // Observer-only: the Input Grade mutates the model input in place, so
-  // snapshot it first for the pre-grade debug view. Gated on the view being
-  // selected by the active pass; no cost otherwise.
-  if (self != nullptr && run.settings != nullptr && run.model_color != nullptr &&
-      DebugViewNeedsPreGradeInput(run.debug_view) &&
-      self->pass_id_ == run.settings->active_pass_id) {
-    const D3D12_RESOURCE_DESC desc = run.model_color->GetDesc();
-    if (self->resources_.EnsureScratch(
-            run.device, desc, static_cast<unsigned int>(desc.Width),
-            static_cast<unsigned int>(desc.Height),
-            kDebugPreGradeInputSlot)) {
-      ID3D12Resource* snapshot =
-          self->resources_.GetScratch(kDebugPreGradeInputSlot);
-      ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
-      self->command_.Transition(list, run.model_color,
-                                D3D12_RESOURCE_STATE_COPY_SOURCE);
-      self->command_.Transition(list, snapshot, D3D12_RESOURCE_STATE_COPY_DEST);
-      list->CopyResource(snapshot, run.model_color);
-      self->command_.Transition(list, run.model_color,
-                                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-      self->command_.Transition(list, snapshot,
-                                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    }
-  }
-
   const GradeSettings& grade = run.grade_input;
-  if (run.input_grade_fused || !grade.enabled) return PipelineStatus::Ok;
+  if (!grade.enabled) return PipelineStatus::Ok;
 
   TRACE_EVT(run.session, "grade_model_input pass=%u luma=%.3f chroma=%.3f",
             self->pass_id_, grade.luma, grade.chroma);
-  PipelineStatus status =
-      GradeInPlace(run, run.model_color, grade, kGradeScratchSlotA);
+
+  ID3D12Resource* graded = self->resources_.GetGradedWorkingInput();
+  if (graded == nullptr) {
+    self->FailForStep("graded model input buffer is unavailable");
+    return PipelineStatus::Fail;
+  }
+
+  PipelineStatus status = GradeInPlace(
+      run, run.model_color, graded, grade, kGradeScratchSlotA);
   if (status != PipelineStatus::Ok) return status;
 
-  const bool use_unlifted_reference =
-      run.hdr_uniforms_ready && run.hdr != nullptr &&
-      run.hdr->ResolvedFormat() != HdrFormat::Sdr &&
-      run.hdr_uniforms.local_exposure_strength > 0.0f &&
-      run.session != nullptr &&
-      run.session->resources_.GetUnliftedWorkingInput() != nullptr;
-  if (use_unlifted_reference) {
-    return GradeInPlace(run,
-                        run.session->resources_.GetUnliftedWorkingInput(),
-                        grade, kGradeScratchSlotA, true);
-  }
+  run.model_color = graded;
   return PipelineStatus::Ok;
 }
 
@@ -289,8 +266,10 @@ PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
     TRACE_EVT(run.session, "restore_model_exposure pass=%u mode=%.3f strength=%.3f",
               self->pass_id_, restore_mode, restore_strength);
   }
-  return GradeInPlace(run, run.model_output, grade, kGradeScratchSlotB, true,
-                      local_carrier, global_carrier, global_scale, restore_mode, restore_strength);
+  return GradeInPlace(run, run.model_output, run.model_output, grade,
+                      kGradeScratchSlotB, true,
+                      local_carrier, global_carrier, global_scale,
+                      restore_mode, restore_strength);
 }
 
 }  // namespace reshade_dlssnr

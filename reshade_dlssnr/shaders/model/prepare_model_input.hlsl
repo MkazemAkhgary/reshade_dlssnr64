@@ -45,16 +45,5 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         result = color.rgb;
     }
 
-    if (kGradeEnabled >= 0.5)
-    {
-        float3 linear_result = SrgbToLinearExt(result);
-        linear_result = GradeLinearFwd(linear_result);
-        const float peak = max(linear_result.r,
-                               max(linear_result.g, linear_result.b));
-        if (peak > 1.0)
-            linear_result *= 1.0 / peak;
-        result = LinearToSrgbExt(linear_result);
-    }
-
     gOutput[id.xy] = float4(result, 1.0);
 }

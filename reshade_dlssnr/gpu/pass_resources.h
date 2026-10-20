@@ -61,6 +61,9 @@ class PassResources {
 
   Microsoft::WRL::ComPtr<ID3D12Resource> working_input;
   Microsoft::WRL::ComPtr<ID3D12Resource> working_output;
+  // Model-input domain after GradeModelInput. NGX consumes this buffer;
+  // working_input stays ungraded and is the compose reference.
+  Microsoft::WRL::ComPtr<ID3D12Resource> graded_working_input;
   Microsoft::WRL::ComPtr<ID3D12Resource> unlifted_working_input;
   unsigned int unlifted_working_width = 0;
   unsigned int unlifted_working_height = 0;
@@ -127,7 +130,8 @@ class PassResources {
       const D3D12_RESOURCE_DESC& desc,
       unsigned int work_width,
       unsigned int work_height,
-      bool need_input);
+      bool need_input,
+      bool need_graded_input);
   bool EnsureUnliftedWorkingInput(
       ID3D12Device* device,
       const D3D12_RESOURCE_DESC& desc,
@@ -169,6 +173,9 @@ class PassResources {
   ID3D12Resource* GetGainStats() const { return gain_stats.Get(); }
   ID3D12Resource* GetWorkingInput() const { return working_input.Get(); }
   ID3D12Resource* GetWorkingOutput() const { return working_output.Get(); }
+  ID3D12Resource* GetGradedWorkingInput() const {
+    return graded_working_input.Get();
+  }
   ID3D12Resource* GetUnliftedWorkingInput() const {
     return unlifted_working_input.Get();
   }

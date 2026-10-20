@@ -43,11 +43,6 @@ float3 ComposeHdrInverse(float3 sdr_base, float3 hdr_src,
     float3 result = hdr_src;
     float3 low_in_lin = max(SrgbToLinearExt(low_in), 0.0);
     float3 low_out_lin = max(SrgbToLinearExt(low_out), 0.0);
-    if (kGradeEnabled > 0.5)
-    {
-        low_in_lin = max(GradeLinearInv(low_in_lin), 0.0);
-        low_out_lin = max(GradeLinearInv(low_out_lin), 0.0);
-    }
 
     const float3 model_delta = low_out_lin - low_in_lin;
     if (!all(model_delta == 0.0))
