@@ -41,6 +41,7 @@ void SetGradeConstants(ComputeConstants& constants, const GradeSettings& grade) 
 bool ApplyGrade(CommandContext& state,
                 ID3D12GraphicsCommandList* command_list,
                 ComputeEngine* codec,
+                ID3D12Resource* source,
                 ID3D12Resource* target,
                 ID3D12Resource* scratch,
                 unsigned int width,
@@ -57,8 +58,8 @@ bool ApplyGrade(CommandContext& state,
       local_carrier != nullptr && global_carrier != nullptr;
   if (!grade.enabled && !restore_exposure) return true;
 
-  if (codec == nullptr || command_list == nullptr || target == nullptr ||
-      scratch == nullptr) {
+  if (codec == nullptr || command_list == nullptr || source == nullptr ||
+      target == nullptr || scratch == nullptr) {
     return false;
   }
 
@@ -87,11 +88,11 @@ bool ApplyGrade(CommandContext& state,
   }
 
   const ResourceTransition before_copy[] = {
-      {target, D3D12_RESOURCE_STATE_COPY_SOURCE},
+      {source, D3D12_RESOURCE_STATE_COPY_SOURCE},
       {scratch, D3D12_RESOURCE_STATE_COPY_DEST},
   };
   state.TransitionBatch(command_list, before_copy, 2);
-  command_list->CopyResource(scratch, target);
+  command_list->CopyResource(scratch, source);
 
   ResourceTransition after_copy[] = {
       {scratch, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE},

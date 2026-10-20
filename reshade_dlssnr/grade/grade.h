@@ -28,6 +28,7 @@ void SetGradeConstants(ComputeConstants& constants, const GradeSettings& grade);
 bool ApplyGrade(CommandContext& state,
                 ID3D12GraphicsCommandList* command_list,
                 ComputeEngine* codec,
+                ID3D12Resource* source,
                 ID3D12Resource* target,
                 ID3D12Resource* scratch,
                 unsigned int width,

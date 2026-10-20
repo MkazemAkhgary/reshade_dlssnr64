@@ -60,7 +60,7 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
 
   ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
   if (!model_pipeline::ApplyGrade(
-          self->command_, list, run.codec, target,
+          self->command_, list, run.codec, target, target,
           self->resources_.GetScratch(scratch_slot), width, height,
           GradeFormatCode(run, target, model_sdr_domain), grade,
           local_carrier, global_carrier, global_scale, restore_mode, restore_strength)) {
