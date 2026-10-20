@@ -36,12 +36,10 @@
     <UpToDateCheckOutput Include="$(DlssnrShaderStampDir)\verify.stamp" />
     <UpToDateCheckOutput Include="$(DlssnrShaderStampDir)\precompile.stamp" />
   </ItemGroup>
-  <!-- Rebuild starts from known shader build outputs, but preserves unrelated
-       files that may also live under generated/. Remove only outputs owned by
-       this project: embedded tables, build stamps and the two generated caches. -->
+  <!-- Rebuild removes only explicit outputs owned by this project. Unrelated
+       files and directories under generated/ are preserved. -->
   <Target Name="CleanGeneratedShaderOutputsBeforeRebuild" BeforeTargets="Rebuild">
-    <Delete Files="$(DlssnrGeneratedFiles);$(DlssnrShaderStampDir)\generate.stamp;$(DlssnrShaderStampDir)\verify.stamp;$(DlssnrShaderStampDir)\precompile.stamp" />
-    <RemoveDir Directories="$(DlssnrGeneratedDir)\expanded_shaders;$(DlssnrGeneratedDir)\shader_cache" />
+    <Delete Files="$(DlssnrGeneratedFiles);$(DlssnrShaderStampDir)\generate.stamp;$(DlssnrShaderStampDir)\verify.stamp;$(DlssnrShaderStampDir)\precompile.stamp;@(ExpandedShaderFiles);@(ShaderCacheFiles)" />
   </Target>
   <Target Name="ValidateFxcPath" Condition="('$(VerifyShaders)' == 'true' or '$(PrecompileShaders)' == 'true') and '$(FxcPath)' == ''">
     <Error Text="FxcPath is not set. Set /p:FxcPath=... or ensure a Windows SDK is installed." />
@@ -62,7 +60,7 @@
     <Touch Files="$(DlssnrShaderStampDir)\generate.stamp" AlwaysCreate="true" />
     <ItemGroup>
       <FileWrites Include="$(DlssnrGeneratedFiles)" />
-      <FileWrites Include="$(DlssnrGeneratedDir)\expanded_shaders\**\*.*" />
+      <FileWrites Include="@(ExpandedShaderFiles)" />
       <FileWrites Include="$(DlssnrShaderStampDir)\generate.stamp" />
     </ItemGroup>
   </Target>
@@ -80,7 +78,7 @@
     <Touch Files="$(DlssnrShaderStampDir)\precompile.stamp" AlwaysCreate="true" />
     <ItemGroup>
       <FileWrites Include="$(DlssnrShaderStampDir)\precompile.stamp" />
-      <FileWrites Include="$(DlssnrGeneratedDir)\shader_cache\**\*.*" />
+      <FileWrites Include="@(ShaderCacheFiles)" />
     </ItemGroup>
   </Target>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -415,30 +413,6 @@
     <None Include="ctl\test_row_stubs.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="shaders\compose\compose_model_output.hlsl" />
-    <None Include="shaders\compose\compose_model_output_hdr.hlsl" />
-    <None Include="shaders\debug\debug_display.hlsl" />
-    <None Include="shaders\debug\debug_hdr_roundtrip.hlsl" />
-    <None Include="shaders\grade\apply_grade.hlsl" />
-    <None Include="shaders\grade\apply_cas.hlsl" />
-    <None Include="shaders\hdr\build_effective_local_exposure.hlsl" />
-    <None Include="shaders\hdr\build_gain_map_stats.hlsl" />
-    <None Include="shaders\hdr\build_histogram.hlsl" />
-    <None Include="shaders\hdr\gain_map_split.hlsl" />
-    <None Include="shaders\hdr\reduce_local_exposure_tiles.hlsl" />
-    <None Include="shaders\hdr\reduce_local_exposure_global.hlsl" />
-    <None Include="shaders\hdr\read_game_exposure.hlsl" />
-    <None Include="shaders\hdr\zero_gain_map_stats.hlsl" />
-    <None Include="shaders\hdr\zero_histogram.hlsl" />
-    <None Include="shaders\importance_mask\build_importance_mask.hlsl" />
-    <None Include="shaders\importance_mask\classify_importance_mask.hlsl" />
-    <None Include="shaders\model\prepare_model_input.hlsl" />
-    <None Include="shaders\temporal\apply_edit.hlsl" />
-    <None Include="shaders\temporal\clear_stats.hlsl" />
-    <None Include="shaders\temporal\commit_history.hlsl" />
-    <None Include="shaders\temporal\reproject_edit.hlsl" />
-    <None Include="shaders\temporal\reconstruct_motion_vectors.hlsl" />
-    <None Include="shaders\temporal\validate_depth.hlsl" />
     <None Include="shaders\common\bindings.hlsli" />
     <None Include="shaders\common\box_filter.hlsli" />
     <None Include="shaders\common\cbuffer.hlsli" />
@@ -451,6 +425,85 @@
     <None Include="shaders\common\luma.hlsli" />
     <None Include="shaders\common\math.hlsli" />
     <None Include="shaders\common\registers.hlsli" />
+  </ItemGroup>
+  <ItemGroup>
+    <ShaderRootFiles Include="compose\compose_model_output.hlsl">
+      <CacheName>compose_compose_model_output_hlsl</CacheName>
+    </ShaderRootFiles>
+    <ShaderRootFiles Include="compose\compose_model_output_hdr.hlsl">
+      <CacheName>compose_compose_model_output_hdr_hlsl</CacheName>
+    </ShaderRootFiles>
+    <ShaderRootFiles Include="debug\debug_display.hlsl">
+      <CacheName>debug_debug_display_hlsl</CacheName>
+    </ShaderRootFiles>
+    <ShaderRootFiles Include="debug\debug_hdr_roundtrip.hlsl">
+      <CacheName>debug_debug_hdr_roundtrip_hlsl</CacheName>
+    </ShaderRootFiles>
+    <ShaderRootFiles Include="grade\apply_grade.hlsl">
+      <CacheName>grade_apply_grade_hlsl</CacheName>
+    </ShaderRootFiles>
+    <ShaderRootFiles Include="grade\apply_cas.hlsl">
+      <CacheName>grade_apply_cas_hlsl</CacheName>
+    </ShaderRootFiles>
+    <ShaderRootFiles Include="hdr\build_effective_local_exposure.hlsl">
+      <CacheName>hdr_build_effective_local_exposure_hlsl</CacheName>
+    </ShaderRootFiles>
+    <ShaderRootFiles Include="hdr\build_gain_map_stats.hlsl">
+      <CacheName>hdr_build_gain_map_stats_hlsl</CacheName>
+    </ShaderRootFiles>
+    <ShaderRootFiles Include="hdr\build_histogram.hlsl">
+      <CacheName>hdr_build_histogram_hlsl</CacheName>
+    </ShaderRootFiles>
+    <ShaderRootFiles Include="hdr\gain_map_split.hlsl">
+      <CacheName>hdr_gain_map_split_hlsl</CacheName>
+    </ShaderRootFiles>
+    <ShaderRootFiles Include="hdr\reduce_local_exposure_tiles.hlsl">
+      <CacheName>hdr_reduce_local_exposure_tiles_hlsl</CacheName>
+    </ShaderRootFiles>
+    <ShaderRootFiles Include="hdr\reduce_local_exposure_global.hlsl">
+      <CacheName>hdr_reduce_local_exposure_global_hlsl</CacheName>
+    </ShaderRootFiles>
+    <ShaderRootFiles Include="hdr\read_game_exposure.hlsl">
+      <CacheName>hdr_read_game_exposure_hlsl</CacheName>
+    </ShaderRootFiles>
+    <ShaderRootFiles Include="hdr\zero_gain_map_stats.hlsl">
+      <CacheName>hdr_zero_gain_map_stats_hlsl</CacheName>
+    </ShaderRootFiles>
+    <ShaderRootFiles Include="hdr\zero_histogram.hlsl">
+      <CacheName>hdr_zero_histogram_hlsl</CacheName>
+    </ShaderRootFiles>
+    <ShaderRootFiles Include="importance_mask\build_importance_mask.hlsl">
+      <CacheName>importance_mask_build_importance_mask_hlsl</CacheName>
+    </ShaderRootFiles>
+    <ShaderRootFiles Include="importance_mask\classify_importance_mask.hlsl">
+      <CacheName>importance_mask_classify_importance_mask_hlsl</CacheName>
+    </ShaderRootFiles>
+    <ShaderRootFiles Include="model\prepare_model_input.hlsl">
+      <CacheName>model_prepare_model_input_hlsl</CacheName>
+    </ShaderRootFiles>
+    <ShaderRootFiles Include="temporal\apply_edit.hlsl">
+      <CacheName>temporal_apply_edit_hlsl</CacheName>
+    </ShaderRootFiles>
+    <ShaderRootFiles Include="temporal\clear_stats.hlsl">
+      <CacheName>temporal_clear_stats_hlsl</CacheName>
+    </ShaderRootFiles>
+    <ShaderRootFiles Include="temporal\commit_history.hlsl">
+      <CacheName>temporal_commit_history_hlsl</CacheName>
+    </ShaderRootFiles>
+    <ShaderRootFiles Include="temporal\reproject_edit.hlsl">
+      <CacheName>temporal_reproject_edit_hlsl</CacheName>
+    </ShaderRootFiles>
+    <ShaderRootFiles Include="temporal\reconstruct_motion_vectors.hlsl">
+      <CacheName>temporal_reconstruct_motion_vectors_hlsl</CacheName>
+    </ShaderRootFiles>
+    <ShaderRootFiles Include="temporal\validate_depth.hlsl">
+      <CacheName>temporal_validate_depth_hlsl</CacheName>
+    </ShaderRootFiles>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="@(ShaderRootFiles->'shaders\%(Identity)')" />
+    <ExpandedShaderFiles Include="@(ShaderRootFiles->'$(DlssnrGeneratedDir)\expanded_shaders\%(Identity)')" />
+    <ShaderCacheFiles Include="@(ShaderRootFiles->'$(DlssnrGeneratedDir)\shader_cache\%(CacheName).cso')" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
