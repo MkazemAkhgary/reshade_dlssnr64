@@ -56,7 +56,6 @@ class FloatSetting : public Setting {
   }
   FloatSetting& Format(const char* fmt) { format_ = CStrToString(fmt); return *this; }
   FloatSetting& NoSave() { meta_.persist = false; return *this; }
-  FloatSetting& NoPersist() { meta_.persist = false; return *this; }
 
   Value DefaultValue() const override;
   void Clamp(Value& value) const override;
