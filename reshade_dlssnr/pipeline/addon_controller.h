@@ -64,9 +64,10 @@ class AddonController {
   // previously recorded GPU work has completed. Called by the UI after changes.
   void EnsureSessions(const feature::pass::PassOrder& order);
 
-  // Clears the failure state of every pass. One button in the UI, so the
-  // user never has to click through tabs to un-stick a frame.
-  void RetryAll();
+  // Requests a full addon restart. The request is deferred until a queue-ordered
+  // fence proves earlier NGX/GPU work has completed.
+  void RestartAll();
+  bool RestartPending() const;
 
   // Records why the Post-DLSS path was skipped, for display in the Status
   // section. Pass nullptr to clear — the hook calls this on every frame,
@@ -186,6 +187,7 @@ class AddonController {
   bool HasUnfencedRetiredSessions() const;
   void TagRetiredSessions(uint64_t fence_value);
   void ReleaseRetiredSessionsCompleted(uint64_t completed_fence_value);
+  void FinishRestartAfterFence();
 
   NgxRuntime runtime_;
   // One session per live pass, keyed by the pass's stable id. Sessions are
@@ -219,6 +221,12 @@ class AddonController {
   // Keep the most recently observed direct queue so addon shutdown can place
   // a final queue marker before releasing sessions that may have GPU work.
   Microsoft::WRL::ComPtr<ID3D12CommandQueue> last_command_queue_;
+
+  // Restart requests are handled only at Present. Once the marker is queued,
+  // NGX hooks are ignored until it completes and resources can be released.
+  bool restart_requested_ = false;
+  bool restart_waiting_for_fence_ = false;
+  uint64_t restart_fence_value_ = 0;
 
   // True between BeginReleaseCommands and EndReleaseCommands. Distinguishes
   // "the list is open and has work in it" from "the list was never opened",

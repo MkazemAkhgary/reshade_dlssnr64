@@ -188,21 +188,12 @@ void DrawStatusSection(Settings& settings, bool& changed) {
     }
   }
 
-  {
-    bool any_failed = false;
-    for (const PassStatusEntry& entry : snap.passes) {
-      if (entry.status.failed) { any_failed = true; break; }
-    }
-
-    if (any_failed) {
-      ImGui::Spacing();
-      if (ImGui::Button("Retry failed passes")) {
-        AddonController::Get().RetryAll();
-      }
-      if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        Tip("Clear every failed pass and rebuild its model on the next frame.");
-      }
-    }
+  ImGui::Spacing();
+  if (ImGui::Button("Restart Addon")) {
+    AddonController::Get().RestartAll();
+  }
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Safely restart NGX and addon resources after the current GPU queue work completes.");
   }
 
   ImGui::Separator();

@@ -370,6 +370,44 @@ void AddonController::OnPresent(
   guides.ReleaseRetiredResourcesCompleted(completed_fence);
   ReleaseRetiredSessionsCompleted(completed_fence);
 
+  if (restart_waiting_for_fence_) {
+    if (restart_fence_value_ == 0 || completed_fence < restart_fence_value_) {
+      frame_debug_.Reset();
+      pre_stage_seen_ = false;
+      return;
+    }
+    FinishRestartAfterFence();
+    return;
+  }
+
+  if (restart_requested_) {
+    if (command_queue == nullptr || BeginReleaseCommands(command_queue) == nullptr) {
+      frame_debug_.Reset();
+      pre_stage_seen_ = false;
+      return;
+    }
+    const uint64_t before_marker = release_command_.LastSignaledFenceValue();
+    EndReleaseCommands(command_queue);
+    const uint64_t marker = release_command_.LastSignaledFenceValue();
+    if (marker <= before_marker) {
+      reshade::log::message(reshade::log::level::error,
+                            "DLSSNR: restart deferred because queue fence could not be signaled");
+      frame_debug_.Reset();
+      pre_stage_seen_ = false;
+      return;
+    }
+    guides.TagRetiredResources(marker);
+    TagRetiredSessions(marker);
+    restart_requested_ = false;
+    restart_waiting_for_fence_ = true;
+    restart_fence_value_ = marker;
+    TRACE_EVT(this, "restart_deferred fence=%llu",
+              static_cast<unsigned long long>(marker));
+    frame_debug_.Reset();
+    pre_stage_seen_ = false;
+    return;
+  }
+
   const Settings& settings = GetSettings();
   if (!settings.enabled) {
     importance_mask_.AdvanceFrame(false);
@@ -480,7 +518,8 @@ void AddonController::OnPreDlssEvaluate(
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
   const Settings& settings = GetSettings();
-  if (!settings.enabled || command_list == nullptr || input_resource == nullptr)
+  if (restart_requested_ || restart_waiting_for_fence_ || !settings.enabled ||
+      command_list == nullptr || input_resource == nullptr)
     return;
 
   bool any_pre_dlss = false;
@@ -537,7 +576,8 @@ void AddonController::OnPostDlssEvaluate(
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
   const Settings& settings = GetSettings();
-  if (!settings.enabled) return;
+  if (restart_requested_ || restart_waiting_for_fence_ || !settings.enabled)
+    return;
   if (command_list == nullptr || output_resource == nullptr) return;
 
   trace::BeginFrame(trace::FrameStream::PostDlss);
@@ -694,14 +734,60 @@ void AddonController::SetPostDlssBlocked(const char* reason) {
                 "%s", reason);
 }
 
-void AddonController::RetryAll() {
+void AddonController::RestartAll() {
   std::lock_guard<std::mutex> lock(g_direct_mutex);
+  restart_requested_ = true;
+  reshade::log::message(reshade::log::level::info,
+                        "DLSSNR: addon restart requested; waiting for a safe GPU fence");
+}
 
+bool AddonController::RestartPending() const {
+  std::lock_guard<std::mutex> lock(g_direct_mutex);
+  return restart_requested_ || restart_waiting_for_fence_;
+}
+
+void AddonController::FinishRestartAfterFence() {
+  const uint64_t completed_fence = release_command_.CompletedFenceValue();
+  DlssGuides& guides = DlssGuides::Get();
+  guides.ReleaseRetiredResourcesCompleted(completed_fence);
+  ReleaseRetiredSessionsCompleted(completed_fence);
+
+  // The restart marker is complete, so active and retired NGX features may now
+  // be released without racing the game's submitted command lists.
   for (auto& entry : sessions_) {
-    if (entry.second) entry.second->Retry(runtime_);
+    if (entry.second) entry.second->Shutdown(runtime_);
   }
-
-  RefreshStatus(GetSettings());
+  sessions_.clear();
+  for (auto& retired : retired_sessions_) {
+    if (retired.session) retired.session->Shutdown(runtime_);
+  }
+  retired_sessions_.clear();
+  hdr_preparation_session_.Shutdown(runtime_);
+  guides.Clear();
+  release_command_.Shutdown();
+  last_command_queue_.Reset();
+  release_list_begun_ = false;
+  temporal_feedback_pending_ = false;
+  grade_scratch_.Reset();
+  grade_scratch_out_.Reset();
+  grade_scratch_width_ = 0;
+  grade_scratch_height_ = 0;
+  grade_scratch_format_ = DXGI_FORMAT_UNKNOWN;
+  pass1_command_.Shutdown();
+  codec_.Destroy();
+  importance_mask_.Shutdown();
+  hdr_.Shutdown();
+  hdr_initialized_ = false;
+  frame_debug_.Release();
+  pre_stage_seen_ = false;
+  runtime_.Shutdown();
+  post_dlss_blocked_ = false;
+  post_dlss_block_reason_[0] = '\0';
+  status_.Reset();
+  restart_waiting_for_fence_ = false;
+  restart_fence_value_ = 0;
+  reshade::log::message(reshade::log::level::info,
+                        "DLSSNR: safe addon restart completed; runtime will initialize on demand");
 }
 
 void AddonController::RefreshStatus(const Settings& settings) {
@@ -826,6 +912,9 @@ void AddonController::Shutdown() {
   hdr_initialized_ = false;
   frame_debug_.Release();
   runtime_.Shutdown();
+  restart_requested_ = false;
+  restart_waiting_for_fence_ = false;
+  restart_fence_value_ = 0;
 }
 
 // ---------------------------------------------------------------------------

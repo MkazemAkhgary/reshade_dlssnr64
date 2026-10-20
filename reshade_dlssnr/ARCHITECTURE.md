@@ -519,7 +519,7 @@ Debug views show the pre-depth candidate, post-depth validation result, and per-
 
 **Keep references to state objects used for restoration.** Root signatures, PSOs, descriptor heaps and related objects can be released and recreated by the game, especially around swapchain changes; storing raw pointers is unsafe.
 
-**The NGX capability parameter block is process-global.** Do not call `Reset()` on it to clear only DLSSNR keys; Streamline may share the same block. The addon writes the keys it owns without clearing the entire object.
+**The NGX capability parameter block is process-global.** Do not call `Reset()` on it to clear only DLSSNR keys; Streamline may share the same block. The addon writes the keys it owns without clearing the entire object. `Restart Addon` is also deferred: it stops recording addon work and guide-clone copies, queues a marker on the game queue, and releases NGX features and addon resources only after that marker completes. A UI callback must never synchronously release a feature that an in-flight command list may still reference.
 
 ### NGX / feature lifecycle
 

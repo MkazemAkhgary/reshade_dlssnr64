@@ -543,6 +543,7 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
   }
 
   const Settings& settings = GetSettings();
+  const bool restart_pending = AddonController::Get().RestartPending();
   bool any_pass_enabled = false;
   bool any_pre_dlss = false;
   bool any_post_dlss = false;
@@ -558,19 +559,20 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
   bool guides_captured_before_evaluate = false;
   PreDlssColorOverride pre_dlss_color_override;
   if (feature_id == NVSDK_NGX_Feature_SuperSampling && settings.enabled &&
-      any_pass_enabled) {
+      any_pass_enabled && !restart_pending) {
     hooks_available = EnsureHooks(work_list);
-    if (hooks_available) {
+    if (hooks_available && !AddonController::Get().RestartPending()) {
       // DLSS has already populated these resources before EvaluateFeature is
       // entered. Capture the current frame before Pre-DLSS so temporal guide
-      // inputs are correct for all three injection points.
+      // inputs are correct for all three injection points. During a deferred
+      // restart, do not record clone copies beyond the restart fence.
       DlssGuides::Get().CaptureGuides(work_list, parameters, feature_id);
       guides_captured_before_evaluate = true;
     }
   }
 
   if (feature_id == NVSDK_NGX_Feature_SuperSampling && settings.enabled &&
-      any_pre_dlss) {
+      any_pre_dlss && !restart_pending) {
     if (!hooks_available) {
       static bool logged_pre_hook_failure = false;
       LogOnce(logged_pre_hook_failure, reshade::log::level::warning,
@@ -643,7 +645,8 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
   }
 
   if (result == NVSDK_NGX_Result_Success && feature_handle != nullptr &&
-      parameters != nullptr && feature_id == NVSDK_NGX_Feature_SuperSampling) {
+      parameters != nullptr && feature_id == NVSDK_NGX_Feature_SuperSampling &&
+      !restart_pending) {
     if (!hooks_available) hooks_available = EnsureHooks(work_list);
     if (!hooks_available) {
       if (any_post_dlss) {
@@ -655,7 +658,8 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
       // run, refresh current guides now. A Pre-DLSS stage was already skipped
       // in this case, but Post-DLSS/Backbuffer can still use this snapshot.
       if (settings.enabled && any_pass_enabled &&
-          !guides_captured_before_evaluate) {
+          !guides_captured_before_evaluate &&
+          !AddonController::Get().RestartPending()) {
         DlssGuides::Get().CaptureGuides(work_list, parameters, feature_id);
       }
 
@@ -668,7 +672,7 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
         ID3D12Resource* output = nullptr;
         if (any_post_dlss) {
           output = GetResourceParameter(parameters, NVSDK_NGX_Parameter_Output);
-          if (output != nullptr) {
+          if (output != nullptr && !AddonController::Get().RestartPending()) {
             DlssGuides::Get().CaptureOutput(work_list, parameters, feature_id);
           }
         }
