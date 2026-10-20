@@ -175,9 +175,15 @@ void AddPass(Settings& settings, bool& changed) {
   DLSSNR_PROFILE_UI_L2("AddPass");
   const size_t total = settings.pass_order.size();
   if (total >= kMaxPasses) return;
-  const size_t source = static_cast<size_t>(
-      std::clamp(static_cast<int>(settings.active_pass_id), 0, static_cast<int>(total) - 1));
-  const size_t insert_at = source + 1;
+  // active_pass_id is an opaque id, not an index; resolve its position.
+  const auto active_it = std::find(settings.pass_order.begin(),
+                                   settings.pass_order.end(),
+                                   settings.active_pass_id);
+  const size_t insert_at =
+      active_it == settings.pass_order.end()
+          ? total
+          : static_cast<size_t>(std::distance(settings.pass_order.begin(),
+                                              active_it)) + 1;
 
   feature::pass::PassOrder order = settings.pass_order;
   const feature::pass::PassId new_id = NewPassId();
