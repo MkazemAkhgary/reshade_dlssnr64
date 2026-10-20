@@ -109,20 +109,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     const float3 residual_shaped = ShapeResidualSdr(residual_log, original.rgb);
 
-    // When an input grade ran, apply it before the ratio and invert after.
-    const bool graded = (kGradeEnabled > 0.5);
-
-    float3 edited;
-    if (graded) {
-        // The SDR path has no tonemap; the model's domain is the sRGB-encoded
-        // image it saw, so the grade and the ratio act on that encoding
-        // directly.
-        float3 graded_original = GradeLinearFwd(original.rgb);
-        float3 graded_edited = graded_original * exp(residual_shaped);
-        edited = GradeLinearInv(graded_edited);
-    } else {
-        edited = original.rgb * exp(residual_shaped);
-    }
+    float3 edited = original.rgb * exp(residual_shaped);
 
     float3 final_rgb = BlendYCbCr(original.rgb, edited,
                                   kLumaStrength, kChromaStrength);
