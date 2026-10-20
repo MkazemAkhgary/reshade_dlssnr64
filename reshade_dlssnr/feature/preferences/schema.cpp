@@ -30,6 +30,14 @@ void RegisterPreferencesSchema(ctl::Schema& schema) {
           "textures. This one option applies to all stages, including "
           "Backbuffer; the requested mode is latched safely at a new DLSS "
           "evaluation.");
+
+  prefs
+      .Add<ctl::BoolSetting>(preferences::kInvertFallbackDepth,
+                             "Invert Fallback Depth", false)
+      .Tooltip(
+          "Invert the ReShade Generic Depth values when they are used because "
+          "the DLSS evaluation did not supply a depth resource. Does not alter "
+          "depth supplied by DLSS.");
 }
 
 }  // namespace feature

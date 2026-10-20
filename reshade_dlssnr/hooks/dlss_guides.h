@@ -39,6 +39,7 @@ struct DlssGuideState {
   float mv_scale_x = 1.0f;
   float mv_scale_y = 1.0f;
   bool depth_inverted = false;
+  bool fallback_depth = false;
   bool clone_resources = false;
   bool valid = false;
   uint64_t capture_serial = 0;
@@ -70,7 +71,8 @@ class DlssGuides {
       const NVSDK_NGX_Parameter* params,
       NVSDK_NGX_Feature feature_id);
 
-  DlssGuideState GetState() const;
+  DlssGuideState GetState(bool invert_fallback_depth = false) const;
+  void SetFallbackDepth(ID3D12Resource* resource);
   void RetireGameResource(ID3D12Resource* resource);
   // Bind all resources retired before this present to a queue-ordered fence.
   // ReleaseRetiredResourcesCompleted() later frees only the completed prefix.
@@ -110,6 +112,9 @@ class DlssGuides {
   Microsoft::WRL::ComPtr<ID3D12Resource> depth_direct_;
   Microsoft::WRL::ComPtr<ID3D12Resource> motion_direct_;
   Microsoft::WRL::ComPtr<ID3D12Resource> dlss_output_direct_;
+  Microsoft::WRL::ComPtr<ID3D12Resource> fallback_depth_;
+  unsigned int fallback_depth_width_ = 0;
+  unsigned int fallback_depth_height_ = 0;
   std::atomic_bool requested_clone_resources_{false};
   bool clone_resources_ = false;
   uint64_t capture_serial_ = 0;

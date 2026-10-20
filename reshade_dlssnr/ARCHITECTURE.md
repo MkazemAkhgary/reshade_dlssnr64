@@ -560,6 +560,8 @@ Debug views show the pre-depth candidate, post-depth validation result, and per-
 
 **Format detection is explicit and overridable.** Auto detection treats `R16G16B16A16_FLOAT` and `R11G11B10_FLOAT` as scRGB, `R10G10B10A2_UNORM` as HDR10, and 8-bit RGBA/BGRA formats as SDR. `HdrSettings::format` can override auto detection.
 
+**Depth falls back to ReShade Generic Depth only when NGX supplies none.** The addon reads Generic Depth's published `selected_shader_resource` at `reshade_begin_effects`, retains the underlying D3D12 resource, and makes it available as a fallback guide. `Invert Fallback Depth` affects only this substitute; it does not override DLSS's own inverted-depth flag. As Generic Depth publishes its selection during effects setup, selection changes are consumed at the next addon pass boundary.
+
 **Exposure is measurement state, not compose state.** Histogram-derived exposure changes what the model sees; HDR compose reads the untouched source directly and applies the model residual in HDR.
 
 **Game Exposure is one layer in the exposure stack.** When enabled, the addon captures the game's NGX `ExposureTexture` before `EvaluateFeature`. If it is a usable 1x1 texture, a compute pass samples its scalar and an asynchronous GPU readback updates HDR state without waiting on the CPU. Game Exposure remains the base when available; its optional bias and bounded tuning use that value as their anchor. Adaptive Exposure can add a bounded histogram-derived correction, and Local Exposure can apply a spatial correction afterward. If game exposure is unavailable, Adaptive Exposure can provide the global exposure on its own. The Status panel reports availability and the last sampled value; `Debug View -> Game Exposure` shows the sampled value in stops.

@@ -18,6 +18,15 @@
 
 namespace {
 
+// Shared private-data contract published by ReShade's Generic Depth addon.
+// The UUID and field order intentionally mirror generic_depth_data.
+struct __declspec(uuid("7c6363c7-f94e-437a-9160-141782c44a98")) GenericDepthData {
+  reshade::api::resource selected_depth_stencil = {};
+  reshade::api::resource override_depth_stencil = {};
+  reshade::api::resource_view selected_shader_resource = {};
+  bool using_backup_texture = false;
+};
+
 // Roughly two seconds at 60 fps: long enough to cover a device that is not
 // ready at init_device, short enough that a permanent failure stops costing
 // an allocator and a command list per frame.
@@ -49,6 +58,38 @@ void OnInitDevice(reshade::api::device* device) {
   if (device == nullptr) return;
   auto* native_device = reinterpret_cast<ID3D12Device*>(device->get_native());
   reshade_dlssnr::D3D12Hooks::Get().InstallEarlyHooks(native_device);
+}
+
+void OnReshadeBeginEffects(
+    reshade::api::effect_runtime* runtime,
+    reshade::api::command_list*,
+    reshade::api::resource_view,
+    reshade::api::resource_view) {
+  if (runtime == nullptr) return;
+  reshade::api::device* const device = runtime->get_device();
+  if (device == nullptr || device->get_api() != reshade::api::device_api::d3d12) {
+    reshade_dlssnr::DlssGuides::Get().SetFallbackDepth(nullptr);
+    return;
+  }
+
+  const GenericDepthData* const depth_data =
+      runtime->get_private_data<GenericDepthData>();
+  if (depth_data == nullptr || depth_data->selected_shader_resource.handle == 0) {
+    reshade_dlssnr::DlssGuides::Get().SetFallbackDepth(nullptr);
+    return;
+  }
+
+  const reshade::api::resource depth =
+      device->get_resource_from_view(depth_data->selected_shader_resource);
+  if (depth.handle == 0) {
+    reshade_dlssnr::DlssGuides::Get().SetFallbackDepth(nullptr);
+    return;
+  }
+
+  // ReShade resource handles map to native resource handles in D3D12.
+  auto* const native_depth = reinterpret_cast<ID3D12Resource*>(
+      static_cast<uintptr_t>(depth.handle));
+  reshade_dlssnr::DlssGuides::Get().SetFallbackDepth(native_depth);
 }
 
 void OnPresent(
@@ -109,6 +150,8 @@ void Attach(HMODULE module) {
   PinAddonModule();
 
   reshade::register_event<reshade::addon_event::init_device>(OnInitDevice);
+  reshade::register_event<reshade::addon_event::reshade_begin_effects>(
+      OnReshadeBeginEffects);
   reshade::register_event<reshade::addon_event::present>(OnPresent);
   reshade::register_overlay("ReShade DLSSNR", reshade_dlssnr::DrawOverlay);
 

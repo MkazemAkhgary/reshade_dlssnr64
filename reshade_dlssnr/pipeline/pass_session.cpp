@@ -21,6 +21,7 @@
 #include "feature/hdr/view.h"
 #include "feature/importance_mask/view.h"
 #include "feature/pass/settings.h"
+#include "feature/preferences/settings.h"
 #include "feature/pass/ui.h"
 #include "model/model_pipeline.h"
 #include "model/ngx_model_params.h"
@@ -717,7 +718,12 @@ void PassSession::PrepareRun(PassRun& run,
   run.command_queue = command_queue;
   run.swapchain = swapchain;
 
-  run.guides = guides_->GetState();
+  const ctl::ValueStore& store = feature::SettingsStore();
+  const ctl::InstanceKey shared = ctl::InstanceKey::FromInt(0);
+  const bool invert_fallback_depth = store.Read(
+      feature::preferences::kSection, shared,
+      feature::preferences::kInvertFallbackDepth).as_bool;
+  run.guides = guides_->GetState(invert_fallback_depth);
   run.guides_valid = run.guides.valid;
   run.is_first_pass = is_first_pass;
 }

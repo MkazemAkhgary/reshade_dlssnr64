@@ -513,9 +513,40 @@ void DlssGuides::RetireResource(Microsoft::WRL::ComPtr<ID3D12Resource>& resource
   retired_resources_.push_back({resource.Detach(), 0});
 }
 
-DlssGuideState DlssGuides::GetState() const {
+DlssGuideState DlssGuides::GetState(bool invert_fallback_depth) const {
   std::lock_guard<std::mutex> lock(lock_);
-  return state_;
+  DlssGuideState result = state_;
+  if (result.depth == nullptr && fallback_depth_ != nullptr) {
+    result.depth = fallback_depth_.Get();
+    result.guide_width = fallback_depth_width_;
+    result.guide_height = fallback_depth_height_;
+    result.guide_base_x = 0;
+    result.guide_base_y = 0;
+    result.guide_subrect_width = fallback_depth_width_;
+    result.guide_subrect_height = fallback_depth_height_;
+    result.depth_inverted = invert_fallback_depth;
+    result.fallback_depth = true;
+    result.valid = true;
+  }
+  return result;
+}
+
+void DlssGuides::SetFallbackDepth(ID3D12Resource* resource) {
+  std::lock_guard<std::mutex> lock(lock_);
+  if (fallback_depth_.Get() == resource) return;
+
+  if (fallback_depth_ != nullptr) {
+    retired_game_resources_.push_back({fallback_depth_.Detach(), 0});
+  }
+  fallback_depth_width_ = 0;
+  fallback_depth_height_ = 0;
+  if (resource != nullptr) {
+    resource->AddRef();
+    fallback_depth_.Attach(resource);
+    const D3D12_RESOURCE_DESC desc = resource->GetDesc();
+    fallback_depth_width_ = static_cast<unsigned int>(desc.Width);
+    fallback_depth_height_ = desc.Height;
+  }
 }
 
 void DlssGuides::ReleaseRetiredResourcesLocked() {
@@ -593,6 +624,11 @@ void DlssGuides::Clear() {
   depth_direct_.Reset();
   motion_direct_.Reset();
   dlss_output_direct_.Reset();
+  if (fallback_depth_ != nullptr) {
+    retired_game_resources_.push_back({fallback_depth_.Detach(), 0});
+  }
+  fallback_depth_width_ = 0;
+  fallback_depth_height_ = 0;
   clone_resources_ = false;
   requested_clone_resources_.store(false, std::memory_order_release);
 

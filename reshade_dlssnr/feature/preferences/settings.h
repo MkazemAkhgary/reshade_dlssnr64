@@ -20,6 +20,7 @@ inline constexpr const char* kSection = "Preferences";
 // (the code that reads a preference back) can name them without a literal.
 inline constexpr const char* kShowTooltips = "show_tooltips";
 inline constexpr const char* kCloneResources = "clone_resources";
+inline constexpr const char* kInvertFallbackDepth = "invert_fallback_depth";
 
 inline constexpr int64_t kKey = 0;  // single instance
 
