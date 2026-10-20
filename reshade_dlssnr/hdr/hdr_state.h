@@ -33,7 +33,6 @@ struct ExposureTracker {
   float exposure = 1.0f;
   float scene_white = 1.0f;
   float exposure_reference_luma = 0.0f;
-  float warmup_frames = 0.0f;
   bool have_measurement = false;
   MeteringSource metering_source = MeteringSource::FullFrame;
 

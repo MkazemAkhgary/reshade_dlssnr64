@@ -183,7 +183,6 @@ void ExposureTracker::Update(const uint32_t* bins,
   const float white_alpha = was_ready ? 1.0f - std::exp(-6.0f * dt) : 1.0f;
   scene_white += (std::max(white_luma, 1e-6f) - scene_white) * white_alpha;
   have_measurement = true;
-  warmup_frames += 1.0f;
 }
 
 bool HdrState::Ensure(ID3D12Device* device) {
@@ -642,7 +641,6 @@ void HdrState::ResolveExposureStack(const HdrSettings& settings) {
       use_adaptive ? adaptive_.exposure_reference_luma : 0.0f;
   regular_.have_measurement = use_game || use_adaptive;
   regular_.metering_source = source;
-  regular_.warmup_frames = std::max(regular_.warmup_frames, adaptive_.warmup_frames);
 }
 
 namespace {
