@@ -146,7 +146,8 @@ void RegisterPassSchema(ctl::Schema& schema) {
   // the pass is disabled. Target is a group-button enum setting.
   pass.Add<ctl::BoolSetting>(kPassEnabled, "Enable", true)
       .Tooltip("Enable or disable this pass profile. Disabled passes do not "
-               "evaluate the model.");
+               "evaluate the model.")
+      .VisibleWhen(&NeverVisible);
   pass.Add<ctl::EnumSetting>(kTarget, "Target", 2)
       .Items(kTargetNames, kTargetTips, 3)
       .AsGroup()

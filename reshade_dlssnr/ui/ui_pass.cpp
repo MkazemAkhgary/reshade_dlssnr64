@@ -75,6 +75,22 @@ void DrawPassToolbar(Settings& settings, bool& changed) {
   const auto active_it = std::find(settings.pass_order.begin(),
                                    settings.pass_order.end(),
                                    settings.active_pass_id);
+
+  if (active_it != settings.pass_order.end()) {
+    const ctl::InstanceKey active_key = feature::pass::PassKey(*active_it);
+    ctl::ValueStore& store = feature::SettingsStore();
+    bool enabled = store.Read(feature::pass::kSection, active_key,
+                              feature::pass::kPassEnabled).as_bool;
+    if (ImGui::Checkbox("Enable##pass_toolbar_enabled", &enabled)) {
+      store.Write(feature::pass::kSection, active_key,
+                  feature::pass::kPassEnabled, ctl::Value::Bool(enabled));
+      changed = true;
+    }
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      Tip("Enable or disable the selected pass without opening its settings.");
+    }
+    ImGui::SameLine();
+  }
   const int position =
       active_it == settings.pass_order.end()
           ? 0

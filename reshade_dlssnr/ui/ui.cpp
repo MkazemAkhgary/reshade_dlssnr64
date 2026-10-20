@@ -525,6 +525,7 @@ void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
     status_by_id.emplace(entry.id, &entry.status);
   }
 
+  const float spacing_x = ImGui::GetStyle().ItemSpacing.x;
   struct PassTabItem {
     feature::pass::PassId id = 0;
     uint32_t position = 0;
@@ -547,15 +548,15 @@ void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
     const auto status_it = status_by_id.find(id);
     const bool pass_failed = status_it != status_by_id.end() &&
                              status_it->second->failed;
-    const char* state_tag = pass_failed ? "FAIL" : pass.enabled ? "on" : "off";
+    const char* state_tag = pass_failed ? " [FAIL]" : "";
     const char* state_description = pass_failed ? "failed" :
                                     pass.enabled ? "enabled" : "disabled";
     char label[128];
     if (!pass.custom_name.empty()) {
-      std::snprintf(label, sizeof(label), "%s [%s] %s##PassTab%u",
+      std::snprintf(label, sizeof(label), "%s%s %s##PassTab%u",
                     pass.custom_name.c_str(), state_tag, stage_short, id);
     } else {
-      std::snprintf(label, sizeof(label), "Pass %u [%s] %s##PassTab%u",
+      std::snprintf(label, sizeof(label), "Pass %u%s %s##PassTab%u",
                     position + 1, state_tag, stage_short, id);
     }
     char default_name[24];
@@ -572,7 +573,8 @@ void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
     item.tooltip = tip;
     item.enabled = pass.enabled;
     item.failed = pass_failed;
-    item.width = ImGui::CalcTextSize(item.label.c_str()).x +
+    item.width = ImGui::GetFrameHeight() + spacing_x +
+                 ImGui::CalcTextSize(item.label.c_str()).x +
                  ImGui::GetStyle().FramePadding.x * 2.0f;
     tabs.push_back(std::move(item));
   }
@@ -581,7 +583,6 @@ void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
   // Child windows must not overlap the item hit regions: even a visually
   // transparent child can intercept clicks from controls beneath it.
   const float row_width = ImGui::GetContentRegionAvail().x;
-  const float spacing_x = ImGui::GetStyle().ItemSpacing.x;
   const ImVec4 active_color = ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive);
   const ImVec4 hovered_color = ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered);
   const ImVec4 inactive_color = ImGui::GetStyleColorVec4(ImGuiCol_Button);
@@ -589,17 +590,33 @@ void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
 
   float line_used = 0.0f;
   for (const PassTabItem& tab : tabs) {
-    const float button_width = std::min(tab.width, row_width);
+    const float checkbox_width = ImGui::GetFrameHeight();
+    const float desired_button_width = tab.width - checkbox_width - spacing_x;
+    const float button_width = std::min(desired_button_width,
+                                        std::max(1.0f, row_width - checkbox_width - spacing_x));
+    const float item_width = checkbox_width + spacing_x + button_width;
     if (line_used > 0.0f &&
-        line_used + spacing_x + button_width <= row_width) {
+        line_used + spacing_x + item_width <= row_width) {
       ImGui::SameLine();
-      line_used += spacing_x + button_width;
+      line_used += spacing_x + item_width;
     } else {
-      line_used = button_width;
+      line_used = item_width;
     }
 
     const bool is_active = settings.active_pass_id == tab.id;
     ImGui::PushID(static_cast<int>(tab.id));
+    bool pass_enabled = tab.enabled;
+    if (ImGui::Checkbox("##PassTabEnabled", &pass_enabled)) {
+      store.Write(feature::pass::kSection, feature::pass::PassKey(tab.id),
+                  feature::pass::kPassEnabled, ctl::Value::Bool(pass_enabled));
+      changed = true;
+    }
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      Tip("Toggle this pass. Current state: %s.", pass_enabled ? "enabled" : "disabled");
+    }
+    ImGui::SameLine();
+    ImGui::PushStyleVar(ImGuiStyleVar_Alpha,
+                        tab.enabled ? 1.0f : ImGui::GetStyle().Alpha * 0.55f);
     ImGui::PushStyleColor(ImGuiCol_Button,
                           is_active ? active_color : inactive_color);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hovered_color);
@@ -611,6 +628,7 @@ void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
       Tip("%s", tab.tooltip.c_str());
     }
     ImGui::PopStyleColor(3);
+    ImGui::PopStyleVar();
     ImGui::PopID();
   }
 
