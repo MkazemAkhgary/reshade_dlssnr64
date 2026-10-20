@@ -89,8 +89,7 @@ struct HdrSettings {
   AdaptiveExposureLayerSettings adaptive_exposure = {};
   LocalExposureLayerSettings local_exposure = {};
 
-  // BT.2446C tone curve. k2 and k4 are derived in the shader from k1, k3,
-  // and the HDR inflection point so the curve is C1-continuous and invertible.
+  // BT.2446C tone-curve source parameters; derived k2/k4 are computed on CPU.
   float bt2446_k1 = 0.83802f;
   float bt2446_k3 = 0.74204f;
   float bt2446_ip = 94.26f;

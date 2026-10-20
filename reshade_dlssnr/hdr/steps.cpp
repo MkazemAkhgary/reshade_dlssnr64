@@ -1,6 +1,7 @@
 #include "pipeline/pass_session.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include "hdr/hdr_state.h"
 #include "pipeline/pipeline_graph.h"
@@ -16,9 +17,16 @@ PipelineStatus PassSession::StepBuildHdrUniforms(PassRun& run) {
   const LocalExposureLayerSettings& local = hs.local_exposure;
   run.hdr_uniforms.format = static_cast<float>(HdrFormatCode(run.hdr->ResolvedFormat()));
   run.hdr_uniforms.exposure = run.hdr->Exposure();
-  run.hdr_uniforms.bt2446_k1 = hs.bt2446_k1;
-  run.hdr_uniforms.bt2446_k3 = hs.bt2446_k3;
-  run.hdr_uniforms.bt2446_ip = hs.bt2446_ip;
+  const float bt2446_k1 = std::max(hs.bt2446_k1, 1e-6f);
+  const float bt2446_k3 = std::clamp(hs.bt2446_k3, 0.0f, 1.0f);
+  const float bt2446_ip = std::max(hs.bt2446_ip, 1e-6f);
+  const float bt2446_remaining = std::max(1.0f - bt2446_k3, 1e-6f);
+  run.hdr_uniforms.bt2446_k1 = bt2446_k1;
+  run.hdr_uniforms.bt2446_k2 = bt2446_k1 * bt2446_ip * (1.0f - bt2446_k3);
+  run.hdr_uniforms.bt2446_k3 = bt2446_k3;
+  run.hdr_uniforms.bt2446_k4 = bt2446_k1 * bt2446_ip *
+      (1.0f - (1.0f - bt2446_k3) * std::log(bt2446_remaining));
+  run.hdr_uniforms.bt2446_ip = bt2446_ip;
   run.hdr_uniforms.bt2446_crosstalk = hs.bt2446_crosstalk;
   run.hdr_uniforms.gain_min_log2 = hs.gain_min_log2;
   run.hdr_uniforms.gain_max_log2 = hs.gain_max_log2;

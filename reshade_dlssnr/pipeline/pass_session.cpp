@@ -1258,7 +1258,9 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
   constants.hdr.Format = run.hdr_uniforms.format;
   constants.hdr.Exposure = run.hdr_uniforms.exposure;
   constants.hdr.Bt2446K1 = run.hdr_uniforms.bt2446_k1;
+  constants.hdr.Bt2446K2 = run.hdr_uniforms.bt2446_k2;
   constants.hdr.Bt2446K3 = run.hdr_uniforms.bt2446_k3;
+  constants.hdr.Bt2446K4 = run.hdr_uniforms.bt2446_k4;
   constants.hdr.Bt2446Ip = run.hdr_uniforms.bt2446_ip;
   constants.hdr.Crosstalk = run.hdr_uniforms.bt2446_crosstalk;
   constants.hdr.GainMinLog2 = run.hdr_uniforms.gain_min_log2;
@@ -1790,7 +1792,9 @@ PipelineStatus PassSession::StepBuildEffectiveLocalExposure(PassRun& run) {
   constants.hdr.Format = run.hdr_uniforms.format;
   constants.hdr.Exposure = run.hdr_uniforms.exposure;
   constants.hdr.Bt2446K1 = run.hdr_uniforms.bt2446_k1;
+  constants.hdr.Bt2446K2 = run.hdr_uniforms.bt2446_k2;
   constants.hdr.Bt2446K3 = run.hdr_uniforms.bt2446_k3;
+  constants.hdr.Bt2446K4 = run.hdr_uniforms.bt2446_k4;
   constants.hdr.Bt2446Ip = run.hdr_uniforms.bt2446_ip;
   constants.hdr.Crosstalk = run.hdr_uniforms.bt2446_crosstalk;
   constants.hdr.GainMinLog2 = run.hdr_uniforms.gain_min_log2;

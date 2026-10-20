@@ -26,8 +26,8 @@ float HdrBt2446Forward(float y_nits)
     float ip = max(kBt2446Ip, 1e-6);
     float k1 = max(kBt2446K1, 1e-6);
     float k3 = saturate(kBt2446K3);
-    float k2 = k1 * ip * (1.0 - k3);
-    float k4 = k1 * ip * (1.0 - (1.0 - k3) * log(1.0 - k3));
+    float k2 = kBt2446K2;
+    float k4 = kBt2446K4;
     float result = k1 * y;
     if (y >= ip)
         result = k2 * log(max(y / ip - k3, 1e-6)) + k4;
@@ -41,8 +41,8 @@ float HdrBt2446Inverse(float y_sdr)
     float ip = max(kBt2446Ip, 1e-6);
     float k1 = max(kBt2446K1, 1e-6);
     float k3 = saturate(kBt2446K3);
-    float k2 = k1 * ip * (1.0 - k3);
-    float k4 = k1 * ip * (1.0 - (1.0 - k3) * log(1.0 - k3));
+    float k2 = kBt2446K2;
+    float k4 = kBt2446K4;
     if (y_sdr < k1 * ip) return y_sdr / k1;
     return ip * (exp((y_sdr - k4) / max(k2, 1e-6)) + k3);
 }

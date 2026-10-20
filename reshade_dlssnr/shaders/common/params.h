@@ -59,7 +59,9 @@ DLSSNR_BLOCK(HdrBlock)
     float Format;
     float Exposure;
     float Bt2446K1;
+    float Bt2446K2;
     float Bt2446K3;
+    float Bt2446K4;
     float Bt2446Ip;
     float Crosstalk;
     // Guide-luma similarity exponent for joint-bilateral reconstruction.
