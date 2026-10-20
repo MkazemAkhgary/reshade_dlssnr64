@@ -63,7 +63,6 @@ struct LocalExposureLayerSettings {
   // Intermediate values interpolate the correction in log exposure space.
   float restore_mode = 1.0f;
   float restore_strength = 1.0f;
-  bool precomputed_luma = false;
   bool fp16_reference = false;
 };
 

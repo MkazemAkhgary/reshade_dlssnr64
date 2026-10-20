@@ -68,9 +68,6 @@ class PassResources {
   // Full-resolution combined exposure used by HDR inverse compose. R32_FLOAT
   // stores global exposure × the exact local exposure factor applied by the
   // gain-map split to that source pixel.
-  Microsoft::WRL::ComPtr<ID3D12Resource> local_exposure_luma;
-  unsigned int local_exposure_luma_width = 0;
-  unsigned int local_exposure_luma_height = 0;
   Microsoft::WRL::ComPtr<ID3D12Resource> effective_exposure_map;
   Microsoft::WRL::ComPtr<ID3D12Resource> local_exposure_partial_sums;
   // One R32_FLOAT scalar holding the geometric-mean local multiplier for
@@ -125,7 +122,6 @@ class PassResources {
       const D3D12_RESOURCE_DESC& desc,
       unsigned int work_width,
       unsigned int work_height);
-  bool EnsureLocalExposureLuma(ID3D12Device* device, unsigned int width, unsigned int height);
   bool EnsureEffectiveExposureMap(
       ID3D12Device* device, unsigned int width, unsigned int height);
   void ReleaseEffectiveExposureMap();
@@ -162,7 +158,6 @@ class PassResources {
   ID3D12Resource* GetUnliftedWorkingInput() const {
     return unlifted_working_input.Get();
   }
-  ID3D12Resource* GetLocalExposureLuma() const { return local_exposure_luma.Get(); }
   ID3D12Resource* GetEffectiveExposureMap() const { return effective_exposure_map.Get(); }
   ID3D12Resource* GetLocalExposurePartialSums() const {
     return local_exposure_partial_sums.Get();

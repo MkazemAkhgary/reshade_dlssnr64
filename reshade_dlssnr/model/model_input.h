@@ -54,7 +54,6 @@ struct HdrUniforms {
   int local_samples = 12;
   bool restore_local_exposure = false;
   float restore_local_mode = 1.0f;
-  bool local_precomputed_luma = false;
   bool fp16_unlifted_reference = false;
 };
 

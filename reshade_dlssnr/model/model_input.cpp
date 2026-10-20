@@ -12,7 +12,6 @@ void SetLocalExposureConstants(ComputeConstants& constants,
   constants.hdr.LocalExposure.w = hdr.midtone;
   constants.hdr.LocalExposureParams.x = hdr.local_radius_px;
   constants.hdr.LocalExposureParams.y = static_cast<float>(hdr.local_samples);
-  constants.hdr.LocalExposureParams.z = hdr.local_precomputed_luma ? 1.0f : 0.0f;
   constants.localExposure.Shape.x = hdr.local_shadow_range;
   constants.localExposure.Shape.y = hdr.local_highlight_range;
   constants.localExposure.Shape.z = hdr.local_highlight_protection;

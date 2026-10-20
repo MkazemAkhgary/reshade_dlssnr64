@@ -99,7 +99,6 @@ uint64_t TemporalSettingsSignature(const PassRun& run) {
   HashTemporalValue(&hash, run.hdr_uniforms.local_edge_protection);
   HashTemporalValue(&hash, run.hdr_uniforms.local_radius_px);
   HashTemporalValue(&hash, run.hdr_uniforms.local_samples);
-  HashTemporalValue(&hash, run.hdr_uniforms.local_precomputed_luma);
   HashTemporalValue(&hash, run.hdr_uniforms.fp16_unlifted_reference);
   return hash;
 }
@@ -172,15 +171,12 @@ void BindLocalExposureInputs(const PassRun& run, ComputeConstants& constants,
   constants.hdr.LocalExposureParams.x = run.hdr_uniforms.local_radius_px;
   constants.hdr.LocalExposureParams.y =
       static_cast<float>(run.hdr_uniforms.local_samples);
-  ID3D12Resource* luma = run.resources != nullptr
-      ? run.resources->GetLocalExposureLuma() : nullptr;
-  const bool use_precomputed = run.hdr_uniforms.local_precomputed_luma && luma != nullptr;
-  constants.hdr.LocalExposureParams.z = use_precomputed ? 1.0f : 0.0f;
+  constants.hdr.LocalExposureParams.z = 0.0f;
 
   srvs[0] = source;
   srvs[1] = source;
   srvs[2] = source;
-  srvs[3] = use_precomputed ? luma : source;
+  srvs[3] = source;
 }
 
 }  // namespace
@@ -1269,37 +1265,6 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
   constants.hdr.GainMaxLog2 = run.hdr_uniforms.gain_max_log2;
   constants.hdr.EffectiveSceneWhiteNits = run.hdr_uniforms.effective_scene_white_nits;
   model_pipeline::SetLocalExposureConstants(constants, run.hdr_uniforms);
-
-  if (run.hdr_uniforms.local_exposure_strength > 0.0f &&
-      run.hdr_uniforms.local_precomputed_luma) {
-    ID3D12Resource* luma = nullptr;
-    if (!self->resources_.EnsureLocalExposureLuma(run.device, run.width, run.height)) {
-      self->FailForStep("failed to create precomputed local exposure luma");
-      return PipelineStatus::Fail;
-    }
-    luma = self->resources_.GetLocalExposureLuma();
-    ComputeConstants luma_constants = {};
-    luma_constants.Width = run.width;
-    luma_constants.Height = run.height;
-    luma_constants.hdr.Format = run.hdr_uniforms.format;
-    luma_constants.hdr.Exposure = run.hdr_uniforms.exposure;
-    luma_constants.hdr.Bt2446K1 = run.hdr_uniforms.bt2446_k1;
-    luma_constants.hdr.Bt2446K3 = run.hdr_uniforms.bt2446_k3;
-    luma_constants.hdr.Bt2446Ip = run.hdr_uniforms.bt2446_ip;
-    luma_constants.hdr.Crosstalk = run.hdr_uniforms.bt2446_crosstalk;
-    luma_constants.hdr.EffectiveSceneWhiteNits = run.hdr_uniforms.effective_scene_white_nits;
-    ID3D12Resource* luma_srvs[kSrvCount] = {source, source, source, source};
-    ID3D12Resource* luma_uavs[kUavCount] = {luma};
-    self->command_.Transition(run.list, source, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    self->command_.Transition(run.list, luma, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    if (!run.codec->Dispatch("BuildLocalExposureLuma", run.list, luma_constants,
-                             luma_srvs, luma_uavs)) {
-      self->FailForStep("failed to precompute local exposure luma");
-      return PipelineStatus::Fail;
-    }
-    self->command_.UavBarrier(run.list, luma);
-    self->command_.Transition(run.list, luma, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  }
 
   ID3D12Resource* global_carrier = nullptr;
   if (run.hdr_uniforms.local_exposure_strength > 0.0f) {

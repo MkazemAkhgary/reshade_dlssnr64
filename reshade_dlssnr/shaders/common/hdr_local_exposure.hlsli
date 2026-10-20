@@ -10,11 +10,8 @@
 #define kLocalMaxDarken        hdr.LocalExposure.z
 #define kLocalExposureMidtone  hdr.LocalExposure.w
 
-Texture2D<float> gPrecomputedLuma : register(t3);
-
 #define kLocalRadiusPx max(hdr.LocalExposureParams.x, 4.0)
 #define kLocalSampleCount ((uint)clamp(round(hdr.LocalExposureParams.y / 4.0) * 4.0, 4.0, 48.0))
-#define kUsePrecomputedLocalLuma (hdr.LocalExposureParams.z > 0.5)
 
 float GlobalHdrLumaToSdr(float hdr_luma, float exposure)
 {
@@ -27,8 +24,6 @@ float GlobalHdrLumaToSdr(float hdr_luma, float exposure)
 
 float SampleGlobalSdrLuma(float2 uv)
 {
-    if (kUsePrecomputedLocalLuma)
-        return max(gPrecomputedLuma.SampleLevel(s0, saturate(uv), 0), 1e-8);
     const float3 c = gSource.SampleLevel(s0, saturate(uv), 0).rgb;
     float3 linear_rgb = DecodeToLinear(
         c, (int)(kFormat + 0.5), kSdrReferenceWhiteNits);
