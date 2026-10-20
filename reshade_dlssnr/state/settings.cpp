@@ -197,14 +197,21 @@ void SyncPassOrder(Settings& settings, bool ensure_nonempty) {
   }
 }
 
-// The key source reads the pass-order setting directly from the store. Since
-// the Pass Order section precedes the instanced Pass/grade sections in schema
-// order, ctl loads it before asking for those sections' instance keys.
+// The key source reads the pass-order setting directly from the store. The
+// Pass Order section is registered before every pass-keyed instanced section
+// (Pass, its two model grades, the four HDR sections, and Importance Mask)
+// so ctl's schema-order load has already populated it when those sections
+// ask for their instance keys.
 std::vector<ctl::InstanceKey> InstanceKeysForSections(
     const void* context, const std::string& section) {
   const bool pass_indexed = section == feature::pass::kSection ||
                             section == feature::pass::kGradeInputSection ||
-                            section == feature::pass::kGradeOutputSection;
+                            section == feature::pass::kGradeOutputSection ||
+                            section == feature::hdr::kSection ||
+                            section == feature::hdr::kGameSection ||
+                            section == feature::hdr::kAdaptiveSection ||
+                            section == feature::hdr::kLocalSection ||
+                            section == feature::importance_mask::kSection;
   if (!pass_indexed) return {};
 
   const auto& store = *static_cast<const ctl::ValueStore*>(context);
@@ -334,8 +341,9 @@ void SaveSettings() {
 }
 
 void ErasePassKeys(feature::pass::PassId id) {
-  // The Pass section and its two hosted grade sections are all keyed by pass.
-  // Their persisted layout is documented in ctl/serialize.h:
+  // Every pass-keyed section erases here: the Pass section itself, its two
+  // hosted model grades, the four HDR sections, and Importance Mask. Their
+  // persisted layout is documented in ctl/serialize.h:
   //   <prefix>.S.<Section>.K.<keytext>.<setting>
   // With an empty prefix this becomes "S.<Section>.K.<keytext>.<setting>".
   // Only settings marked persist are written by Save, so only those need
@@ -350,6 +358,11 @@ void ErasePassKeys(feature::pass::PassId id) {
       feature::pass::kSection,
       feature::pass::kGradeInputSection,
       feature::pass::kGradeOutputSection,
+      feature::hdr::kSection,
+      feature::hdr::kGameSection,
+      feature::hdr::kAdaptiveSection,
+      feature::hdr::kLocalSection,
+      feature::importance_mask::kSection,
   };
   for (const char* section_name : pass_sections) {
     const ctl::Section* section = schema.FindSection(section_name);

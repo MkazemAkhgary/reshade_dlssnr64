@@ -17,10 +17,17 @@ void RegisterAllSchemas(ctl::Schema& schema) {
   RegisterUiStateSchema(schema);
   RegisterPreferencesSchema(schema);
   RegisterDebugLogSchema(schema);
+  // Pass Order must be registered before every pass-keyed instanced
+  // section: Pass and its two model grades, the four HDR sections, and
+  // Importance Mask all resolve their instance keys from the loaded
+  // Pass Order, and ctl::Load walks instanced sections in schema order.
+  // Registering Pass first puts Pass Order ahead of every section that
+  // needs it. RegisterGradeSchema (Grade Backbuffer) is single-instance
+  // and does not need the pass keys, so its position is unaffected.
+  RegisterPassSchema(schema);
   RegisterGradeSchema(schema);
   RegisterHdrSchema(schema);
   RegisterImportanceMaskSchema(schema);
-  RegisterPassSchema(schema);
 }
 
 }  // namespace feature
