@@ -1,4 +1,5 @@
 #include "pass_resources.h"
+#include "profiling/profile.h"
 
 #include <cstdio>
 
@@ -9,6 +10,7 @@
 namespace reshade_dlssnr {
 
 void PassResources::Dispose(Microsoft::WRL::ComPtr<ID3D12Resource>& resource) {
+  DLSSNR_PROFILE_RESOURCE_L3("PassResources::Dispose");
   if (resource == nullptr) return;
 
   if (retire_cb_ != nullptr) {
@@ -32,6 +34,7 @@ bool PassResources::CreateUavTexture(
     ID3D12Device* device,
     const D3D12_RESOURCE_DESC& desc,
     ID3D12Resource** out_resource) {
+  DLSSNR_PROFILE_RESOURCE_L2("PassResources::CreateUavTexture");
   D3D12_HEAP_PROPERTIES heap = {};
   heap.Type = D3D12_HEAP_TYPE_DEFAULT;
 
@@ -50,6 +53,7 @@ bool PassResources::CreateUavTexture(
 bool PassResources::EnsureOutput(
     ID3D12Device* device,
     const D3D12_RESOURCE_DESC& desc) {
+  DLSSNR_PROFILE_RESOURCE_L2("PassResources::EnsureOutput");
   if (output != nullptr &&
       output_width == desc.Width &&
       output_height == desc.Height &&
@@ -82,6 +86,7 @@ void PassResources::ReleaseOutput() {
 bool PassResources::EnsureCompositeOutput(
     ID3D12Device* device,
     const D3D12_RESOURCE_DESC& desc) {
+  DLSSNR_PROFILE_RESOURCE_L2("PassResources::EnsureCompositeOutput");
   if (composite_output != nullptr &&
       composite_output_width == desc.Width &&
       composite_output_height == desc.Height &&
@@ -111,6 +116,7 @@ bool PassResources::CreateUavBuffer(
     ID3D12Device* device,
     uint64_t byte_width,
     ID3D12Resource** out_resource) {
+  DLSSNR_PROFILE_RESOURCE_L2("PassResources::CreateUavBuffer");
   if (device == nullptr || out_resource == nullptr || byte_width == 0) {
     return false;
   }
@@ -137,6 +143,7 @@ bool PassResources::CreateUavBuffer(
 
 bool PassResources::EnsurePackedOutput(
     ID3D12Device* device, const D3D12_RESOURCE_DESC& desc) {
+  DLSSNR_PROFILE_RESOURCE_L2("PassResources::EnsurePackedOutput");
   if (packed_hdr_sdr != nullptr &&
       packed_width == desc.Width &&
       packed_height == desc.Height &&
@@ -168,6 +175,7 @@ bool PassResources::EnsurePackedOutput(
 }
 
 bool PassResources::EnsureGainStats(ID3D12Device* device) {
+  DLSSNR_PROFILE_RESOURCE_L2("PassResources::EnsureGainStats");
   constexpr size_t kBytes = 4 * sizeof(uint32_t);
   if (gain_stats != nullptr && gain_stats_bytes == kBytes) return true;
 
@@ -184,6 +192,7 @@ bool PassResources::EnsureGainStats(ID3D12Device* device) {
 
 bool PassResources::EnsureEffectiveExposureMap(
     ID3D12Device* device, unsigned int width, unsigned int height) {
+  DLSSNR_PROFILE_RESOURCE_L2("PassResources::EnsureEffectiveExposureMap");
   if (device == nullptr || width == 0 || height == 0) return false;
 
   if (effective_exposure_map != nullptr &&
@@ -228,6 +237,7 @@ void PassResources::ReleaseEffectiveExposureMap() {
 
 bool PassResources::EnsureLocalExposureRestoreResources(
     ID3D12Device* device, unsigned int width, unsigned int height) {
+  DLSSNR_PROFILE_RESOURCE_L2("PassResources::EnsureLocalExposureRestoreResources");
   if (device == nullptr || width == 0 || height == 0) return false;
 
   const unsigned int partial_width = (width + 7u) / 8u;
@@ -289,6 +299,7 @@ bool PassResources::EnsureWorkingResources(
     unsigned int work_width,
     unsigned int work_height,
     bool need_input) {
+  DLSSNR_PROFILE_RESOURCE_L2("PassResources::EnsureWorkingResources");
   const bool output_matches = working_output != nullptr &&
       working_width == work_width && working_height == work_height &&
       working_format == desc.Format;
@@ -341,6 +352,7 @@ bool PassResources::EnsureUnliftedWorkingInput(
     const D3D12_RESOURCE_DESC& desc,
     unsigned int work_width,
     unsigned int work_height) {
+  DLSSNR_PROFILE_RESOURCE_L2("PassResources::EnsureUnliftedWorkingInput");
   if (device == nullptr || work_width == 0 || work_height == 0) return false;
 
   if (unlifted_working_input != nullptr &&
@@ -372,6 +384,7 @@ bool PassResources::EnsureUnliftedWorkingInput(
 bool PassResources::EnsureSyntheticMotionResources(
     ID3D12Device* device, const D3D12_RESOURCE_DESC& input_desc,
     unsigned int width, unsigned int height, bool* out_reset_history) {
+  DLSSNR_PROFILE_RESOURCE_L2("PassResources::EnsureSyntheticMotionResources");
   if (out_reset_history != nullptr) *out_reset_history = false;
   if (device == nullptr || width == 0 || height == 0) return false;
 
@@ -450,6 +463,7 @@ bool PassResources::EnsureTemporalResources(
     ID3D12Device* device, const D3D12_RESOURCE_DESC& input_desc,
     unsigned int width, unsigned int height, bool use_fp16_history,
     bool* out_reset_history) {
+  DLSSNR_PROFILE_RESOURCE_L2("PassResources::EnsureTemporalResources");
   if (out_reset_history != nullptr) *out_reset_history = false;
   if (device == nullptr || width == 0 || height == 0) return false;
 
@@ -556,6 +570,7 @@ bool PassResources::EnsureScratch(
     unsigned int width,
     unsigned int height,
     uint32_t index) {
+  DLSSNR_PROFILE_RESOURCE_L3("PassResources::EnsureScratch");
   if (index >= kScratchCount) return false;
 
   if (scratch_[index] != nullptr &&
@@ -591,6 +606,7 @@ bool PassResources::EnsureScratch(
 }
 
 void PassResources::Shutdown() {
+  DLSSNR_PROFILE_RESOURCE_L1("PassResources::Shutdown");
   // Shutdown is only called after the GPU has been synchronized (or the
   // device is gone), so direct release is safe here.
   retire_cb_ = nullptr;

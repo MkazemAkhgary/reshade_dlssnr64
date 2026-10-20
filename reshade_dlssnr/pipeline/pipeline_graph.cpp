@@ -1,4 +1,5 @@
 #include "pipeline_graph.h"
+#include "profiling/profile.h"
 
 #include <cstdio>
 
@@ -689,6 +690,7 @@ void PipelineRunner::BeginSkipLogFrame() { BeginSkipLogFrameImpl(); }
 
 PipelineStatus PipelineRunner::RunStage(const PipelineStageDef& stage,
                                         PassRun& run) {
+  DLSSNR_PROFILE_RENDER_L2("PipelineRunner::RunStage");
   run.stage = &stage;
 
   const bool tracing = TraceEnabled();
@@ -748,7 +750,9 @@ PipelineStatus PipelineRunner::RunStage(const PipelineStageDef& stage,
       if (step_index >= stage.step_count) break;
 
       const PipelineNodeId node = stage.steps[step_index];
+      DLSSNR_PROFILE_RENDER_L3("Pipeline Step");
       const PipelineStepDef* def = FindPipelineStep(node);
+      if (def != nullptr) DLSSNR_PROFILE_RENDER_TAG_L3("PipelineStep", def->name);
 
       // A node with no implementation is a documented placeholder: the work
       // it names is currently performed inside a coarser step. Nothing to do.

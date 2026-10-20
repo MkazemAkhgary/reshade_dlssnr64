@@ -1,4 +1,5 @@
 #include "pipeline/pass_session.h"
+#include "profiling/profile.h"
 
 #include "debug/debug_view.h"
 #include "pipeline/pipeline_graph.h"
@@ -7,6 +8,7 @@
 namespace reshade_dlssnr {
 
 PipelineStatus PassSession::StepRenderDebugView(PassRun& run) {
+  DLSSNR_PROFILE_RENDER_L2("StepRenderDebugView");
   PassSession* self = run.session;
   if (run.settings == nullptr || run.codec == nullptr ||
       run.frame_debug == nullptr) {

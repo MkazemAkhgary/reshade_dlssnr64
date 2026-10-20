@@ -1,4 +1,5 @@
 #include "addon_controller.h"
+#include "profiling/profile.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -79,6 +80,7 @@ PipelineStatus AddonController::RunPassStage(const PipelineStageDef& stage,
                                              IDXGISwapChain* swapchain,
                                              ID3D12Resource* exposure_texture,
                                              HdrState* previous_hdr) {
+  DLSSNR_PROFILE_RENDER_L1("AddonController::RunPassStage");
   const Settings& settings = GetSettings();
 
   std::unique_ptr<PassSession>& slot = sessions_[pass_id];
@@ -122,6 +124,7 @@ PipelineStatus AddonController::RunSingleStage(
     const PipelineStageDef& stage,
     ID3D12CommandQueue* command_queue,
     IDXGISwapChain* swapchain) {
+  DLSSNR_PROFILE_RENDER_L2("AddonController::RunSingleStage");
   const Settings& settings = GetSettings();
 
   PassRun run;
@@ -338,6 +341,7 @@ void AddonController::ReleaseRetiredSessionsCompleted(
 void AddonController::OnPresent(
     ID3D12CommandQueue* command_queue,
     IDXGISwapChain* swapchain) {
+  DLSSNR_PROFILE_CORE_L1("AddonController::OnPresent");
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
   if (++frame_id_ == 0) frame_id_ = 1;
@@ -498,6 +502,7 @@ void AddonController::OnPreDlssEvaluate(
     ID3D12GraphicsCommandList* command_list,
     ID3D12Resource* input_resource,
     ID3D12Resource* exposure_texture) {
+  DLSSNR_PROFILE_CORE_L1("AddonController::OnPreDlssEvaluate");
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
   const Settings& settings = GetSettings();
@@ -556,6 +561,7 @@ void AddonController::OnPostDlssEvaluate(
     ID3D12GraphicsCommandList* command_list,
     ID3D12Resource* output_resource,
     ID3D12Resource* exposure_texture) {
+  DLSSNR_PROFILE_CORE_L1("AddonController::OnPostDlssEvaluate");
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
   const Settings& settings = GetSettings();
@@ -691,6 +697,7 @@ void AddonController::SetPostDlssBlocked(const char* reason) {
 }
 
 void AddonController::RestartAll() {
+  DLSSNR_PROFILE_CORE_L1("AddonController::RestartAll");
   std::lock_guard<std::mutex> lock(g_direct_mutex);
   restart_requested_ = true;
   reshade::log::message(reshade::log::level::info,
@@ -703,6 +710,7 @@ bool AddonController::RestartPending() const {
 }
 
 void AddonController::FinishRestartAfterFence() {
+  DLSSNR_PROFILE_ASYNC_L2("AddonController::FinishRestartAfterFence");
   const uint64_t completed_fence = release_command_.CompletedFenceValue();
   DlssGuides& guides = DlssGuides::Get();
   guides.ReleaseRetiredResourcesCompleted(completed_fence);
@@ -764,6 +772,7 @@ uint64_t AddonController::ReleaseFenceHint() const {
 }
 
 void AddonController::SignalHdrAtPresent(ID3D12CommandQueue* queue) {
+  DLSSNR_PROFILE_ASYNC_L2("AddonController::SignalHdrAtPresent");
   for (auto& entry : sessions_) {
     if (entry.second != nullptr) entry.second->Hdr().SignalAtPresent(queue);
   }
@@ -773,6 +782,7 @@ void AddonController::SignalHdrAtPresent(ID3D12CommandQueue* queue) {
 }
 
 void AddonController::RefreshStatus(const Settings& settings) {
+  DLSSNR_PROFILE_CORE_L2("AddonController::RefreshStatus");
   status_.Reset();
 
   status_.enabled = settings.enabled;
@@ -836,6 +846,7 @@ void AddonController::RefreshStatus(const Settings& settings) {
 
 void AddonController::EnsureSessions(
     const feature::pass::PassOrder& order) {
+  DLSSNR_PROFILE_RESOURCE_L2("AddonController::EnsureSessions");
   std::lock_guard<std::mutex> lock(g_direct_mutex);
   for (auto it = sessions_.begin(); it != sessions_.end();) {
     const bool keep =
@@ -861,6 +872,7 @@ void AddonController::EnsureSessions(
 
 
 void AddonController::Shutdown() {
+  DLSSNR_PROFILE_CORE_L1("AddonController::Shutdown");
   grade_backbuffer_failure_logged_ = false;
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 

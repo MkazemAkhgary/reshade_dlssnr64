@@ -10,6 +10,7 @@
 // where it belongs.
 
 #include "ctl/builtin_settings.h"
+#include "profiling/profile.h"
 #include "ctl/schema.h"
 #include "ctl/values.h"
 #include "feature/hdr/settings.h"
@@ -36,6 +37,7 @@ constexpr const char* kCatDiagnostics = "Diagnostics";
 // declared once and their predicates read the section they are drawn in.
 bool LayerEnabled(const void* context, const ctl::ValueStore& store,
                   const ctl::InstanceKey& key, const std::string& section) {
+  DLSSNR_PROFILE_CTL_L3("LayerEnabled");
   const char* toggle = static_cast<const char*>(context);
   return store.Read(section, key, toggle).as_bool;
 }
@@ -45,6 +47,7 @@ bool LayerEnabled(const void* context, const ctl::ValueStore& store,
 }  // namespace hdr
 
 void RegisterHdrSchema(ctl::Schema& schema) {
+  DLSSNR_PROFILE_CTL_L3("RegisterHdrSchema");
   using namespace hdr;
 
   // --- HDR ---------------------------------------------------------------

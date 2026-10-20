@@ -8,6 +8,7 @@
 // that is the predicate's context, a stable string literal.
 
 #include "rows.h"
+#include "profiling/profile.h"
 
 #include "ctl/builtin_settings.h"
 #include "ctl/schema.h"
@@ -23,6 +24,7 @@ using namespace names;
 // The context is the name of the checkbox this row follows.
 bool Checked(const void* context, const ctl::ValueStore& store,
              const ctl::InstanceKey& key, const std::string& section) {
+  DLSSNR_PROFILE_CTL_L3("Checked");
   const char* checkbox = static_cast<const char*>(context);
   return store.Read(section, key, checkbox).as_bool;
 }
@@ -30,6 +32,7 @@ bool Checked(const void* context, const ctl::ValueStore& store,
 }  // namespace
 
 void Declare(ctl::Section& section, const char* category) {
+  DLSSNR_PROFILE_CTL_L3("Declare");
   section.Add<ctl::BoolSetting>(kImportanceMask, "Importance Mask", false)
       .Tooltip("Meter or correct only pixels weighted by the persistent "
                "Importance Mask mask.")

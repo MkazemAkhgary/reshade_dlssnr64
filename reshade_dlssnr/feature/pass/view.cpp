@@ -1,6 +1,7 @@
 // Pass view implementation. See view.h.
 
 #include "feature/pass/view.h"
+#include "profiling/profile.h"
 
 #include "ctl/values.h"
 #include "feature/pass/settings.h"
@@ -10,6 +11,7 @@ namespace feature {
 namespace pass {
 
 PassSnapshot Read(const ctl::ValueStore& store, const ctl::InstanceKey& key) {
+  DLSSNR_PROFILE_CTL_L3("Read");
   const std::string section = kSection;
   PassSnapshot p;
 

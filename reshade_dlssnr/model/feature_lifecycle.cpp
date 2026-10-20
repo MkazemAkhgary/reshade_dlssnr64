@@ -1,4 +1,5 @@
 #include "model/feature_lifecycle.h"
+#include "profiling/profile.h"
 
 #include <algorithm>
 #include <string>
@@ -15,6 +16,7 @@ bool FeatureLifecycle::EnsureFeature(
     ID3D12GraphicsCommandList* command_list,
     unsigned int width,
     unsigned int height) {
+  DLSSNR_PROFILE_CORE_L2("FeatureLifecycle::EnsureFeature");
   // Only a size change requires a rebuild. Tuning values (preset, intensity,
   // structure strengths, etc.) are re-applied at every evaluation via
   // FillEvaluateParams -> ApplyModelTuningParams, so they never need to
@@ -88,6 +90,7 @@ bool FeatureLifecycle::EnsureFeature(
 }
 
 void FeatureLifecycle::ReleaseFeature(NgxRuntime& runtime) {
+  DLSSNR_PROFILE_RESOURCE_L2("FeatureLifecycle::ReleaseFeature");
   if (feature_handle_ == nullptr) return;
 
   runtime.ReleaseFeature(feature_handle_);
@@ -95,6 +98,7 @@ void FeatureLifecycle::ReleaseFeature(NgxRuntime& runtime) {
 }
 
 void FeatureLifecycle::Shutdown(NgxRuntime& runtime) {
+  DLSSNR_PROFILE_RESOURCE_L2("FeatureLifecycle::Shutdown");
   ReleaseFeature(runtime);
 
   built_width_ = 0;

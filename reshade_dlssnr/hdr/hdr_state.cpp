@@ -1,4 +1,5 @@
 #include "hdr/hdr_state.h"
+#include "profiling/profile.h"
 
 #include <algorithm>
 #include <cmath>
@@ -186,6 +187,7 @@ void ExposureTracker::Update(const uint32_t* bins,
 }
 
 bool HdrState::Ensure(ID3D12Device* device) {
+  DLSSNR_PROFILE_RESOURCE_L2("HdrState::Ensure");
   if (device == nullptr) return false;
   if (device_.Get() == device && histogram_ != nullptr && fence_ != nullptr)
     return true;
@@ -222,6 +224,7 @@ bool HdrState::Ensure(ID3D12Device* device) {
 }
 
 void HdrState::Shutdown() {
+  DLSSNR_PROFILE_RESOURCE_L2("HdrState::Shutdown");
   readback_.Shutdown();
   gain_readback_.Shutdown();
   game_exposure_readback_.Shutdown();
@@ -333,6 +336,7 @@ void HdrState::BeginFrame(CommandContext& cmd,
                           bool depth_inverted,
                           unsigned int exposure_mask_width,
                           unsigned int exposure_mask_height) {
+  DLSSNR_PROFILE_RENDER_L2("HdrState::BeginFrame");
   enabled_ = hdr_settings.enable;
   if (!enabled_ || command_list == nullptr || source == nullptr || width == 0 || height == 0)
     return;
@@ -478,6 +482,7 @@ void HdrState::BeginFrame(CommandContext& cmd,
 
 bool HdrState::EnqueueGainMapStatsReadback(
     ID3D12GraphicsCommandList* command_list, ID3D12Resource* stats) {
+  DLSSNR_PROFILE_ASYNC_L2("HdrState::EnqueueGainMapStatsReadback");
   if (command_list == nullptr || stats == nullptr || fence_ == nullptr ||
       (!device_) || pending_gain_stats_)
     return false;
@@ -493,6 +498,7 @@ bool HdrState::EnqueueGainMapStatsReadback(
 }
 
 void HdrState::SignalAtPresent(ID3D12CommandQueue* queue) {
+  DLSSNR_PROFILE_ASYNC_L2("HdrState::SignalAtPresent");
   if (queue == nullptr || fence_ == nullptr ||
       (!pending_measurement_ && !pending_gain_stats_ && !pending_game_exposure_))
     return;
@@ -508,6 +514,7 @@ void HdrState::SignalAtPresent(ID3D12CommandQueue* queue) {
 }
 
 void HdrState::PollReadback(ID3D12Fence* fence, const HdrSettings& settings) {
+  DLSSNR_PROFILE_ASYNC_L2("HdrState::PollReadback");
   if (fence == nullptr) return;
   const uint64_t completed = fence->GetCompletedValue();
   bool stack_dirty = false;
@@ -569,6 +576,7 @@ void HdrState::PollReadback(ID3D12Fence* fence, const HdrSettings& settings) {
 void HdrState::UpdateExposure(const uint32_t* full_bins,
                               const uint32_t* adaptive_bins,
                               const HdrSettings& settings) {
+  DLSSNR_PROFILE_RENDER_L3("HdrState::UpdateExposure");
   const auto now = std::chrono::steady_clock::now();
   const float dt = have_measurement_time_
       ? std::chrono::duration<float>(now - last_measurement_time_).count()
@@ -609,6 +617,7 @@ void HdrState::UpdateExposure(const uint32_t* full_bins,
 }
 
 void HdrState::ResolveExposureStack(const HdrSettings& settings) {
+  DLSSNR_PROFILE_RENDER_L3("HdrState::ResolveExposureStack");
   const bool use_game = settings.game_exposure.enabled && game_exposure_available_;
   const bool use_adaptive = settings.adaptive_exposure.enabled && adaptive_.have_measurement;
   float exposure = 1.0f;
@@ -646,6 +655,7 @@ void HdrState::ResolveExposureStack(const HdrSettings& settings) {
 namespace {
 
 PipelineStatus RunHdrBeginFrame(PassRun& run) {
+  DLSSNR_PROFILE_RENDER_L2("RunHdrBeginFrame");
   if (run.hdr == nullptr || run.hdr_cmd == nullptr)
     return PipelineStatus::Ok;
 

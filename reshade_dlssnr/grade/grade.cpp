@@ -1,4 +1,5 @@
 #include "grade/grade.h"
+#include "profiling/profile.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -13,6 +14,7 @@
 namespace reshade_dlssnr::model_pipeline {
 
 void SetGradeConstants(ComputeConstants& constants, const GradeSettings& grade) {
+  DLSSNR_PROFILE_RENDER_L3("SetGradeConstants");
   constants.grade.Enabled = grade.enabled ? 1.0f : 0.0f;
   constants.grade.Luma = grade.luma;
   constants.grade.Chroma = grade.chroma;
@@ -50,6 +52,7 @@ bool ApplyGrade(CommandContext& state,
                 ID3D12Resource* global_scale,
                 float restore_mode,
                 float restore_strength) {
+  DLSSNR_PROFILE_RENDER_L2("ApplyGrade");
   const bool restore_exposure =
       local_carrier != nullptr && global_carrier != nullptr;
   if (!grade.enabled && !restore_exposure) return true;

@@ -1,4 +1,5 @@
 #include "model/ngx_model_params.h"
+#include "profiling/profile.h"
 
 #include <algorithm>
 
@@ -6,6 +7,7 @@ namespace reshade_dlssnr {
 
 void ApplyModelTuningParams(NgxParameterBlock& block,
                             const feature::pass::PassSnapshot& pass) {
+  DLSSNR_PROFILE_CORE_L3("ApplyModelTuningParams");
   const unsigned int model_value =
       static_cast<unsigned int>(std::clamp(pass.preset, 0, 2));
 

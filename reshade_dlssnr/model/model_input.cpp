@@ -1,4 +1,5 @@
 #include "model/model_input.h"
+#include "profiling/profile.h"
 
 #include "grade/grade.h"
 
@@ -6,6 +7,7 @@ namespace reshade_dlssnr::model_pipeline {
 
 void SetLocalExposureConstants(ComputeConstants& constants,
                                const HdrUniforms& hdr) {
+  DLSSNR_PROFILE_RENDER_L3("SetLocalExposureConstants");
   constants.hdr.LocalExposure.x = hdr.local_exposure_strength;
   constants.hdr.LocalExposure.y = hdr.local_max_brighten;
   constants.hdr.LocalExposure.z = hdr.local_max_darken;
@@ -37,6 +39,7 @@ bool PrepareInput(
     bool gain_map_source,
     bool allow_identity,
     const GradeSettings* fused_grade) {
+  DLSSNR_PROFILE_RENDER_L2("PrepareInput");
   if (out_model_color == nullptr || out_model_output == nullptr ||
       codec == nullptr || command_list == nullptr || full_input == nullptr) {
     return false;

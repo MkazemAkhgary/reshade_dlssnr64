@@ -1,4 +1,5 @@
 #include "state/trace.h"
+#include "profiling/profile.h"
 
 #include "ctl/trace.h"
 #include "feature/settings_store.h"
@@ -58,6 +59,7 @@ void TraceRuntimeState(const Settings& settings) {
 }  // namespace
 
 void TraceSettings(const Settings& settings) {
+  DLSSNR_PROFILE_CTL_L3("TraceSettings");
   if (!trace::Enabled()) return;
   ctl::ValueStore& store = feature::SettingsStore();
   g_settings_trace.Record(store, &EmitCtlChange);

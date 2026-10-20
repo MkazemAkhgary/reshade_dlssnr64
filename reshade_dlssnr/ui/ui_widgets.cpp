@@ -5,6 +5,7 @@
 
 #include "feature/ui_state/view.h"
 #include "ctl/types.h"
+#include "profiling/profile.h"
 
 #include <algorithm>
 #include <cstdarg>
@@ -16,6 +17,7 @@ namespace reshade_dlssnr {
 bool g_show_tooltips = true;
 
 void Tip(const char* fmt, ...) {
+  DLSSNR_PROFILE_UI_L3("UI Tooltip");
   if (!g_show_tooltips || fmt == nullptr) return;
   va_list args;
   va_start(args, fmt);
@@ -24,6 +26,7 @@ void Tip(const char* fmt, ...) {
 }
 
 void SectionDivider() {
+  DLSSNR_PROFILE_UI_L3("UI Section Divider");
   ImGui::Spacing();
   ImGui::Spacing();
   ImGui::Separator();
@@ -35,6 +38,7 @@ namespace {
 
 void DrawHeaderToggle(const char* label, bool& changed,
                       const HeaderControls& controls) {
+  DLSSNR_PROFILE_UI_L3("UI Header Toggle");
   if (controls.enabled == nullptr && controls.enabled_float == nullptr) return;
   if (controls.enabled_disabled) ImGui::BeginDisabled();
 
@@ -64,6 +68,7 @@ void DrawHeaderToggle(const char* label, bool& changed,
 
 void DrawHeaderReset(const char* label, bool& changed,
                      const HeaderControls& controls) {
+  DLSSNR_PROFILE_UI_L3("UI Header Reset");
   if (controls.reset == nullptr) return;
   const float right = ImGui::GetCursorPosX() +
                        ImGui::GetContentRegionAvail().x;
@@ -82,6 +87,7 @@ void DrawHeaderReset(const char* label, bool& changed,
 bool PersistentSettingHeader(const char* label, const char* setting_key,
                              bool& changed, const char* tooltip,
                              HeaderControls controls) {
+  DLSSNR_PROFILE_UI_L3("UI Persistent Setting Header");
   bool open = feature::ui_state::Read(setting_key);
   const bool previous = open;
   const bool expanded = PersistentHeader(label, open, changed, tooltip, controls);
@@ -91,6 +97,7 @@ bool PersistentSettingHeader(const char* label, const char* setting_key,
 
 bool PersistentHeader(const char* label, bool& open_setting, bool& changed,
                       const char* tooltip, HeaderControls controls) {
+  DLSSNR_PROFILE_UI_L3("UI Persistent Header");
   const std::string label_storage = CStrToString(label);
   const std::string tooltip_storage = CStrToString(tooltip);
   label = label_storage.c_str();
@@ -121,6 +128,7 @@ bool PersistentHeader(const char* label, bool& open_setting, bool& changed,
 bool PersistentSubHeader(const char* label, bool& open_setting,
                          bool& changed, const char* tooltip,
                          HeaderControls controls) {
+  DLSSNR_PROFILE_UI_L3("UI Persistent Subheader");
   const std::string label_storage = CStrToString(label);
   const std::string tooltip_storage = CStrToString(tooltip);
   label = label_storage.c_str();
@@ -173,6 +181,7 @@ bool DrawFloatRow(const char* id,
                   float lo,
                   float hi,
                   float default_value) {
+  DLSSNR_PROFILE_UI_L3("UI Float Row");
   const std::string id_storage = CStrToString(id);
   id = id_storage.c_str();
   const std::string label_storage = CStrToString(label);
@@ -230,6 +239,7 @@ bool DrawIntRow(const char* id,
                 int lo,
                 int hi,
                 int default_value) {
+  DLSSNR_PROFILE_UI_L3("UI Integer Row");
   const std::string id_storage = CStrToString(id);
   id = id_storage.c_str();
   const std::string label_storage = CStrToString(label);
@@ -279,6 +289,7 @@ bool DrawIntRow(const char* id,
 }
 
 bool DrawCheckboxAtLabel(const char* id, bool* value, const char* tooltip) {
+  DLSSNR_PROFILE_UI_L3("UI Checkbox Row");
   const std::string id_storage = CStrToString(id);
   const std::string tooltip_storage = CStrToString(tooltip);
   id = id_storage.c_str();
@@ -301,6 +312,7 @@ bool DrawComboRow(const char* id,
                   const char* const* items,
                   const char* const* item_tooltips,
                   int item_count) {
+  DLSSNR_PROFILE_UI_L3("UI Combo Row");
   const std::string id_storage = CStrToString(id);
   const std::string label_storage = CStrToString(label);
   std::string tooltip_storage = CStrToString(tooltip);
@@ -375,6 +387,7 @@ int DrawGroupButtons(const char* id,
                      int selected,
                      const bool* disabled,
                      float fixed_button_width) {
+  DLSSNR_PROFILE_UI_L3("UI Group Buttons");
   if (count <= 0 || labels == nullptr) return -1;
 
   const std::string id_storage = CStrToString(id);
@@ -443,6 +456,7 @@ bool DrawGroupRow(const char* id,
                   int count,
                   int* value,
                   const bool* disabled) {
+  DLSSNR_PROFILE_UI_L3("UI Group Row");
   const std::string id_storage = CStrToString(id);
   id = id_storage.c_str();
   const std::string label_storage = CStrToString(label);

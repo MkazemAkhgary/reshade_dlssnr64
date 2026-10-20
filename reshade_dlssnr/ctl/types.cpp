@@ -1,4 +1,5 @@
 #include "ctl/types.h"
+#include "profiling/profile.h"
 
 #include <cmath>
 #include <cstdio>
@@ -9,6 +10,7 @@ namespace reshade_dlssnr {
 namespace ctl {
 
 bool Value::operator==(const Value& o) const {
+  DLSSNR_PROFILE_CTL_L3("Value::operator==");
   if (kind != o.kind) return false;
   switch (kind) {
     case Kind::Float:

@@ -10,6 +10,7 @@
 // whole section when HDR is off. See ui/ui.cpp.
 
 #include "ctl/builtin_settings.h"
+#include "profiling/profile.h"
 #include "ctl/schema.h"
 #include "ctl/values.h"
 #include "feature/importance_mask/settings.h"
@@ -23,6 +24,7 @@ namespace {
 // Interactive only while the mask is on.
 bool MaskEditable(const void*, const ctl::ValueStore& store,
                   const ctl::InstanceKey& key, const std::string& section) {
+  DLSSNR_PROFILE_CTL_L3("MaskEditable");
   return store.Read(section, key, kEnable).as_bool;
 }
 
@@ -31,6 +33,7 @@ bool MaskEditable(const void*, const ctl::ValueStore& store,
 }  // namespace importance_mask
 
 void RegisterImportanceMaskSchema(ctl::Schema& schema) {
+  DLSSNR_PROFILE_CTL_L3("RegisterImportanceMaskSchema");
   using namespace importance_mask;
 
   ctl::Section& mask =

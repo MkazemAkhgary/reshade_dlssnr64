@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "addon_controller.h"
+#include "profiling/profile.h"
 #include "crash_trace.h"
 #include "d3d12_hooks.h"
 #include "dlss_guides.h"
@@ -100,6 +101,8 @@ void OnPresent(
     const reshade::api::rect*,
     uint32_t,
     const reshade::api::rect*) {
+  DLSSNR_PROFILE_FRAME_L1("DLSSNR ReShade Present");
+  DLSSNR_PROFILE_CORE_L1("ReShade Present Callback");
   if (command_queue == nullptr || swapchain == nullptr) return;
 
   reshade::api::device* const device = command_queue->get_device();

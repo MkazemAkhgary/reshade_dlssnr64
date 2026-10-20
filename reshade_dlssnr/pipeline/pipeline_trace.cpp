@@ -1,4 +1,5 @@
 #include "pipeline_trace.h"
+#include "profiling/profile.h"
 
 #include <atomic>
 #include <cstdarg>
@@ -274,6 +275,7 @@ void AfterLineLocked() {
 
 void Line(const char* category, const char* function, const void* user_object,
           const char* fmt, ...) {
+  DLSSNR_PROFILE_ASYNC_L3("trace::Line");
   std::lock_guard<std::mutex> lock(Mutex());
   FILE* file = g_file.load(std::memory_order_relaxed);
   if (file == nullptr) return;

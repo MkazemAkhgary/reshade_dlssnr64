@@ -1,4 +1,5 @@
 #include "dlss_guides.h"
+#include "profiling/profile.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -202,6 +203,7 @@ void DlssGuides::CaptureGuides(
     const NVSDK_NGX_Parameter* params,
     NVSDK_NGX_Feature feature_id,
     uint64_t retirement_fence_hint) {
+  DLSSNR_PROFILE_RESOURCE_L2("DlssGuides::CaptureGuides");
   // Anything pushed during this call is tagged with the queue's most
   // recently signaled fence value. If no queue has signaled yet the hint
   // is zero and TagRetiredResources at Present still fills it in; that
@@ -439,6 +441,7 @@ void DlssGuides::CaptureOutput(
     const NVSDK_NGX_Parameter* params,
     NVSDK_NGX_Feature feature_id,
     uint64_t retirement_fence_hint) {
+  DLSSNR_PROFILE_RESOURCE_L2("DlssGuides::CaptureOutput");
   auto retire_with_hint = [this, retirement_fence_hint](ID3D12Resource* r) {
     if (r == nullptr) return;
     retired_game_resources_.push_back({r, retirement_fence_hint});
@@ -524,6 +527,7 @@ void DlssGuides::CaptureOutput(
 
 
 void DlssGuides::RetireResource(Microsoft::WRL::ComPtr<ID3D12Resource>& resource) {
+  DLSSNR_PROFILE_RESOURCE_L3("DlssGuides::RetireResource");
   if (resource == nullptr) return;
   retired_resources_.push_back({resource.Detach(), 0});
 }
@@ -547,6 +551,7 @@ DlssGuideState DlssGuides::GetState(bool invert_fallback_depth) const {
 }
 
 void DlssGuides::SetFallbackDepth(ID3D12Resource* resource) {
+  DLSSNR_PROFILE_RESOURCE_L2("DlssGuides::SetFallbackDepth");
   std::lock_guard<std::mutex> lock(lock_);
   if (fallback_depth_.Get() == resource) return;
 
@@ -603,6 +608,7 @@ void DlssGuides::RetireGameResource(ID3D12Resource* resource) {
 }
 
 void DlssGuides::TagRetiredResources(uint64_t fence_value) {
+  DLSSNR_PROFILE_ASYNC_L2("DlssGuides::TagRetiredResources");
   if (fence_value == 0) return;
   std::lock_guard<std::mutex> lock(lock_);
   for (RetiredResource& retired : retired_resources_) {
@@ -631,6 +637,7 @@ size_t DlssGuides::RetiredGameResourceCount() const {
 }
 
 void DlssGuides::Clear() {
+  DLSSNR_PROFILE_RESOURCE_L1("DlssGuides::Clear");
   std::lock_guard<std::mutex> lock(lock_);
 
   depth_clone_.Reset();

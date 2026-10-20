@@ -1,6 +1,7 @@
 // Preferences schema, declared inline.
 
 #include "ctl/builtin_settings.h"
+#include "profiling/profile.h"
 #include "ctl/schema.h"
 #include "feature/preferences/settings.h"
 
@@ -13,6 +14,7 @@ namespace {
 }  // namespace
 
 void RegisterPreferencesSchema(ctl::Schema& schema) {
+  DLSSNR_PROFILE_CTL_L3("RegisterPreferencesSchema");
   ctl::Section& prefs = schema.AddSection(preferences::kSection, ctl::SectionKind::Single);
 
   prefs

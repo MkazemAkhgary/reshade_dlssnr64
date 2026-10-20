@@ -1,4 +1,5 @@
 #include "feature/register_all.h"
+#include "profiling/profile.h"
 
 namespace reshade_dlssnr {
 namespace feature {
@@ -14,6 +15,7 @@ void RegisterPassSchema(ctl::Schema& schema);
 void RegisterUiStateSchema(ctl::Schema& schema);
 
 void RegisterAllSchemas(ctl::Schema& schema) {
+  DLSSNR_PROFILE_CTL_L1("RegisterAllSchemas");
   RegisterUiStateSchema(schema);
   RegisterPreferencesSchema(schema);
   RegisterDebugLogSchema(schema);

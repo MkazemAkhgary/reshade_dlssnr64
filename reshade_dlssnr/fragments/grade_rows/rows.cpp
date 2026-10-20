@@ -2,6 +2,7 @@
 // feature.
 
 #include "rows.h"
+#include "profiling/profile.h"
 
 #include "ctl/builtin_settings.h"
 #include "ctl/schema.h"
@@ -29,6 +30,7 @@ const char* const kChromaModeTips[] = {
 // Setting names are built from the caller's prefix, so two instances on one
 // section cannot collide.
 std::string Named(const std::string& prefix, const char* name) {
+  DLSSNR_PROFILE_CTL_L3("Named");
   return prefix + CStrToString(name);
 }
 
@@ -37,6 +39,7 @@ std::string Named(const std::string& prefix, const char* name) {
 void Declare(ctl::Section& section, const std::string& prefix,
              ctl::EnablePredicate enabled, const void* context,
              const char* category) {
+  DLSSNR_PROFILE_CTL_L3("Declare");
   auto named = [&](const char* name) { return Named(prefix, name); };
   // Every row goes through `group`, so the caller's gate and category are
   // applied here and the caller never has to name a row.

@@ -1,8 +1,10 @@
 #include "gpu_readback.h"
+#include "profiling/profile.h"
 
 namespace reshade_dlssnr {
 
 bool GpuReadback::Ensure(ID3D12Device* device, size_t bytes_per_slot) {
+  DLSSNR_PROFILE_RESOURCE_L2("GpuReadback::Ensure");
   if (device == nullptr || bytes_per_slot == 0) return false;
   if (device_.Get() == device && bytes_per_slot_ == bytes_per_slot) return true;
 
@@ -56,6 +58,7 @@ bool GpuReadback::Ensure(ID3D12Device* device, size_t bytes_per_slot) {
 }
 
 void GpuReadback::Shutdown() {
+  DLSSNR_PROFILE_RESOURCE_L2("GpuReadback::Shutdown");
   for (auto& slot : slots_) {
     if (slot.buffer != nullptr && slot.mapped != nullptr) {
       slot.buffer->Unmap(0, nullptr);
@@ -80,6 +83,7 @@ bool GpuReadback::EnqueueCopy(
     uint32_t source_bytes,
     ID3D12Fence* fence,
     uint64_t fence_value) {
+  DLSSNR_PROFILE_ASYNC_L2("GpuReadback::EnqueueCopy");
   if (command_list == nullptr || source == nullptr || fence == nullptr ||
       bytes_per_slot_ == 0) {
     return false;
@@ -107,6 +111,7 @@ bool GpuReadback::EnqueueCopy(
 }
 
 const void* GpuReadback::TryGet(ID3D12Fence* fence, uint32_t* out_bytes) {
+  DLSSNR_PROFILE_ASYNC_L3("GpuReadback::TryGet");
   if (fence == nullptr || bytes_per_slot_ == 0) return nullptr;
 
   const uint64_t completed = fence->GetCompletedValue();

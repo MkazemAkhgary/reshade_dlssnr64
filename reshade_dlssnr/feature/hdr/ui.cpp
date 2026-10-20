@@ -9,6 +9,7 @@
 // own, and only a section can.
 
 #include "feature/hdr/ui.h"
+#include "profiling/profile.h"
 
 #include <imgui.h>
 
@@ -36,6 +37,7 @@ namespace {
 // no hash, no re-derivation -- so a string-keyed instance survives the trip.
 bool DrawLayerBody(ctl::ValueStore& store, const ctl::DrawOptions& options,
                    const char* section, const ctl::InstanceKey& key) {
+  DLSSNR_PROFILE_UI_L3("DrawLayerBody");
   ctl::DrawOptions body = options;
   body.draw_headers = false;
   body.indent_bodies = false;
@@ -51,6 +53,7 @@ bool DrawHdrLayers(const void* context, ctl::ValueStore& store,
                    const ctl::DrawOptions& options,
                    const std::string& section,
                    const ctl::InstanceKey& key, bool& changed) {
+  DLSSNR_PROFILE_UI_L3("DrawHdrLayers");
   (void)context;
   (void)section;
   bool local_changed = false;
@@ -141,6 +144,7 @@ bool DrawBt2446Derived(const void* context, ctl::ValueStore& store,
                        const ctl::DrawOptions& options,
                        const std::string& section,
                        const ctl::InstanceKey& key, bool& changed) {
+  DLSSNR_PROFILE_UI_L3("DrawBt2446Derived");
   (void)context;
   (void)options;
   (void)changed;
@@ -184,6 +188,7 @@ bool DrawHdrDiagnostics(const void* context, ctl::ValueStore& store,
                         const ctl::DrawOptions& options,
                         const std::string& section,
                         const ctl::InstanceKey& key, bool& changed) {
+  DLSSNR_PROFILE_UI_L3("DrawHdrDiagnostics");
   (void)context;
   (void)store;
   (void)options;

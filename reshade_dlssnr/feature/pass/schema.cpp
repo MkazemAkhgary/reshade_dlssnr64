@@ -12,6 +12,7 @@
 // not on the grade feature.
 
 #include "ctl/builtin_settings.h"
+#include "profiling/profile.h"
 #include "ctl/draw.h"
 #include "ctl/schema.h"
 #include "ctl/values.h"
@@ -28,6 +29,7 @@ namespace {
 
 bool NeverVisible(const void*, const ctl::ValueStore&,
                   const ctl::InstanceKey&, const std::string&) {
+  DLSSNR_PROFILE_CTL_L3("NeverVisible");
   return false;
 }
 
@@ -45,6 +47,7 @@ constexpr const char* kCatTemporal = "Temporal Reprojection";
 // sections are independent.
 bool GradeEnabled(const void*, const ctl::ValueStore& store,
                   const ctl::InstanceKey& key, const std::string& section) {
+  DLSSNR_PROFILE_CTL_L3("GradeEnabled");
   return store.Read(section, key, kGradeEnabled).as_bool;
 }
 
@@ -52,12 +55,14 @@ bool GradeEnabled(const void*, const ctl::ValueStore& store,
 // on -- the same rule the hand-written UI applied with WithDisabled.
 bool AutoMaskOn(const void*, const ctl::ValueStore& store,
                 const ctl::InstanceKey& key, const std::string& section) {
+  DLSSNR_PROFILE_CTL_L3("AutoMaskOn");
   return store.Read(section, key, kAutoMask).as_bool;
 }
 
 // Soft-compression parameter rows follow its own enable checkbox.
 bool SoftCompressionOn(const void*, const ctl::ValueStore& store,
                        const ctl::InstanceKey& key, const std::string& section) {
+  DLSSNR_PROFILE_CTL_L3("SoftCompressionOn");
   return store.Read(section, key, kSoftCompressionEnabled).as_bool;
 }
 
@@ -67,12 +72,14 @@ bool SoftCompressionOn(const void*, const ctl::ValueStore& store,
 bool BackbufferTarget(const void*, const ctl::ValueStore& store,
                       const ctl::InstanceKey& key,
                       const std::string& section) {
+  DLSSNR_PROFILE_CTL_L3("BackbufferTarget");
   return store.Read(section, key, kTarget).as_int == 2;
 }
 
 bool TemporalEnabled(const void*, const ctl::ValueStore& store,
                      const ctl::InstanceKey& key,
                      const std::string& section) {
+  DLSSNR_PROFILE_CTL_L3("TemporalEnabled");
   return store.Read(section, key, kTemporalMode).as_int != 0;
 }
 
@@ -111,6 +118,7 @@ bool DrawGradeSections(const void*, ctl::ValueStore& store,
                        const ctl::DrawOptions& options,
                        const std::string&, const ctl::InstanceKey& key,
                        bool& changed_any) {
+  DLSSNR_PROFILE_UI_L3("DrawGradeSections");
   ctl::DrawOptions nested = options;
   nested.draw_headers = true;
   nested.indent_bodies = true;
@@ -130,6 +138,7 @@ bool DrawGradeSections(const void*, ctl::ValueStore& store,
 }  // namespace pass
 
 void RegisterPassSchema(ctl::Schema& schema) {
+  DLSSNR_PROFILE_CTL_L3("RegisterPassSchema");
   using namespace pass;
 
   ctl::Section& order = schema.AddSection(kOrderSection, ctl::SectionKind::Single);

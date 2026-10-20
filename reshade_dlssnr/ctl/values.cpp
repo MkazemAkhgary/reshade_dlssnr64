@@ -1,4 +1,5 @@
 #include "ctl/values.h"
+#include "profiling/profile.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -112,6 +113,7 @@ void InstanceSet::Retain(const std::vector<InstanceKey>& keys) {
 // ---------------------------------------------------------------------------
 
 void ValueStore::Init(const Schema& schema) {
+  DLSSNR_PROFILE_CTL_L2("ctl::ValueStore::Init");
   schema_ = &schema;
   section_sets_.clear();
   section_offset_.clear();
@@ -193,6 +195,7 @@ bool ValueStore::FindSettingId(const std::string& section,
 }
 
 Value ValueStore::Resolve(const Instance& instance, uint32_t setting_id) const {
+  DLSSNR_PROFILE_CTL_L3("ctl::ValueStore::Resolve");
   const Setting* setting = SettingAt(setting_id);
   if (setting == nullptr) return Value();
   const SettingState& state = instance.states[setting_id];
@@ -201,6 +204,7 @@ Value ValueStore::Resolve(const Instance& instance, uint32_t setting_id) const {
 
 Value ValueStore::Read(const std::string& section, const InstanceKey& key,
                        const std::string& setting) const {
+  DLSSNR_PROFILE_CTL_L3("ctl::ValueStore::Read");
   uint32_t id = 0;
   if (!FindSettingId(section, setting, &id)) return Value();
   InstanceSet& set = const_cast<ValueStore*>(this)->SectionSet(section);
@@ -215,6 +219,7 @@ Value ValueStore::Read(const std::string& section, const InstanceKey& key,
 bool ValueStore::Write(const std::string& section, const InstanceKey& key,
                        const std::string& setting, const Value& value,
                        bool from_user) {
+  DLSSNR_PROFILE_CTL_L3("ctl::ValueStore::Write");
   uint32_t id = 0;
   if (!FindSettingId(section, setting, &id)) return false;
   const Setting* declared = SettingAt(id);
@@ -240,6 +245,7 @@ bool ValueStore::Write(const std::string& section, const InstanceKey& key,
 
 bool ValueStore::ResetToDefault(const std::string& section, const InstanceKey& key,
                                 const std::string& setting) {
+  DLSSNR_PROFILE_CTL_L3("ctl::ValueStore::ResetToDefault");
   uint32_t id = 0;
   if (!FindSettingId(section, setting, &id)) return false;
   const Setting* declared = SettingAt(id);
@@ -259,6 +265,7 @@ bool ValueStore::ResetToDefault(const std::string& section, const InstanceKey& k
 
 void ValueStore::ResetSectionToDefault(const std::string& section,
                                        const InstanceKey& key) {
+  DLSSNR_PROFILE_CTL_L3("ctl::ValueStore::ResetSectionToDefault");
   const Section* s = schema_->FindSection(section);
   if (s == nullptr) return;
   for (const auto& setting : s->settings()) {
@@ -267,6 +274,7 @@ void ValueStore::ResetSectionToDefault(const std::string& section,
 }
 
 void ValueStore::ResetToDefaults(PersistenceTarget target) {
+  DLSSNR_PROFILE_CTL_L2("ctl::ValueStore::ResetToDefaults");
   for (InstanceSet& set : section_sets_) {
     for (Instance& instance : set.instances()) {
       const size_t count = instance.states.size();

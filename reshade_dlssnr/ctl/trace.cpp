@@ -1,4 +1,5 @@
 #include "ctl/trace.h"
+#include "profiling/profile.h"
 
 #include <algorithm>
 #include <unordered_map>
@@ -8,6 +9,7 @@ namespace ctl {
 
 std::vector<TraceRecorder::Entry> TraceRecorder::Capture(
     ValueStore& store) const {
+  DLSSNR_PROFILE_CTL_L3("TraceRecorder::Capture");
   std::vector<TraceRecorder::Entry> entries;
   const Schema& schema = store.schema();
   if (!schema.built()) return entries;
@@ -41,6 +43,7 @@ std::vector<TraceRecorder::Entry> TraceRecorder::Capture(
 }
 
 void TraceRecorder::Record(ValueStore& store, TraceSink sink, void* context) {
+  DLSSNR_PROFILE_CTL_L3("TraceRecorder::Record");
   if (sink == nullptr) return;
 
   const std::vector<Entry> current = Capture(store);
@@ -84,6 +87,7 @@ void TraceRecorder::Record(ValueStore& store, TraceSink sink, void* context) {
 }
 
 void TraceRecorder::Reset() {
+  DLSSNR_PROFILE_CTL_L3("TraceRecorder::Reset");
   previous_.clear();
   has_previous_ = false;
 }

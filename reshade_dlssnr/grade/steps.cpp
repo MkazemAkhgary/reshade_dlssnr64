@@ -1,4 +1,5 @@
 #include "pipeline/pass_session.h"
+#include "profiling/profile.h"
 
 #include <algorithm>
 
@@ -37,6 +38,7 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
                                          ID3D12Resource* global_scale,
                                          float restore_mode,
                                          float restore_strength) {
+  DLSSNR_PROFILE_RENDER_L3("GradeInPlace");
   PassSession* self = run.session;
   if (self == nullptr) return PipelineStatus::Ok;
   if (target == nullptr) return PipelineStatus::Ok;
@@ -72,6 +74,7 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* target,
 }
 
 PipelineStatus PassSession::StepGradeModelInput(PassRun& run) {
+  DLSSNR_PROFILE_RENDER_L2("StepGradeModelInput");
   if (!run.pass_bound) return PipelineStatus::Ok;
   PassSession* self = run.session;
 
@@ -129,6 +132,7 @@ PipelineStatus PassSession::StepGradeModelInput(PassRun& run) {
 // symmetric to the Input Grade on the model input — so downstream steps see
 // it as if the model had produced the graded SDR.
 PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
+  DLSSNR_PROFILE_RENDER_L2("StepGradeModelOutput");
   if (!run.pass_bound || run.session == nullptr) return PipelineStatus::Ok;
   PassSession* self = run.session;
 

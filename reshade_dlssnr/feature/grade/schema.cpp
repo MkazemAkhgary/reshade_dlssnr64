@@ -4,6 +4,7 @@
 // uses for its input and output grades. Neither feature includes the other.
 
 #include "ctl/builtin_settings.h"
+#include "profiling/profile.h"
 #include "ctl/schema.h"
 #include "ctl/values.h"
 #include "feature/grade/settings.h"
@@ -23,6 +24,7 @@ constexpr const char* kPrefix = "";
 // itself is the gate's input, so it is not gated.
 bool GradeEnabled(const void*, const ctl::ValueStore& store,
                   const ctl::InstanceKey& key, const std::string& section) {
+  DLSSNR_PROFILE_CTL_L3("GradeEnabled");
   return store.Read(section, key, kEnabled).as_bool;
 }
 
@@ -31,6 +33,7 @@ bool GradeEnabled(const void*, const ctl::ValueStore& store,
 }  // namespace grade
 
 void RegisterGradeSchema(ctl::Schema& schema) {
+  DLSSNR_PROFILE_CTL_L3("RegisterGradeSchema");
   using namespace grade;
 
   ctl::Section& section = schema.AddSection(kSection, ctl::SectionKind::Single);

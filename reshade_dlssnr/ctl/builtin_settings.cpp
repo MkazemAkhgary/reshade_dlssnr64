@@ -1,4 +1,5 @@
 #include "ctl/builtin_settings.h"
+#include "profiling/profile.h"
 
 #include <imgui.h>
 
@@ -38,11 +39,13 @@ FloatSetting::FloatSetting(const char* name, const char* label, float default_va
 Value FloatSetting::DefaultValue() const { return Value::Float(default_); }
 
 void FloatSetting::Clamp(Value& value) const {
+  DLSSNR_PROFILE_CTL_L3("FloatSetting::Clamp");
   if (value.kind != Value::Kind::Float) return;
   value.as_float = std::clamp(value.as_float, lo_, hi_);
 }
 
 bool FloatSetting::Assign(Value& out, const Value& in) const {
+  DLSSNR_PROFILE_CTL_L3("FloatSetting::Assign");
   if (in.kind == Value::Kind::Float) {
     out = in;
   } else if (in.kind == Value::Kind::Int || in.kind == Value::Kind::Enum) {
@@ -57,12 +60,14 @@ bool FloatSetting::Assign(Value& out, const Value& in) const {
 }
 
 std::string FloatSetting::ToString(const Value& value) const {
+  DLSSNR_PROFILE_CTL_L3("FloatSetting::ToString");
   char buffer[64];
   std::snprintf(buffer, sizeof(buffer), format_.c_str(), static_cast<double>(value.as_float));
   return buffer;
 }
 
 bool FloatSetting::FromString(const std::string& text, Value& out) const {
+  DLSSNR_PROFILE_CTL_L3("FloatSetting::FromString");
   if (text.empty()) return false;
   char* end = nullptr;
   const float parsed = std::strtof(text.c_str(), &end);
@@ -74,6 +79,7 @@ bool FloatSetting::FromString(const std::string& text, Value& out) const {
 
 bool FloatSetting::Draw(const SettingContext& ctx, const Value& resolved,
                         Value& out) const {
+  DLSSNR_PROFILE_UI_L3("FloatSetting::Draw");
   float display = resolved.as_float;
 
   ImGui::AlignTextToFramePadding();
@@ -143,11 +149,13 @@ IntSetting::IntSetting(const char* name, const char* label, int default_value)
 Value IntSetting::DefaultValue() const { return Value::Int(default_); }
 
 void IntSetting::Clamp(Value& value) const {
+  DLSSNR_PROFILE_CTL_L3("IntSetting::Clamp");
   if (value.kind != Value::Kind::Int && value.kind != Value::Kind::Enum) return;
   value.as_int = std::clamp(value.as_int, lo_, hi_);
 }
 
 bool IntSetting::Assign(Value& out, const Value& in) const {
+  DLSSNR_PROFILE_CTL_L3("IntSetting::Assign");
   if (in.kind == Value::Kind::Int || in.kind == Value::Kind::Enum) {
     out = Value::Int(in.as_int);
   } else if (in.kind == Value::Kind::Float) {
@@ -162,12 +170,14 @@ bool IntSetting::Assign(Value& out, const Value& in) const {
 }
 
 std::string IntSetting::ToString(const Value& value) const {
+  DLSSNR_PROFILE_CTL_L3("IntSetting::ToString");
   char buffer[32];
   std::snprintf(buffer, sizeof(buffer), "%d", value.as_int);
   return buffer;
 }
 
 bool IntSetting::FromString(const std::string& text, Value& out) const {
+  DLSSNR_PROFILE_CTL_L3("IntSetting::FromString");
   if (text.empty()) return false;
   char* end = nullptr;
   const long parsed = std::strtol(text.c_str(), &end, 10);
@@ -179,6 +189,7 @@ bool IntSetting::FromString(const std::string& text, Value& out) const {
 
 bool IntSetting::Draw(const SettingContext& ctx, const Value& resolved,
                       Value& out) const {
+  DLSSNR_PROFILE_UI_L3("IntSetting::Draw");
   int display = resolved.as_int;
 
   ImGui::AlignTextToFramePadding();
@@ -246,6 +257,7 @@ Value BoolSetting::DefaultValue() const { return Value::Bool(default_); }
 void BoolSetting::Clamp(Value&) const {}
 
 bool BoolSetting::Assign(Value& out, const Value& in) const {
+  DLSSNR_PROFILE_CTL_L3("BoolSetting::Assign");
   if (in.kind == Value::Kind::Bool) {
     out = in;
   } else if (in.kind == Value::Kind::Int || in.kind == Value::Kind::Enum) {
@@ -259,10 +271,12 @@ bool BoolSetting::Assign(Value& out, const Value& in) const {
 }
 
 std::string BoolSetting::ToString(const Value& value) const {
+  DLSSNR_PROFILE_CTL_L3("BoolSetting::ToString");
   return value.as_bool ? "1" : "0";
 }
 
 bool BoolSetting::FromString(const std::string& text, Value& out) const {
+  DLSSNR_PROFILE_CTL_L3("BoolSetting::FromString");
   if (text == "1" || text == "true") {
     out = Value::Bool(true);
     return true;
@@ -276,6 +290,7 @@ bool BoolSetting::FromString(const std::string& text, Value& out) const {
 
 bool BoolSetting::Draw(const SettingContext& ctx, const Value& resolved,
                        Value& out) const {
+  DLSSNR_PROFILE_UI_L3("BoolSetting::Draw");
   bool display = resolved.as_bool;
 
   ImGui::AlignTextToFramePadding();
@@ -322,6 +337,7 @@ StringSetting::StringSetting(const char* name, const char* label,
 Value StringSetting::DefaultValue() const { return Value::String(default_); }
 
 void StringSetting::Clamp(Value& value) const {
+  DLSSNR_PROFILE_CTL_L3("StringSetting::Clamp");
   if (value.kind != Value::Kind::String) return;
   if (max_length_ > 0 && value.as_string.size() > max_length_) {
     value.as_string.resize(max_length_);
@@ -329,17 +345,20 @@ void StringSetting::Clamp(Value& value) const {
 }
 
 bool StringSetting::Assign(Value& out, const Value& in) const {
+  DLSSNR_PROFILE_CTL_L3("StringSetting::Assign");
   if (in.kind != Value::Kind::String) return false;
   out = in;
   return true;
 }
 
 std::string StringSetting::ToString(const Value& value) const {
+  DLSSNR_PROFILE_CTL_L3("StringSetting::ToString");
   if (value.kind != Value::Kind::String) return default_;
   return value.as_string;
 }
 
 bool StringSetting::FromString(const std::string& text, Value& out) const {
+  DLSSNR_PROFILE_CTL_L3("StringSetting::FromString");
   Value candidate = Value::String(text);
   Clamp(candidate);
   out = candidate;
@@ -348,6 +367,7 @@ bool StringSetting::FromString(const std::string& text, Value& out) const {
 
 bool StringSetting::Draw(const SettingContext& ctx, const Value& resolved,
                          Value& out) const {
+  DLSSNR_PROFILE_UI_L3("StringSetting::Draw");
   // InputText needs a mutable NUL-terminated buffer, so the value is copied
   // into a fixed array and copied back only on an actual edit.
   std::string text =
@@ -421,6 +441,7 @@ IntListSetting::IntListSetting(const char* name, const char* label,
 Value IntListSetting::DefaultValue() const { return Value::IntList(default_); }
 
 void IntListSetting::Clamp(Value& value) const {
+  DLSSNR_PROFILE_CTL_L3("IntListSetting::Clamp");
   if (value.kind != Value::Kind::IntList) return;
   std::vector<int64_t> result;
   result.reserve(std::min(value.as_int_list.size(), max_items_));
@@ -441,6 +462,7 @@ void IntListSetting::Clamp(Value& value) const {
 }
 
 bool IntListSetting::Assign(Value& out, const Value& in) const {
+  DLSSNR_PROFILE_CTL_L3("IntListSetting::Assign");
   if (in.kind != Value::Kind::IntList) return false;
   out = in;
   Clamp(out);
@@ -448,6 +470,7 @@ bool IntListSetting::Assign(Value& out, const Value& in) const {
 }
 
 std::string IntListSetting::ToString(const Value& value) const {
+  DLSSNR_PROFILE_CTL_L3("IntListSetting::ToString");
   if (value.kind != Value::Kind::IntList) return {};
   std::string text;
   for (int64_t item : value.as_int_list) {
@@ -458,6 +481,7 @@ std::string IntListSetting::ToString(const Value& value) const {
 }
 
 bool IntListSetting::FromString(const std::string& text, Value& out) const {
+  DLSSNR_PROFILE_CTL_L3("IntListSetting::FromString");
   std::vector<int64_t> values;
   size_t begin = 0;
   while (begin < text.size()) {
@@ -493,6 +517,7 @@ bool IntListSetting::FromString(const std::string& text, Value& out) const {
 
 bool IntListSetting::Draw(const SettingContext&, const Value& resolved,
                           Value& out) const {
+  DLSSNR_PROFILE_UI_L3("IntListSetting::Draw");
   const std::string current = ToString(resolved);
   std::vector<char> buffer(std::max<size_t>(current.size() + 64, 128), '\0');
   std::snprintf(buffer.data(), buffer.size(), "%s", current.c_str());

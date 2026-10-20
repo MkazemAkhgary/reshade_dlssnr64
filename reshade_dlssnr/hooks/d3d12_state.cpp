@@ -1,4 +1,5 @@
 #include "d3d12_state.h"
+#include "profiling/profile.h"
 
 namespace reshade_dlssnr {
 
@@ -30,6 +31,7 @@ D3D12StateTracker& D3D12StateTracker::Get() {
 }
 
 void D3D12StateTracker::TrackCommandList(ID3D12GraphicsCommandList* command_list) {
+  DLSSNR_PROFILE_RESOURCE_L3("D3D12StateTracker::TrackCommandList");
   if (command_list == nullptr) return;
 
   descriptor_heaps_.try_emplace(command_list);
@@ -43,6 +45,7 @@ void D3D12StateTracker::TrackCommandList(ID3D12GraphicsCommandList* command_list
 // that follows is a new one -- which is also what keeps the references from
 // accumulating for the life of the process.
 void D3D12StateTracker::UntrackCommandList(ID3D12GraphicsCommandList* command_list) {
+  DLSSNR_PROFILE_RESOURCE_L3("D3D12StateTracker::UntrackCommandList");
   if (command_list == nullptr) return;
 
   {
@@ -86,6 +89,7 @@ void D3D12StateTracker::UntrackCommandList(ID3D12GraphicsCommandList* command_li
 }
 
 void D3D12StateTracker::SetDescriptorHeaps(ID3D12GraphicsCommandList* command_list, UINT count, ID3D12DescriptorHeap* const* heaps) {
+  DLSSNR_PROFILE_RESOURCE_L3("D3D12StateTracker::SetDescriptorHeaps");
   if (command_list == nullptr || heaps == nullptr) return;
 
   std::unique_lock<std::shared_mutex> lock(descriptor_heaps_mutex_);
@@ -100,6 +104,7 @@ void D3D12StateTracker::SetDescriptorHeaps(ID3D12GraphicsCommandList* command_li
 }
 
 void D3D12StateTracker::SetPipelineState(ID3D12GraphicsCommandList* command_list, ID3D12PipelineState* pipeline_state) {
+  DLSSNR_PROFILE_RESOURCE_L3("D3D12StateTracker::SetPipelineState");
   if (command_list == nullptr) return;
 
   std::unique_lock<std::shared_mutex> lock(pipeline_states_mutex_);
@@ -119,6 +124,7 @@ RootState& D3D12StateTracker::RootSlotLocked(ID3D12GraphicsCommandList* command_
 }
 
 void D3D12StateTracker::SetPipelineState1(ID3D12GraphicsCommandList* command_list, ID3D12StateObject* state_object) {
+  DLSSNR_PROFILE_RESOURCE_L3("D3D12StateTracker::SetPipelineState1");
   if (command_list == nullptr) return;
 
   std::unique_lock<std::shared_mutex> lock(state_objects_mutex_);
@@ -126,6 +132,7 @@ void D3D12StateTracker::SetPipelineState1(ID3D12GraphicsCommandList* command_lis
 }
 
 void D3D12StateTracker::SetComputeRootSignature(ID3D12GraphicsCommandList* command_list, ID3D12RootSignature* root_signature) {
+  DLSSNR_PROFILE_RESOURCE_L3("D3D12StateTracker::SetComputeRootSignature");
   if (command_list == nullptr || root_signature == nullptr) return;
 
   {
@@ -151,6 +158,7 @@ void D3D12StateTracker::SetComputeRootSignature(ID3D12GraphicsCommandList* comma
 }
 
 void D3D12StateTracker::SetGraphicsRootSignature(ID3D12GraphicsCommandList* command_list, ID3D12RootSignature* root_signature) {
+  DLSSNR_PROFILE_RESOURCE_L3("D3D12StateTracker::SetGraphicsRootSignature");
   if (command_list == nullptr || root_signature == nullptr) return;
 
   std::unique_lock<std::shared_mutex> lock(root_signature_mutex_);
@@ -158,6 +166,7 @@ void D3D12StateTracker::SetGraphicsRootSignature(ID3D12GraphicsCommandList* comm
 }
 
 void D3D12StateTracker::SetComputeRootDescriptorTable(ID3D12GraphicsCommandList* command_list, UINT index, D3D12_GPU_DESCRIPTOR_HANDLE base_descriptor) {
+  DLSSNR_PROFILE_RESOURCE_L3("D3D12StateTracker::SetComputeRootDescriptorTable");
   if (command_list == nullptr || base_descriptor.ptr == 0) return;
 
   std::unique_lock<std::shared_mutex> lock(root_states_mutex_);
@@ -167,6 +176,7 @@ void D3D12StateTracker::SetComputeRootDescriptorTable(ID3D12GraphicsCommandList*
 }
 
 void D3D12StateTracker::SetComputeRoot32BitConstants(ID3D12GraphicsCommandList* command_list, UINT index, UINT count, const void* data, UINT offset) {
+  DLSSNR_PROFILE_RESOURCE_L3("D3D12StateTracker::SetComputeRoot32BitConstants");
   if (command_list == nullptr || data == nullptr) return;
 
   std::unique_lock<std::shared_mutex> lock(root_states_mutex_);
@@ -179,6 +189,7 @@ void D3D12StateTracker::SetComputeRoot32BitConstants(ID3D12GraphicsCommandList* 
 }
 
 void D3D12StateTracker::SetComputeRoot32BitConstant(ID3D12GraphicsCommandList* command_list, UINT index, UINT value, UINT offset) {
+  DLSSNR_PROFILE_RESOURCE_L3("D3D12StateTracker::SetComputeRoot32BitConstant");
   if (command_list == nullptr) return;
 
   std::unique_lock<std::shared_mutex> lock(root_states_mutex_);
@@ -189,6 +200,7 @@ void D3D12StateTracker::SetComputeRoot32BitConstant(ID3D12GraphicsCommandList* c
 }
 
 void D3D12StateTracker::SetComputeRootConstantBufferView(ID3D12GraphicsCommandList* command_list, UINT index, D3D12_GPU_VIRTUAL_ADDRESS address) {
+  DLSSNR_PROFILE_RESOURCE_L3("D3D12StateTracker::SetComputeRootConstantBufferView");
   if (command_list == nullptr) return;
 
   std::unique_lock<std::shared_mutex> lock(root_states_mutex_);
@@ -198,6 +210,7 @@ void D3D12StateTracker::SetComputeRootConstantBufferView(ID3D12GraphicsCommandLi
 }
 
 void D3D12StateTracker::SetComputeRootShaderResourceView(ID3D12GraphicsCommandList* command_list, UINT index, D3D12_GPU_VIRTUAL_ADDRESS address) {
+  DLSSNR_PROFILE_RESOURCE_L3("D3D12StateTracker::SetComputeRootShaderResourceView");
   if (command_list == nullptr) return;
 
   std::unique_lock<std::shared_mutex> lock(root_states_mutex_);
@@ -207,6 +220,7 @@ void D3D12StateTracker::SetComputeRootShaderResourceView(ID3D12GraphicsCommandLi
 }
 
 void D3D12StateTracker::SetComputeRootUnorderedAccessView(ID3D12GraphicsCommandList* command_list, UINT index, D3D12_GPU_VIRTUAL_ADDRESS address) {
+  DLSSNR_PROFILE_RESOURCE_L3("D3D12StateTracker::SetComputeRootUnorderedAccessView");
   if (command_list == nullptr) return;
 
   std::unique_lock<std::shared_mutex> lock(root_states_mutex_);
@@ -261,6 +275,7 @@ ID3D12StateObject* D3D12StateTracker::GetPipelineState1(ID3D12GraphicsCommandLis
 }
 
 SignatureState D3D12StateTracker::GetSignatures(ID3D12GraphicsCommandList* command_list) const {
+  DLSSNR_PROFILE_RESOURCE_L3("D3D12StateTracker::GetSignatures");
   std::shared_lock<std::shared_mutex> lock(root_signature_mutex_);
   auto it = signatures_.find(command_list);
   if (it == signatures_.end()) return {};

@@ -8,6 +8,7 @@
 #include <imgui.h>
 
 #include "ctl/builtin_settings.h"
+#include "profiling/profile.h"
 #include "ctl/schema.h"
 #include "debug/debug_view.h"
 #include "feature/debug_log/settings.h"
@@ -22,6 +23,7 @@ namespace {
 // and tooltips have exactly one definition. Item 0 is "Off": the value
 // convention is 0 = off, N = kDebugViews[N-1].
 std::vector<ctl::EnumSetting::Item> DebugViewItems() {
+  DLSSNR_PROFILE_CTL_L3("DebugViewItems");
   std::vector<ctl::EnumSetting::Item> items;
   items.push_back({"Off",
                    "Disable the debug view and show the normal composed "
@@ -35,6 +37,7 @@ std::vector<ctl::EnumSetting::Item> DebugViewItems() {
 }  // namespace
 
 void RegisterDebugLogSchema(ctl::Schema& schema) {
+  DLSSNR_PROFILE_CTL_L3("RegisterDebugLogSchema");
   ctl::Section& debug = schema.AddSection(debug_log::kSection, ctl::SectionKind::Single);
 
   debug

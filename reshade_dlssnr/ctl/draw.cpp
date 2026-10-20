@@ -1,4 +1,5 @@
 #include "ctl/draw.h"
+#include "profiling/profile.h"
 
 #include <imgui.h>
 
@@ -243,6 +244,7 @@ void DrawSectionToggle(const Section& section, ValueStore& store,
 bool DrawSection(ValueStore& store, const std::string& section_name,
                  const InstanceKey& key, bool& changed,
                  const DrawOptions& options) {
+  DLSSNR_PROFILE_CTL_L2("ctl::DrawSection");
   const Schema& schema = store.schema();
   const Section* section = schema.FindSection(section_name);
   if (section == nullptr) return false;
@@ -328,6 +330,8 @@ bool DrawSection(ValueStore& store, const std::string& section_name,
     }
 
     const Setting& setting = *section->settings()[row.setting_index];
+    DLSSNR_PROFILE_CTL_L3("ctl setting row");
+    DLSSNR_PROFILE_CTL_TAG_L3("Setting", setting.meta().name.c_str());
     const std::string& category = setting.meta().category;
     if (!RowVisible(*section, setting, store, key)) continue;
     switch_path(SplitCategoryPath(category));

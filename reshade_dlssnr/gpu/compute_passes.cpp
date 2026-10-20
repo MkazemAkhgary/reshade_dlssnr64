@@ -1,4 +1,5 @@
 #include "compute_passes.h"
+#include "profiling/profile.h"
 
 #include <cstring>
 
@@ -48,6 +49,7 @@ const uint32_t kComputePassCount =
     sizeof(kComputePasses) / sizeof(kComputePasses[0]);
 
 const ComputePassDef* FindComputePassDef(const char* name) {
+  DLSSNR_PROFILE_RESOURCE_L3("FindComputePassDef");
   if (name == nullptr) return nullptr;
   for (uint32_t i = 0; i < kComputePassCount; ++i) {
     if (std::strcmp(kComputePasses[i].name, name) == 0) {

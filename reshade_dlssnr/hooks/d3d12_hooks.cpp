@@ -1,4 +1,5 @@
 #include "d3d12_hooks.h"
+#include "profiling/profile.h"
 
 #include <cstdio>
 
@@ -120,6 +121,7 @@ thread_local bool g_in_set_compute_root_srv = false;
 thread_local bool g_in_set_compute_root_uav = false;
 
 void STDMETHODCALLTYPE HookedSetDescriptorHeaps(ID3D12GraphicsCommandList* command_list, UINT count, ID3D12DescriptorHeap* const* heaps) {
+  DLSSNR_PROFILE_RESOURCE_L3("HookedSetDescriptorHeaps");
   if (g_tracking_enabled && !g_in_set_descriptor_heaps && command_list != nullptr) {
     D3D12StateTracker::Get().SetDescriptorHeaps(command_list, count, heaps);
   }
@@ -127,6 +129,7 @@ void STDMETHODCALLTYPE HookedSetDescriptorHeaps(ID3D12GraphicsCommandList* comma
 }
 
 void STDMETHODCALLTYPE HookedSetPipelineState(ID3D12GraphicsCommandList* command_list, ID3D12PipelineState* pipeline_state) {
+  DLSSNR_PROFILE_RESOURCE_L3("HookedSetPipelineState");
   if (g_tracking_enabled && !g_in_set_pipeline_state && command_list != nullptr) {
     D3D12StateTracker::Get().SetPipelineState(command_list, pipeline_state);
   }
@@ -134,6 +137,7 @@ void STDMETHODCALLTYPE HookedSetPipelineState(ID3D12GraphicsCommandList* command
 }
 
 void STDMETHODCALLTYPE HookedSetPipelineState1(ID3D12GraphicsCommandList4* command_list, ID3D12StateObject* state_object) {
+  DLSSNR_PROFILE_RESOURCE_L3("HookedSetPipelineState1");
   if (g_tracking_enabled && !g_in_set_pipeline_state1 && command_list != nullptr) {
     D3D12StateTracker::Get().SetPipelineState1(
         reinterpret_cast<ID3D12GraphicsCommandList*>(command_list), state_object);
@@ -142,6 +146,7 @@ void STDMETHODCALLTYPE HookedSetPipelineState1(ID3D12GraphicsCommandList4* comma
 }
 
 HRESULT STDMETHODCALLTYPE HookedReset(ID3D12GraphicsCommandList* command_list, ID3D12CommandAllocator* allocator, ID3D12PipelineState* initial_state) {
+  DLSSNR_PROFILE_RESOURCE_L3("HookedReset");
   // A reset command list has no state, and everything the tracker holds for it
   // belongs to the recording that just ended. Dropping it here does two things:
   // it keeps the held references from accumulating for the life of the
@@ -154,6 +159,7 @@ HRESULT STDMETHODCALLTYPE HookedReset(ID3D12GraphicsCommandList* command_list, I
 }
 
 void STDMETHODCALLTYPE HookedSetComputeRootSignature(ID3D12GraphicsCommandList* command_list, ID3D12RootSignature* root_signature) {
+  DLSSNR_PROFILE_RESOURCE_L3("HookedSetComputeRootSignature");
   if (g_tracking_enabled && !g_in_set_compute_root_signature && command_list != nullptr) {
     D3D12StateTracker::Get().SetComputeRootSignature(command_list, root_signature);
   }
@@ -161,6 +167,7 @@ void STDMETHODCALLTYPE HookedSetComputeRootSignature(ID3D12GraphicsCommandList* 
 }
 
 void STDMETHODCALLTYPE HookedSetGraphicsRootSignature(ID3D12GraphicsCommandList* command_list, ID3D12RootSignature* root_signature) {
+  DLSSNR_PROFILE_RESOURCE_L3("HookedSetGraphicsRootSignature");
   if (g_tracking_enabled && !g_in_set_graphics_root_signature && command_list != nullptr) {
     D3D12StateTracker::Get().SetGraphicsRootSignature(command_list, root_signature);
   }
@@ -168,6 +175,7 @@ void STDMETHODCALLTYPE HookedSetGraphicsRootSignature(ID3D12GraphicsCommandList*
 }
 
 void STDMETHODCALLTYPE HookedSetComputeRootDescriptorTable(ID3D12GraphicsCommandList* command_list, UINT index, D3D12_GPU_DESCRIPTOR_HANDLE base_descriptor) {
+  DLSSNR_PROFILE_RESOURCE_L3("HookedSetComputeRootDescriptorTable");
   if (g_tracking_enabled && !g_in_set_compute_root_descriptor_table && command_list != nullptr) {
     D3D12StateTracker::Get().SetComputeRootDescriptorTable(command_list, index, base_descriptor);
   }
@@ -175,6 +183,7 @@ void STDMETHODCALLTYPE HookedSetComputeRootDescriptorTable(ID3D12GraphicsCommand
 }
 
 void STDMETHODCALLTYPE HookedSetComputeRoot32BitConstant(ID3D12GraphicsCommandList* command_list, UINT index, UINT value, UINT offset) {
+  DLSSNR_PROFILE_RESOURCE_L3("HookedSetComputeRoot32BitConstant");
   if (g_tracking_enabled && !g_in_set_compute_root_32bit_constant && command_list != nullptr) {
     D3D12StateTracker::Get().SetComputeRoot32BitConstant(command_list, index, value, offset);
   }
@@ -182,6 +191,7 @@ void STDMETHODCALLTYPE HookedSetComputeRoot32BitConstant(ID3D12GraphicsCommandLi
 }
 
 void STDMETHODCALLTYPE HookedSetComputeRoot32BitConstants(ID3D12GraphicsCommandList* command_list, UINT index, UINT count, const void* data, UINT offset) {
+  DLSSNR_PROFILE_RESOURCE_L3("HookedSetComputeRoot32BitConstants");
   if (g_tracking_enabled && !g_in_set_compute_root_32bit_constants && command_list != nullptr) {
     D3D12StateTracker::Get().SetComputeRoot32BitConstants(command_list, index, count, data, offset);
   }
@@ -189,6 +199,7 @@ void STDMETHODCALLTYPE HookedSetComputeRoot32BitConstants(ID3D12GraphicsCommandL
 }
 
 void STDMETHODCALLTYPE HookedSetComputeRootConstantBufferView(ID3D12GraphicsCommandList* command_list, UINT index, D3D12_GPU_VIRTUAL_ADDRESS address) {
+  DLSSNR_PROFILE_RESOURCE_L3("HookedSetComputeRootConstantBufferView");
   if (g_tracking_enabled && !g_in_set_compute_root_cbv && command_list != nullptr) {
     D3D12StateTracker::Get().SetComputeRootConstantBufferView(command_list, index, address);
   }
@@ -196,6 +207,7 @@ void STDMETHODCALLTYPE HookedSetComputeRootConstantBufferView(ID3D12GraphicsComm
 }
 
 void STDMETHODCALLTYPE HookedSetComputeRootShaderResourceView(ID3D12GraphicsCommandList* command_list, UINT index, D3D12_GPU_VIRTUAL_ADDRESS address) {
+  DLSSNR_PROFILE_RESOURCE_L3("HookedSetComputeRootShaderResourceView");
   if (g_tracking_enabled && !g_in_set_compute_root_srv && command_list != nullptr) {
     D3D12StateTracker::Get().SetComputeRootShaderResourceView(command_list, index, address);
   }
@@ -203,6 +215,7 @@ void STDMETHODCALLTYPE HookedSetComputeRootShaderResourceView(ID3D12GraphicsComm
 }
 
 void STDMETHODCALLTYPE HookedSetComputeRootUnorderedAccessView(ID3D12GraphicsCommandList* command_list, UINT index, D3D12_GPU_VIRTUAL_ADDRESS address) {
+  DLSSNR_PROFILE_RESOURCE_L3("HookedSetComputeRootUnorderedAccessView");
   if (g_tracking_enabled && !g_in_set_compute_root_uav && command_list != nullptr) {
     D3D12StateTracker::Get().SetComputeRootUnorderedAccessView(command_list, index, address);
   }
@@ -266,6 +279,7 @@ D3D12Hooks& D3D12Hooks::Get() {
 }
 
 bool D3D12Hooks::InstallEarlyHooks(ID3D12Device* device) {
+  DLSSNR_PROFILE_CORE_L2("D3D12Hooks::InstallEarlyHooks");
   if (device == nullptr) return false;
   if (g_hooked_command_lists && g_hooked_device) return true;
 
@@ -401,6 +415,7 @@ void D3D12Hooks::SetTrackingEnabled(bool enabled) {
 }
 
 void D3D12Hooks::RestoreCommandList(ID3D12GraphicsCommandList* command_list) {
+  DLSSNR_PROFILE_RESOURCE_L3("D3D12Hooks::RestoreCommandList");
   // Nothing was recorded if the hooks never went in, so there is nothing to
   // put back. Returning here rather than calling the unhooked originals also
   // keeps the tracker from being consulted on the Present path.

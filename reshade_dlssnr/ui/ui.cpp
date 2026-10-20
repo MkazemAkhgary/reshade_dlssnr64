@@ -1,6 +1,7 @@
 #include <imgui.h>
 
 #include "ui.h"
+#include "profiling/profile.h"
 
 #include <algorithm>
 #include <cfloat>
@@ -145,6 +146,7 @@ void ResetBackbufferGrade(void* /*context*/) {
 // bar and the body both need it, and both key it by the pass's stable id.
 
 void ApplyPassReorder(Settings& settings, const int* order, bool& changed) {
+  DLSSNR_PROFILE_UI_L2("ApplyPassReorder");
   const size_t total = settings.pass_order.size();
   feature::pass::PassOrder reordered(total);
   for (size_t i = 0; i < total; ++i) {
@@ -170,6 +172,7 @@ void ApplyPassReorder(Settings& settings, const int* order, bool& changed) {
 // Insert a new pass after the selected one. The inserted pass gets a fresh
 // stable id, so its settings start empty and every other pass keeps its own.
 void AddPass(Settings& settings, bool& changed) {
+  DLSSNR_PROFILE_UI_L2("AddPass");
   const size_t total = settings.pass_order.size();
   if (total >= kMaxPasses) return;
   const size_t source = static_cast<size_t>(
@@ -191,6 +194,7 @@ void AddPass(Settings& settings, bool& changed) {
 // its settings stay in the store unread rather than being handed to a pass
 // created later.
 void RemoveActivePass(Settings& settings, bool& changed) {
+  DLSSNR_PROFILE_UI_L2("RemoveActivePass");
   if (settings.pass_order.size() <= 1) return;
   const auto active_it = std::find(settings.pass_order.begin(),
                                    settings.pass_order.end(),
@@ -227,6 +231,7 @@ void RemoveActivePass(Settings& settings, bool& changed) {
 }
 
 void DrawSavedProfilesSection(Settings& settings, bool& changed) {
+  DLSSNR_PROFILE_UI_L2("DrawSavedProfilesSection");
   if (!PersistentSettingHeader(
           "Presets", feature::ui_state::kPresetsOpen, changed,
           "Save and restore named profiles of the current DLSSNR settings in ReShade.ini.")) {
@@ -511,6 +516,7 @@ bool FeatureRowGate(void*, ctl::ValueStore& store, const std::string& section,
 
 void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
                         bool& changed) {
+  DLSSNR_PROFILE_UI_L2("DrawTabsRowAndBody");
   // The section header keeps the legacy label.
   if (!PersistentSettingHeader(
           "Passes", feature::ui_state::kPassesOpen, changed,
@@ -709,6 +715,7 @@ void DrawOne(ctl::ValueStore& store, const char* name, bool& changed,
 }  // namespace
 
 void DrawOverlay(reshade::api::effect_runtime*) {
+  DLSSNR_PROFILE_UI_L1("DrawOverlay");
   Settings& settings = GetSettings();
   bool changed = false;
 

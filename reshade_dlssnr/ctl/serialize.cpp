@@ -1,4 +1,5 @@
 #include "ctl/serialize.h"
+#include "profiling/profile.h"
 
 #include <string>
 #include <vector>
@@ -115,6 +116,7 @@ void SaveInstance(ValueStore& store, KeyValueWriter& writer,
 void Save(ValueStore& store, KeyValueWriter& writer,
           const std::string& prefix, const InstanceKeySource& source,
           const void* context, PersistenceTarget target) {
+  DLSSNR_PROFILE_CTL_L2("ctl::Save");
   writer.WriteInt(Join(prefix, "Version"), kSerializeVersion);
 
   const Schema& schema = store.schema();
@@ -150,6 +152,7 @@ void Save(ValueStore& store, KeyValueWriter& writer,
 void Delete(ValueStore& store, KeyValueWriter& writer,
             const std::string& prefix, const InstanceKeySource& source,
             const void* context, PersistenceTarget target) {
+  DLSSNR_PROFILE_CTL_L2("ctl::Delete");
   writer.Erase(Join(prefix, "Version"));
 
   const Schema& schema = store.schema();
@@ -181,6 +184,7 @@ void Delete(ValueStore& store, KeyValueWriter& writer,
 void Load(ValueStore& store, KeyValueReader& reader,
           const std::string& prefix, const InstanceKeySource& source,
           const void* context, PersistenceTarget target) {
+  DLSSNR_PROFILE_CTL_L2("ctl::Load");
   // A version we do not recognise is not an error: unknown keys are skipped,
   // and every setting keeps its declared default, so a newer or older file
   // still loads what it can.

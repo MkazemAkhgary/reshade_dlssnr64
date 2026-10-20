@@ -1,4 +1,6 @@
 #include "pass_session.h"
+#include "profiling/profile.h"
+
 
 #include <algorithm>
 #include <cstdio>
@@ -431,6 +433,7 @@ bool PassSession::FillEvaluateParams(
 }
 
 void PassSession::SeedFrameState(ID3D12Resource* backbuffer) {
+  DLSSNR_PROFILE_RESOURCE_L2("PassSession::SeedFrameState");
   if (backbuffer != nullptr) {
     command_.SetResourceState(backbuffer, D3D12_RESOURCE_STATE_PRESENT);
   }
@@ -473,6 +476,7 @@ void PassSession::SeedFrameState(ID3D12Resource* backbuffer) {
 }
 
 void PassSession::CleanupFrameState(ID3D12GraphicsCommandList* command_list) {
+  DLSSNR_PROFILE_RESOURCE_L2("PassSession::CleanupFrameState");
   if (command_list == nullptr) return;
   command_.Transition(command_list, resources_.GetOutput(),
                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
@@ -513,6 +517,7 @@ void PassSession::CleanupFrameState(ID3D12GraphicsCommandList* command_list) {
 }
 
 void PassSession::SubmitBackbuffer() {
+  DLSSNR_PROFILE_ASYNC_L2("PassSession::SubmitBackbuffer");
   // The backbuffer commands are ordered before Present on this same queue.
   // Signal completion for future allocator reuse and deferred retirement, but
   // do not make every frame's CPU thread wait for that fence.
@@ -614,6 +619,7 @@ bool PassSession::MaybeRenderDebug(
 }
 
 void PassSession::Shutdown(NgxRuntime& runtime) {
+  DLSSNR_PROFILE_RESOURCE_L2("PassSession::Shutdown");
   std::lock_guard<std::mutex> lock(g_session_mutex);
 
   temporal_readback_.Shutdown();
@@ -753,6 +759,8 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
                                      uint64_t frame_id,
                                      ID3D12Fence* temporal_feedback_fence,
                                      uint64_t temporal_feedback_fence_value) {
+  DLSSNR_PROFILE_RENDER_L1("PassSession::RunStage");
+  DLSSNR_PROFILE_RENDER_TAG_L2("PassId", static_cast<uint32_t>(pass_id));
   // Serializes stage execution across passes.
   std::lock_guard<std::mutex> lock(g_session_mutex);
 
@@ -853,6 +861,7 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
 // already set, which is what the pre-refactor call sites did when they had
 // produced a reason deeper down.
 void PassSession::FailForStep(const char* reason) {
+  DLSSNR_PROFILE_CORE_L2("PassSession::FailForStep");
   if (reason == nullptr && reason_ != nullptr && reason_[0] != '\0') {
     Fail(reason_);
     return;
@@ -867,6 +876,7 @@ void PassSession::FailForStep(const char* reason) {
 // Backbuffer only: acquire the swapchain backbuffer and the device behind the
 // command queue.
 PipelineStatus PassSession::StepAcquireBackbuffer(PassRun& run) {
+  DLSSNR_PROFILE_RENDER_L2("StepAcquireBackbuffer");
   PassSession* self = run.session;
   IDXGISwapChain* swapchain = run.swapchain;
   ID3D12CommandQueue* queue = run.command_queue;
@@ -903,6 +913,7 @@ PipelineStatus PassSession::StepAcquireBackbuffer(PassRun& run) {
 // because the game may not have loaded the DLSS model yet, and is fatal for
 // Backbuffer.
 PipelineStatus PassSession::StepResolveDevice(PassRun& run) {
+  DLSSNR_PROFILE_RESOURCE_L2("StepResolveDevice");
   PassSession* self = run.session;
   const bool uses_game_list = run.stage != nullptr && !run.stage->owns_submit;
 
@@ -977,6 +988,7 @@ PipelineStatus PassSession::StepResolveDevice(PassRun& run) {
 // The engine is initialized once and shared by every pass. A background compile
 // means "not ready yet", which is not a failure.
 PipelineStatus PassSession::StepEnsureComputeEngine(PassRun& run) {
+  DLSSNR_PROFILE_RESOURCE_L2("StepEnsureComputeEngine");
   PassSession* self = run.session;
   if (run.device == nullptr || run.codec == nullptr) {
     return PipelineStatus::SkipFrame;
@@ -1001,6 +1013,7 @@ PipelineStatus PassSession::StepEnsureComputeEngine(PassRun& run) {
 // Compute the per-pass working resolution from the frame extent and the pass's
 // working-scale setting.
 PipelineStatus PassSession::StepResolveWorkingScale(PassRun& run) {
+  DLSSNR_PROFILE_RENDER_L2("StepResolveWorkingScale");
   if (!run.pass_bound) return PipelineStatus::SkipFrame;
 
   const float working_scale =
@@ -1019,6 +1032,7 @@ PipelineStatus PassSession::StepResolveWorkingScale(PassRun& run) {
 // retired item with a queue-ordered Release fence and drains it asynchronously
 // after that fence has completed.
 PipelineStatus PassSession::StepEnsureFrameResources(PassRun& run) {
+  DLSSNR_PROFILE_RESOURCE_L2("StepEnsureFrameResources");
   PassSession* self = run.session;
   if (run.device == nullptr) return PipelineStatus::SkipFrame;
 
@@ -1038,6 +1052,7 @@ PipelineStatus PassSession::StepEnsureFrameResources(PassRun& run) {
 // Register the known frame-boundary state of every pass-owned resource, so
 // inference never has to guess for resources we own.
 PipelineStatus PassSession::StepSeedResourceStates(PassRun& run) {
+  DLSSNR_PROFILE_RESOURCE_L2("StepSeedResourceStates");
   PassSession* self = run.session;
   if (run.cmd == nullptr) return PipelineStatus::SkipFrame;
 
@@ -1079,6 +1094,7 @@ PipelineStatus PassSession::StepSeedResourceStates(PassRun& run) {
 // because the two stages place it differently relative to the feature build;
 // grouping it with the snapshot is what makes one step table serve both.
 PipelineStatus PassSession::StepSnapshotGuides(PassRun& run) {
+  DLSSNR_PROFILE_RESOURCE_L2("StepSnapshotGuides");
   PassSession* self = run.session;
 
   // PrepareRun already took the stage's immutable guide snapshot.
@@ -1108,6 +1124,7 @@ PipelineStatus PassSession::StepSnapshotGuides(PassRun& run) {
 // the feature build. Its guide pointers/dimensions were snapshotted by
 // PrepareRun, just like the other stages.
 PipelineStatus PassSession::StepSeedGuideStates(PassRun& run) {
+  DLSSNR_PROFILE_RESOURCE_L2("StepSeedGuideStates");
   PassSession* self = run.session;
   if (run.cmd == nullptr) return PipelineStatus::Ok;
 
@@ -1141,6 +1158,7 @@ PipelineStatus PassSession::StepSeedGuideStates(PassRun& run) {
 // PreDLSS reads the game's Color input; PostDLSS reads the captured DLSS
 // output. Chained game-resource passes snapshot the previous result.
 PipelineStatus PassSession::StepResolveModelInput(PassRun& run) {
+  DLSSNR_PROFILE_RENDER_L2("StepResolveModelInput");
   PassSession* self = run.session;
   if (run.stage != nullptr && run.stage->owns_submit) {
     run.model_input = run.backbuffer;
@@ -1207,6 +1225,7 @@ PipelineStatus PassSession::StepResolveModelInput(PassRun& run) {
 // sets on every frame, so changing working scale never triggers a rebuild. A
 // rebuild happens only when the swapchain resolution itself changes.
 PipelineStatus PassSession::StepEnsureFeature(PassRun& run) {
+  DLSSNR_PROFILE_RESOURCE_L2("StepEnsureFeature");
   PassSession* self = run.session;
   if (run.runtime == nullptr || !run.pass_bound) {
     return PipelineStatus::SkipFrame;
@@ -1250,6 +1269,7 @@ PipelineStatus PassSession::StepEnsureFeature(PassRun& run) {
 }
 
 PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
+  DLSSNR_PROFILE_RENDER_L2("StepGainMapSplit");
   PassSession* self = run.session;
   if (self == nullptr || run.codec == nullptr || run.list == nullptr ||
       !run.hdr_uniforms_ready || run.hdr == nullptr ||
@@ -1360,6 +1380,7 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
 // a distinct step so the packed HDR representation is also available to the
 // debug and compose paths at full resolution.
 PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
+  DLSSNR_PROFILE_RENDER_L2("StepPrepareModelInput");
   PassSession* self = run.session;
   if (run.codec == nullptr) return PipelineStatus::SkipFrame;
 
@@ -1461,6 +1482,7 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
 // into the ordinary model-output resource and marks the NGX step as skipped.
 // Every rejection is fail-open: the regular fresh model evaluation still runs.
 PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
+  DLSSNR_PROFILE_RENDER_L2("StepTemporalPrepare");
   PassSession* self = run.session;
   run.temporal_candidate_ready = false;
   if (self == nullptr || run.codec == nullptr || run.device == nullptr ||
@@ -1903,6 +1925,7 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
 // HDR inverse composition recovers the same multiplier from the source/carrier
 // pair and does not use this extra texture in its descriptor table.
 PipelineStatus PassSession::StepBuildEffectiveLocalExposure(PassRun& run) {
+  DLSSNR_PROFILE_RENDER_L2("StepBuildEffectiveLocalExposure");
   PassSession* self = run.session;
   if (self == nullptr) return PipelineStatus::Ok;
 
@@ -1965,6 +1988,7 @@ PipelineStatus PassSession::StepBuildEffectiveLocalExposure(PassRun& run) {
 // Fill the real NGX parameter block with tuning values, resources and subrects
 // for this evaluation.
 PipelineStatus PassSession::StepFillEvaluateParams(PassRun& run) {
+  DLSSNR_PROFILE_CORE_L2("StepFillEvaluateParams");
   PassSession* self = run.session;
   if (run.temporal_reuse) return PipelineStatus::Ok;
   if (run.runtime == nullptr || !run.pass_bound) {
@@ -2082,6 +2106,7 @@ bool PassSession::EvalKeysDiffer(const EvalLogKey& a, const EvalLogKey& b) {
 // Backbuffer captures the result and reports a failure after the frame has been
 // submitted (see StepSubmitBackbuffer); PostDLSS ignores the result entirely.
 PipelineStatus PassSession::StepEvaluateFeature(PassRun& run) {
+  DLSSNR_PROFILE_RENDER_L2("StepEvaluateFeature");
   PassSession* self = run.session;
   if (run.temporal_reuse) {
     run.eval_result = NVSDK_NGX_Result_Success;
@@ -2135,6 +2160,7 @@ PipelineStatus PassSession::StepEvaluateFeature(PassRun& run) {
 // not guarantee those writes are visible to the subsequent reads, so insert an
 // explicit UAV barrier before composition reads it back.
 PipelineStatus PassSession::StepModelOutputBarrier(PassRun& run) {
+  DLSSNR_PROFILE_RESOURCE_L2("StepModelOutputBarrier");
   PassSession* self = run.session;
   if (run.model_output == nullptr) return PipelineStatus::Ok;
   ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
@@ -2235,6 +2261,7 @@ PipelineStatus PassSession::StepModelOutputBarrier(PassRun& run) {
 // the packed carrier for model-domain values and the original source resource
 // for full-precision HDR composition.
 PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
+  DLSSNR_PROFILE_RENDER_L2("StepComposeModelOutput");
   PassSession* self = run.session;
   if (run.codec == nullptr || !run.pass_bound) {
     return PipelineStatus::SkipFrame;
@@ -2287,6 +2314,7 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
 
 // Backbuffer: publish the composed image on the swapchain backbuffer.
 PipelineStatus PassSession::StepWriteToBackbuffer(PassRun& run) {
+  DLSSNR_PROFILE_RENDER_L2("StepWriteToBackbuffer");
   PassSession* self = run.session;
   // Always write the real composed output; the debug override happens in the
   // Release stage and does not affect the game's resources.
@@ -2300,6 +2328,7 @@ PipelineStatus PassSession::StepWriteToBackbuffer(PassRun& run) {
 
 // PreDLSS/PostDLSS: publish the composed image into the game's resource.
 PipelineStatus PassSession::StepWriteToGameResource(PassRun& run) {
+  DLSSNR_PROFILE_RENDER_L2("StepWriteToGameResource");
   PassSession* self = run.session;
   if (run.output_resource == nullptr) return PipelineStatus::SkipFrame;
 
@@ -2330,6 +2359,7 @@ PipelineStatus PassSession::StepWriteToGameResource(PassRun& run) {
 // submit with a queue fence, and return without blocking the CPU. The fence is
 // polled later; allocator reuse waits only when this session's ring slot wraps.
 PipelineStatus PassSession::StepSubmitBackbuffer(PassRun& run) {
+  DLSSNR_PROFILE_ASYNC_L2("StepSubmitBackbuffer");
   PassSession* self = run.session;
   self->CleanupFrameState(self->command_.GetCommandList());
   self->SubmitBackbuffer();

@@ -1,4 +1,5 @@
 #include "model/ngx_parameter_block.h"
+#include "profiling/profile.h"
 
 namespace reshade_dlssnr {
 
@@ -30,6 +31,7 @@ void CallSetResource(void* params, const char* name, ID3D12Resource* value) {
 }  // namespace
 
 bool NgxParameterBlock::Initialize() {
+  DLSSNR_PROFILE_CORE_L2("NgxParameterBlock::Initialize");
   if (params_ != nullptr) return true;
 
   core_module_ = GetModuleHandleW(L"_nvngx.dll");
@@ -91,14 +93,17 @@ void NgxParameterBlock::Shutdown() {
 }
 
 void NgxParameterBlock::SetUInt(const char* name, unsigned int value) {
+  DLSSNR_PROFILE_CORE_L3("NgxParameterBlock::SetUInt");
   if (params_ != nullptr) CallSetUInt(params_, name, value);
 }
 
 void NgxParameterBlock::SetFloat(const char* name, float value) {
+  DLSSNR_PROFILE_CORE_L3("NgxParameterBlock::SetFloat");
   if (params_ != nullptr) CallSetFloat(params_, name, value, float_slot_);
 }
 
 void NgxParameterBlock::SetResource(const char* name, ID3D12Resource* value) {
+  DLSSNR_PROFILE_CORE_L3("NgxParameterBlock::SetResource");
   if (params_ != nullptr) CallSetResource(params_, name, value);
 }
 

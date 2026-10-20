@@ -1,4 +1,5 @@
 #include "debug/debug_view.h"
+#include "profiling/profile.h"
 
 #include <algorithm>
 
@@ -239,6 +240,7 @@ bool RenderDebugView(
     ID3D12Resource* target,
     unsigned int target_width,
     unsigned int target_height) {
+  DLSSNR_PROFILE_RENDER_L2("RenderDebugView");
   if (debug_view <= 0 || command_list == nullptr || target == nullptr ||
       target_width == 0 || target_height == 0) {
     return false;

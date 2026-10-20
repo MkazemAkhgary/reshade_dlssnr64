@@ -1,6 +1,7 @@
 // Importance Mask view implementation. See view.h.
 
 #include "feature/importance_mask/view.h"
+#include "profiling/profile.h"
 
 #include "ctl/values.h"
 #include "feature/importance_mask/settings.h"
@@ -11,6 +12,7 @@ namespace importance_mask {
 
 ImportanceMaskSnapshot Read(const ctl::ValueStore& store,
                             const ctl::InstanceKey& key) {
+  DLSSNR_PROFILE_CTL_L3("Read");
   const std::string sec = kSection;
   ImportanceMaskSnapshot s;
   s.enable = store.Read(sec, key, kEnable).as_bool;

@@ -1,4 +1,5 @@
 #include "command_context.h"
+#include "profiling/profile.h"
 
 #include <cstdio>
 
@@ -34,6 +35,7 @@ void LogFailureOnce(const char* what, HRESULT result) {
 }  // namespace
 
 bool CommandContext::Ensure(ID3D12Device* device) {
+  DLSSNR_PROFILE_RESOURCE_L2("CommandContext::Ensure");
   if (frames_[0].allocator != nullptr) return true;
   if (device == nullptr) return false;
 
@@ -81,6 +83,7 @@ bool CommandContext::Ensure(ID3D12Device* device) {
 }
 
 bool CommandContext::Abort() {
+  DLSSNR_PROFILE_ASYNC_L2("CommandContext::Abort");
   FrameCommands& frame = frames_[current_frame_];
   if (frame.command_list == nullptr || frame.allocator == nullptr) return true;
 
@@ -99,6 +102,7 @@ bool CommandContext::Abort() {
 }
 
 bool CommandContext::WaitForFenceValue(UINT64 value) {
+  DLSSNR_PROFILE_ASYNC_L3("CommandContext::WaitForFenceValue");
   if (value == 0 || fence_ == nullptr || fence_->GetCompletedValue() >= value) {
     return true;
   }
@@ -150,6 +154,7 @@ void CommandContext::ClearState() {
 }
 
 void CommandContext::CloseAndSubmit(ID3D12CommandQueue* command_queue) {
+  DLSSNR_PROFILE_ASYNC_L2("CommandContext::CloseAndSubmit");
   FrameCommands& frame = frames_[current_frame_];
   if (frame.command_list == nullptr || command_queue == nullptr) return;
 
@@ -174,6 +179,7 @@ void CommandContext::CloseAndSubmit(ID3D12CommandQueue* command_queue) {
 }
 
 uint64_t CommandContext::SignalGpu(ID3D12CommandQueue* command_queue) {
+  DLSSNR_PROFILE_ASYNC_L2("CommandContext::SignalGpu");
   if (command_queue == nullptr || fence_ == nullptr) return 0;
 
   const UINT64 value = fence_value_ + 1;
@@ -192,6 +198,7 @@ uint64_t CommandContext::SignalGpu(ID3D12CommandQueue* command_queue) {
 }
 
 void CommandContext::WaitGpu(ID3D12CommandQueue* command_queue) {
+  DLSSNR_PROFILE_ASYNC_L3("CommandContext::WaitGpu");
   const UINT64 value = SignalGpu(command_queue);
   if (value == 0) return;
   WaitForFenceValue(value);
@@ -340,6 +347,7 @@ void CommandContext::CopyResourceToBackbuffer(
 }
 
 void CommandContext::Shutdown() {
+  DLSSNR_PROFILE_RESOURCE_L2("CommandContext::Shutdown");
   Abort();
   // Shutdown is rare; drain all submitted commands before releasing allocator
   // and list objects. The frame path uses rotating slots and never does this.

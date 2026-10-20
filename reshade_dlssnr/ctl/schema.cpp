@@ -1,4 +1,5 @@
 #include "ctl/schema.h"
+#include "profiling/profile.h"
 
 #include <cstdio>
 #include <memory>
@@ -8,6 +9,7 @@ namespace reshade_dlssnr {
 namespace ctl {
 
 bool Schema::Build(std::string* error) {
+  DLSSNR_PROFILE_CTL_L2("ctl::Schema::Build");
   rows_.clear();
   rows_.resize(sections_.size());
 
@@ -28,6 +30,9 @@ bool Schema::Build(std::string* error) {
     }
 
     for (uint32_t si = 0; si < section.settings_.size(); ++si) {
+      DLSSNR_PROFILE_CTL_L3("ctl setting-name validation");
+      DLSSNR_PROFILE_CTL_TAG_L3("Setting",
+                                section.settings_[si]->meta().name.c_str());
       const std::string& name = section.settings_[si]->meta().name;
       for (uint32_t sj = 0; sj < si; ++sj) {
         if (section.settings_[sj]->meta().name == name) {
@@ -82,6 +87,7 @@ bool Schema::Build(std::string* error) {
     // Inline toggles are declared on their target setting. Every source must
     // resolve to a distinct boolean setting and can be used only once.
     for (uint32_t si = 0; si < section.settings_.size(); ++si) {
+      DLSSNR_PROFILE_CTL_L3("ctl inline-toggle validation");
       const SettingMeta& target_meta = section.settings_[si]->meta();
       if (target_meta.inline_toggle_setting.empty()) continue;
 

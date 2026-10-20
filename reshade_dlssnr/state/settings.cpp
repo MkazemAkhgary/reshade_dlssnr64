@@ -1,4 +1,5 @@
 #include "state/settings.h"
+#include "profiling/profile.h"
 #include "hooks/dlss_guides.h"
 
 #include <reshade.hpp>
@@ -320,6 +321,7 @@ ProfileId NewProfileId() {
 }
 
 void LoadSettings() {
+  DLSSNR_PROFILE_CTL_L1("LoadSettings");
   // ctl loads the order setting before the instanced sections, then uses it
   // to resolve the active pass keys for this profile.
   LoadSettingsValues(g_settings, "");
@@ -335,6 +337,7 @@ void LoadSettings() {
 }
 
 void SaveSettings() {
+  DLSSNR_PROFILE_CTL_L1("SaveSettings");
   TraceSettings(g_settings);
   SaveSettingsValues(g_settings, "");
   SaveStore(g_settings, "", ctl::PersistenceTarget::Global);
@@ -392,6 +395,7 @@ uint32_t GetSavedProfiles(SavedProfileInfo* profiles, uint32_t capacity) {
 }
 
 bool SaveCurrentAsProfile(const char* name) {
+  DLSSNR_PROFILE_CTL_L2("SaveCurrentAsProfile");
   std::string clean_name = CStrToString(name);
   const auto first = clean_name.find_first_not_of(" \t\r\n");
   if (first == std::string::npos) return false;
@@ -419,6 +423,7 @@ bool SaveCurrentAsProfile(const char* name) {
 }
 
 bool RenameSavedProfile(ProfileId id, const char* name) {
+  DLSSNR_PROFILE_CTL_L2("RenameSavedProfile");
   if (!ValidProfileId(id)) return false;
 
   std::string clean_name = CStrToString(name);
@@ -440,6 +445,7 @@ bool RenameSavedProfile(ProfileId id, const char* name) {
 }
 
 bool SaveCurrentToProfile(ProfileId id) {
+  DLSSNR_PROFILE_CTL_L2("SaveCurrentToProfile");
   if (!ValidProfileId(id)) return false;
 
   // Remove all schema-defined keys from the old pass set before overwriting
@@ -458,6 +464,7 @@ bool SaveCurrentToProfile(ProfileId id) {
 }
 
 bool LoadSavedProfile(ProfileId id) {
+  DLSSNR_PROFILE_CTL_L2("LoadSavedProfile");
   if (!ValidProfileId(id)) return false;
   Settings loaded = g_settings;
   LoadSettingsValues(loaded, ProfileValuePrefix(id));
@@ -485,6 +492,7 @@ bool LoadSavedProfile(ProfileId id) {
 }
 
 bool DeleteSavedProfile(ProfileId id) {
+  DLSSNR_PROFILE_CTL_L2("DeleteSavedProfile");
   std::vector<ProfileId> order = ReadProfileOrder();
   const auto found = std::find(order.begin(), order.end(), id);
   if (found == order.end()) return false;

@@ -1,4 +1,5 @@
 #include "compose/compose.h"
+#include "profiling/profile.h"
 
 namespace reshade_dlssnr::model_pipeline {
 
@@ -18,6 +19,7 @@ bool ComposeOutput(
     const ResidualSettings& residual,
     const GradeSettings* grade_input,
     const HdrUniforms* hdr) {
+  DLSSNR_PROFILE_RENDER_L2("ComposeOutput");
   if (codec == nullptr || command_list == nullptr || packed_source == nullptr ||
       hdr_source == nullptr || low_input == nullptr || low_enhanced == nullptr) {
     return false;

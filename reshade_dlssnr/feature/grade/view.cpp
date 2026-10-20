@@ -5,6 +5,7 @@
 // user sees, with no second copy of the grade to keep in step.
 
 #include "feature/grade/view.h"
+#include "profiling/profile.h"
 
 #include "ctl/values.h"
 #include "feature/grade/settings.h"
@@ -18,6 +19,7 @@ namespace {
 
 // prefix + suffix, matching how grade_rows::Declare spelled the row.
 std::string Row(const std::string& prefix, const char* suffix) {
+  DLSSNR_PROFILE_CTL_L3("Row");
   return prefix + CStrToString(suffix);
 }
 
@@ -25,6 +27,7 @@ std::string Row(const std::string& prefix, const char* suffix) {
 
 GradeSettings Read(const ctl::ValueStore& store, const ctl::InstanceKey& key,
                    const std::string& section, const std::string& prefix) {
+  DLSSNR_PROFILE_CTL_L3("Read");
   using grade_rows::names::kBlackLevel;
   using grade_rows::names::kChroma;
   using grade_rows::names::kChromaMode;
@@ -66,6 +69,7 @@ GradeSettings Read(const ctl::ValueStore& store, const ctl::InstanceKey& key,
 }
 
 GradeSnapshot ReadBackbuffer(const ctl::ValueStore& store) {
+  DLSSNR_PROFILE_CTL_L3("ReadBackbuffer");
   return Read(store, ctl::InstanceKey::FromInt(0), kSection);
 }
 

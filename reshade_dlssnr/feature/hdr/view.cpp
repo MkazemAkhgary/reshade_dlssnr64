@@ -1,6 +1,7 @@
 // HDR view implementation. See view.h.
 
 #include "feature/hdr/view.h"
+#include "profiling/profile.h"
 
 #include "ctl/values.h"
 #include "feature/hdr/settings.h"
@@ -17,6 +18,7 @@ namespace {
 ExposureFilterSettings ReadFilters(const ctl::ValueStore& store,
                                    const ctl::InstanceKey& key,
                                    const std::string& section) {
+  DLSSNR_PROFILE_CTL_L3("ReadFilters");
   using namespace hdr_filter_rows::names;
   ExposureFilterSettings f;
   f.importance_mask = store.Read(section, key, kImportanceMask).as_bool;
@@ -33,6 +35,7 @@ ExposureFilterSettings ReadFilters(const ctl::ValueStore& store,
 
 HdrSnapshotView Read(const ctl::ValueStore& store,
                      const ctl::InstanceKey& key) {
+  DLSSNR_PROFILE_CTL_L3("Read");
   const std::string hdr = kSection;
   HdrSnapshotView s;
 

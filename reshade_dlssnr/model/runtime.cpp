@@ -1,4 +1,5 @@
 #include "model/runtime.h"
+#include "profiling/profile.h"
 
 #include <reshade.hpp>
 
@@ -86,6 +87,7 @@ bool PatchImport(HMODULE module, const char* dll_name,
 }  // namespace
 
 bool NgxRuntime::EnsureModelAndPatch() {
+  DLSSNR_PROFILE_CORE_L1("NgxRuntime::EnsureModule");
   if (model_module_ != nullptr) return true;
 
   model_module_ = GetModuleHandleW(L"nvngx_dlssnr.dll");
@@ -122,6 +124,7 @@ bool NgxRuntime::EnsureModelAndPatch() {
 }
 
 bool NgxRuntime::EnsureInitialized(ID3D12Device* device) {
+  DLSSNR_PROFILE_CORE_L2("NgxRuntime::EnsureInitialized");
   if (initialized_) return true;
   if (init_ext_ == nullptr) return false;
 
@@ -147,6 +150,7 @@ bool NgxRuntime::EnsureInitialized(ID3D12Device* device) {
 }
 
 bool NgxRuntime::Initialize(ID3D12Device* device) {
+  DLSSNR_PROFILE_CORE_L1("NgxRuntime::Initialize");
   std::lock_guard<std::mutex> lock(g_runtime_mutex);
 
   if (!EnsureModelAndPatch()) return false;
@@ -160,6 +164,7 @@ bool NgxRuntime::Initialize(ID3D12Device* device) {
 }
 
 void NgxRuntime::Shutdown() {
+  DLSSNR_PROFILE_CORE_L1("NgxRuntime::Shutdown");
   std::lock_guard<std::mutex> lock(g_runtime_mutex);
   parameter_block_.Shutdown();
   initialized_ = false;
@@ -170,6 +175,7 @@ NVSDK_NGX_Result NgxRuntime::CreateFeature(
     NVSDK_NGX_Feature feature_id,
     NVSDK_NGX_Parameter* params,
     NVSDK_NGX_Handle** out_handle) {
+  DLSSNR_PROFILE_CORE_L2("NgxRuntime::CreateFeature");
   if (create_feature_ == nullptr) return NVSDK_NGX_Result_FAIL_NotInitialized;
   return create_feature_(command_list, feature_id, params, out_handle);
 }
@@ -179,11 +185,13 @@ NVSDK_NGX_Result NgxRuntime::EvaluateFeature(
     const NVSDK_NGX_Handle* feature_handle,
     const NVSDK_NGX_Parameter* params,
     void* callback) {
+  DLSSNR_PROFILE_CORE_L2("NgxRuntime::EvaluateFeature");
   if (evaluate_feature_ == nullptr) return NVSDK_NGX_Result_FAIL_NotInitialized;
   return evaluate_feature_(command_list, feature_handle, params, callback);
 }
 
 NVSDK_NGX_Result NgxRuntime::ReleaseFeature(NVSDK_NGX_Handle* feature_handle) {
+  DLSSNR_PROFILE_RESOURCE_L2("NgxRuntime::ReleaseFeature");
   if (release_feature_ == nullptr) return NVSDK_NGX_Result_FAIL_NotInitialized;
   return release_feature_(feature_handle);
 }

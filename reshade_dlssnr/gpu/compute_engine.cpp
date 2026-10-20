@@ -1,4 +1,6 @@
 #include "compute_engine.h"
+#include "profiling/profile.h"
+
 
 #include <cstdio>
 #include <cstring>
@@ -133,6 +135,7 @@ bool ComputeEngine::BindAndDispatch(
     uint32_t threads_x,
     uint32_t threads_y,
     uint32_t threads_z) {
+  DLSSNR_PROFILE_RENDER_L3("ComputeEngine::BindAndDispatch");
   if (command_list == nullptr || pipeline_state == nullptr ||
       srvs == nullptr || uavs == nullptr) {
     return false;
@@ -198,6 +201,7 @@ bool ComputeEngine::BindAndDispatch(
 }
 
 bool ComputeEngine::CreateRootSignature(ID3D12Device* device) {
+  DLSSNR_PROFILE_RESOURCE_L2("ComputeEngine::CreateRootSignature");
   D3D12_DESCRIPTOR_RANGE ranges[3] = {};
   ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
   ranges[0].NumDescriptors = kSrvCount;
@@ -272,6 +276,7 @@ bool ComputeEngine::CreateRootSignature(ID3D12Device* device) {
 bool ComputeEngine::CompilePipeline(
     const ComputePassDef& def,
     ID3D12PipelineState** out_pso) {
+  DLSSNR_PROFILE_ASYNC_L2("ComputeEngine::CompilePipeline");
   if (device_ == nullptr || out_pso == nullptr) return false;
 
   *out_pso = nullptr;
@@ -465,6 +470,9 @@ bool ComputeEngine::Dispatch(
     uint32_t threads_x,
     uint32_t threads_y,
     uint32_t threads_z) {
+  DLSSNR_PROFILE_RENDER_L2("ComputeEngine::Dispatch");
+  DLSSNR_PROFILE_RENDER_TAG_L2("ComputePass", pass_name != nullptr ? pass_name : "<null>");
+
   if (device_ == nullptr || pass_name == nullptr ||
       command_list == nullptr || srvs == nullptr || uavs == nullptr) {
     return false;
@@ -553,12 +561,15 @@ bool ComputeEngine::Dispatch(
                 trace::ResourceId(uavs[0]), params_text);
   }
 
+  DLSSNR_PROFILE_GPU_CONTEXT_L2(command_list);
+  DLSSNR_PROFILE_GPU_L2("Compute Dispatch");
   return BindAndDispatch(
       command_list, pso, constants, srvs, uavs,
       threads_x, threads_y, threads_z);
 }
 
 bool ComputeEngine::Init(ID3D12Device* device) {
+  DLSSNR_PROFILE_RESOURCE_L1("ComputeEngine::Init");
   if (device_ != nullptr) return true;
   if (device == nullptr) return false;
 
@@ -658,6 +669,7 @@ ComputeEngine::~ComputeEngine() {
 }
 
 void ComputeEngine::Destroy() {
+  DLSSNR_PROFILE_RESOURCE_L1("ComputeEngine::Destroy");
   // Stop and join first: the worker reads device_ and root_signature_ and
   // writes passes_, all of which are torn down below.
   {
@@ -693,6 +705,7 @@ void ComputeEngine::Destroy() {
 }
 
 void ComputeEngine::WorkerCompileAll() {
+  DLSSNR_PROFILE_ASYNC_L1("ComputeEngine::WorkerCompileAll");
   for (uint32_t i = 0; i < kComputePassCount; ++i) {
     const char* name = kComputePasses[i].name;
 

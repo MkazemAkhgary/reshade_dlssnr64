@@ -1,4 +1,5 @@
 #include "importance_mask/importance_mask.h"
+#include "profiling/profile.h"
 
 #include <algorithm>
 #include <utility>
@@ -49,6 +50,7 @@ bool CreateMaskResource(ID3D12Device* device,
 }
 
 PipelineStatus RunBuildImportanceMask(PassRun& run) {
+  DLSSNR_PROFILE_RENDER_L2("RunBuildImportanceMask");
   // Compare the exact post-preparation, post-input-grade resource sent to NGX.
   // The builder is scheduled only after this pass's output barrier. A failed
   // NGX evaluation must not publish a mask derived from stale output memory.
@@ -112,6 +114,7 @@ static_assert(
 }  // namespace
 
 void ImportanceMask::Shutdown() {
+  DLSSNR_PROFILE_RESOURCE_L2("ImportanceMask::Shutdown");
   RetireSlot(masks_[0]);
   RetireSlot(masks_[1]);
   RetireSlot(classifier_);
@@ -128,6 +131,7 @@ void ImportanceMask::Shutdown() {
 }
 
 void ImportanceMask::AdvanceFrame(bool enabled) {
+  DLSSNR_PROFILE_CORE_L2("ImportanceMask::AdvanceFrame");
   built_this_frame_ = false;
   generated_this_frame_ = false;
   if (!enabled) {

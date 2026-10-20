@@ -1,4 +1,5 @@
 #include "pipeline/pass_session.h"
+#include "profiling/profile.h"
 
 #include <algorithm>
 #include <cmath>
@@ -9,6 +10,7 @@
 namespace reshade_dlssnr {
 
 PipelineStatus PassSession::StepBuildHdrUniforms(PassRun& run) {
+  DLSSNR_PROFILE_RENDER_L2("PassSession::StepBuildHdrUniforms");
   run.hdr_uniforms_ready = false;
   if (run.hdr == nullptr) return PipelineStatus::Ok;
   if (!run.hdr->Enabled()) return PipelineStatus::Ok;

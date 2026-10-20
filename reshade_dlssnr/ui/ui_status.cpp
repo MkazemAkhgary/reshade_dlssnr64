@@ -2,6 +2,7 @@
 #include <reshade.hpp>
 
 #include "ui/ui_sections.h"
+#include "profiling/profile.h"
 
 #include <cstdio>
 #include <unordered_map>
@@ -63,6 +64,7 @@ void FormatPassStatus(const PassStatus& pass,
 }  // namespace
 
 void DrawStatusSection(Settings& settings, bool& changed) {
+  DLSSNR_PROFILE_UI_L2("DrawStatusSection");
   if (!PersistentSettingHeader(
           "Status", feature::ui_state::kStatusOpen, changed,
           "Live addon, NGX, guide, HDR, and per-pass health. Pass rows use the same target-stage grouping as execution.")) {

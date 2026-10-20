@@ -10,6 +10,7 @@
 // frame's tab layout.
 
 #include "ui/ui_sections.h"
+#include "profiling/profile.h"
 
 #include <imgui.h>
 
@@ -42,6 +43,7 @@ namespace {
 // ResetSectionToDefault, and the survivors are written back. The pass's stable
 // id -- not its position -- is what identifies the instance throughout.
 void ResetPassProfile(feature::pass::PassId id) {
+  DLSSNR_PROFILE_UI_L2("ResetPassProfile");
   const ctl::InstanceKey key = feature::pass::PassKey(id);
   const std::string section = feature::pass::kSection;
   ctl::ValueStore& store = feature::SettingsStore();
@@ -71,6 +73,7 @@ void ResetPassProfile(feature::pass::PassId id) {
 // Positions are view-only. Nothing here touches a store value: a reorder
 // permutes Settings::pass_order, and the store's instances do not move.
 void DrawPassToolbar(Settings& settings, bool& changed) {
+  DLSSNR_PROFILE_UI_L2("DrawPassToolbar");
   const int pass_total = static_cast<int>(settings.pass_order.size());
   const auto active_it = std::find(settings.pass_order.begin(),
                                    settings.pass_order.end(),
