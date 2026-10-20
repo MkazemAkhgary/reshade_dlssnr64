@@ -223,6 +223,7 @@ constexpr PipelineNodeId kPreDlssSteps[] = {
     PipelineNodeId::ResolveDevice,
     PipelineNodeId::EnsureHdr,
     PipelineNodeId::EnsureComputeEngine,
+    PipelineNodeId::HdrBeginFrame,
     PipelineNodeId::ResolveWorkingScale,
     PipelineNodeId::EnsureFrameResources,
     PipelineNodeId::SeedResourceStates,
@@ -247,13 +248,13 @@ constexpr PipelineNodeId kPreDlssSteps[] = {
 };
 
 constexpr PipelinePhaseDef kPreDlssPhases[] = {
-    {"setup", 0, 3, nullptr},
-    {"resources", 3, 4, nullptr},
-    {"feature", 7, 3, nullptr},
-    {"prepare", 10, 7, nullptr},
-    {"evaluate", 17, 3, nullptr},
-    {"compose", 20, 2, nullptr},
-    {"output", 22, 2, nullptr},
+    {"setup", 0, 4, nullptr},
+    {"resources", 4, 4, nullptr},
+    {"feature", 8, 3, nullptr},
+    {"prepare", 11, 7, nullptr},
+    {"evaluate", 18, 3, nullptr},
+    {"compose", 21, 2, nullptr},
+    {"output", 23, 2, nullptr},
 };
 
 // -- Post-DLSS stage --------------------------------------------------------
@@ -263,6 +264,7 @@ constexpr PipelineNodeId kPostDlssSteps[] = {
     // Importance Mask is built after the model output barrier.
     PipelineNodeId::EnsureHdr,
     PipelineNodeId::EnsureComputeEngine,  // codec.Init + IsReady
+    PipelineNodeId::HdrBeginFrame,
     PipelineNodeId::ResolveWorkingScale,
     PipelineNodeId::EnsureFrameResources, // includes SetRetireCallback
     PipelineNodeId::SeedResourceStates,   // ClearState + SeedFrameState + output
@@ -287,13 +289,13 @@ constexpr PipelineNodeId kPostDlssSteps[] = {
 };
 
 constexpr PipelinePhaseDef kPostDlssPhases[] = {
-    {"setup", 0, 3, nullptr},
-    {"resources", 3, 4, nullptr},
-    {"feature", 7, 3, nullptr},
-    {"prepare", 10, 6, nullptr},
-    {"evaluate", 16, 4, nullptr},
-    {"compose", 20, 2, nullptr},
-    {"output", 22, 2, nullptr},
+    {"setup", 0, 4, nullptr},
+    {"resources", 4, 4, nullptr},
+    {"feature", 8, 3, nullptr},
+    {"prepare", 11, 6, nullptr},
+    {"evaluate", 17, 4, nullptr},
+    {"compose", 21, 2, nullptr},
+    {"output", 23, 2, nullptr},
 };
 
 constexpr PipelineNodeId kReleaseSteps[] = {
