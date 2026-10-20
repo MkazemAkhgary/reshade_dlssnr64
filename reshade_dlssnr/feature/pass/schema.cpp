@@ -83,7 +83,9 @@ const char* const kTargetTips[] = {
     "input.",
     "Run after the game's DLSS evaluation on its upscaled output, before later "
     "post-processing and UI.",
-    "Run on the final swapchain backbuffer, after DLSS-stage passes."};
+    "Run on the final swapchain backbuffer at ReShade Present. Works even "
+    "when the game does not use DLSS; it is not ordered with Pre/Post-DLSS "
+    "passes unless those stages are available."};
 
 const char* const kTemporalNames[] = {"Off", "Adaptive", "Every 2", "Every 4"};
 const char* const kTemporalTips[] = {

@@ -286,7 +286,7 @@ The two grades are symmetric around the model: `PrepareModelInput` fuses Input G
 
 ### Backbuffer injection
 
-At ReShade present, enabled Backbuffer passes run after all NGX evaluate hooks for the frame:
+At ReShade present, enabled Backbuffer passes run independently of NGX hook availability. When a game does not use DLSS, Pre-DLSS and Post-DLSS receive no evaluation callbacks, but Backbuffer passes can still process the swapchain image:
 
 ```text
 ReShade present

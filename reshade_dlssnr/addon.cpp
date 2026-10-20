@@ -119,7 +119,7 @@ void OnPresent(
       g_ngx_hook_warned = true;
       reshade::log::message(
           reshade::log::level::warning,
-          "nvngx_dlss.dll never appeared; Pre-DLSS/Post-DLSS stages cannot run");
+          "nvngx_dlss.dll never appeared; Pre-DLSS/Post-DLSS stages cannot run, but Backbuffer passes remain available");
     }
   }
 
