@@ -8,6 +8,24 @@ $project = (Resolve-Path $ProjectDir).Path
 $generated = (Resolve-Path $GeneratedDir).Path
 $shaderRoot = Join-Path $project "shaders"
 $expandedShaderRoot = Join-Path $generated "expanded_shaders"
+$expandedShaderPrefix = [IO.Path]::GetFullPath($expandedShaderRoot).TrimEnd('\') + '\'
+$sourceShaderPrefix = [IO.Path]::GetFullPath($shaderRoot).TrimEnd('\') + '\'
+$projectPrefix = [IO.Path]::GetFullPath($ProjectDir).TrimEnd('\') + '\'
+$expandedRelativePrefix = ''
+if ($expandedShaderRoot.StartsWith($projectPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+  $expandedRelativePrefix = $expandedShaderRoot.Substring($projectPrefix.Length).TrimEnd('\') + '\'
+}
+$sourceRelativePrefix = 'shaders\'
+
+function Convert-ExpandedShaderDiagnostics([string]$Text) {
+  $converted = $Text.Replace($expandedShaderPrefix, $sourceShaderPrefix)
+  $converted = $converted.Replace($expandedShaderPrefix.Replace('\', '/'), $sourceShaderPrefix.Replace('\', '/'))
+  if (-not [string]::IsNullOrEmpty($expandedRelativePrefix)) {
+    $converted = $converted.Replace($expandedRelativePrefix, $sourceRelativePrefix)
+    $converted = $converted.Replace($expandedRelativePrefix.Replace('\', '/'), $sourceRelativePrefix.Replace('\', '/'))
+  }
+  return $converted
+}
 if (-not (Test-Path -LiteralPath $expandedShaderRoot -PathType Container)) {
   throw "Expanded shader sources not found. Run generate_shaders.ps1 before precompiling."
 }
@@ -20,8 +38,20 @@ foreach ($shader in $roots) {
   $rel = $shader.FullName.Substring($expandedShaderRoot.Length + 1).Replace('\','/')
   $safe = [regex]::Replace($rel, '[^A-Za-z0-9_]', '_')
   $cso = Join-Path $csodir ($safe + '.cso')
-  & $FxcPath /nologo /T cs_5_1 /E CSMain /O3 /I $shaderRoot /Fo $cso $shader.FullName
-  if ($LASTEXITCODE -ne 0) { throw "Precompile failed: $rel" }
+  $fxcOutput = @(& $FxcPath /nologo /T cs_5_1 /E CSMain /O3 /I $shaderRoot /Fo $cso $shader.FullName 2>&1)
+  $fxcExitCode = $LASTEXITCODE
+  foreach ($line in $fxcOutput) {
+    if ($line -is [System.Management.Automation.ErrorRecord] -and $null -ne $line.Exception) {
+      $message = $line.Exception.Message
+    } else {
+      $message = [string]$line
+    }
+    Write-Host (Convert-ExpandedShaderDiagnostics $message)
+  }
+  if ($fxcExitCode -ne 0) {
+    $sourcePath = Join-Path $shaderRoot $rel.Replace('/', '\')
+    throw "Precompile failed: $sourcePath"
+  }
   $bytes = [IO.File]::ReadAllBytes($cso)
   $hex = ($bytes | ForEach-Object { '0x{0:X2}' -f $_ }) -join ','
   $entries += [pscustomobject]@{ Name=$rel; Bytes=$hex; Count=$bytes.Length }

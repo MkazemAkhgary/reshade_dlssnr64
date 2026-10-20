@@ -10,6 +10,25 @@ if ([string]::IsNullOrWhiteSpace($GeneratedDir)) {
 }
 $GeneratedDir = [IO.Path]::GetFullPath($GeneratedDir)
 $expandedShaderRoot = Join-Path $GeneratedDir "expanded_shaders"
+$expandedShaderPrefix = [IO.Path]::GetFullPath($expandedShaderRoot).TrimEnd('\') + '\'
+$sourceShaderRoot = Join-Path $ProjectDir "shaders"
+$sourceShaderPrefix = [IO.Path]::GetFullPath($sourceShaderRoot).TrimEnd('\') + '\'
+$projectPrefix = [IO.Path]::GetFullPath($ProjectDir).TrimEnd('\') + '\'
+$expandedRelativePrefix = ''
+if ($expandedShaderRoot.StartsWith($projectPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+  $expandedRelativePrefix = $expandedShaderRoot.Substring($projectPrefix.Length).TrimEnd('\') + '\'
+}
+$sourceRelativePrefix = 'shaders\'
+
+function Convert-ExpandedShaderDiagnostics([string]$Text) {
+  $converted = $Text.Replace($expandedShaderPrefix, $sourceShaderPrefix)
+  $converted = $converted.Replace($expandedShaderPrefix.Replace('\', '/'), $sourceShaderPrefix.Replace('\', '/'))
+  if (-not [string]::IsNullOrEmpty($expandedRelativePrefix)) {
+    $converted = $converted.Replace($expandedRelativePrefix, $sourceRelativePrefix)
+    $converted = $converted.Replace($expandedRelativePrefix.Replace('\', '/'), $sourceRelativePrefix.Replace('\', '/'))
+  }
+  return $converted
+}
 
 # Under MSBuild the generate target runs first via DependsOnTargets, so this
 # fallback only fires when the script is invoked standalone. It regenerates the
@@ -56,7 +75,9 @@ try {
     $index++
     $objectPath = Join-Path $verifyTemp ("shader_{0:D4}.cso" -f $index)
     Write-Host "============================================================"
-    Write-Host ("VERIFYING [{0}/{1}] {2}" -f $index, $roots.Count, $shader.FullName)
+    $relativeShaderPath = $shader.FullName.Substring($expandedShaderPrefix.Length)
+    $sourceShaderPath = Join-Path $sourceShaderRoot $relativeShaderPath
+    Write-Host ("VERIFYING [{0}/{1}] {2}" -f $index, $roots.Count, $sourceShaderPath)
 
     # These sources have already had #pragma once processed during expansion;
     # FXC therefore sees neither the unsupported pragma nor duplicate includes.
@@ -66,23 +87,24 @@ try {
     foreach ($line in $output) {
       if ($line -is [System.Management.Automation.ErrorRecord]) {
         if ($null -ne $line.Exception) {
-          Write-Host $line.Exception.Message
+          $message = $line.Exception.Message
         } else {
-          Write-Host ([string]$line)
+          $message = [string]$line
         }
       } else {
-        Write-Host ([string]$line)
+        $message = [string]$line
       }
+      Write-Host (Convert-ExpandedShaderDiagnostics $message)
     }
 
     if ($exitCode -ne 0) {
       $failedShaders += [pscustomobject]@{
-        Path = $shader.FullName
+        Path = $sourceShaderPath
         ExitCode = $exitCode
       }
-      Write-Host ("FAILED   [{0}/{1}] {2} (FXC exit code: {3})" -f $index, $roots.Count, $shader.FullName, $exitCode)
+      Write-Host ("FAILED   [{0}/{1}] {2} (FXC exit code: {3})" -f $index, $roots.Count, $sourceShaderPath, $exitCode)
     } else {
-      Write-Host ("VERIFIED [{0}/{1}] {2}" -f $index, $roots.Count, $shader.FullName)
+      Write-Host ("VERIFIED [{0}/{1}] {2}" -f $index, $roots.Count, $sourceShaderPath)
     }
   }
 } finally {
