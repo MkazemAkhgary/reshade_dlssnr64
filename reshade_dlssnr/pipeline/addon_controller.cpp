@@ -755,6 +755,14 @@ void AddonController::AdvanceMaskFrames(bool master_enabled) {
   }
 }
 
+uint64_t AddonController::ReleaseFenceHint() const {
+  // LastSignaledFenceValue is a plain load; the member is only written
+  // by SignalGpu under g_direct_mutex, and the NGX hook already holds
+  // that mutex when it calls CaptureGuides. Reading without a lock would
+  // be safe for the load itself but is not needed here.
+  return release_command_.LastSignaledFenceValue();
+}
+
 void AddonController::SignalHdrAtPresent(ID3D12CommandQueue* queue) {
   for (auto& entry : sessions_) {
     if (entry.second != nullptr) entry.second->Hdr().SignalAtPresent(queue);

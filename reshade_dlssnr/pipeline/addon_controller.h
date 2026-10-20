@@ -119,6 +119,14 @@ class AddonController {
                        IDXGISwapChain* swapchain,
                        const GradeSettings& grade);
 
+  // The Release queue's most recently signaled fence value. DlssGuides
+  // uses this to tag resources it retires during CaptureGuides so that
+  // an addon stall (debugger, profiler pause) cannot hold the game's
+  // D3D12 resources alive past the point the game thinks they are gone.
+  // 0 means no fence has been signaled yet; the Present-time tagging
+  // path still covers that case.
+  uint64_t ReleaseFenceHint() const;
+
   // Signals every live and retired pass HDR readback after game work is queued.
   void SignalHdrAtPresent(ID3D12CommandQueue* queue);
   void AdvanceMaskFrames(bool enabled);

@@ -200,7 +200,17 @@ ID3D12Resource* DlssGuides::CreateGuideClone(
 void DlssGuides::CaptureGuides(
     ID3D12GraphicsCommandList* command_list,
     const NVSDK_NGX_Parameter* params,
-    NVSDK_NGX_Feature feature_id) {
+    NVSDK_NGX_Feature feature_id,
+    uint64_t retirement_fence_hint) {
+  // Anything pushed during this call is tagged with the queue's most
+  // recently signaled fence value. If no queue has signaled yet the hint
+  // is zero and TagRetiredResources at Present still fills it in; that
+  // matches the previous behaviour for the very first frames, when nothing
+  // can be retired in flight anyway.
+  auto retire_with_hint = [this, retirement_fence_hint](ID3D12Resource* r) {
+    if (r == nullptr) return;
+    retired_game_resources_.push_back({r, retirement_fence_hint});
+  };
   std::lock_guard<std::mutex> lock(lock_);
   const uint64_t capture_serial = ++capture_serial_;
 
@@ -213,9 +223,9 @@ void DlssGuides::CaptureGuides(
     RetireResource(depth_clone_);
     RetireResource(motion_clone_);
     RetireResource(dlss_output_clone_);
-    if (ID3D12Resource* retired = depth_direct_.Detach()) retired_game_resources_.push_back({retired, 0});
-    if (ID3D12Resource* retired = motion_direct_.Detach()) retired_game_resources_.push_back({retired, 0});
-    if (ID3D12Resource* retired = dlss_output_direct_.Detach()) retired_game_resources_.push_back({retired, 0});
+    retire_with_hint(depth_direct_.Detach());
+    retire_with_hint(motion_direct_.Detach());
+    retire_with_hint(dlss_output_direct_.Detach());
     depth_width_ = depth_height_ = 0;
     depth_format_ = DXGI_FORMAT_UNKNOWN;
     motion_width_ = motion_height_ = 0;
@@ -252,9 +262,9 @@ void DlssGuides::CaptureGuides(
     // In direct mode the retained game resources must not keep an obsolete
     // frame's guides alive indefinitely if the game temporarily stops
     // supplying guides. In clone mode, allocations can be reused later.
-    if (ID3D12Resource* retired = depth_direct_.Detach()) retired_game_resources_.push_back({retired, 0});
-    if (ID3D12Resource* retired = motion_direct_.Detach()) retired_game_resources_.push_back({retired, 0});
-    if (ID3D12Resource* retired = dlss_output_direct_.Detach()) retired_game_resources_.push_back({retired, 0});
+    retire_with_hint(depth_direct_.Detach());
+    retire_with_hint(motion_direct_.Detach());
+    retire_with_hint(dlss_output_direct_.Detach());
     state_ = {};
     state_.clone_resources = clone_resources_;
     state_.capture_serial = capture_serial;
@@ -388,11 +398,11 @@ void DlssGuides::CaptureGuides(
     published_motion = motion_clone_.Get();
   } else {
     if (depth_direct_.Get() != depth) {
-      if (ID3D12Resource* retired = depth_direct_.Detach()) retired_game_resources_.push_back({retired, 0});
+      retire_with_hint(depth_direct_.Detach());
       depth_direct_ = depth;
     }
     if (motion_direct_.Get() != motion) {
-      if (ID3D12Resource* retired = motion_direct_.Detach()) retired_game_resources_.push_back({retired, 0});
+      retire_with_hint(motion_direct_.Detach());
       motion_direct_ = motion;
     }
     published_depth = depth_direct_.Get();
@@ -427,7 +437,12 @@ void DlssGuides::CaptureGuides(
 void DlssGuides::CaptureOutput(
     ID3D12GraphicsCommandList* command_list,
     const NVSDK_NGX_Parameter* params,
-    NVSDK_NGX_Feature feature_id) {
+    NVSDK_NGX_Feature feature_id,
+    uint64_t retirement_fence_hint) {
+  auto retire_with_hint = [this, retirement_fence_hint](ID3D12Resource* r) {
+    if (r == nullptr) return;
+    retired_game_resources_.push_back({r, retirement_fence_hint});
+  };
   std::lock_guard<std::mutex> lock(lock_);
 
   state_.dlss_output_color = nullptr;
@@ -485,7 +500,7 @@ void DlssGuides::CaptureOutput(
     published_output = dlss_output_clone_.Get();
   } else {
     if (dlss_output_direct_.Get() != output) {
-      if (ID3D12Resource* retired = dlss_output_direct_.Detach()) retired_game_resources_.push_back({retired, 0});
+      retire_with_hint(dlss_output_direct_.Detach());
       dlss_output_direct_ = output;
     }
     // Direct mode needs the game's just-produced output in an SRV state before

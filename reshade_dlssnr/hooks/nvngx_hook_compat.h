@@ -566,7 +566,10 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
       // entered. Capture the current frame before Pre-DLSS so temporal guide
       // inputs are correct for all three injection points. During a deferred
       // restart, do not record clone copies beyond the restart fence.
-      DlssGuides::Get().CaptureGuides(work_list, parameters, feature_id);
+      const uint64_t retirement_hint =
+          AddonController::Get().ReleaseFenceHint();
+      DlssGuides::Get().CaptureGuides(work_list, parameters, feature_id,
+                                      retirement_hint);
       guides_captured_before_evaluate = true;
     }
   }
@@ -660,7 +663,10 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
       if (settings.enabled && any_pass_enabled &&
           !guides_captured_before_evaluate &&
           !AddonController::Get().RestartPending()) {
-        DlssGuides::Get().CaptureGuides(work_list, parameters, feature_id);
+        const uint64_t retirement_hint =
+            AddonController::Get().ReleaseFenceHint();
+        DlssGuides::Get().CaptureGuides(work_list, parameters, feature_id,
+                                        retirement_hint);
       }
 
       if (settings.enabled) {
@@ -673,7 +679,10 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
         if (any_post_dlss) {
           output = GetResourceParameter(parameters, NVSDK_NGX_Parameter_Output);
           if (output != nullptr && !AddonController::Get().RestartPending()) {
-            DlssGuides::Get().CaptureOutput(work_list, parameters, feature_id);
+            const uint64_t retirement_hint =
+                AddonController::Get().ReleaseFenceHint();
+            DlssGuides::Get().CaptureOutput(work_list, parameters, feature_id,
+                                            retirement_hint);
           }
         }
 

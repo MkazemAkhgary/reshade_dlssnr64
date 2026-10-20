@@ -59,18 +59,28 @@ class DlssGuides {
 
   // Called before the real NGX evaluation with this evaluation's current
   // depth/motion inputs. Mode changes are applied only at this boundary.
+  //
+  // Resources retired by this call are tagged eagerly with
+  // `retirement_fence_hint` -- the release queue's most recently signaled
+  // fence value at the time of the call -- rather than waiting for the
+  // next Present to tag them. This keeps the addon from holding the game's
+  // D3D12 resources indefinitely if Present stops running (debugger stall,
+  // profiler pause) while EvaluateFeature keeps firing.
   void CaptureGuides(
       ID3D12GraphicsCommandList* command_list,
       const NVSDK_NGX_Parameter* params,
-      NVSDK_NGX_Feature feature_id);
+      NVSDK_NGX_Feature feature_id,
+      uint64_t retirement_fence_hint = 0);
 
   // Called after a successful evaluation when a Post-DLSS pass needs the
   // just-produced output. The mode latched by CaptureGuides is used for the
-  // matching evaluation.
+  // matching evaluation. `retirement_fence_hint` is forwarded to any
+  // resources retired by this call; see CaptureGuides for why it exists.
   void CaptureOutput(
       ID3D12GraphicsCommandList* command_list,
       const NVSDK_NGX_Parameter* params,
-      NVSDK_NGX_Feature feature_id);
+      NVSDK_NGX_Feature feature_id,
+      uint64_t retirement_fence_hint = 0);
 
   DlssGuideState GetState(bool invert_fallback_depth = false) const;
   void SetFallbackDepth(ID3D12Resource* resource);
