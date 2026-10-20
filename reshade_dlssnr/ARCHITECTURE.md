@@ -549,6 +549,8 @@ Debug views show the pre-depth candidate, post-depth validation result, and per-
 
 **Keep `groupshared` variables at global scope.** HLSL rejects function-local `groupshared` declarations.
 
+**Initialize HLSL result/output variables at function entry and return once to avoid FXC X4000 warnings.**
+
 **Avoid reserved or ambiguous identifiers.** HLSL's parser can report misleading errors for names that collide with language keywords or intrinsics.
 
 **Be explicit with color types.** Functions that operate on colors take and return `float3`; do not rely on HLSL scalar-to-vector coercion.

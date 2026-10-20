@@ -19,7 +19,8 @@ float GlobalHdrLumaToSdr(float hdr_luma, float exposure)
     const float effective_peak_nits = max(
         kSdrReferenceWhiteNits, max(kEffectiveSceneWhiteNits, 0.01));
     const float y_curve = y_exposed * kPqPeakNits / effective_peak_nits;
-    return max(HdrBt2446Forward(y_curve) / 100.0, 0.0);
+    const float result = max(HdrBt2446Forward(y_curve) / 100.0, 0.0);
+    return result;
 }
 
 float SampleGlobalSdrLuma(float2 uv)
@@ -29,7 +30,8 @@ float SampleGlobalSdrLuma(float2 uv)
         c, (int)(kFormat + 0.5), kSdrReferenceWhiteNits);
     linear_rgb = HdrPreDesaturate(linear_rgb, saturate(kCrosstalk));
     const float hdr_luma = max(dot(max(linear_rgb, 0.0), HdrLumaWeights()), 0.0);
-    return max(GlobalHdrLumaToSdr(hdr_luma, kExposure), 1e-8);
+    const float result = max(GlobalHdrLumaToSdr(hdr_luma, kExposure), 1e-8);
+    return result;
 }
 
 float LocalBaseLogLuma(float2 uv, float center_log2)
@@ -87,103 +89,104 @@ float LocalBaseLogLuma(float2 uv, float center_log2)
         weighted += local_luma * sample_weight;
         weight += sample_weight;
     }
-    return weighted / max(weight, 1e-6);
+    const float result = weighted / max(weight, 1e-6);
+    return result;
 }
 
 float LocalExposureScale(float2 uv, float global_sdr_luma)
 {
-    if (kLocalExposureStrength <= 0.0 || global_sdr_luma <= 1e-8)
-        return 1.0;
+    float result = 1.0;
+    if (kLocalExposureStrength > 0.0 && global_sdr_luma > 1e-8) {
+        const float center_log2 = log2(max(global_sdr_luma, 1e-8));
+        const float mid_log2 = log2(max(kLocalExposureMidtone, 1e-6));
+        if (abs(center_log2 - mid_log2) >= 1e-6) {
+            const float base_log2 = LocalBaseLogLuma(uv, center_log2);
+            const float detail_log2 = center_log2 - base_log2;
+            const float distance_to_mid = mid_log2 - base_log2;
 
-    const float center_log2 = log2(max(global_sdr_luma, 1e-8));
-    const float mid_log2 = log2(max(kLocalExposureMidtone, 1e-6));
-    if (abs(center_log2 - mid_log2) < 1e-6)
-        return 1.0;
+            const float shadow_range = max(localExposure.Shape.x, 0.25);
+            const float highlight_range = max(localExposure.Shape.y, 0.25);
+            const float highlight_protection = saturate(localExposure.Shape.z);
+            const float shadow_protection = saturate(localExposure.Shape.w);
+            const float detail_retention = saturate(localExposure.Detail.x);
+            const float shadow_strength = saturate(localExposure.Detail.y);
+            const float highlight_strength = saturate(localExposure.Detail.z);
 
-    const float base_log2 = LocalBaseLogLuma(uv, center_log2);
-    const float detail_log2 = center_log2 - base_log2;
-    const float distance_to_mid = mid_log2 - base_log2;
+            float base_shift = 0.0;
+            if (distance_to_mid > 0.0)
+            {
+                const float transition = smoothstep(0.0, shadow_range, distance_to_mid);
+                base_shift = distance_to_mid * transition *
+                             saturate(kLocalExposureStrength) * shadow_strength;
+            }
+            else if (distance_to_mid < 0.0)
+            {
+                const float highlight_distance = -distance_to_mid;
+                const float transition = smoothstep(0.0, highlight_range, highlight_distance);
+                base_shift = -highlight_distance * transition *
+                             saturate(kLocalExposureStrength) * highlight_strength;
+            }
 
-    const float shadow_range = max(localExposure.Shape.x, 0.25);
-    const float highlight_range = max(localExposure.Shape.y, 0.25);
-    const float highlight_protection = saturate(localExposure.Shape.z);
-    const float shadow_protection = saturate(localExposure.Shape.w);
-    const float detail_retention = saturate(localExposure.Detail.x);
-    const float shadow_strength = saturate(localExposure.Detail.y);
-    const float highlight_strength = saturate(localExposure.Detail.z);
+            // The local neighborhood selects the correction direction, but the pixel's
+            // own luminance determines whether it should receive that correction. This
+            // keeps the pivot stable, lifts shadow pixels without lifting bright spots,
+            // and reduces highlights without crushing dark detail. The protection
+            // sliders control how much correction is allowed to cross the pivot.
+            const float pixel_from_mid = center_log2 - mid_log2;
+            bool cross_pivot_correction = false;
+            if (base_shift > 0.0)
+            {
+                if (pixel_from_mid < 0.0)
+                {
+                    const float pixel_gate =
+                        smoothstep(0.0, shadow_range, -pixel_from_mid);
+                    base_shift = min(base_shift * pixel_gate, -pixel_from_mid);
+                }
+                else
+                {
+                    cross_pivot_correction = highlight_protection < 1.0;
+                    const float pixel_gate = (1.0 - highlight_protection) *
+                        smoothstep(0.0, highlight_range, pixel_from_mid);
+                    base_shift *= pixel_gate;
+                }
+            }
+            else if (base_shift < 0.0)
+            {
+                if (pixel_from_mid > 0.0)
+                {
+                    const float pixel_gate =
+                        smoothstep(0.0, highlight_range, pixel_from_mid);
+                    base_shift = max(base_shift * pixel_gate, -pixel_from_mid);
+                }
+                else
+                {
+                    cross_pivot_correction = shadow_protection < 1.0;
+                    const float pixel_gate = (1.0 - shadow_protection) *
+                        smoothstep(0.0, shadow_range, -pixel_from_mid);
+                    base_shift *= pixel_gate;
+                }
+            }
 
-    float base_shift = 0.0;
-    if (distance_to_mid > 0.0)
-    {
-        const float transition = smoothstep(0.0, shadow_range, distance_to_mid);
-        base_shift = distance_to_mid * transition *
-                     saturate(kLocalExposureStrength) * shadow_strength;
-    }
-    else if (distance_to_mid < 0.0)
-    {
-        const float highlight_distance = -distance_to_mid;
-        const float transition = smoothstep(0.0, highlight_range, highlight_distance);
-        base_shift = -highlight_distance * transition *
-                     saturate(kLocalExposureStrength) * highlight_strength;
-    }
+            const float new_base_log2 = base_log2 + base_shift;
+            const float new_log2 = new_base_log2 + detail_log2 * detail_retention;
+            float stops = clamp(new_log2 - center_log2,
+                                -max(kLocalMaxDarken, 0.0),
+                                max(kLocalMaxBrighten, 0.0));
+            float adjusted_log2 = center_log2 + stops;
 
-    // The local neighborhood selects the correction direction, but the pixel's
-    // own luminance determines whether it should receive that correction. This
-    // keeps the pivot stable, lifts shadow pixels without lifting bright spots,
-    // and reduces highlights without crushing dark detail. The protection
-    // sliders control how much correction is allowed to cross the pivot.
-    const float pixel_from_mid = center_log2 - mid_log2;
-    bool cross_pivot_correction = false;
-    if (base_shift > 0.0)
-    {
-        if (pixel_from_mid < 0.0)
-        {
-            const float pixel_gate =
-                smoothstep(0.0, shadow_range, -pixel_from_mid);
-            base_shift = min(base_shift * pixel_gate, -pixel_from_mid);
+            // When cross-pivot correction is disabled, the pivot is also a hard output
+            // shoulder/toe: strong settings cannot push a shadow above the pivot or a
+            // highlight below it. This is what prevents Max Brighten = 4+ from blowing
+            // out mid/dark details while still allowing deep shadows to receive a lift.
+            if (!cross_pivot_correction)
+            {
+                if (pixel_from_mid < 0.0)
+                    adjusted_log2 = min(adjusted_log2, mid_log2);
+                else
+                    adjusted_log2 = max(adjusted_log2, mid_log2);
+            }
+            result = exp2(adjusted_log2 - center_log2);
         }
-        else
-        {
-            cross_pivot_correction = highlight_protection < 1.0;
-            const float pixel_gate = (1.0 - highlight_protection) *
-                smoothstep(0.0, highlight_range, pixel_from_mid);
-            base_shift *= pixel_gate;
-        }
     }
-    else if (base_shift < 0.0)
-    {
-        if (pixel_from_mid > 0.0)
-        {
-            const float pixel_gate =
-                smoothstep(0.0, highlight_range, pixel_from_mid);
-            base_shift = max(base_shift * pixel_gate, -pixel_from_mid);
-        }
-        else
-        {
-            cross_pivot_correction = shadow_protection < 1.0;
-            const float pixel_gate = (1.0 - shadow_protection) *
-                smoothstep(0.0, shadow_range, -pixel_from_mid);
-            base_shift *= pixel_gate;
-        }
-    }
-
-    const float new_base_log2 = base_log2 + base_shift;
-    const float new_log2 = new_base_log2 + detail_log2 * detail_retention;
-    float stops = clamp(new_log2 - center_log2,
-                        -max(kLocalMaxDarken, 0.0),
-                        max(kLocalMaxBrighten, 0.0));
-    float adjusted_log2 = center_log2 + stops;
-
-    // When cross-pivot correction is disabled, the pivot is also a hard output
-    // shoulder/toe: strong settings cannot push a shadow above the pivot or a
-    // highlight below it. This is what prevents Max Brighten = 4+ from blowing
-    // out mid/dark details while still allowing deep shadows to receive a lift.
-    if (!cross_pivot_correction)
-    {
-        if (pixel_from_mid < 0.0)
-            adjusted_log2 = min(adjusted_log2, mid_log2);
-        else
-            adjusted_log2 = max(adjusted_log2, mid_log2);
-    }
-    return exp2(adjusted_log2 - center_log2);
+    return result;
 }
