@@ -437,6 +437,11 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
               }
             } else {
               if (LoadSavedProfile(profiles[i].id)) {
+                // A loaded profile can replace the pass order. Reconcile the
+                // live session map with the new order so retired sessions are
+                // fenced and new ones are created before the next frame runs
+                // them.
+                AddonController::Get().EnsureSessions(settings.pass_order);
                 changed = true;
                 profile_feedback_index = static_cast<int>(i);
                 std::snprintf(profile_feedback, sizeof(profile_feedback),
