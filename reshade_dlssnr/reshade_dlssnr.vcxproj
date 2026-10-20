@@ -36,6 +36,13 @@
     <UpToDateCheckOutput Include="$(DlssnrShaderStampDir)\verify.stamp" />
     <UpToDateCheckOutput Include="$(DlssnrShaderStampDir)\precompile.stamp" />
   </ItemGroup>
+  <!-- Rebuild starts from known shader build outputs, but preserves unrelated
+       files that may also live under generated/. Remove only outputs owned by
+       this project: embedded tables, build stamps and the two generated caches. -->
+  <Target Name="CleanGeneratedShaderOutputsBeforeRebuild" BeforeTargets="Rebuild">
+    <Delete Files="$(DlssnrGeneratedFiles);$(DlssnrShaderStampDir)\generate.stamp;$(DlssnrShaderStampDir)\verify.stamp;$(DlssnrShaderStampDir)\precompile.stamp" />
+    <RemoveDir Directories="$(DlssnrGeneratedDir)\expanded_shaders;$(DlssnrGeneratedDir)\shader_cache" />
+  </Target>
   <Target Name="ValidateFxcPath" Condition="('$(VerifyShaders)' == 'true' or '$(PrecompileShaders)' == 'true') and '$(FxcPath)' == ''">
     <Error Text="FxcPath is not set. Set /p:FxcPath=... or ensure a Windows SDK is installed." />
   </Target>
