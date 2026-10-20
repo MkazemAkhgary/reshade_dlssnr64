@@ -649,8 +649,9 @@ bool EnumSetting::Assign(Value& out, const Value& in) const {
 
 std::string EnumSetting::ToString(const Value& value) const {
   EnsureItems();
-  Clamp(const_cast<Value&>(value));
-  const int idx = value.as_int;
+  Value clamped = value;
+  Clamp(clamped);
+  const int idx = clamped.as_int;
   if (idx >= 0 && idx < static_cast<int>(names_.size())) return names_[idx];
   return std::to_string(idx);
 }
