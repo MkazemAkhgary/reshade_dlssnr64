@@ -531,7 +531,8 @@ bool ComputeEngine::Dispatch(
     const float* params = &constants.shader.Params0.x;
     constexpr uint32_t kParamCapacity =
         (sizeof(ShaderBlock) + sizeof(GradeBlock) + sizeof(ResidualBlock) +
-         sizeof(HdrBlock) + sizeof(HistogramBlock) + sizeof(TemporalBlock)) / sizeof(float);
+         sizeof(HdrBlock) + sizeof(HistogramBlock) + sizeof(TemporalBlock) +
+         sizeof(LocalExposureControlBlock)) / sizeof(float);
     uint32_t param_count = 0;
     for (uint32_t i = 0; i < kParamCapacity; ++i) {
       if (params[i] != 0.0f) param_count = i + 1;
