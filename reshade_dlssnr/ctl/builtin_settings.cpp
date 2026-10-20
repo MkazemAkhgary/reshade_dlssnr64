@@ -99,9 +99,19 @@ bool FloatSetting::Draw(const SettingContext& ctx, const Value& resolved,
     const std::string id = std::string("##") + meta_.name;
     // Range, narrowed by ClampRange when the latter is set. Typed input is
     // always clamped to [lo_, hi_].
-    const float eff_lo = has_clamp_range_ ? std::max(ui_lo_, lo_) : lo_;
-    const float eff_hi = has_clamp_range_ ? std::min(ui_hi_, hi_) : hi_;
-    changed = ImGui::SliderFloat(id.c_str(), &display, eff_lo, eff_hi,
+    // Slider bounds: ClampRange (when set) is the base, narrowed to the
+    // overlap with Range. If the two do not overlap, ClampRange stands.
+    float slider_lo = lo_;
+    float slider_hi = hi_;
+    if (has_clamp_range_) {
+      const float overlap_lo = std::max(ui_lo_, lo_);
+      const float overlap_hi = std::min(ui_hi_, hi_);
+      if (overlap_lo <= overlap_hi) {
+        slider_lo = overlap_lo;
+        slider_hi = overlap_hi;
+      }
+    }
+    changed = ImGui::SliderFloat(id.c_str(), &display, slider_lo, slider_hi,
                                  format_.c_str());
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -209,9 +219,19 @@ bool IntSetting::Draw(const SettingContext& ctx, const Value& resolved,
     const std::string id = std::string("##") + meta_.name;
     // Range, narrowed by ClampRange when the latter is set. Typed input is
     // always clamped to [lo_, hi_].
-    const int eff_lo = has_clamp_range_ ? std::max(ui_lo_, lo_) : lo_;
-    const int eff_hi = has_clamp_range_ ? std::min(ui_hi_, hi_) : hi_;
-    changed = ImGui::SliderInt(id.c_str(), &display, eff_lo, eff_hi);
+    // Slider bounds: ClampRange (when set) is the base, narrowed to the
+    // overlap with Range. If the two do not overlap, ClampRange stands.
+    int slider_lo = lo_;
+    int slider_hi = hi_;
+    if (has_clamp_range_) {
+      const int overlap_lo = std::max(ui_lo_, lo_);
+      const int overlap_hi = std::min(ui_hi_, hi_);
+      if (overlap_lo <= overlap_hi) {
+        slider_lo = overlap_lo;
+        slider_hi = overlap_hi;
+      }
+    }
+    changed = ImGui::SliderInt(id.c_str(), &display, slider_lo, slider_hi);
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("%s", meta_.tooltip.empty() ? meta_.label.c_str() : meta_.tooltip.c_str());
