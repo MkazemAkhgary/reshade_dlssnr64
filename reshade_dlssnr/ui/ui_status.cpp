@@ -20,19 +20,6 @@
 
 namespace reshade_dlssnr {
 
-bool AnyPassUsesHdrInjection(const Settings& settings) {
-  ctl::ValueStore& store = feature::SettingsStore();
-  for (feature::pass::PassId id : settings.pass_order) {
-    const feature::pass::PassSnapshot snapshot =
-        feature::pass::Read(store, feature::pass::PassKey(id));
-    // Only enabled passes reach the render path at all.
-    if (!snapshot.enabled) continue;
-    const InjectionStage target =
-        static_cast<InjectionStage>(snapshot.target);
-    if (target != InjectionStage::Backbuffer) return true;
-  }
-  return false;
-}
 
 namespace {
 
@@ -127,12 +114,16 @@ void DrawStatusSection(Settings& settings, bool& changed) {
   std::snprintf(guides_buf, sizeof(guides_buf), "%s",
                 snap.guides_valid ? "Valid (depth + motion)" : "Not seen");
 
-  const bool hdr_in_use = AnyPassUsesHdrInjection(settings);
-  // Read the HDR toggle from the store rather than from `settings`: the UI
-  // edits it through the store, so a copy carried in Settings would be frozen
-  // at load time and this panel would never see the user's change.
-  const ctl::InstanceKey hdr_key = ctl::InstanceKey::FromInt(0);
-  const bool hdr_enabled = feature::hdr::Read(feature::SettingsStore(), hdr_key).enable;
+  // HDR settings are pass-keyed. Status follows the selected pass, matching
+  // the exposure snapshot shown by the HDR diagnostics section.
+  const ctl::InstanceKey hdr_key = feature::pass::PassKey(settings.active_pass_id);
+  const ctl::ValueStore& store = feature::SettingsStore();
+  const bool hdr_enabled = feature::hdr::Read(store, hdr_key).enable;
+  const feature::pass::PassSnapshot active_pass =
+      feature::pass::Read(store, hdr_key);
+  const bool hdr_in_use = settings.enabled && active_pass.enabled &&
+                          active_pass.target !=
+                              static_cast<int>(InjectionStage::Backbuffer);
   const bool hdr_good = !hdr_enabled || !hdr_in_use || snap.hdr_ready;
   char hdr_buf[96];
   if (!hdr_enabled) {

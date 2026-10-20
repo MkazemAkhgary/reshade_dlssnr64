@@ -76,6 +76,8 @@ class HdrState {
  public:
   bool Ensure(ID3D12Device* device);
   void Shutdown();
+  void ReuseMeasurementFrom(const HdrState& previous,
+                            const HdrSettings& settings);
 
   void BeginFrame(CommandContext& cmd,
                   ID3D12GraphicsCommandList* command_list,

@@ -34,13 +34,12 @@ void RegisterImportanceMaskSchema(ctl::Schema& schema) {
   using namespace importance_mask;
 
   ctl::Section& mask =
-      schema.AddSection(kSection, ctl::SectionKind::Single);
+      schema.AddSection(kSection, ctl::SectionKind::Instanced);
   mask.HeaderToggle(kEnable);
 
   mask.Add<ctl::BoolSetting>(kEnable, "Enable", false)
-      .Tooltip("The first Pre/Post-DLSS pass builds the mask after model "
-               "evaluation. It never affects exposure or later passes until "
-               "the next frame.");
+      .Tooltip("This pass builds its Importance Mask after model evaluation. "
+               "The mask affects only this pass's next-frame HDR metering.");
 
   mask.Add<ctl::FloatSetting>(kEditStrength, "Edit Strength", 1.0f)
       .ClampRange(0.1f, 8.0f)

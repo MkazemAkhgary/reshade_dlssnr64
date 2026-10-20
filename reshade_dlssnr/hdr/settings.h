@@ -84,6 +84,7 @@ struct HdrSettings {
   float highlight_headroom = 1.0f;
   bool detailed_statistics = false;
   bool faster_metering = false;
+  bool reuse_previous_pass_measurement = false;
 
   GameExposureLayerSettings game_exposure = {};
   AdaptiveExposureLayerSettings adaptive_exposure = {};

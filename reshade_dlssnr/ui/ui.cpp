@@ -503,6 +503,12 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
 
 namespace {
 
+bool FeatureRowGate(void*, ctl::ValueStore& store, const std::string& section,
+                    const ctl::InstanceKey& key) {
+  if (section != feature::importance_mask::kSection) return true;
+  return store.Read(feature::hdr::kSection, key, feature::hdr::kEnable).as_bool;
+}
+
 void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
                         bool& changed) {
   // The section header keeps the legacy label.
@@ -653,13 +659,19 @@ void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
                    MakeOptions(/*headers=*/false, /*indent=*/false));
   changed |= local_changed;
   ImGui::PopID();
-}
 
-bool FeatureRowGate(void*, ctl::ValueStore& store, const std::string& section,
-                    const ctl::InstanceKey& key) {
-  if (section != feature::importance_mask::kSection) return true;
-  const ctl::InstanceKey shared = ctl::InstanceKey::FromInt(0);
-  return store.Read(feature::hdr::kSection, shared, feature::hdr::kEnable).as_bool;
+  SectionDivider();
+  local_changed = false;
+  ctl::DrawSection(store, feature::hdr::kSection, key, local_changed,
+                   MakeOptions(/*headers=*/true, /*indent=*/true));
+  changed |= local_changed;
+  SectionDivider();
+  local_changed = false;
+  ctl::DrawOptions mask_options = MakeOptions(/*headers=*/true, /*indent=*/true);
+  mask_options.row_gate = &FeatureRowGate;
+  ctl::DrawSection(store, feature::importance_mask::kSection, key,
+                   local_changed, mask_options);
+  changed |= local_changed;
 }
 
 void DrawSectionHeaderAction(void*, const std::string& section,
@@ -787,20 +799,6 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   // is an application-owned header action; the Enabled row is not duplicated.
   DrawOne(store, feature::grade::kSection, changed,
           &DrawSectionHeaderAction);
-
-  SectionDivider();
-
-  // HDR: the framework draws the header and the rows. Inside, the exposure tab
-  // bar and selected layer are drawn by the ExposureTabs hook, declared between
-  // the headroom row and the BT.2446 curve rows in the HDR schema.
-  DrawOne(store, feature::hdr::kSection, changed);
-
-  SectionDivider();
-
-  // Importance Mask is only usable when HDR is on: without HDR there is no
-  // measurement to filter. Keep the mask's header toggle interactive, while
-  // the host applies the cross-feature gate to the tuning rows.
-  DrawOne(store, feature::importance_mask::kSection, changed);
 
   SectionDivider();
 

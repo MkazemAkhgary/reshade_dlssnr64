@@ -34,6 +34,7 @@ inline constexpr const char* kGainMinLog2 = "gain_min_log2";
 inline constexpr const char* kGainMaxLog2 = "gain_max_log2";
 inline constexpr const char* kDetailedStatistics = "detailed_statistics";
 inline constexpr const char* kFasterMetering = "faster_metering";
+inline constexpr const char* kReusePreviousPassMeasurement = "reuse_previous_pass_measurement";
 
 // Section "HDR Game Exposure".
 inline constexpr const char* kGameEnabled = "enabled";

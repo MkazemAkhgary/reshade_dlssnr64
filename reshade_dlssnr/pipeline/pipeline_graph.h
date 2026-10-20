@@ -194,7 +194,8 @@ struct PassRun {
   FeatureLifecycle* feature = nullptr;
   ComputeEngine* codec = nullptr;
   NgxRuntime* runtime = nullptr;
-  HdrState* hdr = nullptr;                 // null in Backbuffer stage
+  HdrState* hdr = nullptr;                 // per-pass; null in Backbuffer stage
+  HdrState* previous_hdr = nullptr;        // prior pass in the same stage chain
   ImportanceMask* importance_mask = nullptr; // null in Backbuffer stage
   // Game-owned NGX ExposureTexture captured from the current DLSS evaluate.
   ID3D12Resource* game_exposure_texture = nullptr;
@@ -207,7 +208,7 @@ struct PassRun {
   // `settings` is the whole Settings struct, still read by the trace
   // diagnostic and by the few steps that have not moved to a snapshot. What
   // the render path reads about the pass comes from `pass_state` / `grade_*`,
-  // about HDR from `hdr_state`, about the mask from `mask_state`, and
+  // about per-pass HDR from `hdr_state`, about that pass mask from `mask_state`, and
   // `pass_bound` says whether a pass instance was bound at all.
   const Settings* settings = nullptr;
   int debug_view = 0;
@@ -743,15 +744,6 @@ inline constexpr PipelineNodeId kPostDlssStepNodes[] = {
     PipelineNodeId::WriteToGameResource,
 };
 
-// Runs HDR metering immediately before the first active PreDLSS or PostDLSS pass.
-// Backbuffer-only configurations never schedule this utility stage.
-inline constexpr PipelineNodeId kHdrPreparationStepNodes[] = {
-    PipelineNodeId::ResolveDevice,
-    PipelineNodeId::EnsureHdr,
-    PipelineNodeId::EnsureComputeEngine,
-    PipelineNodeId::HdrBeginFrame,
-};
-
 inline constexpr PipelineNodeId kReleaseStepNodes[] = {
     PipelineNodeId::GradeBackbuffer,
     PipelineNodeId::WriteDebugToBackbuffer,
@@ -778,7 +770,6 @@ const PipelineStageDef* FindPipelineStageForInjection(int injection_stage);
 
 // A non-selectable utility stage that meters HDR from the current source before
 // the first Pre/Post-DLSS pass. Importance Mask generation happens after model evaluation.
-const PipelineStageDef& PipelineHdrPreparationStage();
 
 // The release stage: work that runs once per frame after every pass stage,
 // against the swapchain rather than the game's resources.

@@ -217,8 +217,8 @@ constexpr PipelinePhaseDef kPresentPhases[] = {
 
 // -- Pre-DLSS stage ---------------------------------------------------------
 // Runs on the game's input Color resource before the original EvaluateFeature.
-// HDR metering uses the previous frame's Importance Mask. The current
-// frame mask is generated after the first successful Pre/Post model evaluation.
+// Every pass meters its live target with its own previous-frame Importance Mask.
+// Its new mask is generated after that pass's successful model evaluation.
 constexpr PipelineNodeId kPreDlssSteps[] = {
     PipelineNodeId::ResolveDevice,
     PipelineNodeId::EnsureHdr,
@@ -259,8 +259,8 @@ constexpr PipelinePhaseDef kPreDlssPhases[] = {
 // -- Post-DLSS stage --------------------------------------------------------
 constexpr PipelineNodeId kPostDlssSteps[] = {
     PipelineNodeId::ResolveDevice,        // GetDevice + runtime.Initialize
-    // HDR measurement is completed by the shared frame-preparation stage.
-    // The Importance Mask is built after this pass evaluates the model.
+    // This pass meters its live target before preparing model input. Its own
+    // Importance Mask is built after the model output barrier.
     PipelineNodeId::EnsureHdr,
     PipelineNodeId::EnsureComputeEngine,  // codec.Init + IsReady
     PipelineNodeId::ResolveWorkingScale,
@@ -296,35 +296,6 @@ constexpr PipelinePhaseDef kPostDlssPhases[] = {
     {"output", 22, 2, nullptr},
 };
 
-constexpr PipelinePhaseDef kHdrPreparationPhases[] = {
-    {"prepare", 0, 4, nullptr},
-};
-
-constexpr size_t kHdrPreparationStepCount =
-    sizeof(kHdrPreparationStepNodes) / sizeof(kHdrPreparationStepNodes[0]);
-constexpr size_t kHdrPreparationPhaseCount =
-    sizeof(kHdrPreparationPhases) / sizeof(kHdrPreparationPhases[0]);
-
-const PipelineStageDef kHdrPreparationStage = {
-    /*name=*/"HdrPreparation",
-    /*has_injection_stage=*/false,
-    /*is_pre_dlss=*/false,
-    /*is_post_dlss=*/true,
-    /*steps=*/kHdrPreparationStepNodes,
-    /*step_count=*/static_cast<uint32_t>(kHdrPreparationStepCount),
-    /*phases=*/kHdrPreparationPhases,
-    /*phase_count=*/static_cast<uint32_t>(kHdrPreparationPhaseCount),
-    /*default_failure=*/FailurePolicy::Transient,
-    /*owns_submit=*/false,
-    /*hdr_capable=*/true,
-    /*reads_dlss_output=*/true,
-    /*max_passes=*/1,
-    /*required_inputs=*/StageInput::CommandList | StageInput::OutputResource |
-        StageInput::Stage,
-    /*output_state_managed_externally=*/true,
-};
-
-// -- Release stage ----------------------------------------------------------
 constexpr PipelineNodeId kReleaseSteps[] = {
     PipelineNodeId::GradeBackbuffer,
     PipelineNodeId::WriteDebugToBackbuffer,
@@ -380,10 +351,6 @@ static_assert(PhasesCover(kPreDlssPhases, kPreDlssPhaseCount,
 static_assert(PhasesCover(kPostDlssPhases, kPostDlssPhaseCount,
                           kPostDlssStepCount),
               "PostDLSS phases must span kPostDlssSteps with no gap or overlap");
-static_assert(PhasesCover(kHdrPreparationPhases,
-                          kHdrPreparationPhaseCount,
-                          kHdrPreparationStepCount),
-              "HdrPreparation phases must cover every step exactly once");
 static_assert(PhasesCover(kReleasePhases, kReleasePhaseCount,
                           kReleaseStepCount),
               "Release phases must span kReleaseSteps with no gap or overlap");
@@ -516,10 +483,6 @@ const PipelineStageDef* FindPipelineStageForInjection(int injection_stage) {
     if (stage_value == injection_stage) return &stage;
   }
   return nullptr;
-}
-
-const PipelineStageDef& PipelineHdrPreparationStage() {
-  return kHdrPreparationStage;
 }
 
 const PipelineStageDef& PipelineReleaseStage() {

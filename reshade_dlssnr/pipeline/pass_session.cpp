@@ -635,6 +635,8 @@ void PassSession::Shutdown(NgxRuntime& runtime) {
   temporal_mv_scale_x_ = temporal_mv_scale_y_ = 1.0f;
   feature_.Shutdown(runtime);
   resources_.Shutdown();
+  importance_mask_.Shutdown();
+  hdr_state_.Shutdown();
   command_.Shutdown();
 
   command_queue_ = nullptr;
@@ -657,6 +659,7 @@ void PassSession::PrepareRun(PassRun& run,
                              bool is_first_pass,
                              FrameDebugContext& frame_debug,
                              HdrState* hdr,
+                             HdrState* previous_hdr,
                              CommandContext* hdr_cmd,
                              ImportanceMask* importance_mask,
                              ID3D12Resource* game_exposure_texture,
@@ -675,6 +678,7 @@ void PassSession::PrepareRun(PassRun& run,
   run.codec = &codec;
   run.runtime = &runtime;
   run.hdr = hdr;
+  run.previous_hdr = previous_hdr;
   run.hdr_cmd = hdr_cmd;
   run.importance_mask = importance_mask;
   run.game_exposure_texture = game_exposure_texture;
@@ -704,13 +708,12 @@ void PassSession::PrepareRun(PassRun& run,
         feature::grade::Read(store, key, feature::pass::kGradeOutputSection,
                              feature::pass::kGradeOutputPrefix);
 
-    // HDR and the importance mask are single-instance, so their snapshots do
-    // not depend on the pass index; the fixed key is the same one their
-    // sections are drawn with.
+    // HDR metering and Importance Mask settings are pass-keyed just like the
+    // model and its two grade boundaries. Each pass has its own state/history.
     const ctl::InstanceKey shared = ctl::InstanceKey::FromInt(0);
     run.debug_view = feature::debug_log::Read(store, shared);
-    run.hdr_state = feature::hdr::Read(store, shared);
-    run.mask_state = feature::importance_mask::Read(store, shared);
+    run.hdr_state = feature::hdr::Read(store, key);
+    run.mask_state = feature::importance_mask::Read(store, key);
   }
 
   run.list = command_list;
@@ -737,6 +740,7 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
                                      bool is_first_pass,
                                      FrameDebugContext& frame_debug,
                                      HdrState* hdr,
+                                     HdrState* previous_hdr,
                                      CommandContext* hdr_cmd,
                                      ImportanceMask* importance_mask,
                                      ID3D12Resource* game_exposure_texture,
@@ -774,7 +778,7 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
 
   PassRun run;
   PrepareRun(run, settings, codec, runtime, command_list, output_resource,
-             is_first_pass, frame_debug, hdr, hdr_cmd, importance_mask,
+             is_first_pass, frame_debug, hdr, previous_hdr, hdr_cmd, importance_mask,
              game_exposure_texture, command_queue, swapchain, pass_id,
              frame_id, temporal_feedback_fence,
              temporal_feedback_fence_value);
@@ -1307,10 +1311,9 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
                               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   }
 
-  // Only the first active pass publishes frame-level statistics, and the
-  // expensive diagnostic work is opt-in. The shader reduces each thread group
-  // before touching the global counters.
-  if (!run.hdr_state.detailed_statistics || !run.is_first_pass) {
+  // The detailed statistics and counters are pass-owned, so every HDR pass
+  // may collect them when the opt-in setting is enabled.
+  if (!run.hdr_state.detailed_statistics) {
     return PipelineStatus::Ok;
   }
   if (stats == nullptr) {
@@ -1336,9 +1339,8 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
   self->command_.UavBarrier(run.list, stats);
   self->command_.Transition(run.list, stats, D3D12_RESOURCE_STATE_COPY_SOURCE);
 
-  // One readback per game frame is enough. The first pass owns the frame-level
-  // diagnostic so chained passes do not enqueue duplicate copies.
-  if (run.is_first_pass && run.hdr != nullptr) {
+  // Every pass owns its own HDR stats/readback state.
+  if (run.hdr != nullptr) {
     if (!run.hdr->EnqueueGainMapStatsReadback(run.list, stats)) {
       TRACE_EVT(self, "gain_stats_readback unavailable");
     }

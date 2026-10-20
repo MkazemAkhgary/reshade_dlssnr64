@@ -27,16 +27,6 @@ namespace {
 std::mutex g_direct_mutex;
 
 
-// True when the mask should be allowed to build this frame: both layers have
-// to be on, because the mask feeds the HDR local-exposure path. Reads the
-// store -- the source of truth -- rather than a copy in Settings, so this
-// stays correct once Settings stops carrying the values.
-bool ImportanceMaskActive() {
-  const ctl::ValueStore& store = feature::SettingsStore();
-  const ctl::InstanceKey key = ctl::InstanceKey::FromInt(0);
-  return feature::importance_mask::Read(store, key).enable &&
-         feature::hdr::Read(store, key).enable;
-}
 
 // Creates a UAV-capable texture matching `desc`.
 //
@@ -87,7 +77,8 @@ PipelineStatus AddonController::RunPassStage(const PipelineStageDef& stage,
                                              bool is_first_pass,
                                              ID3D12CommandQueue* command_queue,
                                              IDXGISwapChain* swapchain,
-                                             ID3D12Resource* exposure_texture) {
+                                             ID3D12Resource* exposure_texture,
+                                             HdrState* previous_hdr) {
   const Settings& settings = GetSettings();
 
   std::unique_ptr<PassSession>& slot = sessions_[pass_id];
@@ -122,9 +113,9 @@ PipelineStatus AddonController::RunPassStage(const PipelineStageDef& stage,
 
   return slot->RunStage(
       stage, settings, codec_, runtime_, command_list, output_resource,
-      is_first_pass, frame_debug_, &hdr_, &pass1_command_, &importance_mask_,
-      exposure_texture, command_queue, swapchain, pass_id, run_frame_id,
-      feedback_fence, feedback_fence_value);
+      is_first_pass, frame_debug_, &slot->Hdr(), previous_hdr, &pass1_command_,
+      &slot->Mask(), exposure_texture, command_queue, swapchain, pass_id,
+      run_frame_id, feedback_fence, feedback_fence_value);
 }
 
 PipelineStatus AddonController::RunSingleStage(
@@ -136,22 +127,19 @@ PipelineStatus AddonController::RunSingleStage(
   PassRun run;
   run.codec = &codec_;
   run.runtime = &runtime_;
-  run.hdr = &hdr_;
+  run.hdr = nullptr;
   run.frame_debug = &frame_debug_;
   run.settings = &settings;
   run.command_queue = command_queue;
   run.swapchain = swapchain;
 
-  // The Release stage does not go through a PassSession, so the single-instance
-  // snapshots it might read are filled here. Its steps read the backbuffer
-  // grade directly (RunGradeBackbuffer), but hdr_state / mask_state are cheap
-  // and keep the run self-consistent for any step later added to this stage.
+  // Release only grades the backbuffer, presents debug output, and signals
+  // outstanding per-pass HDR readbacks. None of those settings are global HDR
+  // or Importance Mask settings.
   {
     const ctl::ValueStore& store = feature::SettingsStore();
     const ctl::InstanceKey shared = ctl::InstanceKey::FromInt(0);
     run.debug_view = feature::debug_log::Read(store, shared);
-    run.hdr_state = feature::hdr::Read(store, shared);
-    run.mask_state = feature::importance_mask::Read(store, shared);
   }
 
   codec_.InvalidateBindings();
@@ -315,13 +303,6 @@ void AddonController::GradeBackbuffer(ComputeEngine& codec,
                               D3D12_RESOURCE_STATE_PRESENT);
 }
 
-bool AddonController::EnsureHdr(ID3D12Device* device) {
-  if (hdr_initialized_) return true;
-  if (device == nullptr) return false;
-  if (!hdr_.Ensure(device) || !codec_.Init(device)) return false;
-  hdr_initialized_ = true;
-  return true;
-}
 
 bool AddonController::HasUnfencedRetiredSessions() const {
   for (const RetiredPassSession& retired : retired_sessions_) {
@@ -410,7 +391,8 @@ void AddonController::OnPresent(
 
   const Settings& settings = GetSettings();
   if (!settings.enabled) {
-    importance_mask_.AdvanceFrame(false);
+    if (command_queue != nullptr) SignalHdrAtPresent(command_queue);
+    AdvanceMaskFrames(false);
     // The effect can be disabled after a mode/resource change retired objects.
     // Submit an empty marker only; do not run grading/debug steps while the
     // master switch is off.
@@ -436,7 +418,8 @@ void AddonController::OnPresent(
     return;
   }
   if (command_queue == nullptr || swapchain == nullptr) {
-    importance_mask_.AdvanceFrame(ImportanceMaskActive());
+    if (command_queue != nullptr) SignalHdrAtPresent(command_queue);
+    AdvanceMaskFrames(true);
     frame_debug_.Reset();
     pre_stage_seen_ = false;
     return;
@@ -504,7 +487,7 @@ void AddonController::OnPresent(
   }
 
   RefreshStatus(settings);
-  importance_mask_.AdvanceFrame(ImportanceMaskActive());
+  AdvanceMaskFrames(true);
   frame_debug_.Reset();
   pre_stage_seen_ = false;
   TRACE_EVT(this, "controller_exit stage=Present");
@@ -533,7 +516,7 @@ void AddonController::OnPreDlssEvaluate(
 
   trace::BeginFrame(trace::FrameStream::PreDlss);
   TRACE_EVT(this, "controller_enter stage=PreDLSS hdr_init=%d",
-            hdr_initialized_ ? 1 : 0);
+            codec_.IsReady() ? 1 : 0);
 
   // One debug image per evaluate call. If PostDLSS follows, it preserves this
   // target and only overwrites it when a selected PostDLSS pass renders a view.
@@ -541,25 +524,25 @@ void AddonController::OnPreDlssEvaluate(
   frame_debug_.preferred_format = backbuffer_format_;
   pre_stage_seen_ = true;
 
-  // HDR metering is shared frame pre-work and uses only the previously
-  // published Importance Mask. The current frame's mask is built after its
-  // first successful model evaluation and is not published until Present.
-  PrepareFrameForPass(command_list, input_resource, exposure_texture,
-                      /*pre_dlss=*/true);
-
   const PipelineStageDef* stage = FindPipelineStageForInjection(
       static_cast<int>(InjectionStage::PreDLSS));
   if (stage != nullptr) {
     // One debug image per evaluate call. If PostDLSS follows, it preserves this
     // one, so the debug view stays stable across the whole evaluation.
     bool is_first = true;
+    HdrState* previous_hdr = nullptr;
     for (const EnabledPass& pass : EnabledPasses(settings)) {
       if (pass.target != static_cast<int>(InjectionStage::PreDLSS)) continue;
       TRACE_EVT(this, "controller_dispatch stage=PreDLSS pass=%u is_first=%d",
                 pass.id, is_first ? 1 : 0);
-      RunPassStage(*stage, pass.id, command_list,
-                   input_resource, is_first, nullptr, nullptr,
-                   exposure_texture);
+      const PipelineStatus status = RunPassStage(
+          *stage, pass.id, command_list, input_resource, is_first, nullptr,
+          nullptr, exposure_texture, previous_hdr);
+      auto found = sessions_.find(pass.id);
+      if (status == PipelineStatus::Ok && found != sessions_.end() &&
+          found->second != nullptr) {
+        previous_hdr = &found->second->Hdr();
+      }
       is_first = false;
     }
   }
@@ -582,22 +565,13 @@ void AddonController::OnPostDlssEvaluate(
 
   trace::BeginFrame(trace::FrameStream::PostDlss);
   TRACE_EVT(this, "controller_enter stage=PostDLSS hdr_init=%d guides_out=%d",
-            hdr_initialized_ ? 1 : 0, 0);
+            codec_.IsReady() ? 1 : 0, 0);
 
   // The PreDLSS entry resets debug state for this EvaluateFeature call. Keep
   // its output unless a selected PostDLSS pass replaces it; otherwise reset
   // here for the existing post-only configuration.
   if (!pre_stage_seen_) frame_debug_.Reset();
   frame_debug_.preferred_format = backbuffer_format_;
-
-  // If no PreDLSS pass ran in this NGX evaluation, PostDLSS is the first
-  // usable target. Prepare metering from its current upscaled output before
-  // dispatching the first PostDLSS pass. The current Importance Mask is not
-  // published until Present.
-  if (!pre_stage_seen_) {
-    PrepareFrameForPass(command_list, output_resource, exposure_texture,
-                        /*pre_dlss=*/false);
-  }
 
   const PipelineStageDef* stage = FindPipelineStageForInjection(
       static_cast<int>(InjectionStage::PostDLSS));
@@ -607,13 +581,19 @@ void AddonController::OnPostDlssEvaluate(
     // and it stays the first even if earlier passes are disabled or set to
     // the Release stage.
     bool is_first = true;
+    HdrState* previous_hdr = nullptr;
     for (const EnabledPass& pass : EnabledPasses(settings)) {
       if (pass.target != static_cast<int>(InjectionStage::PostDLSS)) continue;
       TRACE_EVT(this, "controller_dispatch stage=PostDLSS pass=%u is_first=%d",
                 pass.id, is_first ? 1 : 0);
-      RunPassStage(*stage, pass.id, command_list,
-                   output_resource, is_first, nullptr, nullptr,
-                   exposure_texture);
+      const PipelineStatus status = RunPassStage(
+          *stage, pass.id, command_list, output_resource, is_first, nullptr,
+          nullptr, exposure_texture, previous_hdr);
+      auto found = sessions_.find(pass.id);
+      if (status == PipelineStatus::Ok && found != sessions_.end() &&
+          found->second != nullptr) {
+        previous_hdr = &found->second->Hdr();
+      }
       is_first = false;
     }
   }
@@ -621,37 +601,6 @@ void AddonController::OnPostDlssEvaluate(
   RefreshStatus(settings);
   TRACE_EVT(this, "controller_exit stage=PostDLSS");
   trace::EndFrame(trace::FrameStream::PostDlss);
-}
-
-void AddonController::PrepareFrameForPass(
-    ID3D12GraphicsCommandList* command_list,
-    ID3D12Resource* source_resource,
-    ID3D12Resource* exposure_texture,
-    bool pre_dlss) {
-  const Settings& settings = GetSettings();
-  if (!settings.enabled || command_list == nullptr || source_resource == nullptr)
-    return;
-
-  // This utility stage performs the HDR measurement for the current frame.
-  // Its target metadata is switched to match the earliest enabled stage, so
-  // HDR reads the same source color that the first pass will see instead of
-  // a stale DLSS output from the previous evaluation.
-  PipelineStageDef stage = PipelineHdrPreparationStage();
-  stage.is_pre_dlss = pre_dlss;
-  stage.is_post_dlss = !pre_dlss;
-  stage.reads_dlss_output = !pre_dlss;
-  stage.output_state_managed_externally = !pre_dlss;
-
-  TRACE_EVT(this, "controller_prepare stage=%s", pre_dlss ? "PreDLSS" : "PostDLSS");
-  const PipelineStatus status = hdr_preparation_session_.RunStage(
-      stage, settings, codec_, runtime_, command_list, source_resource,
-      /*is_first_pass=*/true, frame_debug_, &hdr_, &pass1_command_,
-      &importance_mask_, exposure_texture, nullptr, nullptr);
-  // This helper session is not exposed as a user pass. A transient setup
-  // failure must not permanently disable shared preparation on future frames.
-  if (status == PipelineStatus::Fail) {
-    hdr_preparation_session_.Retry(runtime_);
-  }
 }
 
 void AddonController::PresentDebugOutput(
@@ -712,7 +661,14 @@ void AddonController::PresentDebugOutput(
 
 HdrSnapshot AddonController::GetHdrSnapshot() const {
   std::lock_guard<std::mutex> lock(g_direct_mutex);
-  return hdr_.GetSnapshot();
+  const auto active = sessions_.find(GetSettings().active_pass_id);
+  if (active != sessions_.end() && active->second != nullptr)
+    return active->second->Hdr().GetSnapshot();
+  for (const auto& entry : sessions_) {
+    if (entry.second != nullptr && entry.second->Hdr().Enabled())
+      return entry.second->Hdr().GetSnapshot();
+  }
+  return {};
 }
 
 StatusSnapshot AddonController::GetStatus() const {
@@ -762,7 +718,6 @@ void AddonController::FinishRestartAfterFence() {
     if (retired.session) retired.session->Shutdown(runtime_);
   }
   retired_sessions_.clear();
-  hdr_preparation_session_.Shutdown(runtime_);
   guides.Clear();
   release_command_.Shutdown();
   last_command_queue_.Reset();
@@ -775,9 +730,6 @@ void AddonController::FinishRestartAfterFence() {
   grade_scratch_format_ = DXGI_FORMAT_UNKNOWN;
   pass1_command_.Shutdown();
   codec_.Destroy();
-  importance_mask_.Shutdown();
-  hdr_.Shutdown();
-  hdr_initialized_ = false;
   frame_debug_.Release();
   pre_stage_seen_ = false;
   runtime_.Shutdown();
@@ -788,6 +740,28 @@ void AddonController::FinishRestartAfterFence() {
   restart_fence_value_ = 0;
   reshade::log::message(reshade::log::level::info,
                         "DLSSNR: safe addon restart completed; runtime will initialize on demand");
+}
+
+
+void AddonController::AdvanceMaskFrames(bool master_enabled) {
+  const ctl::ValueStore& store = feature::SettingsStore();
+  for (auto& entry : sessions_) {
+    if (entry.second == nullptr) continue;
+    const ctl::InstanceKey key = feature::pass::PassKey(entry.first);
+    const bool enabled = master_enabled &&
+        feature::hdr::Read(store, key).enable &&
+        feature::importance_mask::Read(store, key).enable;
+    entry.second->AdvanceMaskFrame(enabled);
+  }
+}
+
+void AddonController::SignalHdrAtPresent(ID3D12CommandQueue* queue) {
+  for (auto& entry : sessions_) {
+    if (entry.second != nullptr) entry.second->Hdr().SignalAtPresent(queue);
+  }
+  for (RetiredPassSession& entry : retired_sessions_) {
+    if (entry.session != nullptr) entry.session->Hdr().SignalAtPresent(queue);
+  }
 }
 
 void AddonController::RefreshStatus(const Settings& settings) {
@@ -813,7 +787,18 @@ void AddonController::RefreshStatus(const Settings& settings) {
                   post_dlss_block_reason_);
   }
 
-  const HdrSnapshot hdr = hdr_.GetSnapshot();
+  HdrSnapshot hdr = {};
+  const auto active_hdr = sessions_.find(settings.active_pass_id);
+  if (active_hdr != sessions_.end() && active_hdr->second != nullptr) {
+    hdr = active_hdr->second->Hdr().GetSnapshot();
+  } else {
+    for (const auto& entry : sessions_) {
+      if (entry.second != nullptr && entry.second->Hdr().Enabled()) {
+        hdr = entry.second->Hdr().GetSnapshot();
+        break;
+      }
+    }
+  }
   status_.hdr_ready = hdr.ready;
   status_.hdr_exposure = hdr.exposure;
   status_.hdr_scene_white = hdr.scene_white;
@@ -896,7 +881,6 @@ void AddonController::Shutdown() {
     if (retired.session) retired.session->Shutdown(runtime_);
   }
   retired_sessions_.clear();
-  hdr_preparation_session_.Shutdown(runtime_);
   release_command_.Shutdown();
   last_command_queue_.Reset();
   release_list_begun_ = false;
@@ -907,9 +891,6 @@ void AddonController::Shutdown() {
   grade_scratch_format_ = DXGI_FORMAT_UNKNOWN;
   pass1_command_.Shutdown();
   codec_.Destroy();
-  importance_mask_.Shutdown();
-  hdr_.Shutdown();
-  hdr_initialized_ = false;
   frame_debug_.Release();
   runtime_.Shutdown();
   restart_requested_ = false;
@@ -927,24 +908,21 @@ void AddonController::Shutdown() {
 
 namespace {
 
-// Lazily creates the HDR histogram resources and initializes the compute
-// engine for them. The shared frame-preparation stage calls this before the
-// first PreDLSS or PostDLSS pass; later frames reuse the resources.
-//
-// This is controller state (hdr_initialized_ spans every pass and every
-// frame), which is why the step lives here rather than in hdr_state.cpp.
+// Lazily initializes this pass's HDR measurement resources. The HDR state is
+// owned by PassSession, so each pass keeps independent exposure history.
 PipelineStatus RunEnsureHdr(PassRun& run) {
-  AddonController& controller = AddonController::Get();
-  if (controller.HdrInitialized()) return PipelineStatus::Ok;
-  if (run.list == nullptr) return PipelineStatus::SkipFrame;
+  if (run.hdr == nullptr || !run.hdr_state.enable)
+    return PipelineStatus::Ok;
+  if (run.list == nullptr || run.codec == nullptr)
+    return PipelineStatus::SkipFrame;
 
   Microsoft::WRL::ComPtr<ID3D12Device> device;
   if (FAILED(run.list->GetDevice(IID_PPV_ARGS(&device))) || device == nullptr) {
     return PipelineStatus::SkipFrame;
   }
 
-  if (controller.EnsureHdr(device.Get())) {
-    TRACE_EVT(run.session, "hdr_initialized");
+  if (run.codec->Init(device.Get()) && run.hdr->Ensure(device.Get())) {
+    TRACE_EVT(run.session, "hdr_initialized pass=%u", run.pass_id);
   }
   // A failure here is not fatal: the pass runs without HDR measurement and
   // retries the ensure next frame.
@@ -992,8 +970,7 @@ PipelineStatus RunWriteDebugToBackbuffer(PassRun& run) {
 // its command list, so this marks the point at which any pending histogram
 // copy has completed.
 PipelineStatus RunSignalHdrAtPresent(PassRun& run) {
-  if (run.hdr == nullptr) return PipelineStatus::Ok;
-  run.hdr->SignalAtPresent(run.command_queue);
+  AddonController::Get().SignalHdrAtPresent(run.command_queue);
   return PipelineStatus::Ok;
 }
 

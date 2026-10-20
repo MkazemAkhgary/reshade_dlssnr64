@@ -119,19 +119,13 @@ class AddonController {
                        IDXGISwapChain* swapchain,
                        const GradeSettings& grade);
 
-  // HDR measurement bring-up, exposed for the EnsureHdr pipeline step. The
-  // lazy-init flag spans every pass and frame, so it belongs to the
-  // controller rather than to a session.
-  bool HdrInitialized() const { return hdr_initialized_; }
-  bool EnsureHdr(ID3D12Device* device);
-
-  // Shared Importance Mask state. Its frame snapshot is used by HDR metering;
-  // generation happens after the first successful Pre/Post-DLSS evaluation.
-  ImportanceMask& GetImportanceMask() { return importance_mask_; }
+  // Signals every live and retired pass HDR readback after game work is queued.
+  void SignalHdrAtPresent(ID3D12CommandQueue* queue);
+  void AdvanceMaskFrames(bool enabled);
 
  private:
   AddonController()
-      : hdr_preparation_session_(&DlssGuides::Get()) {}
+      = default;
   ~AddonController() = default;
 
   AddonController(const AddonController&) = delete;
@@ -142,15 +136,6 @@ class AddonController {
   // to render diagnostics at a copy-compatible size.
   // A failure to query leaves the cached value untouched.
   void RefreshBackbufferFormat(IDXGISwapChain* swapchain);
-
-  // Measures the current frame with the published previous-frame Importance
-  // Mask before the first enabled PreDLSS or PostDLSS pass. Generation happens
-  // after model evaluation. Backbuffer-only frames never call this helper.
-  void PrepareFrameForPass(
-      ID3D12GraphicsCommandList* command_list,
-      ID3D12Resource* source_resource,
-      ID3D12Resource* exposure_texture,
-      bool pre_dlss);
 
   // Builds the PassRun for one pass of `stage` and hands it to the session.
   //
@@ -166,7 +151,8 @@ class AddonController {
       bool is_first_pass,
       ID3D12CommandQueue* command_queue,
       IDXGISwapChain* swapchain,
-      ID3D12Resource* exposure_texture = nullptr);
+      ID3D12Resource* exposure_texture = nullptr,
+      HdrState* previous_hdr = nullptr);
 
   // Runs a stage once, outside the per-pass loop. Used for the Release stage,
   // whose steps act on the swapchain rather than on a game resource. It is
@@ -202,15 +188,10 @@ class AddonController {
   // A session removed while its commands may still be in flight. Keep the
   // entire session (including its NGX feature) until its fence completes.
   std::vector<RetiredPassSession> retired_sessions_;
-  // Internal session: detection is shared across passes and must not latch a
-  // failure onto a user-configured pass.
-  PassSession hdr_preparation_session_;
   FrameDebugContext frame_debug_;
   // The current NGX EvaluateFeature call has already reset the debug target at
   // PreDLSS. PostDLSS must preserve it so a selected PreDLSS pass can display.
   bool pre_stage_seen_ = false;
-  HdrState hdr_;
-  ImportanceMask importance_mask_;
 
   // The Release stage's command list, opened on demand by
   // BeginReleaseCommands and submitted by EndReleaseCommands.
@@ -257,10 +238,6 @@ class AddonController {
   // compile of kComputePasses[] instead of one per session.
   ComputeEngine codec_;
 
-  // Set once after the first successful hdr_.Ensure() + codec_.Init().
-  // After that, Ensure/Init are not called again — BeginFrame does its own
-  // lightweight polling and dispatch scheduling.
-  bool hdr_initialized_ = false;
 
   // Backbuffer format from the last Present. The debug output is displayed
   // on the backbuffer, so we create it in this format. Cached because a

@@ -5,8 +5,7 @@
 // already takes. This is the one place that translates between them, so the
 // setting spellings appear once and the runtime never spells one.
 //
-// The section is single-instance, so the reader takes the same key its section
-// draws with.
+// The section is pass-keyed, so the reader takes the same stable pass key its section draws with.
 
 #pragma once
 

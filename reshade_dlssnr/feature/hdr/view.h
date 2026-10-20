@@ -4,7 +4,7 @@
 // already passes around. This is the one place that translates between them,
 // so the setting spellings appear once and the runtime never spells one.
 //
-// The four sections are all single-instance and independent: HDR itself, and
+// The four sections are all pass-keyed and independent: HDR itself, and
 // the three exposure layers. Each layer owns an ExposureFilterSettings, so
 // the filter rows are read here rather than by the fragment.
 
@@ -26,8 +26,7 @@ namespace hdr {
 // HdrSettings that might have come from anywhere.
 using HdrSnapshotView = HdrSettings;
 
-// Read all four sections for `key` (the single-instance key the HDR sections
-// are drawn with).
+// Read all four sections for `key` (the stable pass ID used by the HDR sections).
 HdrSnapshotView Read(const ctl::ValueStore& store,
                      const ctl::InstanceKey& key);
 

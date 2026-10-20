@@ -295,6 +295,31 @@ HdrSnapshot HdrState::GetSnapshot() const {
   return snapshot;
 }
 
+void HdrState::ReuseMeasurementFrom(const HdrState& previous,
+                                    const HdrSettings& settings) {
+  // Consume any completed local readbacks, but do not dispatch a new meter.
+  PollReadback(fence_.Get(), settings);
+  // Copy only CPU-side measurement results. Per-pass resources, fences,
+  // readback ownership, and gain-map diagnostics remain local to this pass.
+  enabled_ = previous.enabled_;
+  resolved_format_ = previous.resolved_format_;
+  regular_ = previous.regular_;
+  adaptive_ = previous.adaptive_;
+  game_exposure_value_ = previous.game_exposure_value_;
+  game_exposure_available_ = previous.game_exposure_available_;
+  game_exposure_width_ = previous.game_exposure_width_;
+  game_exposure_height_ = previous.game_exposure_height_;
+  game_exposure_format_ = previous.game_exposure_format_;
+  frames_since_measure_ = previous.frames_since_measure_;
+  measurement_generation_ = previous.measurement_generation_;
+  have_histogram_ = previous.have_histogram_;
+  std::copy(previous.last_histogram_, previous.last_histogram_ + 256,
+            last_histogram_);
+  last_samples_ = previous.last_samples_;
+  last_measurement_time_ = previous.last_measurement_time_;
+  have_measurement_time_ = previous.have_measurement_time_;
+}
+
 void HdrState::BeginFrame(CommandContext& cmd,
                           ID3D12GraphicsCommandList* command_list,
                           ID3D12Resource* source,
@@ -621,13 +646,12 @@ void HdrState::ResolveExposureStack(const HdrSettings& settings) {
 namespace {
 
 PipelineStatus RunHdrBeginFrame(PassRun& run) {
-  if (!run.is_first_pass) return PipelineStatus::Ok;
   if (run.hdr == nullptr || run.hdr_cmd == nullptr)
     return PipelineStatus::Ok;
 
-  const bool pre_dlss = run.stage != nullptr && run.stage->is_pre_dlss;
-  ID3D12Resource* source = pre_dlss ? run.output_resource
-                                    : run.guides.dlss_output_color;
+  // Pre/Post stages chain through the same target resource. Meter that live
+  // resource for every pass so later passes observe the last composed result.
+  ID3D12Resource* source = run.output_resource;
   if (source == nullptr) {
     TRACE_EVT(run.session, "hdr_begin_frame SKIP (no source color)");
     return PipelineStatus::Ok;
@@ -637,6 +661,14 @@ PipelineStatus RunHdrBeginFrame(PassRun& run) {
   const unsigned int source_height = source_desc.Height;
   if (source_width == 0 || source_height == 0) {
     TRACE_EVT(run.session, "hdr_begin_frame SKIP (empty source color)");
+    return PipelineStatus::Ok;
+  }
+  if (run.hdr_state.enable &&
+      run.hdr_state.reuse_previous_pass_measurement &&
+      run.previous_hdr != nullptr && run.previous_hdr->Enabled()) {
+    run.hdr->ReuseMeasurementFrom(*run.previous_hdr, run.hdr_state);
+    TRACE_EVT(run.session, "hdr_begin_frame REUSE previous pass=%u",
+              run.pass_id);
     return PipelineStatus::Ok;
   }
 
@@ -684,27 +716,12 @@ constexpr PipelineStepDef kHdrSteps[] = {
      &RunHistogramPlaceholder, kHistogramRequires, StageInput::None, true},
 };
 
-static_assert(PrerequisitesPrecedeSteps(
-                  kHdrPreparationStepNodes,
-                  ArrayCount(kHdrPreparationStepNodes), kHdrSteps,
-                  ArrayCount(kHdrSteps)),
-              "an HDR step in HdrPreparation declares a prerequisite "
-              "that the stage lists after it");
-
 static_assert(
     StageInputsCoverSteps(kPreDlssStepNodes, ArrayCount(kPreDlssStepNodes),
                           kHdrSteps, ArrayCount(kHdrSteps),
                           StageInput::CommandList | StageInput::OutputResource |
                               StageInput::Stage),
     "an HDR step in PreDLSS needs an input the stage call site does not supply");
-static_assert(
-    StageInputsCoverSteps(kHdrPreparationStepNodes,
-                          ArrayCount(kHdrPreparationStepNodes), kHdrSteps,
-                          ArrayCount(kHdrSteps),
-                          StageInput::CommandList | StageInput::OutputResource |
-                              StageInput::Stage),
-    "an HDR step in HdrPreparation needs an input the stage call site "
-    "does not supply");
 
 }  // namespace
 

@@ -22,7 +22,6 @@ extern PendingPassAction g_pending_pass_action;
 // invalidate the active frame's tab layout.
 void DrawPassToolbar(Settings& settings, bool& changed);
 
-bool AnyPassUsesHdrInjection(const Settings& settings);
 void DrawStatusSection(Settings& settings, bool& changed);
 
 // Pass bookkeeping. The pass body itself is declared in the ctl schema; these
