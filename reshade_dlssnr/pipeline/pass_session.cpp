@@ -394,31 +394,38 @@ bool PassSession::FillEvaluateParams(
   //   block.SetResource("DLSSNR.Backbuffer", <backbuffer>);
   // which will be re-enabled when a reliable UI mask source is available.
 
-  if (guides.valid) {
-    block.SetResource("DLSSNR.Depth", guides.depth);
-    block.SetResource("DLSSNR.MVec", guides.motion);
-    block.SetUInt("DLSSNR.DepthInverted", guides.depth_inverted ? 1u : 0u);
-    block.SetFloat("DLSSNR.MVecScaleX", guides.mv_scale_x);
-    block.SetFloat("DLSSNR.MVecScaleY", guides.mv_scale_y);
+  // Always overwrite guide fields. The NGX parameter object is shared and
+  // persists between evaluations; skipping these writes when guides are absent
+  // would leave pointers to resources from an older frame.
+  block.SetResource("DLSSNR.Depth", guides.valid ? guides.depth : nullptr);
+  block.SetResource("DLSSNR.MVec", guides.valid ? guides.motion : nullptr);
+  block.SetUInt("DLSSNR.DepthInverted",
+                guides.valid && guides.depth_inverted ? 1u : 0u);
+  block.SetFloat("DLSSNR.MVecScaleX",
+                 guides.valid ? guides.mv_scale_x : 0.0f);
+  block.SetFloat("DLSSNR.MVecScaleY",
+                 guides.valid ? guides.mv_scale_y : 0.0f);
 
-    block.SetUInt("DLSSNR.ColorSubrectBaseX", 0u);
-    block.SetUInt("DLSSNR.ColorSubrectBaseY", 0u);
-    block.SetUInt("DLSSNR.ColorSubrectWidth", eval_width);
-    block.SetUInt("DLSSNR.ColorSubrectHeight", eval_height);
-    block.SetUInt("DLSSNR.OutputSubrectBaseX", 0u);
-    block.SetUInt("DLSSNR.OutputSubrectBaseY", 0u);
-    block.SetUInt("DLSSNR.OutputSubrectWidth", eval_width);
-    block.SetUInt("DLSSNR.OutputSubrectHeight", eval_height);
-    block.SetUInt("DLSSNR.DepthSubrectBaseX", 0u);
-    block.SetUInt("DLSSNR.DepthSubrectBaseY", 0u);
-    block.SetUInt("DLSSNR.DepthSubrectWidth", guides.guide_width);
-    block.SetUInt("DLSSNR.DepthSubrectHeight", guides.guide_height);
-    block.SetUInt("DLSSNR.MVecSubrectBaseX", 0u);
-    block.SetUInt("DLSSNR.MVecSubrectBaseY", 0u);
-    block.SetUInt("DLSSNR.MVecSubrectWidth", guides.motion_width);
-    block.SetUInt("DLSSNR.MVecSubrectHeight", guides.motion_height);
-  }
-
+  block.SetUInt("DLSSNR.ColorSubrectBaseX", 0u);
+  block.SetUInt("DLSSNR.ColorSubrectBaseY", 0u);
+  block.SetUInt("DLSSNR.ColorSubrectWidth", eval_width);
+  block.SetUInt("DLSSNR.ColorSubrectHeight", eval_height);
+  block.SetUInt("DLSSNR.OutputSubrectBaseX", 0u);
+  block.SetUInt("DLSSNR.OutputSubrectBaseY", 0u);
+  block.SetUInt("DLSSNR.OutputSubrectWidth", eval_width);
+  block.SetUInt("DLSSNR.OutputSubrectHeight", eval_height);
+  block.SetUInt("DLSSNR.DepthSubrectBaseX", 0u);
+  block.SetUInt("DLSSNR.DepthSubrectBaseY", 0u);
+  block.SetUInt("DLSSNR.DepthSubrectWidth",
+                guides.valid ? guides.guide_width : 0u);
+  block.SetUInt("DLSSNR.DepthSubrectHeight",
+                guides.valid ? guides.guide_height : 0u);
+  block.SetUInt("DLSSNR.MVecSubrectBaseX", 0u);
+  block.SetUInt("DLSSNR.MVecSubrectBaseY", 0u);
+  block.SetUInt("DLSSNR.MVecSubrectWidth",
+                guides.valid ? guides.motion_width : 0u);
+  block.SetUInt("DLSSNR.MVecSubrectHeight",
+                guides.valid ? guides.motion_height : 0u);
   block.SetUInt("DLSSNR.Reset", feature_.ShouldReset() ? 1u : 0u);
   feature_.MarkEvaluated();
 

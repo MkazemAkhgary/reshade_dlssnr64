@@ -539,7 +539,7 @@ Debug views show the pre-depth candidate, post-depth validation result, and per-
 
 `model/runtime.cpp` owns direct loading of `nvngx_dlssnr.dll`, patches the model module's import of `KERNEL32!GetModuleFileNameW` to satisfy its caller check, resolves `NVSDK_NGX_D3D12_Init_Ext`, `CreateFeature`, `EvaluateFeature`, and `ReleaseFeature`, then initializes the model against the addon module directory.
 
-`NgxParameterBlock` obtains the driver NGX capability parameter block from `_nvngx.dll`. The float setter slot is probed from candidate vtable slots at runtime because the binary interface does not expose a stable named C++ method for the required setter. The block is not reset or cleared wholesale.
+`NgxParameterBlock` obtains the driver NGX capability parameter block from `_nvngx.dll`. The float setter slot is probed from candidate vtable slots at runtime because the binary interface does not expose a stable named C++ method for the required setter. The block is not reset or cleared wholesale. `FillEvaluateParams` must write every owned guide field on every evaluation, using null resources and zeroed guide metadata when no guide is valid; leaving a field untouched can preserve a dangling resource pointer in NGX’s persistent shared parameter block.
 
 ### HLSL
 
