@@ -13,11 +13,6 @@ Texture2D<float>  gEffectiveExposure : register(t3);
 RWTexture2D<float4> gOutput : register(u0);
 SamplerState s0 : register(s0);
 
-#define gLowInput gSource
-#define gLowEnhanced gModelOut
-#include "common/fsr.hlsli"
-#undef gLowInput
-#undef gLowEnhanced
 
 #define kDiagMode shader.Params0.x
 #define kEffectiveExposureMapValid shader.Params1.w
@@ -69,7 +64,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     int mode = (int)(kDiagMode + 0.5);
 
     // Measure the full-resolution carrier round trip independently of model
-    // upsampling and RCAS so those operations cannot masquerade as transfer error.
+    // upsampling so reconstruction cannot masquerade as transfer error.
     if (mode == 1)
     {
         const float3 source_encoded = gSource.Load(int3(id.xy, 0)).rgb;
@@ -90,28 +85,10 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     float3 roundtrip = ForwardHdrToModelSdr(
         gComposed.SampleLevel(s0, uv, 0.0).rgb, id.xy);
-    const float2 easu_con3 = float2(0.0, 4.0 * kEasuCon1.y);
-    float3 model_in = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
-                               easu_con3, 0);
-    float3 model_out = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
-                                easu_con3, 1);
-
-    if (kRcasEnabled > 0.5)
-    {
-        const float2 texel = float2(kEasuCon1.x, kEasuCon1.y);
-
-        float3 b_in = gSource.SampleLevel(s0, uv + float2(0.0, -texel.y), 0).rgb;
-        float3 d_in = gSource.SampleLevel(s0, uv + float2(-texel.x, 0.0), 0).rgb;
-        float3 f_in = gSource.SampleLevel(s0, uv + float2(texel.x, 0.0), 0).rgb;
-        float3 h_in = gSource.SampleLevel(s0, uv + float2(0.0, texel.y), 0).rgb;
-        model_in = FsrRcasF(b_in, d_in, model_in, f_in, h_in, kRcasStrength);
-
-        float3 b_out = gModelOut.SampleLevel(s0, uv + float2(0.0, -texel.y), 0).rgb;
-        float3 d_out = gModelOut.SampleLevel(s0, uv + float2(-texel.x, 0.0), 0).rgb;
-        float3 f_out = gModelOut.SampleLevel(s0, uv + float2(texel.x, 0.0), 0).rgb;
-        float3 h_out = gModelOut.SampleLevel(s0, uv + float2(0.0, texel.y), 0).rgb;
-        model_out = FsrRcasF(b_out, d_out, model_out, f_out, h_out, kRcasStrength);
-    }
+    // This diagnostic intentionally uses ordinary linear sampling. Its purpose is
+    // to compare the carrier/model domains, not to duplicate the compose filter.
+    float3 model_in = gSource.SampleLevel(s0, uv, 0.0).rgb;
+    float3 model_out = gModelOut.SampleLevel(s0, uv, 0.0).rgb;
 
     float3 display = 0.0;
     if (mode == 0) {

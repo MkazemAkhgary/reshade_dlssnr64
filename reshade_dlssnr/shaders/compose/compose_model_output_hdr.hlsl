@@ -19,7 +19,6 @@ SamplerState        s0           : register(s0);
 
 #define kLocalExposureStrength hdr.LocalExposure.x
 
-#include "common/fsr.hlsli"
 
 float3 DecodePackedHdr(float4 packed)
 {
@@ -87,52 +86,21 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     const float3 hdr_src = DecodeToLinear(
         source_encoded, (int)(kFormat + 0.5), kSdrReferenceWhiteNits);
 
-    // EASU upsample from the actual model working resolution back to full HDR
-    // resolution. Both textures are in the same sRGB-encoded model domain.
-    float3 low_in;
-    float3 low_out;
-    if (kEasuCon0.x == 1.0 && kEasuCon0.y == 1.0) {
-        // With matching working/output extents, reconstruction is identity.
+    // Reconstruct both model-domain images with the fixed joint-bilateral 3x3 filter.
+    float3 low_in = float3(0.0, 0.0, 0.0);
+    float3 low_out = float3(0.0, 0.0, 0.0);
+    uint low_w = 0u;
+    uint low_h = 0u;
+    gLowInput.GetDimensions(low_w, low_h);
+    if (low_w == Width && low_h == Height) {
         low_in = gLowInput.Load(int3(id.xy, 0)).rgb;
         low_out = gLowEnhanced.Load(int3(id.xy, 0)).rgb;
-    } else if (kUpsampleMode >= 0.5) {
-
-        // Joint bilateral upsample the model input and output separately,
-        // guided by the full-resolution packed SDR carrier. The carrier's RGB
-        // is the linear SDR base the model was trained on, so its edges line
-        // up with the model-domain reconstruction. Replaces EASU, which
-        // degrades at low working scales. The residual math in
-        // ComposeHdrInverse is unchanged and still receives low_in / low_out.
+    } else {
         const int2 full_size_int = int2((int)Width, (int)Height);
         const int2 full_xy = int2((int)id.x, (int)id.y);
         JointBilateralUpsamplePair(
             full_xy, full_size_int, gLowInput, gLowEnhanced, gOriginal,
-            8.0, kUpsampleSharpness, low_in, low_out);
-    } else {
-        // FSR 1.0 EASU. The original upsampler. Designed for roughly
-        // 2x reconstruction; at working scales far from that the
-        // source footprint shrinks and the result can look blocky.
-        const float2 easu_con3 = float2(0.0, 4.0 * kEasuCon1.y);
-        low_in = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
-                          easu_con3, 0);
-        low_out = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
-                           easu_con3, 1);
-    }
-
-    if (kRcasEnabled > 0.5) {
-        const float2 texel = float2(kEasuCon1.x, kEasuCon1.y);
-
-        float3 b_in = gLowInput.SampleLevel(s0, uv + float2(0.0, -texel.y), 0).rgb;
-        float3 d_in = gLowInput.SampleLevel(s0, uv + float2(-texel.x, 0.0), 0).rgb;
-        float3 f_in = gLowInput.SampleLevel(s0, uv + float2(texel.x, 0.0), 0).rgb;
-        float3 h_in = gLowInput.SampleLevel(s0, uv + float2(0.0, texel.y), 0).rgb;
-        low_in = FsrRcasF(b_in, d_in, low_in, f_in, h_in, kRcasStrength);
-
-        float3 b_out = gLowEnhanced.SampleLevel(s0, uv + float2(0.0, -texel.y), 0).rgb;
-        float3 d_out = gLowEnhanced.SampleLevel(s0, uv + float2(-texel.x, 0.0), 0).rgb;
-        float3 f_out = gLowEnhanced.SampleLevel(s0, uv + float2(texel.x, 0.0), 0).rgb;
-        float3 h_out = gLowEnhanced.SampleLevel(s0, uv + float2(0.0, texel.y), 0).rgb;
-        low_out = FsrRcasF(b_out, d_out, low_out, f_out, h_out, kRcasStrength);
+            kUpsampleSharpness, kUpsampleSharpness, low_in, low_out);
     }
 
     const float3 sdr_base = DecodePackedHdr(packed);

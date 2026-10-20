@@ -27,8 +27,6 @@ bool ComposeOutput(
     const StrengthSettings& strength,
     const SoftCompressionSettings& soft_compression = {},
     const ResidualSettings& residual = {},
-    bool rcas_enabled = false,
-    float rcas_strength = 0.5f,
     const GradeSettings* grade_input = nullptr,
     const HdrUniforms* hdr = nullptr);
 

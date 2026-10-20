@@ -166,14 +166,14 @@ const DebugViewDef kDebugViews[] = {
      "2x2 comparison: actual prepared Model Input | Model Output / composed HDR "
      "mapped back to the ungraded model domain | composition difference against "
      "the ungraded Model Output. Nonzero edges can be expected because full-resolution "
-     "source detail is preserved; working scale and RCAS affect this comparison. "
+     "source detail is preserved; working scale affects this comparison. "
      "Use HDR Roundtrip Error for the isolated carrier reconstruction check.",
      DebugDisplayMode::HdrRoundtripDiagnostic, SelectComposedOutput},
     {"HDR Roundtrip Error",
      "False-color relative error between the original decoded HDR source and the "
      "direct float32 reconstruction from the RGBA32F carrier and carrier-to-HDR multiplier. "
      "This validates the carrier transfer only, not the model edit or final composition; "
-     "independent of Working Scale, RCAS, and input grade.",
+     "independent of Working Scale and input grade.",
      DebugDisplayMode::HdrRoundtripError, SelectPackedSdr},
     {"HDR Local Exposure",
      "Local exposure factor in stops, mapped so 0 stops is mid-gray, -2 stops "
@@ -318,32 +318,6 @@ bool RenderDebugView(
     constants.grade.Contrast = grade.contrast;
     constants.grade.Shadows = grade.shadows;
     constants.grade.Highlights = grade.highlights;
-
-    const D3D12_RESOURCE_DESC model_desc =
-        hdr_needs_model && snapshot.prepared_input != nullptr
-            ? snapshot.prepared_input->GetDesc()
-            : (snapshot.model_output != nullptr
-                   ? snapshot.model_output->GetDesc()
-                   : source_desc);
-    const float in_w = static_cast<float>(std::max<UINT>(1u, static_cast<UINT>(model_desc.Width)));
-    const float in_h = static_cast<float>(std::max<UINT>(1u, model_desc.Height));
-    const float out_w = static_cast<float>(std::max(1u, target_width));
-    const float out_h = static_cast<float>(std::max(1u, target_height));
-    constants.easu.Con0.x = in_w / out_w;
-    constants.easu.Con0.y = in_h / out_h;
-    constants.easu.Con0.z = 0.5f * in_w / out_w - 0.5f;
-    constants.easu.Con0.w = 0.5f * in_h / out_h - 0.5f;
-    constants.easu.Con1.x = 1.0f / in_w;
-    constants.easu.Con1.y = 1.0f / in_h;
-    constants.easu.Con1.z = 1.0f / in_w;
-    constants.easu.Con1.w = -1.0f / in_h;
-    constants.easu.Con2.x = -1.0f / in_w;
-    constants.easu.Con2.y = 2.0f / in_h;
-    constants.easu.Con2.z = 1.0f / in_w;
-    constants.easu.Con2.w = 2.0f / in_h;
-
-    constants.rcas.Enabled = snapshot.rcas_enabled ? 1.0f : 0.0f;
-    constants.rcas.Strength = snapshot.rcas_strength;
 
     if (snapshot.composed_output != nullptr) {
       state.Transition(command_list, snapshot.composed_output,

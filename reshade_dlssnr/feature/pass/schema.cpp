@@ -61,18 +61,6 @@ bool SoftCompressionOn(const void*, const ctl::ValueStore& store,
   return store.Read(section, key, kSoftCompressionEnabled).as_bool;
 }
 
-// The guided-upsample rows follow Upsample Mode == Joint Bilateral.
-bool JointBilateral(const void*, const ctl::ValueStore& store,
-                    const ctl::InstanceKey& key, const std::string& section) {
-  return store.Read(section, key, kUpsampleMode).as_int == 1;
-}
-
-// RCAS strength follows its own enable checkbox.
-bool RcasOn(const void*, const ctl::ValueStore& store,
-            const ctl::InstanceKey& key, const std::string& section) {
-  return store.Read(section, key, kRcasEnabled).as_bool;
-}
-
 // The ratio rows are Backbuffer-only. That is a property of this pass's target,
 // which is itself a row in this section -- so the gate just reads it, exactly
 // like every other "follows that checkbox" rule here.
@@ -116,27 +104,6 @@ const char* const kPresetTips[] = {
     "rebuild the feature.",
     "Use model preset C. Preset changes are applied per evaluation and do not "
     "rebuild the feature."};
-
-const char* const kUpsampleNames[] = {"EASU", "Joint Bilateral"};
-const char* const kUpsampleTips[] = {
-    "FSR 1.0 EASU upsampling. The original upsampler, designed for roughly 2x "
-    "reconstruction. At working scales far from that it has less source detail "
-    "to work with and the composed image can look blocky.",
-    "Joint bilateral upsampling guided by the full-resolution original. Each "
-    "output pixel is a weighted average of the nearby low-resolution samples, "
-    "weighted by guide-luma similarity. Preserves the model's per-channel edit "
-    "at any working scale."};
-
-const char* const kKernelNames[] = {"3x3", "5x5", "7x7"};
-const char* const kKernelTips[] = {
-    "3x3 kernel. Nine samples per output pixel. Lowest cost, good for typical "
-    "working scales.",
-    "5x5 kernel. Twenty-five samples. Wider spatial support, smoother "
-    "reconstruction across curves and diagonals, and weaker sample-grid "
-    "modulation at very low working scales.",
-    "7x7 kernel. Forty-nine samples. Further smoothing at increasing cost; the "
-    "outer ring contributes little unless the scene has large, "
-    "softly-varying low-resolution features."};
 
 bool DrawGradeSections(const void*, ctl::ValueStore& store,
                        const ctl::DrawOptions& options,
@@ -346,33 +313,14 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .Category(kCatResidualEdits)
       .Tooltip("Fades the edit out below mid-to-low brightness.");
 
-  pass.Add<ctl::EnumSetting>(kUpsampleMode, "Upsample Mode", 0)
-      .Items(kUpsampleNames, kUpsampleTips, 2)
-      .AsGroup()
-      .Category(kCatResidualEdits)
-      .Tooltip("Which algorithm reconstructs full resolution from the "
-               "working-scale model input and output. EASU is the original "
-               "FSR 1.0 path; Joint Bilateral uses the full-resolution "
-               "original as an edge guide.");
   pass.Add<ctl::FloatSetting>(kUpsampleSharpness, "Upsample Sharpness", 8.0f)
       .ClampRange(0.5f, 32.0f)
-      .VisibleWhen(&JointBilateral)
       .Category(kCatResidualEdits)
-      .Tooltip("Edge-preservation exponent for the guided upsample of the "
-               "model's input and output. Higher values track the "
-               "full-resolution image's edges more sharply; lower values blend "
-               "more smoothly across the low-resolution neighborhood. This is "
-               "an edge-preservation exponent, not a strength multiplier: it "
-               "does not amplify or attenuate the model's edit.");
-  pass.Add<ctl::EnumSetting>(kUpsampleKernel, "Upsample Kernel", 0)
-      .Items(kKernelNames, kKernelTips, 3)
-      .AsGroup()
-      .VisibleWhen(&JointBilateral)
-      .Category(kCatResidualEdits)
-      .Tooltip("Spatial extent of the joint-bilateral kernel. The spatial "
-               "sigma is derived from the kernel size, so the falloff shape is "
-               "the same across sizes and only the number of contributing taps "
-               "changes.");
+      .Tooltip("Edge-preservation exponent for the fixed joint-bilateral 3x3 "
+               "reconstruction of the model input and output. Higher values "
+               "track full-resolution guide edges more sharply; lower values "
+               "blend more smoothly across the low-resolution neighborhood. "
+               "This does not scale the model edit.");
 
   // Ratio rows apply to Backbuffer passes only, which is a value in this same
   // section -- so the gate reads it exactly like every other "follows that
@@ -398,15 +346,6 @@ void RegisterPassSchema(ctl::Schema& schema) {
                "darkening. This has no effect on Pre-DLSS or Post-DLSS "
                "passes.");
 
-  pass.Add<ctl::BoolSetting>(kRcasEnabled, "Sharpening", false)
-      .Category(kCatResidualEdits)
-      .Tooltip("Sharpen the model's upsampled output with FSR RCAS.");
-  pass.Add<ctl::FloatSetting>(kRcasStrength, "Strength", 0.5f)
-      .ClampRange(0.0f, 1.0f)
-      .VisibleWhen(&RcasOn)
-      .Category(kCatResidualEdits)
-      .Tooltip("How aggressively to sharpen.");
-
   // --- The two model grades ----------------------------------------------
   ctl::Section& grade_input =
       schema.AddSection(kGradeInputSection, ctl::SectionKind::Instanced);
@@ -422,7 +361,7 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .Tooltip("Grade the model produced, before it is published.");
   grade_rows::Declare(grade_output, kGradeOutputPrefix, &GradeEnabled);
 
-  pass.AddHookAfter(kRcasStrength, "GradeBoundarySections",
+  pass.AddHookAfter(kRatioDarken, "GradeBoundarySections",
                     &DrawGradeSections).Category(nullptr);
 }
 

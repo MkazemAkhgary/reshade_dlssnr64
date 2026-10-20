@@ -38,12 +38,6 @@
 #define kGainMaxLog2         hdr.GainMaxLog2
 #define kEffectiveSceneWhiteNits hdr.EffectiveSceneWhiteNits
 
-// FSR
-#define kEasuCon0     easu.Con0
-#define kEasuCon1     easu.Con1
-#define kEasuCon2     easu.Con2
-#define kRcasEnabled  rcas.Enabled
-#define kRcasStrength rcas.Strength
 
 // Dynamic shader parameter table
 #define kLumaStrength    shader.Params0.x
@@ -53,9 +47,7 @@
 #define kSoftMaxDarken   shader.Params1.x
 #define kSoftMaxChroma   shader.Params1.y
 #define kSoftKnee        shader.Params1.z
-#define kUpsampleMode      hdr.UpsampleMode
 #define kUpsampleSharpness hdr.UpsampleSharpness
-#define kUpsampleKernelHalf shader.Params1.w
 
 // Temporal reprojection settings and motion/depth guide mapping.
 #define kTemporalPhotometricAbsThreshold temporal.Thresholds.x

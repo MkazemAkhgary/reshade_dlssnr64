@@ -64,19 +64,12 @@ PassSnapshot Read(const ctl::ValueStore& store, const ctl::InstanceKey& key) {
       store.Read(section, key, kResidualHighlight).as_float;
   p.residual.shadow_protect =
       store.Read(section, key, kResidualShadow).as_float;
-  p.residual.upsample_mode = static_cast<UpsampleMode>(
-      store.Read(section, key, kUpsampleMode).as_int);
   p.residual.upsample_sharpness =
       store.Read(section, key, kUpsampleSharpness).as_float;
-  p.residual.upsample_kernel = static_cast<UpsampleKernel>(
-      store.Read(section, key, kUpsampleKernel).as_int);
   p.residual.ratio_eps = store.Read(section, key, kRatioEps).as_float;
   p.residual.ratio_brighten =
       store.Read(section, key, kRatioBrighten).as_float;
   p.residual.ratio_darken = store.Read(section, key, kRatioDarken).as_float;
-
-  p.rcas_enabled = store.Read(section, key, kRcasEnabled).as_bool;
-  p.rcas_strength = store.Read(section, key, kRcasStrength).as_float;
 
   return p;
 }

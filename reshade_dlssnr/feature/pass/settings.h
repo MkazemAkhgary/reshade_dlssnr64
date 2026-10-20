@@ -58,14 +58,10 @@ inline constexpr const char* kResidualChroma = "residual_chroma";
 inline constexpr const char* kResidualGamma = "residual_gamma";
 inline constexpr const char* kResidualHighlight = "residual_highlight";
 inline constexpr const char* kResidualShadow = "residual_shadow";
-inline constexpr const char* kUpsampleMode = "upsample_mode";
 inline constexpr const char* kUpsampleSharpness = "upsample_sharpness";
-inline constexpr const char* kUpsampleKernel = "upsample_kernel";
 inline constexpr const char* kRatioEps = "ratio_eps";
 inline constexpr const char* kRatioBrighten = "ratio_brighten";
 inline constexpr const char* kRatioDarken = "ratio_darken";
-inline constexpr const char* kRcasEnabled = "rcas_enabled";
-inline constexpr const char* kRcasStrength = "rcas_strength";
 
 // The two model grade sections. Each is a section of its own, so "enabled" is
 // unqualified within it.

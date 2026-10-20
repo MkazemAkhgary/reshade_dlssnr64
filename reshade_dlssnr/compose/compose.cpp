@@ -16,8 +16,6 @@ bool ComposeOutput(
     const StrengthSettings& strength,
     const SoftCompressionSettings& soft_compression,
     const ResidualSettings& residual,
-    bool rcas_enabled,
-    float rcas_strength,
     const GradeSettings* grade_input,
     const HdrUniforms* hdr) {
   if (codec == nullptr || command_list == nullptr || packed_source == nullptr ||
@@ -44,49 +42,9 @@ bool ComposeOutput(
   constants.residual.RatioBrighten = residual.ratio_brighten;
   constants.residual.RatioDarken = residual.ratio_darken;
 
-  // Compose upsampler selection, shared by the SDR and HDR paths.
-  // Both fields live in the HdrBlock's two previously reserved slots;
-  // they must be written here, before the HDR-only branch below, so
-  // the SDR dispatch also sees them.
-  constants.hdr.UpsampleMode =
-      static_cast<float>(static_cast<int>(residual.upsample_mode));
   constants.hdr.UpsampleSharpness = residual.upsample_sharpness;
 
-  // Joint-bilateral kernel half-size, derived from the enum and packed
-  // into shader.Params1.w. The slot was freed when the sigma slider was
-  // reverted; the shader derives sigma from this value, so there is no
-  // separate sigma uniform and the CBV layout is unchanged.
-  constants.shader.Params1.w =
-      static_cast<float>(static_cast<int>(residual.upsample_kernel) + 1);
-
-
   const char* pass_name = "ComposeModelOutput";
-
-  // FSR 1.0 EASU + optional RCAS is shared by both SDR and HDR compose.
-  // FsrEasuCon uses inputViewport == inputSize because the working textures
-  // are exactly their allocated model resolution. con3 is derived in shader
-  // from con1.y and is therefore not stored in the constant block.
-  const D3D12_RESOURCE_DESC low_desc = low_enhanced->GetDesc();
-  const float in_w = static_cast<float>(low_desc.Width);
-  const float in_h = static_cast<float>(low_desc.Height);
-  const float out_w = static_cast<float>(full_width);
-  const float out_h = static_cast<float>(full_height);
-
-  constants.easu.Con0.x = in_w / out_w;
-  constants.easu.Con0.y = in_h / out_h;
-  constants.easu.Con0.z = 0.5f * in_w / out_w - 0.5f;
-  constants.easu.Con0.w = 0.5f * in_h / out_h - 0.5f;
-  constants.easu.Con1.x = 1.0f / in_w;
-  constants.easu.Con1.y = 1.0f / in_h;
-  constants.easu.Con1.z = 1.0f / in_w;
-  constants.easu.Con1.w = -1.0f / in_h;
-  constants.easu.Con2.x = -1.0f / in_w;
-  constants.easu.Con2.y = 2.0f / in_h;
-  constants.easu.Con2.z = 1.0f / in_w;
-  constants.easu.Con2.w = 2.0f / in_h;
-
-  constants.rcas.Enabled = rcas_enabled ? 1.0f : 0.0f;
-  constants.rcas.Strength = rcas_strength;
 
   if (hdr != nullptr) {
     pass_name = "ComposeModelOutputHdr";

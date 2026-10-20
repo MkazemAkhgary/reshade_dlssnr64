@@ -68,8 +68,6 @@ struct DebugSnapshot {
   ID3D12Resource* model_output = nullptr;
   unsigned int model_output_width = 0;
   unsigned int model_output_height = 0;
-  bool rcas_enabled = false;
-  float rcas_strength = 0.0f;
   GradeSettings input_grade = {};
 
   // Model output after composition (residual, strength, HDR remap).

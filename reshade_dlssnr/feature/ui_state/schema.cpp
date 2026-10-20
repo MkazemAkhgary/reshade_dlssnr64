@@ -49,8 +49,6 @@ void RegisterUiStateSchema(ctl::Schema& schema) {
                                 "Soft Compression Open", true).GlobalOnly();
   section.Add<ctl::BoolSetting>(ui_state::kResidualOpen, "Residual Edits Open",
                                 false).GlobalOnly();
-  section.Add<ctl::BoolSetting>(ui_state::kRcasOpen, "RCAS Open", false)
-      .GlobalOnly();
   section.Add<ctl::BoolSetting>(ui_state::kGradeInputOpen,
                                 "Grade Input Open", false).GlobalOnly();
   section.Add<ctl::BoolSetting>(ui_state::kGradeOutputOpen,

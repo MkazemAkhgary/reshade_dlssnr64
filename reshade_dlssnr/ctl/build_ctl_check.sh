@@ -19,7 +19,7 @@ for f in "$@"; do
   out=$(MSYS2_ARG_CONV_EXCL='*' cl.exe /nologo /c /W3 /permissive- /std:c++20 /EHsc \
     /DNDEBUG /DWIN32 /D_WINDOWS /D_USRDLL /DNOMINMAX /DWIN32_LEAN_AND_MEAN \
     "/I$PROJW" "/I$PROJW/generated" "/I$RE/include" "/I$RE" "/I$RE/deps/imgui" \
-    "/I$PROJW/third_party" "/I$PROJW/third_party/FidelityFX-FSR/ffx-fsr" \
+    "/I$PROJW/third_party" \
     "/I$PROJW/third_party/nvngx_dlss_sdk" "/I$PROJW/third_party/d3dx" \
     "/I$PROJW/third_party/detours" "/I$PROJW/gpu" "/I$PROJW/model" \
     "/I$PROJW/pipeline" "/I$PROJW/hooks" "/I$PROJW/ui" "/I$PROJW/state" \

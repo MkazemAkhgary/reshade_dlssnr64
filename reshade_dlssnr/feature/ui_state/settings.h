@@ -26,7 +26,6 @@ inline constexpr const char* kStrengthOpen = "strength_open";
 inline constexpr const char* kTemporalOpen = "temporal_open";
 inline constexpr const char* kSoftCompressionOpen = "soft_compression_open";
 inline constexpr const char* kResidualOpen = "residual_open";
-inline constexpr const char* kRcasOpen = "rcas_open";
 inline constexpr const char* kGradeInputOpen = "grade_input_open";
 inline constexpr const char* kGradeOutputOpen = "grade_output_open";
 

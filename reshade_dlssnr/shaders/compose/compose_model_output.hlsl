@@ -15,7 +15,6 @@ SamplerState        s0           : register(s0);
 
 #include "common/compose_upsample.hlsli"
 
-#include "common/fsr.hlsli"
 
 // Shared shader state is declared by the common cbuffer/bindings includes.
 
@@ -61,53 +60,21 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     float4 original = gOriginal.SampleLevel(s0, uv, 0);
 
-    // FSR 1.0 EASU upsample from the actual model working resolution back to
-    // full SDR resolution. Both HDR and SDR compose use the same reconstruction.
-    float3 in_rgb;
-    float3 out_rgb;
-    if (kEasuCon0.x == 1.0 && kEasuCon0.y == 1.0) {
-        // Working scale 1:1: the low-res buffers are already full resolution,
-        // so read them directly.
+    // Reconstruct both model-domain images with the fixed joint-bilateral 3x3 filter.
+    float3 in_rgb = float3(0.0, 0.0, 0.0);
+    float3 out_rgb = float3(0.0, 0.0, 0.0);
+    uint low_w = 0u;
+    uint low_h = 0u;
+    gLowInput.GetDimensions(low_w, low_h);
+    if (low_w == Width && low_h == Height) {
         in_rgb = gLowInput.Load(int3(id.xy, 0)).rgb;
         out_rgb = gLowEnhanced.Load(int3(id.xy, 0)).rgb;
-    } else if (kUpsampleMode >= 0.5) {
-
-        // Joint bilateral upsample the model input and output separately,
-        // guided by the full-resolution original. This replaces the EASU
-        // reconstruction, which produces a blocky pattern when the working
-        // scale is far from EASU's design point (~2x). The residual math
-        // below is unchanged: it still operates on in_rgb and out_rgb, so
-        // the model's per-channel edit — chroma included — is preserved.
+    } else {
         const int2 full_size_int = int2((int)Width, (int)Height);
         const int2 full_xy = int2((int)id.x, (int)id.y);
         JointBilateralUpsamplePair(
             full_xy, full_size_int, gLowInput, gLowEnhanced, gOriginal,
-            8.0, kUpsampleSharpness, in_rgb, out_rgb);
-    } else {
-        // FSR 1.0 EASU. The original upsampler. Designed for roughly
-        // 2x reconstruction; at working scales far from that the
-        // source footprint shrinks and the result can look blocky.
-        const float2 easu_con3 = float2(0.0, 4.0 * kEasuCon1.y);
-        in_rgb = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
-                          easu_con3, 0);
-        out_rgb = FsrEasuF(id.xy, kEasuCon0, kEasuCon1, kEasuCon2,
-                           easu_con3, 1);
-    }
-
-    if (kRcasEnabled > 0.5) {
-        const float2 texel = float2(kEasuCon1.x, kEasuCon1.y);
-
-        float3 b_in = gLowInput.SampleLevel(s0, uv + float2(0.0, -texel.y), 0).rgb;
-        float3 d_in = gLowInput.SampleLevel(s0, uv + float2(-texel.x, 0.0), 0).rgb;
-        float3 f_in = gLowInput.SampleLevel(s0, uv + float2(texel.x, 0.0), 0).rgb;
-        float3 h_in = gLowInput.SampleLevel(s0, uv + float2(0.0, texel.y), 0).rgb;
-        in_rgb = FsrRcasF(b_in, d_in, in_rgb, f_in, h_in, kRcasStrength);
-
-        float3 b_out = gLowEnhanced.SampleLevel(s0, uv + float2(0.0, -texel.y), 0).rgb;
-        float3 d_out = gLowEnhanced.SampleLevel(s0, uv + float2(-texel.x, 0.0), 0).rgb;
-        float3 f_out = gLowEnhanced.SampleLevel(s0, uv + float2(texel.x, 0.0), 0).rgb;
-        float3 h_out = gLowEnhanced.SampleLevel(s0, uv + float2(0.0, texel.y), 0).rgb;
-        out_rgb = FsrRcasF(b_out, d_out, out_rgb, f_out, h_out, kRcasStrength);
+            kUpsampleSharpness, kUpsampleSharpness, in_rgb, out_rgb);
     }
 
     // The model's edit as a per-channel ratio, held in log space so the

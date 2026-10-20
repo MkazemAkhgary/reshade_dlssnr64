@@ -35,8 +35,8 @@ void JointBilateralUpsamplePair(
     const float3 guide_center = guide_tex.Load(int3(full_xy, 0)).rgb;
     const float guide_luma_center =
         dot(guide_center, float3(0.2126, 0.7152, 0.0722));
-    const int kernel_half = max((int)(kUpsampleKernelHalf + 0.5), 1);
-    const float spatial_sigma = (float)kernel_half;
+    const int kernel_half = 1;
+    const float spatial_sigma = 1.0;
     const float spatial_sigma_inv2 = 1.0 / (spatial_sigma * spatial_sigma);
 
     float3 input_accum = float3(0.0, 0.0, 0.0);

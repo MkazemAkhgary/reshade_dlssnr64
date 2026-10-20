@@ -65,8 +65,6 @@ struct PassSnapshot {
   // Advanced group.
   SoftCompressionSettings soft_compression;
   ResidualSettings residual;
-  bool rcas_enabled = false;
-  float rcas_strength = 0.5f;
 };
 
 // Read the Pass section for `key`.

@@ -42,14 +42,13 @@ reshade_dlssnr/
     luma.hlsli                      BT.709/BT.2020 luma weights
     math.hlsli                      Shared scalar/vector math helpers
     grade.hlsli                     Linear and SDR grade transforms
-    fsr.hlsli                       FSR 1.0 EASU/RCAS implementation
     box_filter.hlsli                Exact footprint Box Area Average
     compose_common.hlsli            Residual shaping, ratio compose, YCbCr blend
     compose_upsample.hlsli          Shared SDR/HDR joint-bilateral upsampling
 
   shaders/compose/
-    compose_model_output.hlsl       SDR compose with FSR upsampling
-    compose_model_output_hdr.hlsl   Gain-Map Residual HDR compose with FSR upsampling and source-preserving HDR composition
+    compose_model_output.hlsl       SDR compose with fixed joint-bilateral 3×3 upsampling
+    compose_model_output_hdr.hlsl   Gain-Map Residual HDR compose with fixed joint-bilateral 3×3 upsampling and source-preserving HDR composition
   shaders/debug/
     debug_display.hlsl              Debug-view renderer
     debug_hdr_roundtrip.hlsl        HDR round-trip, error, and local-exposure diagnostic renderer
@@ -197,7 +196,6 @@ reshade_dlssnr/
 
   third_party/
     reshade/                        ReShade SDK and ImGui source
-    FidelityFX-FSR/                 FSR 1.0 source used by the addon/toolchain
     nvngx_dlss_sdk/                 NVIDIA NGX SDK headers
     d3dx/                           D3DX12 helper header
     detours/                        Detours headers and import library
@@ -417,16 +415,14 @@ The 512-byte CBV is:
 | 48 | `GradeBlock` | 48 |
 | 96 | `ResidualBlock` | 32 |
 | 128 | `HdrBlock` | 80 |
-| 208 | `EasuBlock` | 48 |
-| 256 | `RcasBlock` | 16 |
-| 272 | `HistogramBlock` | 32 |
-| 304 | `TemporalBlock` | 96 |
-| 400 | `LocalExposureControlBlock` | 32 |
-| 432 | alignment padding | 80 |
+| 208 | `HistogramBlock` | 32 |
+| 240 | `TemporalBlock` | 96 |
+| 336 | `LocalExposureControlBlock` | 32 |
+| 368 | alignment padding | 144 |
 
 The resulting `ComputeConstants` size and `BindAndDispatch` stride are both 512 bytes, rounded to the D3D12 constant-buffer alignment. `TemporalBlock` owns the photometric/depth thresholds, maximum motion displacement, motion-vector coordinate metadata, and guide subrect metadata. Temporal kernels use a dedicated `TemporalBlock`; they do not borrow HDR or generic shader-parameter slots. `HdrBlock.LocalExposureParams.x/y` carry the local-exposure radius and sample count; `.z` selects the optional precomputed-luma path. The `LocalExposureControlBlock` occupies previously unused trailing cbuffer space and carries the directional curve, detail-retention, and protection controls without changing existing block offsets.
 
-The shader-side aliases in `bindings.hlsli` turn fields such as `hdr.Exposure` and `easu.Con0` into the existing semantic names used by shader code (`kExposure`, `kEasuCon0`, and so on). The Strength/Soft-Compression settings (`PassSettings::strength` / `::soft_compression`, compose/settings.h) are written field-by-field into `ShaderBlock.Params0` and `Params1` by `ComposeOutput` in compose/compose.cpp.
+The shader-side aliases in `bindings.hlsli` turn fields such as `hdr.Exposure` into the semantic names used by shader code (`kExposure` and so on). The Strength/Soft-Compression settings (`PassSettings::strength` / `::soft_compression`, compose/settings.h) are written field-by-field into `ShaderBlock.Params0` and `Params1` by `ComposeOutput` in compose/compose.cpp.
 
 The layout intentionally avoids `float2`, `float3`, `packoffset`, platform headers and HLSL-only utility code in `params.h`. Every nested block is explicitly 16-byte aligned and padded.
 
@@ -438,7 +434,7 @@ The model input downsample is `BoxAreaAverage` from `shaders/common/box_filter.h
 
 The non-HDR `PrepareModelInput` path therefore treats the source as already in the model's target sRGB space and passes the averaged RGB through unchanged. The HDR carrier path averages the linear carrier, applies the reversible model highlight/gamut fit, and applies `LinearToSrgb` before the model sees it. Normal colors are unchanged; super-whites are smoothly compressed toward white so emissive highlights keep a white/yellow core.
 
-Both SDR and HDR compose paths support FSR 1.0 EASU or joint-bilateral upsampling. Optional RCAS from `shaders/common/fsr.hlsli` sharpens both the reconstructed model input and output after either upsampling path. RCAS enable/strength are registered per pass and are not gated to Backbuffer targets or EASU mode; all three paths use the shared cbuffer controls.
+Both SDR and HDR compose paths use a fixed joint-bilateral 3×3 reconstruction guided by the full-resolution source. The per-pass Upsample Sharpness setting controls guide-luma similarity; the kernel size is fixed to avoid expensive larger neighborhoods and there is no separate sharpening stage.
 
 The common helpers are also consolidated. `math.hlsli` owns the single `safe_log`/`safe_log3` implementation; `color.hlsli` owns `NitsToPq` and `DecodeToLinear`; and `color_constants.h` is the shared C++/HLSL source of truth for color-domain constants.
 
@@ -557,7 +553,7 @@ Debug views show the pre-depth candidate, post-depth validation result, and per-
 
 **Keep shared cbuffer math-free.** `shaders/common/params.h` is a layout contract for two languages, not a utility header.
 
-**Share local-exposure math between split and compose support.** `shaders/common/hdr_local_exposure.hlsli` is the single implementation of the local-exposure field calculation used by both the HDR gain-map split and the full-resolution exposure map. This prevents the map from drifting away from the exposure field that produced the model input. The precomputed-luma texture has independent cached dimensions; releasing an inactive diagnostic map must not invalidate that cache.
+**Share local-exposure math between split and compose support.** `shaders/common/hdr_local_exposure.hlsli` is the single implementation of the local-exposure field calculation used by both the HDR gain-map split and the full-resolution exposure map. This prevents the map from drifting away from the exposure field that produced the model input.
 
 **Include shared helpers before using their aliases.** `bindings.hlsli` assumes the `params.h` field names exist. `color.hlsli`, `grade.hlsli`, and other helper files should only assume the functions they explicitly include or receive through earlier root includes.
 
@@ -573,13 +569,13 @@ Debug views show the pre-depth candidate, post-depth validation result, and per-
 
 **Adaptive and Local Exposure are independent layers.** Adaptive Exposure maps the filtered histogram to its midtone target and can provide global exposure by itself or a bounded correction on top of Game Exposure. Local Exposure computes a log-luminance base/detail correction using a configurable radius and 4–48 spatial taps. The target midtone is a pivot: shadow lift and highlight reduction have independent strengths and transition ranges, while bright-detail and dark-detail protection prevent one side of the local contrast from being dragged along with the other. Detail Retention controls the amount of within-neighborhood log-luminance detail preserved. Local Exposure still has no mask, depth, or percentile filters. An optional precomputed-luma path can be enabled to test performance against the original sampling path; it changes the order of interpolation and nonlinear luminance transfer and is disabled by default. `Restore Model Exposure` is a separate opt-in checkbox. Its `Restore Scale` slider interpolates in log exposure between the exact local multiplier at 0 and a uniform geometric-mean multiplier at 1. The local endpoint reads the multiplier directly from the carrier pair without a blurred map; the global endpoint uses a tile reduction followed by a single-group reduction. Intermediate values blend the two spatial scales. The Game and Adaptive layers retain their histogram-filter options.
 
-**The HDR carrier and source have separate responsibilities.** `GainMapSplit` writes RGB linear SDR carrier plus a direct reciprocal of the RGB carrier scale to `R32G32B32A32_FLOAT`. The multiplier is stored linearly in alpha to avoid an unnecessary log2/exp2 precision cycle; gain statistics and the debug view convert it to stops. The paired pre-desaturation/inverse operations are reduced algebraically to a scalar RGB multiply so saturated super-whites do not suffer cancellation noise in near-zero channels. No additive offsets or fixed super-white ceiling are applied. HDR composition reads the untouched source resource and decodes it into float shader values, then transfers the model residual onto that source; it never reconstructs the original from the SDR carrier. The HDR model input/output and EASU/RCAS working textures use `R32G32B32A32_FLOAT` to reduce precision loss in the reversible highlight transform. The opt-in `FP16 Reference` setting changes only the unlifted working-resolution composition reference to `R16G16B16A16_FLOAT`; SDR continues to use the source-compatible model format. The published composite remains in the game's native format, whose representable range still applies. The model-gamut mapping keeps valid source super-whites below model-domain white with a piecewise logarithmic mapping; its inverse also handles model-output overrange. This mapping is only for the model-facing carrier. The original source and its full carrier-to-HDR multiplier remain separate, so model-gamut fitting never caps the final HDR result.
+**The HDR carrier and source have separate responsibilities.** `GainMapSplit` writes RGB linear SDR carrier plus a direct reciprocal of the RGB carrier scale to `R32G32B32A32_FLOAT`. The multiplier is stored linearly in alpha to avoid an unnecessary log2/exp2 precision cycle; gain statistics and the debug view convert it to stops. The paired pre-desaturation/inverse operations are reduced algebraically to a scalar RGB multiply so saturated super-whites do not suffer cancellation noise in near-zero channels. No additive offsets or fixed super-white ceiling are applied. HDR composition reads the untouched source resource and decodes it into float shader values, then transfers the model residual onto that source; it never reconstructs the original from the SDR carrier. The HDR model input/output working textures use `R32G32B32A32_FLOAT` to reduce precision loss in the reversible highlight transform. The opt-in `FP16 Reference` setting changes only the unlifted working-resolution composition reference to `R16G16B16A16_FLOAT`; SDR continues to use the source-compatible model format. The published composite remains in the game's native format, whose representable range still applies. The model-gamut mapping keeps valid source super-whites below model-domain white with a piecewise logarithmic mapping; its inverse also handles model-output overrange. This mapping is only for the model-facing carrier. The original source and its full carrier-to-HDR multiplier remain separate, so model-gamut fitting never caps the final HDR result.
 
-**`HDR Roundtrip Error` isolates the carrier transfer.** It compares the original decoded full-resolution HDR source directly with HDR reconstructed from the RGBA32F carrier and multiplier. It does not run EASU, RCAS, model processing, input grade, or output-format encoding. Alpha stores the reciprocal of the scalar used to create RGB from the original HDR source; it is the carrier-to-HDR reconstruction multiplier. Gain statistics and the gain-map debug view display its log2 value in stops. HDR composition itself uses the untouched source and therefore does not inherit carrier reconstruction error. `HDR Roundtrip Diagnostic` is a different comparison: it uses the actual prepared model input and compares the composed HDR mapped back to model SDR with the model output in the ungraded model-linear domain. Nonzero edge differences can be legitimate because HDR composition preserves full-resolution source detail; Working Scale and RCAS change the comparison. It is not an isolated carrier-transfer test.
+**`HDR Roundtrip Error` isolates the carrier transfer.** It compares the original decoded full-resolution HDR source directly with HDR reconstructed from the RGBA32F carrier and multiplier. It does not run model processing, input grade, or output-format encoding. Alpha stores the reciprocal of the scalar used to create RGB from the original HDR source; it is the carrier-to-HDR reconstruction multiplier. Gain statistics and the gain-map debug view display its log2 value in stops. HDR composition itself uses the untouched source and therefore does not inherit carrier reconstruction error. `HDR Roundtrip Diagnostic` is a different comparison: it uses the actual prepared model input and compares the composed HDR mapped back to model SDR with the model output in the ungraded model-linear domain. Nonzero edge differences can be legitimate because HDR composition preserves full-resolution source detail; Working Scale changes the comparison. It is not an isolated carrier-transfer test.
 
 **Local exposure is kept out of the HDR residual reference.** When Local Exposure is active, GainMapSplit produces both the normal locally adjusted carrier and a global-only carrier with the same BT.2446 mapping. The global-only carrier is downsampled and model-gamut-fitted through the same preparation path as the actual model input, and receives the same input grade. HDR composition compares the model output against this unlifted reference, so local lifting does not flatten the measured edit. It is constructed before downsampling rather than by dividing a filtered image afterward; this preserves the exact sampling footprint and avoids detail loss. The normal carrier still stores the reciprocal of its complete global × local scale, which cancels that scale when transferring the relative edit onto the untouched HDR source.
 
-**HDR round-trip diagnostics.** `HDR Roundtrip Error` checks only source-to-carrier-to-HDR reconstruction, independent of Working Scale, RCAS, model processing, and input grade. A uniform neutral image means the carrier reconstruction itself is accurate. `HDR Roundtrip Diagnostic` compares model and composition domains, including EASU/RCAS and the preservation of full-resolution source detail. Its bottom-right panel is a composition difference, not a pure transfer error; input grade is removed before the model output is compared. Use Error to test carrier math and Diagnostic to inspect composition behavior.
+**HDR round-trip diagnostics.** `HDR Roundtrip Error` checks only source-to-carrier-to-HDR reconstruction, independent of Working Scale, model processing, and input grade. A uniform neutral image means the carrier reconstruction itself is accurate. `HDR Roundtrip Diagnostic` compares model and composition domains, including the preservation of full-resolution source detail. Its bottom-right panel is a composition difference, not a pure transfer error; input grade is removed before the model output is compared. Use Error to test carrier math and Diagnostic to inspect composition behavior.
 
 **Render debug images at pass time.** The resource state is trustworthy while the producing pass still owns the command list and has just produced the resource. `MaybeRenderDebug` renders into `FrameDebugContext::output`; the Release stage only copies that already-rendered output to the backbuffer.
 
@@ -591,7 +587,7 @@ Debug views show the pre-depth candidate, post-depth validation result, and per-
 
 **Guide/output cloning is one shared advanced option.** `CloneResources` defaults to false and is read atomically by the NGX hook at the next evaluation boundary. Off uses current game resources directly; on clones current depth/motion and, only for Post-DLSS, the post-evaluation color output. The same toggle governs Pre-DLSS, Post-DLSS, and the guides available to Backbuffer, so it can compare copy-path costs without reverting to stale guides.
 
-**Working scale 1 avoids identity scaling work.** For SDR inputs with no input grade and equal input/working dimensions, `PrepareModelInput` passes the original resource to the model instead of dispatching an identity downsample. SDR/HDR composition still dispatches because it applies the model residual and writes the final image, but the shaders skip upsampling when the working and output sizes are equal; optional RCAS remains active. The HDR carrier preparation is not bypassed because it performs required color-domain conversion.
+**Working scale 1 avoids identity scaling work.** For SDR inputs with no input grade and equal input/working dimensions, `PrepareModelInput` passes the original resource to the model instead of dispatching an identity downsample. SDR/HDR composition still dispatches because it applies the model residual and writes the final image; the shaders bypass reconstruction when working and output sizes match. The HDR carrier preparation is not bypassed because it performs required color-domain conversion.
 
 **Brightness mode `Exposure` operates in linear light.** It multiplies all three linear RGB channels by `2^stops` before output encoding, which changes scene intensity while preserving chromaticity until gamut limits/clipping. It replaces the former Lift mode; the shared mode index is retained so profile serialization remains stable. Gain, Gamma, and Soft keep their separate luminance-shaped curves.
 
@@ -624,10 +620,10 @@ The HDR path is gain-map based and runs on the Pre-DLSS and Post-DLSS targets. B
 3. `GainMapSplit` converts the full-resolution HDR source into an RGBA32F carrier: RGB is the linear SDR base and A is the reciprocal of the complete carrier scale. BT.2446-C parameters and scene-white control the carrier; no additive gain offsets or gain ceiling are applied. If Local Exposure is enabled, a second invocation with Local Exposure disabled writes a global-only carrier for the residual reference.
 4. `PrepareModelInput` performs exact Box Area downsampling. For the HDR carrier path it applies the reversible model highlight/gamut fit and sRGB encoding. When Local Exposure is active, the global-only carrier uses this same path to create a separate unlifted working-resolution reference for HDR composition. Importance Mask instead reads the actual prepared model input after input grading; it never uses the composition reference.
 5. The model feature evaluates at the selected working scale while being built at full frame resolution.
-6. `ComposeModelOutputHdr` uses FSR EASU and optional RCAS to reconstruct model-domain images at full resolution. With Local Exposure enabled, the composition residual uses the unlifted reference; otherwise it uses the prepared model input. HDR composition retains the original Gain-Map Residual math: the packed per-pixel carrier-to-HDR multiplier transfers the relative model edit onto the untouched full-resolution HDR source. It does not invert the nonlinear super-white fit to derive an absolute endpoint delta. Present/backbuffer passes continue to use the existing SDR log-ratio compose path.
+6. `ComposeModelOutputHdr` uses fixed joint-bilateral 3×3 reconstruction to upsample model-domain images at full resolution. With Local Exposure enabled, the composition residual uses the unlifted reference; otherwise it uses the prepared model input. HDR composition retains the original Gain-Map Residual math: the packed per-pixel carrier-to-HDR multiplier transfers the relative model edit onto the untouched full-resolution HDR source. It does not invert the nonlinear super-white fit to derive an absolute endpoint delta. Present/backbuffer passes continue to use the existing SDR log-ratio compose path.
 7. `EncodeHdr` writes the reconstructed result back into scRGB or HDR10 as required by the source format. The gain-map residual compose path measures the model edit in the model domain, then uses the packed carrier-to-HDR multiplier to transfer that edit into the original source's scene-referred range without inverting the highlight/gamut fit.
 
-The SDR compose uses the same FSR path but does not reconstruct an HDR carrier; it applies the residual in the source SDR space and uses the shared grade/compose helpers.
+The SDR compose uses the same fixed joint-bilateral 3×3 reconstruction but does not reconstruct an HDR carrier; it applies the residual in the source SDR space and uses the shared grade/compose helpers.
 
 ## Logging, tracing, status, and crash trace
 
@@ -760,7 +756,7 @@ GenerateEmbeddedShaders
 
 The build selects the latest installed Windows 10 SDK with `ToolLocationHelper`. `verify_shaders.ps1` can independently locate `fxc.exe` from `WindowsSdkDir`/`WindowsSdkVerBinPath` when `FxcPath` is not passed explicitly.
 
-The project expects the ReShade SDK/ImGui sources, FidelityFX-FSR sources, NVIDIA NGX headers and the local Detours/D3DX12 dependencies under `third_party/`. A clean checkout needs those repository dependencies present before building.
+The project expects the ReShade SDK/ImGui sources, NVIDIA NGX headers and the local Detours/D3DX12 dependencies under `third_party/`. A clean checkout needs those repository dependencies present before building.
 
 
 ### Runtime dispatch overhead

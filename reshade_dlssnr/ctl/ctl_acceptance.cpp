@@ -174,9 +174,6 @@ struct Fixture {
         .Tooltip("How strongly the model edits the image.");
     model.Add<FloatSetting>("working_scale", "Working Scale", 1.0f)
         .ClampRange(0.1f, 1.0f);
-    // The upsample mode is a per-pass choice, never shared.
-    model.Add<EnumSetting>("upsample", "Upsample Mode", 1)
-        .Items(kUpsampleNames, nullptr, 2);
     // Never written to config.
     model.Add<FloatSetting>("live_metric", "Live Metric", 0.0f)
         .ClampRange(0.0f, 1.0f)
@@ -192,11 +189,9 @@ struct Fixture {
   }
 
   static const char* kPresetNames[3];
-  static const char* kUpsampleNames[2];
 };
 
 const char* Fixture::kPresetNames[3] = {"A", "B", "C"};
-const char* Fixture::kUpsampleNames[2] = {"EASU", "Joint Bilateral"};
 
 // Helpers ------------------------------------------------------------------
 
@@ -851,13 +846,13 @@ int main() {
                           const InstanceKey& k, const std::string& section) {
         (void)ctx;
         (void)section;
-        return s.Read("Model", k, "upsample").as_int == 1;
+        return s.Read("Model", k, "working_scale").as_float < 1.0f;
       }
     };
 
     Schema schema;
     Section& model = schema.AddSection("Model", SectionKind::Instanced);
-    model.Add<EnumSetting>("upsample", "Upsample Mode", 1);
+    model.Add<FloatSetting>("working_scale", "Working Scale", 1.0f);
     model.Add<FloatSetting>("sharpness", "Sharpness", 8.0f);
     model.EnableWhen("sharpness", &Gate::Follows);
 
@@ -872,7 +867,7 @@ int main() {
 
     ValueStore store(schema);
     const InstanceKey k = InstanceKey::FromInt(0);
-    store.Write("Model", k, "upsample", Value::Enum(1));
+    store.Write("Model", k, "working_scale", Value::Float(0.5f));
     store.Write("Model", k, "sharpness", Value::Float(4.0f));
     // The predicate itself is exercised through the same read path the
     // drawer uses, so the wiring is what is under test, not the lambda.

@@ -23,7 +23,7 @@
 DLSSNR_BLOCK(ShaderBlock)
 {
     float4 Params0;   // LumaStrength, ChromaStrength, SoftCompression, SoftMaxBrighten
-    float4 Params1;   // SoftMaxDarken, SoftMaxChroma, SoftKnee, UpsampleKernelHalf
+    float4 Params1;   // SoftMaxDarken, SoftMaxChroma, SoftKnee, Reserved
 };
 
 DLSSNR_BLOCK(GradeBlock)
@@ -62,11 +62,7 @@ DLSSNR_BLOCK(HdrBlock)
     float Bt2446K3;
     float Bt2446Ip;
     float Crosstalk;
-    // Compose upsample selection.
-    //   UpsampleMode: 0 = FSR 1.0 EASU, 1 = joint bilateral.
-    //   UpsampleSharpness: guide-difference exponent for the bilateral
-    //     path; ignored when mode selects EASU.
-    float UpsampleMode;
+    // Guide-luma similarity exponent for joint-bilateral reconstruction.
     float UpsampleSharpness;
     float GainMinLog2;
     float GainMaxLog2;
@@ -77,21 +73,6 @@ DLSSNR_BLOCK(HdrBlock)
     float4 LocalExposure;
     // x = neighborhood radius in source pixels, y = neighborhood tap count.
     float4 LocalExposureParams;
-};
-
-DLSSNR_BLOCK(EasuBlock)
-{
-    float4 Con0;
-    float4 Con1;
-    float4 Con2;
-};
-
-DLSSNR_BLOCK(RcasBlock)
-{
-    float Enabled;
-    float Strength;
-    float Reserved0;
-    float Reserved1;
 };
 
 DLSSNR_BLOCK(HistogramBlock)
@@ -128,8 +109,6 @@ DLSSNR_CBUFFER(ComputeConstants)
     GradeBlock grade;
     ResidualBlock residual;
     HdrBlock hdr;
-    EasuBlock easu;
-    RcasBlock rcas;
     HistogramBlock histogram;
     TemporalBlock temporal;
     LocalExposureControlBlock localExposure;

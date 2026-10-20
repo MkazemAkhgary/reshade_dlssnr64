@@ -320,7 +320,7 @@ bool PassSession::EnsureFrameResources(
   }
 
   // HDR model-domain values may legitimately exceed 1.0. Keep the NGX-facing
-  // input/output and EASU/RCAS working textures in FP32 so super-white values
+  // input/output working textures in FP32 so super-white values
   // retain enough precision for the inverse model-domain transfer. The packed
   // carrier is also RGBA32F; the final published composite uses the game's
   // native format and therefore retains the format's inherent representable
@@ -2158,8 +2158,7 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
           self->resources_, run.codec, original, run.model_input,
           compose_input, enhanced_for_compose, run.width, run.height,
           run.pass_state.strength, run.pass_state.soft_compression,
-          run.pass_state.residual, run.pass_state.rcas_enabled,
-          run.pass_state.rcas_strength, &run.grade_input, hdr_ptr)) {
+          run.pass_state.residual, &run.grade_input, hdr_ptr)) {
     self->FailForStep("failed to compose model output");
     return PipelineStatus::Fail;
   }
