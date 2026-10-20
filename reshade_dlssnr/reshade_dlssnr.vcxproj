@@ -403,6 +403,9 @@
     <None Include="tools\generate_shaders.ps1" />
     <None Include="tools\verify_shaders.ps1" />
     <None Include="tools\precompile_shaders.ps1" />
+    <None Include="ctl\ctl_acceptance.cpp" />
+    <None Include="ctl\test_imgui_stubs.cpp" />
+    <None Include="ctl\test_row_stubs.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\compose\compose_model_output.hlsl" />
@@ -413,6 +416,7 @@
     <None Include="shaders\hdr\build_effective_local_exposure.hlsl" />
     <None Include="shaders\hdr\build_gain_map_stats.hlsl" />
     <None Include="shaders\hdr\build_histogram.hlsl" />
+    <None Include="shaders\hdr\build_local_exposure_luma.hlsl" />
     <None Include="shaders\hdr\gain_map_split.hlsl" />
     <None Include="shaders\hdr\reduce_local_exposure_tiles.hlsl" />
     <None Include="shaders\hdr\reduce_local_exposure_global.hlsl" />
@@ -420,7 +424,13 @@
     <None Include="shaders\hdr\zero_gain_map_stats.hlsl" />
     <None Include="shaders\hdr\zero_histogram.hlsl" />
     <None Include="shaders\importance_mask\build_importance_mask.hlsl" />
+    <None Include="shaders\importance_mask\classify_importance_mask.hlsl" />
     <None Include="shaders\model\prepare_model_input.hlsl" />
+    <None Include="shaders\temporal\apply_edit.hlsl" />
+    <None Include="shaders\temporal\clear_stats.hlsl" />
+    <None Include="shaders\temporal\commit_history.hlsl" />
+    <None Include="shaders\temporal\reproject_edit.hlsl" />
+    <None Include="shaders\temporal\validate_depth.hlsl" />
     <None Include="shaders\common\bindings.hlsli" />
     <None Include="shaders\common\box_filter.hlsli" />
     <None Include="shaders\common\cbuffer.hlsli" />
