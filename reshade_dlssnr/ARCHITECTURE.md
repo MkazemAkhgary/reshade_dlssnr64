@@ -613,6 +613,8 @@ Debug views show the pre-depth candidate, post-depth validation result, and per-
 
 **ImGui IDs are scoped by section identity and instance identity.** `ctl::DrawSection` pushes a scope derived from the schema section name and `InstanceKey`, so equal visible labels in different sections or instances do not share collapsing-header IDs. All persisted overlay open/closed states are schema settings in `Overlay UI State`, marked global-only so profile loads cannot change them. The overlay callbacks still implement the same header interactions, but read and write the ctl store rather than manually maintained `Settings` booleans.
 
+**Inline toggles belong to the target setting.** Chain `.InlineToggle(bool_setting)` on the target declaration. `ctl` validates the boolean source, draws it to the left of the target label, and hides its standalone row.
+
 ## HDR model path
 
 The HDR path is gain-map based and runs on the Pre-DLSS and Post-DLSS targets. Backbuffer passes use the existing SDR composition path.

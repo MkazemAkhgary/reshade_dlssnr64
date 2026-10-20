@@ -25,6 +25,7 @@ class FloatSetting : public Setting {
   FloatSetting(const char* name, const char* label, float default_value);
 
   FloatSetting& Tooltip(const char* text) { meta_.tooltip = CStrToString(text); return *this; }
+  FloatSetting& InlineToggle(const char* bool_setting) { SetInlineToggle(bool_setting); return *this; }
   FloatSetting& Category(const char* text) { meta_.category = CStrToString(text); return *this; }
   FloatSetting& EnableWhen(EnablePredicate enabled, const void* context = nullptr) {
     SetEnabled(enabled, context);
@@ -88,6 +89,7 @@ class IntSetting : public Setting {
   IntSetting(const char* name, const char* label, int default_value);
 
   IntSetting& Tooltip(const char* text) { meta_.tooltip = CStrToString(text); return *this; }
+  IntSetting& InlineToggle(const char* bool_setting) { SetInlineToggle(bool_setting); return *this; }
   IntSetting& Category(const char* text) { meta_.category = CStrToString(text); return *this; }
   IntSetting& EnableWhen(EnablePredicate enabled, const void* context = nullptr) {
     SetEnabled(enabled, context);
@@ -148,6 +150,7 @@ class BoolSetting : public Setting {
   BoolSetting(const char* name, const char* label, bool default_value);
 
   BoolSetting& Tooltip(const char* text) { meta_.tooltip = CStrToString(text); return *this; }
+  BoolSetting& InlineToggle(const char* bool_setting) { SetInlineToggle(bool_setting); return *this; }
   BoolSetting& Category(const char* text) { meta_.category = CStrToString(text); return *this; }
   BoolSetting& EnableWhen(EnablePredicate enabled, const void* context = nullptr) {
     SetEnabled(enabled, context);
@@ -189,6 +192,7 @@ class StringSetting : public Setting {
   StringSetting(const char* name, const char* label, std::string default_value);
 
   StringSetting& Tooltip(const char* text) { meta_.tooltip = CStrToString(text); return *this; }
+  StringSetting& InlineToggle(const char* bool_setting) { SetInlineToggle(bool_setting); return *this; }
   StringSetting& Category(const char* text) { meta_.category = CStrToString(text); return *this; }
   StringSetting& EnableWhen(EnablePredicate enabled, const void* context = nullptr) {
     SetEnabled(enabled, context);
@@ -224,6 +228,7 @@ class IntListSetting : public Setting {
                  std::vector<int64_t> default_value = {});
 
   IntListSetting& Tooltip(const char* text) { meta_.tooltip = CStrToString(text); return *this; }
+  IntListSetting& InlineToggle(const char* bool_setting) { SetInlineToggle(bool_setting); return *this; }
   IntListSetting& MaxItems(size_t count) { max_items_ = count; return *this; }
   IntListSetting& MinItems(size_t count) { min_items_ = count; return *this; }
   IntListSetting& UniqueItems(bool enabled = true) { unique_items_ = enabled; return *this; }
@@ -283,6 +288,7 @@ class EnumSetting : public Setting {
     return *this;
   }
   EnumSetting& Tooltip(const char* text) { meta_.tooltip = CStrToString(text); return *this; }
+  EnumSetting& InlineToggle(const char* bool_setting) { SetInlineToggle(bool_setting); return *this; }
   EnumSetting& Category(const char* text) { meta_.category = CStrToString(text); return *this; }
   EnumSetting& EnableWhen(EnablePredicate enabled, const void* context = nullptr) {
     SetEnabled(enabled, context);

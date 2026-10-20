@@ -42,6 +42,10 @@ model.Add<FloatSetting>("intensity", "Intensity", 1.0f)
      .Tooltip("How strongly the model edits the image.");
 model.Add<EnumSetting>("upsample", "Upsample mode", 1)
      .Items(kUpsampleNames, nullptr, 2);
+model.Add<FloatSetting>("skin_structure", "Skin Structure", 1.0f)
+     .ClampRange(0.0f, 1.0f)
+     .InlineToggle("auto_mask");
+model.Add<BoolSetting>("auto_mask", "Auto Mask", true);
 
 model.AddHookBefore("upsample", "PresetRow",
                     [](const void*, ValueStore&, const DrawOptions&,

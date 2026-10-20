@@ -80,6 +80,7 @@ struct SettingMeta {
   bool persist = true;   // false = never written to config
   bool persist_in_profiles = true;
   bool category_toggle = false;  // bool setting drawn in its category header
+  std::string inline_toggle_setting;  // bool drawn before this setting's label
   EnumPresentation enum_presentation = EnumPresentation::Combo;
 };
 
@@ -137,6 +138,10 @@ class Setting {
 
   // Persist normally to global settings but exclude this setting from profiles.
   Setting& GlobalOnly() { meta_.persist_in_profiles = false; return *this; }
+
+  void SetInlineToggle(const char* bool_setting) {
+    meta_.inline_toggle_setting = CStrToString(bool_setting);
+  }
 
   // --- rendering ---------------------------------------------------------
 

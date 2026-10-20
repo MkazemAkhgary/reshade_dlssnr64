@@ -124,6 +124,36 @@ bool IsHeaderToggle(const Section& section, const Setting& setting) {
          setting.meta().name == section.header_toggle_setting();
 }
 
+bool IsInlineToggleSource(const Section& section, const Setting& setting) {
+  for (const auto& target : section.settings()) {
+    if (target->meta().inline_toggle_setting == setting.meta().name) return true;
+  }
+  return false;
+}
+
+bool DrawInlineToggle(const Section& section, ValueStore& store,
+                      const InstanceKey& key, const Setting& target) {
+  const std::string& bool_name = target.meta().inline_toggle_setting;
+  if (bool_name.empty()) return false;
+  const Setting* toggle_setting = FindSetting(section, bool_name);
+  if (toggle_setting == nullptr) return false;
+
+  bool value = store.Read(section.name(), key, bool_name).as_bool;
+  bool changed = false;
+  ImGui::PushID((target.meta().name + "/inline/" + bool_name).c_str());
+  if (ImGui::Checkbox("##ctl_inline_toggle", &value)) {
+    store.Write(section.name(), key, bool_name, Value::Bool(value), true);
+    changed = true;
+  }
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) &&
+      !toggle_setting->meta().tooltip.empty()) {
+    Tip("%s", toggle_setting->meta().tooltip.c_str());
+  }
+  ImGui::PopID();
+  ImGui::SameLine();
+  return changed;
+}
+
 bool IsCategoryToggle(const Setting& setting) {
   return setting.meta().category_toggle;
 }
@@ -303,12 +333,17 @@ bool DrawSection(ValueStore& store, const std::string& section_name,
     switch_path(SplitCategoryPath(category));
     const bool path_open = active_open.empty() || active_open.back();
     if (!path_open || IsHeaderToggle(*section, setting) ||
-        IsCategoryToggle(setting)) {
+        IsCategoryToggle(setting) || IsInlineToggleSource(*section, setting)) {
       continue;
     }
 
     const bool indented = !category.empty();
     if (indented) ImGui::Indent(16.0f);
+
+    if (!setting.meta().inline_toggle_setting.empty() &&
+        DrawInlineToggle(*section, store, key, setting)) {
+      local_changed = true;
+    }
 
     const Value resolved = store.Resolve(instance, offset + row.setting_index);
 

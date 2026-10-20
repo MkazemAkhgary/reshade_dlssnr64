@@ -1259,6 +1259,27 @@ int main() {
           "trace emits removal when an instance leaves the live store");
   }
 
+  // ------------------------------------------------------------------------
+  std::printf("\n[42] Setting-level inline toggle metadata\n");
+  {
+    Schema schema;
+    Section& section = schema.AddSection("Pass", SectionKind::Instanced);
+    section.Add<BoolSetting>("auto_mask", "Auto Mask", true);
+    FloatSetting& skin = section.Add<FloatSetting>("skin_structure", "Skin Structure", 1.0f)
+        .ClampRange(0.0f, 1.0f)
+        .InlineToggle("auto_mask");
+    std::string error;
+    Check(schema.Build(&error), "setting-level InlineToggle validates a boolean source");
+    Check(skin.meta().inline_toggle_setting == "auto_mask",
+          "InlineToggle stores source metadata on the target setting");
+
+    Schema bad_schema;
+    Section& bad = bad_schema.AddSection("Pass", SectionKind::Single);
+    bad.Add<FloatSetting>("toggle", "Toggle", 1.0f);
+    bad.Add<FloatSetting>("target", "Target", 1.0f).InlineToggle("toggle");
+    Check(!bad_schema.Build(&error), "InlineToggle rejects non-boolean sources");
+  }
+
   std::printf("\n======================\n");
   std::printf("checks: %d  failures: %d\n", g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;

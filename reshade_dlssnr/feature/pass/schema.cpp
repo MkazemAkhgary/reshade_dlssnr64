@@ -224,6 +224,7 @@ void RegisterPassSchema(ctl::Schema& schema) {
   pass.Add<ctl::FloatSetting>(kSkinStructure, "Skin Structure", 1.0f)
       .ClampRange(0.0f, 1.0f)
       .EnableWhen(&AutoMaskOn)
+      .InlineToggle(kAutoMask)
       .Category(kCatModel)
       .Tooltip("Controls how strongly the model applies its skin-specific "
                "edits. Disabled when the model's automatic masking option is off.");

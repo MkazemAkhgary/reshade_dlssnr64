@@ -79,6 +79,38 @@ bool Schema::Build(std::string* error) {
       }
     }
 
+    // Inline toggles are declared on their target setting. Every source must
+    // resolve to a distinct boolean setting and can be used only once.
+    for (uint32_t si = 0; si < section.settings_.size(); ++si) {
+      const SettingMeta& target_meta = section.settings_[si]->meta();
+      if (target_meta.inline_toggle_setting.empty()) continue;
+
+      const Setting* toggle = nullptr;
+      for (const auto& setting : section.settings_) {
+        if (setting->meta().name == target_meta.inline_toggle_setting) {
+          toggle = setting.get();
+          break;
+        }
+      }
+      if (toggle == nullptr ||
+          target_meta.inline_toggle_setting == target_meta.name) {
+        return fail("inline toggle on setting '" + target_meta.name +
+                    "' references an unknown or identical setting in section '" +
+                    section.name() + "'");
+      }
+      if (toggle->DefaultValue().kind != Value::Kind::Bool) {
+        return fail("inline toggle source '" + target_meta.inline_toggle_setting +
+                    "' is not boolean in section '" + section.name() + "'");
+      }
+      for (uint32_t prior = 0; prior < si; ++prior) {
+        if (section.settings_[prior]->meta().inline_toggle_setting ==
+            target_meta.inline_toggle_setting) {
+          return fail("inline toggle source '" + target_meta.inline_toggle_setting +
+                      "' is used more than once in section '" + section.name() + "'");
+        }
+      }
+    }
+
     // An enable rule naming a setting that does not exist is a declaration
     // mistake, and silently ignoring it would leave a row permanently
     // editable in a build that otherwise looks fine. Catch it here.
