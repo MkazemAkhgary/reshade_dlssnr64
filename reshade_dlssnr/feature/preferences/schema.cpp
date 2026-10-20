@@ -21,14 +21,6 @@ void RegisterPreferencesSchema(ctl::Schema& schema) {
                "section headers.");
 
   prefs
-      .Add<ctl::BoolSetting>(preferences::kRequireDlss, "Require DLSS", true)
-      .Tooltip(
-          "Only run when the game is actively using DLSS Super Sampling. "
-          "Turning this off also allows evaluation on frames without DLSS, "
-          "which is rarely useful because the model expects a DLSS-path "
-          "image.");
-
-  prefs
       .Add<ctl::BoolSetting>(preferences::kCloneResources,
                              "Clone Game Resources", false)
       .Tooltip(

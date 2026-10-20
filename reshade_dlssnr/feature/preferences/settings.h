@@ -19,7 +19,6 @@ inline constexpr const char* kSection = "Preferences";
 // The setting names, so the one other place that must agree with the schema
 // (the code that reads a preference back) can name them without a literal.
 inline constexpr const char* kShowTooltips = "show_tooltips";
-inline constexpr const char* kRequireDlss = "require_dlss";
 inline constexpr const char* kCloneResources = "clone_resources";
 
 inline constexpr int64_t kKey = 0;  // single instance
