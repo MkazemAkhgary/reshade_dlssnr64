@@ -144,7 +144,6 @@ class HdrState {
   HdrFormat resolved_format_ = HdrFormat::Sdr;
   ExposureTracker regular_;
   ExposureTracker adaptive_;
-  uint32_t frame_counter_ = 0;
   uint32_t frames_until_measure_ = 0;
   uint32_t frames_since_measure_ = 0;
   uint64_t measurement_generation_ = 0;

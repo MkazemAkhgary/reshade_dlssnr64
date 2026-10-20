@@ -248,7 +248,6 @@ void HdrState::Shutdown() {
   enabled_ = false;
   regular_.Reset();
   adaptive_.Reset();
-  frame_counter_ = 0;
   frames_until_measure_ = 0;
   frames_since_measure_ = 0;
   measurement_generation_ = 0;
@@ -399,18 +398,15 @@ void HdrState::BeginFrame(CommandContext& cmd,
   }
 
   if (pending_measurement_) {
-    ++frame_counter_;
     return;
   }
   if (frames_until_measure_ > 0) {
     --frames_until_measure_;
-    ++frame_counter_;
     return;
   }
   frames_until_measure_ = static_cast<uint32_t>(
       std::clamp(hdr_settings.measure_interval, 1, 32)) - 1u;
   if (!codec.IsReady()) {
-    ++frame_counter_;
     return;
   }
 
@@ -459,12 +455,10 @@ void HdrState::BeginFrame(CommandContext& cmd,
 
   if (!codec.Dispatch("ZeroHistogram", command_list, constants, srvs, uavs,
                       2, 1, 1)) {
-    ++frame_counter_;
     return;
   }
   cmd.UavBarrier(command_list, histogram_.Get());
   if (!codec.Dispatch("BuildHistogram", command_list, constants, srvs, uavs)) {
-    ++frame_counter_;
     return;
   }
 
@@ -477,7 +471,6 @@ void HdrState::BeginFrame(CommandContext& cmd,
     pending_measurement_ = true;
   }
   cmd.Transition(command_list, histogram_.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  ++frame_counter_;
 }
 
 bool HdrState::EnqueueGainMapStatsReadback(
