@@ -11,9 +11,10 @@ std::mutex g_runtime_mutex;
 
 std::filesystem::path GetModuleDirectory() {
   HMODULE module = nullptr;
+  // Use a function address for FROM_ADDRESS lookup.
   GetModuleHandleExW(
       GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-      reinterpret_cast<LPCWSTR>(&g_runtime_mutex),
+      reinterpret_cast<LPCWSTR>(&GetModuleDirectory),
       &module);
 
   wchar_t path[MAX_PATH] = {};
