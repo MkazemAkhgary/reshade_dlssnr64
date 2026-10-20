@@ -2141,14 +2141,6 @@ PipelineStatus PassSession::StepEvaluateFeature(PassRun& run) {
   self->eval_log_key_ = key;
   self->eval_log_key_valid_ = true;
 
-  if (run.stage != nullptr && !run.stage->owns_submit) {
-    run.eval_result = run.runtime->EvaluateFeature(
-        self->StageList(run, self->command_), self->feature_.FeatureHandle(),
-        run.runtime->Parameters().Get(), nullptr);
-    run.codec->InvalidateBindings();
-    return PipelineStatus::Ok;
-  }
-
   run.eval_result = run.runtime->EvaluateFeature(
       self->StageList(run, self->command_), self->feature_.FeatureHandle(),
       run.runtime->Parameters().Get(), nullptr);
