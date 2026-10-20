@@ -36,10 +36,11 @@ namespace {
 
 // Reset a pass to its declared defaults, preserving the three things the reset
 // button's tooltip promises: the target stage, the custom name, and (via the
-// caller) the enabled flag.
+// caller) the enabled flag. The three pass-owned sections -- the Pass section
+// itself, Grade Model Input, and Grade Model Output -- are reset; the
+// preserved values are then written back to the Pass section.
 //
-// All three live in the store now, so they are read and written through it:
-// the values that survive are read off the instance, the rest are reset with
+// The values that survive are read off the instance, the rest are reset with
 // ResetSectionToDefault, and the survivors are written back. The pass's stable
 // id -- not its position -- is what identifies the instance throughout.
 void ResetPassProfile(feature::pass::PassId id) {
@@ -55,6 +56,8 @@ void ResetPassProfile(feature::pass::PassId id) {
       store.Read(section, key, feature::pass::kCustomName).as_string;
 
   store.ResetSectionToDefault(section, key);
+  store.ResetSectionToDefault(feature::pass::kGradeInputSection, key);
+  store.ResetSectionToDefault(feature::pass::kGradeOutputSection, key);
 
   store.Write(section, key, feature::pass::kTarget, ctl::Value::Enum(target));
   store.Write(section, key, feature::pass::kPassEnabled,
