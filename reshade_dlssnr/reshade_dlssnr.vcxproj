@@ -142,6 +142,7 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <AdditionalOptions>/pathmap:"$(ProjectDir)=./" %(AdditionalOptions)</AdditionalOptions>
       <Optimization>Disabled</Optimization>
       <!-- Tracy requires a constexpr __LINE__. Edit And Continue (/ZI)
            makes __LINE__ a runtime value, so Tracy's ZoneScopedN
@@ -171,6 +172,7 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <AdditionalOptions>/pathmap:"$(ProjectDir)=./" %(AdditionalOptions)</AdditionalOptions>
       <ErrorLog>$(IntDir)$(MSBuildProjectName).error.log</ErrorLog>
       <ObjectFileName>$(IntDir)%(RelativeDir)%(Filename).obj</ObjectFileName>
       <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)generated;$(ProjectDir)third_party\reshade\include;$(ProjectDir)third_party\reshade;$(ProjectDir)third_party\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\nvngx_dlss_sdk;$(ProjectDir)third_party\d3dx;$(ProjectDir)third_party\detours;$(ProjectDir)third_party\tracy\public;$(ProjectDir)third_party\tracy\public\tracy;$(ProjectDir)gpu;$(ProjectDir)model;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)compose;$(ProjectDir)grade;$(ProjectDir)hdr;$(ProjectDir)importance_mask;$(ProjectDir)debug;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
