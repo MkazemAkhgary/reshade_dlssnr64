@@ -19,12 +19,10 @@ SamplerState        s0           : register(s0);
 
 #define kLocalExposureStrength hdr.LocalExposure.x
 
-
 float3 DecodePackedHdr(float4 packed)
 {
     return packed.rgb;
 }
-
 
 float3 EncodeHdr(float3 lin)
 {
@@ -40,30 +38,60 @@ float3 ComposeHdrInverse(float3 sdr_base, float3 hdr_src,
                          float3 low_in, float3 low_out,
                          float carrier_to_hdr_scale)
 {
-    float3 result = hdr_src;
+    float3 composition_base = hdr_src;
+    float carrier_to_composition_scale = carrier_to_hdr_scale;
+
+    // In this mode the residual is measured against the actual Grade Model
+    // Input result, then applied to the image just before that grade. The
+    // carrier already includes local exposure, so invert only the global
+    // carrier scale here; using the packed reciprocal would cancel the local
+    // exposure that belongs to the pre-grade image.
+    if (kApplyEditToPreGrade > 0.5 && kLocalExposureStrength > 0.0)
+    {
+        const float3 pre_hdr = HdrPreDesaturate(
+            max(hdr_src, 0.0), saturate(kCrosstalk));
+        const float hdr_luma = max(dot(pre_hdr, HdrLumaWeights()), 0.0);
+        const float exposure = max(kExposure, 1e-6);
+        const float y_exposed = hdr_luma * exposure;
+        const float effective_peak_nits = max(
+            kSdrReferenceWhiteNits, max(kEffectiveSceneWhiteNits, 0.01));
+        const float y_curve = y_exposed * kPqPeakNits / effective_peak_nits;
+        const float y_sdr = max(HdrBt2446Forward(y_curve) / 100.0, 0.0);
+        const float global_scale = y_exposed > 0.0
+            ? exposure * (y_sdr / y_exposed)
+            : 0.0;
+        const float inverse_global_scale = rcp(max(global_scale, 1e-8));
+        composition_base = max(sdr_base, 0.0) * inverse_global_scale;
+        carrier_to_composition_scale = inverse_global_scale;
+    }
+
+    float3 result = composition_base;
     float3 low_in_lin = max(SrgbToLinearExt(low_in), 0.0);
     float3 low_out_lin = max(SrgbToLinearExt(low_out), 0.0);
 
     const float3 model_delta = low_out_lin - low_in_lin;
     if (!all(model_delta == 0.0))
     {
-        const float3 model_denominator = max(abs(low_in_lin), 0.001.xxx);
-        const float3 relative_delta = model_delta / model_denominator;
-        const float3 model_sdr_base = GamutFitModelInput(max(sdr_base, 0.0));
         const float3 kL = HdrLumaWeights();
+        const float3 model_sdr_base = GamutFitModelInput(max(sdr_base, 0.0));
         float base_luma = dot(model_sdr_base, kL);
         if (kLocalExposureStrength > 0.0)
             base_luma = max(dot(low_in_lin, kL), 0.0);
-        const float3 shaped = ShapeResidual(relative_delta, base_luma);
 
-        // packed.rgb * packed.a reconstructs this pixel's scene-referred source
-        // scale. Applying the relative edit in this domain preserves super-whites;
-        // no inverse gamut curve, hard highlight ceiling, or tone-curve re-evaluation
-        // is needed during composition.
+        const float3 model_denominator = max(abs(low_in_lin), 0.001.xxx);
+        const float3 relative_delta = model_delta / model_denominator;
+        const float3 shaped = ShapeResidual(relative_delta, base_luma);
+        // In the normal composition path, packed.rgb * packed.a reconstructs
+        // this pixel's scene-referred source scale. Applying the relative edit
+        // in this domain preserves super-whites without inverting the model's
+        // nonlinear gamut fit. The pre-grade path substitutes the inverse
+        // global carrier scale above.
         const float3 carrier_delta = max(sdr_base, 0.0) * shaped;
         const float3 hdr_edited = max(
-            hdr_src + carrier_delta * max(carrier_to_hdr_scale, 0.0), 0.0);
-        result = BlendYCbCr(hdr_src, hdr_edited, kLumaStrength, kChromaStrength);
+            composition_base + carrier_delta *
+                max(carrier_to_composition_scale, 0.0), 0.0);
+        result = BlendYCbCr(
+            composition_base, hdr_edited, kLumaStrength, kChromaStrength);
     }
     return result;
 }

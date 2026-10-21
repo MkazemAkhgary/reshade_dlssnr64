@@ -315,6 +315,9 @@ struct PassRun {
   feature::pass::PassSnapshot pass_state = {};
   GradeSettings grade_input = {};
   GradeSettings grade_output = {};
+  // Input-grade behavior toggle: when set, the model edit is measured against
+  // the graded input and applied to the pre-grade image.
+  bool input_grade_apply_to_pre_grade = false;
   HdrSettings hdr_state = {};
   ImportanceMaskSettings mask_state = {};
 

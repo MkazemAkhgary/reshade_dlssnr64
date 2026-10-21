@@ -68,6 +68,11 @@ inline constexpr const char* kRatioDarken = "ratio_darken";
 // unqualified within it.
 inline constexpr const char* kGradeEnabled = "enabled";
 
+// Input-grade behavior: when set, the model edit is measured against the graded
+// input and applied to the pre-grade image, so the input grade changes what the
+// model sees without being baked into the final result.
+inline constexpr const char* kGradeInputApplyToPreGrade = "apply_to_pre_grade";
+
 }  // namespace pass
 }  // namespace feature
 }  // namespace reshade_dlssnr

@@ -15,7 +15,6 @@ SamplerState        s0           : register(s0);
 
 #include "common/compose_upsample.hlsli"
 
-
 // Shared shader state is declared by the common cbuffer/bindings includes.
 
 // Same shaping as ShapeResidual in the HDR compose, but on the SDR path's
@@ -78,7 +77,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     }
 
     // The model's edit as a per-channel ratio, held in log space so the
-    // compression sliders can bound it on both sides of 1.0.
+    // compression sliders can bound it on both sides.
     float3 residual_log;
     if (kSoftCompression != 0) {
         float in_luma = max(dot(in_rgb, float3(0.2126, 0.7152, 0.0722)), 1e-6);
@@ -106,14 +105,10 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     residual_log = clamp(residual_log,
                          log(max(kRatioDarken, 1e-4)),
                          log(max(kRatioBrighten, 1e-4)));
-
     const float3 residual_shaped = ShapeResidualSdr(residual_log, original.rgb);
-
     float3 edited = original.rgb * exp(residual_shaped);
-
     float3 final_rgb = BlendYCbCr(original.rgb, edited,
                                   kLumaStrength, kChromaStrength);
     final_rgb = max(final_rgb, 0.0);
-
     gOutput[id.xy] = float4(final_rgb, original.a);
 }

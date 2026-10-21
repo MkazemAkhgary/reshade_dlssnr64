@@ -53,6 +53,7 @@
 #define kSoftMaxDarken   shader.Params1.x
 #define kSoftMaxChroma   shader.Params1.y
 #define kSoftKnee        shader.Params1.z
+#define kApplyEditToPreGrade shader.Params1.w
 #define kUpsampleSharpness hdr.UpsampleSharpness
 
 // Temporal reprojection settings and motion/depth guide mapping.

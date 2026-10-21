@@ -17,7 +17,8 @@ bool ComposeOutput(
     const StrengthSettings& strength,
     const SoftCompressionSettings& soft_compression,
     const ResidualSettings& residual,
-    const HdrUniforms* hdr) {
+    const HdrUniforms* hdr,
+    bool apply_edit_to_pre_grade) {
   DLSSNR_PROFILE_RENDER_L2("ComposeOutput");
   if (codec == nullptr || command_list == nullptr || packed_source == nullptr ||
       hdr_source == nullptr || low_input == nullptr || low_enhanced == nullptr) {
@@ -34,6 +35,7 @@ bool ComposeOutput(
   constants.shader.Params1.x = soft_compression.max_darken;
   constants.shader.Params1.y = soft_compression.max_chroma;
   constants.shader.Params1.z = soft_compression.knee;
+  constants.shader.Params1.w = apply_edit_to_pre_grade ? 1.0f : 0.0f;
   constants.residual.EditStrength = residual.edit_strength;
   constants.residual.ChromaStrength = residual.chroma_strength;
   constants.residual.EditGamma = residual.edit_gamma;

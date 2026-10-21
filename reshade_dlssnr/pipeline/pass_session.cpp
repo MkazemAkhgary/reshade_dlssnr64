@@ -724,6 +724,14 @@ void PassSession::PrepareRun(PassRun& run,
     run.grade_output =
         feature::grade::Read(store, key, feature::pass::kGradeOutputSection,
                              feature::pass::kGradeOutputPrefix);
+    run.input_grade_apply_to_pre_grade =
+        store.Read(feature::pass::kGradeInputSection, key,
+                   feature::pass::kGradeInputApplyToPreGrade)
+            .as_bool;
+    run.input_grade_apply_to_pre_grade =
+        store.Read(feature::pass::kGradeInputSection, key,
+                   feature::pass::kGradeInputApplyToPreGrade)
+            .as_bool;
 
     // HDR metering and Importance Mask settings are pass-keyed just like the
     // model and its two grade boundaries. Each pass has its own state/history.
@@ -2282,12 +2290,26 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
     compose_input = self->resources_.GetUnliftedWorkingInput();
   }
 
+  // Compare against the actual Grade Model Input result, then apply only the
+  // model residual to the image before that grade section. The option remains
+  // active at zero model intensity: there the comparison endpoints are made
+  // identical, while the HDR compose path retains local exposure in its base.
+  const bool apply_edit_to_pre_grade =
+      run.input_grade_apply_to_pre_grade && run.grade_input.enabled &&
+      run.model_color != nullptr && run.model_output != nullptr;
+  if (apply_edit_to_pre_grade) {
+    compose_input = run.model_color;
+    enhanced_for_compose = run.pass_state.intensity <= 0.0f
+                               ? run.model_color
+                               : run.model_output;
+  }
+
   if (!model_pipeline::ComposeOutput(
           self->command_, self->StageList(run, self->command_),
           self->resources_, run.codec, original, run.model_input,
           compose_input, enhanced_for_compose, run.width, run.height,
           run.pass_state.strength, run.pass_state.soft_compression,
-          run.pass_state.residual, hdr_ptr)) {
+          run.pass_state.residual, hdr_ptr, apply_edit_to_pre_grade)) {
     self->FailForStep("failed to compose model output");
     return PipelineStatus::Fail;
   }

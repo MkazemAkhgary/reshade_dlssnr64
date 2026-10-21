@@ -96,7 +96,8 @@ PipelineStatus PassSession::StepGradeModelInput(PassRun& run) {
   }
 
   PipelineStatus status = GradeInPlace(
-      run, run.model_color, graded, grade, kGradeScratchSlotA);
+      run, run.model_color, graded, grade, kGradeScratchSlotA,
+      /*model_sdr_domain=*/true);
   if (status != PipelineStatus::Ok) return status;
 
   run.model_color = graded;
