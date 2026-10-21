@@ -82,7 +82,8 @@ struct HdrSettings {
   int measure_interval = 4;
   float highlight_headroom = 1.0f;
   bool detailed_statistics = false;
-  bool faster_metering = false;
+  // 0 = every pixel, 1 = every 2nd in each axis, 2 = every 4th, 3 = every 8th.
+  int metering_density = 0;
   bool reuse_previous_pass_measurement = false;
 
   GameExposureLayerSettings game_exposure = {};

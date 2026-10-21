@@ -30,6 +30,17 @@ const char* const kFormatTips[] = {
     "Treat the source as linear scRGB (1.0 = 80 nits).",
     "Treat the source as HDR10 PQ (ST.2084)."};
 
+const char* const kMeteringDensityNames[] = {
+    "Full", "1/4", "1/16", "1/64"};
+const char* const kMeteringDensityTips[] = {
+    "Sample every pixel. Full-density histogram, highest accuracy.",
+    "Sample every 2nd pixel in each axis (1/4 of the frame). "
+    "Small isolated highlights may be missed.",
+    "Sample every 4th pixel in each axis (1/16 of the frame). "
+    "Isolated highlights and fine detail may be missed.",
+    "Sample every 8th pixel in each axis (1/64 of the frame). "
+    "Suitable only for roughly-uniform content."};
+
 constexpr const char* kCatAdvanced = "Advanced";
 constexpr const char* kCatDiagnostics = "Diagnostics";
 
@@ -72,10 +83,12 @@ void RegisterHdrSchema(ctl::Schema& schema) {
       .ClampRange(1, 32)
       .Category(kCatAdvanced)
       .Tooltip("How often exposure histograms are measured, in frames.");
-  hdr.Add<ctl::BoolSetting>(kFasterMetering, "Faster HDR Metering", false)
+  hdr.Add<ctl::EnumSetting>(kMeteringDensity, "Metering Density", 0)
+      .Items(kMeteringDensityNames, kMeteringDensityTips, 4)
       .Category(kCatAdvanced)
-      .Tooltip("Sample one pixel from each 2x2 block during histogram metering. "
-               "Lower GPU cost, but small isolated highlights may be missed.");
+      .Tooltip("How many pixels the HDR histogram samples. Full density "
+               "captures every pixel; coarser densities sample fewer "
+               "pixels at lower GPU cost.");
   hdr.Add<ctl::BoolSetting>(kReusePreviousPassMeasurement,
                             "Reuse Previous HDR Pass Metering", false)
       .Category(kCatAdvanced)

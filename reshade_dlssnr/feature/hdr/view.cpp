@@ -44,7 +44,7 @@ HdrSnapshotView Read(const ctl::ValueStore& store,
   s.measure_interval = store.Read(hdr, key, kMeasureInterval).as_int;
   s.highlight_headroom = store.Read(hdr, key, kHighlightHeadroom).as_float;
   s.detailed_statistics = store.Read(hdr, key, kDetailedStatistics).as_bool;
-  s.faster_metering = store.Read(hdr, key, kFasterMetering).as_bool;
+  s.metering_density = store.Read(hdr, key, kMeteringDensity).as_int;
   s.reuse_previous_pass_measurement =
       store.Read(hdr, key, kReusePreviousPassMeasurement).as_bool;
   s.bt2446_k1 = store.Read(hdr, key, kBt2446K1).as_float;
