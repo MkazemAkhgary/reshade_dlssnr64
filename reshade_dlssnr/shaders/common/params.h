@@ -89,7 +89,9 @@ DLSSNR_BLOCK(HistogramBlock)
 {
     // x = filter flags, y/z = depth range, w = depth inversion.
     float4 AdaptiveFilter;
-    float4 Settings;        // x = use 2x2-stride metering samples
+    // x = sample stride (1, 2, 4, 8); y = pixels per thread axis (8);
+    // z/w unused.
+    float4 Settings;
 };
 
 DLSSNR_BLOCK(TemporalBlock)

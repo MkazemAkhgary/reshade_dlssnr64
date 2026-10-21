@@ -71,4 +71,5 @@
 
 #define kTemporalUseValidatedHistory temporal.HistoryControl.x
 
-#define kFasterHdrMetering histogram.Settings.x
+#define kHistogramSampleStride histogram.Settings.x
+#define kHistogramPixelsPerThreadAxis histogram.Settings.y
