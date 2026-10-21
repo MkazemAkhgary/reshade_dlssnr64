@@ -52,10 +52,44 @@
 #define DLSSNR_PROFILE_TRACY_ENABLED 0
 #endif
 
+#if DLSSNR_PROFILE_TRACY_ENABLED
+#include <cstdio>
+#include <string>
+
+namespace reshade_dlssnr::profiling {
+
+// Tracy's ZoneText macro takes (const char*, size_t). These tag macros carry
+// a label plus a value; format them into "label: value" and pass the string's
+// data and length.
+inline std::string FormatProfileTag(const char* name, const char* value) {
+    std::string result(name ? name : "");
+    result += ": ";
+    result += value ? value : "";
+    return result;
+}
+
+template <typename T>
+inline std::string FormatProfileTag(const char* name, T value) {
+    char buf[256];
+    std::snprintf(buf, sizeof(buf), "%s: %lld", name ? name : "",
+                  static_cast<long long>(value));
+    return buf;
+}
+
+}  // namespace reshade_dlssnr::profiling
+
+#define DLSSNR_PROFILE_TAG_IMPL(name, value)                                   \
+    do {                                                                       \
+        auto _dlssnr_tag_ =                                                    \
+            ::reshade_dlssnr::profiling::FormatProfileTag((name), (value));    \
+        ZoneText(_dlssnr_tag_.c_str(), _dlssnr_tag_.size());                   \
+    } while (0)
+#endif
+
 // -- CPU scopes -------------------------------------------------------------
 #if DLSSNR_PROFILE_TRACY_ENABLED && DLSSNR_PROFILE_VERBOSITY >= 1 && DLSSNR_PROFILE_DOMAIN_CORE
 #define DLSSNR_PROFILE_CORE_L1(name) ZoneScopedN(name)
-#define DLSSNR_PROFILE_CORE_TAG_L1(name, value) ZoneText(name, value)
+#define DLSSNR_PROFILE_CORE_TAG_L1(name, value) DLSSNR_PROFILE_TAG_IMPL(name, value)
 #else
 #define DLSSNR_PROFILE_CORE_L1(name) ((void)0)
 #define DLSSNR_PROFILE_CORE_TAG_L1(name, value) ((void)0)
@@ -63,7 +97,7 @@
 
 #if DLSSNR_PROFILE_TRACY_ENABLED && DLSSNR_PROFILE_VERBOSITY >= 2 && DLSSNR_PROFILE_DOMAIN_CORE
 #define DLSSNR_PROFILE_CORE_L2(name) ZoneScopedN(name)
-#define DLSSNR_PROFILE_CORE_TAG_L2(name, value) ZoneText(name, value)
+#define DLSSNR_PROFILE_CORE_TAG_L2(name, value) DLSSNR_PROFILE_TAG_IMPL(name, value)
 #else
 #define DLSSNR_PROFILE_CORE_L2(name) ((void)0)
 #define DLSSNR_PROFILE_CORE_TAG_L2(name, value) ((void)0)
@@ -71,7 +105,7 @@
 
 #if DLSSNR_PROFILE_TRACY_ENABLED && DLSSNR_PROFILE_VERBOSITY >= 3 && DLSSNR_PROFILE_DOMAIN_CORE
 #define DLSSNR_PROFILE_CORE_L3(name) ZoneScopedN(name)
-#define DLSSNR_PROFILE_CORE_TAG_L3(name, value) ZoneText(name, value)
+#define DLSSNR_PROFILE_CORE_TAG_L3(name, value) DLSSNR_PROFILE_TAG_IMPL(name, value)
 #else
 #define DLSSNR_PROFILE_CORE_L3(name) ((void)0)
 #define DLSSNR_PROFILE_CORE_TAG_L3(name, value) ((void)0)
@@ -80,7 +114,7 @@
 // -- Render domain ---------------------------------------------------------
 #if DLSSNR_PROFILE_TRACY_ENABLED && DLSSNR_PROFILE_VERBOSITY >= 1 && DLSSNR_PROFILE_DOMAIN_RENDER
 #define DLSSNR_PROFILE_RENDER_L1(name) ZoneScopedN(name)
-#define DLSSNR_PROFILE_RENDER_TAG_L1(name, value) ZoneText(name, value)
+#define DLSSNR_PROFILE_RENDER_TAG_L1(name, value) DLSSNR_PROFILE_TAG_IMPL(name, value)
 #else
 #define DLSSNR_PROFILE_RENDER_L1(name) ((void)0)
 #define DLSSNR_PROFILE_RENDER_TAG_L1(name, value) ((void)0)
@@ -88,7 +122,7 @@
 
 #if DLSSNR_PROFILE_TRACY_ENABLED && DLSSNR_PROFILE_VERBOSITY >= 2 && DLSSNR_PROFILE_DOMAIN_RENDER
 #define DLSSNR_PROFILE_RENDER_L2(name) ZoneScopedN(name)
-#define DLSSNR_PROFILE_RENDER_TAG_L2(name, value) ZoneText(name, value)
+#define DLSSNR_PROFILE_RENDER_TAG_L2(name, value) DLSSNR_PROFILE_TAG_IMPL(name, value)
 #else
 #define DLSSNR_PROFILE_RENDER_L2(name) ((void)0)
 #define DLSSNR_PROFILE_RENDER_TAG_L2(name, value) ((void)0)
@@ -96,7 +130,7 @@
 
 #if DLSSNR_PROFILE_TRACY_ENABLED && DLSSNR_PROFILE_VERBOSITY >= 3 && DLSSNR_PROFILE_DOMAIN_RENDER
 #define DLSSNR_PROFILE_RENDER_L3(name) ZoneScopedN(name)
-#define DLSSNR_PROFILE_RENDER_TAG_L3(name, value) ZoneText(name, value)
+#define DLSSNR_PROFILE_RENDER_TAG_L3(name, value) DLSSNR_PROFILE_TAG_IMPL(name, value)
 #else
 #define DLSSNR_PROFILE_RENDER_L3(name) ((void)0)
 #define DLSSNR_PROFILE_RENDER_TAG_L3(name, value) ((void)0)
@@ -105,7 +139,7 @@
 // -- Resource domain -------------------------------------------------------
 #if DLSSNR_PROFILE_TRACY_ENABLED && DLSSNR_PROFILE_VERBOSITY >= 1 && DLSSNR_PROFILE_DOMAIN_RESOURCE
 #define DLSSNR_PROFILE_RESOURCE_L1(name) ZoneScopedN(name)
-#define DLSSNR_PROFILE_RESOURCE_TAG_L1(name, value) ZoneText(name, value)
+#define DLSSNR_PROFILE_RESOURCE_TAG_L1(name, value) DLSSNR_PROFILE_TAG_IMPL(name, value)
 #else
 #define DLSSNR_PROFILE_RESOURCE_L1(name) ((void)0)
 #define DLSSNR_PROFILE_RESOURCE_TAG_L1(name, value) ((void)0)
@@ -113,7 +147,7 @@
 
 #if DLSSNR_PROFILE_TRACY_ENABLED && DLSSNR_PROFILE_VERBOSITY >= 2 && DLSSNR_PROFILE_DOMAIN_RESOURCE
 #define DLSSNR_PROFILE_RESOURCE_L2(name) ZoneScopedN(name)
-#define DLSSNR_PROFILE_RESOURCE_TAG_L2(name, value) ZoneText(name, value)
+#define DLSSNR_PROFILE_RESOURCE_TAG_L2(name, value) DLSSNR_PROFILE_TAG_IMPL(name, value)
 #else
 #define DLSSNR_PROFILE_RESOURCE_L2(name) ((void)0)
 #define DLSSNR_PROFILE_RESOURCE_TAG_L2(name, value) ((void)0)
@@ -121,7 +155,7 @@
 
 #if DLSSNR_PROFILE_TRACY_ENABLED && DLSSNR_PROFILE_VERBOSITY >= 3 && DLSSNR_PROFILE_DOMAIN_RESOURCE
 #define DLSSNR_PROFILE_RESOURCE_L3(name) ZoneScopedN(name)
-#define DLSSNR_PROFILE_RESOURCE_TAG_L3(name, value) ZoneText(name, value)
+#define DLSSNR_PROFILE_RESOURCE_TAG_L3(name, value) DLSSNR_PROFILE_TAG_IMPL(name, value)
 #else
 #define DLSSNR_PROFILE_RESOURCE_L3(name) ((void)0)
 #define DLSSNR_PROFILE_RESOURCE_TAG_L3(name, value) ((void)0)
@@ -130,7 +164,7 @@
 // -- Async domain ----------------------------------------------------------
 #if DLSSNR_PROFILE_TRACY_ENABLED && DLSSNR_PROFILE_VERBOSITY >= 1 && DLSSNR_PROFILE_DOMAIN_ASYNC
 #define DLSSNR_PROFILE_ASYNC_L1(name) ZoneScopedN(name)
-#define DLSSNR_PROFILE_ASYNC_TAG_L1(name, value) ZoneText(name, value)
+#define DLSSNR_PROFILE_ASYNC_TAG_L1(name, value) DLSSNR_PROFILE_TAG_IMPL(name, value)
 #else
 #define DLSSNR_PROFILE_ASYNC_L1(name) ((void)0)
 #define DLSSNR_PROFILE_ASYNC_TAG_L1(name, value) ((void)0)
@@ -138,7 +172,7 @@
 
 #if DLSSNR_PROFILE_TRACY_ENABLED && DLSSNR_PROFILE_VERBOSITY >= 2 && DLSSNR_PROFILE_DOMAIN_ASYNC
 #define DLSSNR_PROFILE_ASYNC_L2(name) ZoneScopedN(name)
-#define DLSSNR_PROFILE_ASYNC_TAG_L2(name, value) ZoneText(name, value)
+#define DLSSNR_PROFILE_ASYNC_TAG_L2(name, value) DLSSNR_PROFILE_TAG_IMPL(name, value)
 #else
 #define DLSSNR_PROFILE_ASYNC_L2(name) ((void)0)
 #define DLSSNR_PROFILE_ASYNC_TAG_L2(name, value) ((void)0)
@@ -146,7 +180,7 @@
 
 #if DLSSNR_PROFILE_TRACY_ENABLED && DLSSNR_PROFILE_VERBOSITY >= 3 && DLSSNR_PROFILE_DOMAIN_ASYNC
 #define DLSSNR_PROFILE_ASYNC_L3(name) ZoneScopedN(name)
-#define DLSSNR_PROFILE_ASYNC_TAG_L3(name, value) ZoneText(name, value)
+#define DLSSNR_PROFILE_ASYNC_TAG_L3(name, value) DLSSNR_PROFILE_TAG_IMPL(name, value)
 #else
 #define DLSSNR_PROFILE_ASYNC_L3(name) ((void)0)
 #define DLSSNR_PROFILE_ASYNC_TAG_L3(name, value) ((void)0)
@@ -155,7 +189,7 @@
 // -- UI domain -------------------------------------------------------------
 #if DLSSNR_PROFILE_TRACY_ENABLED && DLSSNR_PROFILE_VERBOSITY >= 1 && DLSSNR_PROFILE_DOMAIN_UI
 #define DLSSNR_PROFILE_UI_L1(name) ZoneScopedN(name)
-#define DLSSNR_PROFILE_UI_TAG_L1(name, value) ZoneText(name, value)
+#define DLSSNR_PROFILE_UI_TAG_L1(name, value) DLSSNR_PROFILE_TAG_IMPL(name, value)
 #else
 #define DLSSNR_PROFILE_UI_L1(name) ((void)0)
 #define DLSSNR_PROFILE_UI_TAG_L1(name, value) ((void)0)
@@ -163,7 +197,7 @@
 
 #if DLSSNR_PROFILE_TRACY_ENABLED && DLSSNR_PROFILE_VERBOSITY >= 2 && DLSSNR_PROFILE_DOMAIN_UI
 #define DLSSNR_PROFILE_UI_L2(name) ZoneScopedN(name)
-#define DLSSNR_PROFILE_UI_TAG_L2(name, value) ZoneText(name, value)
+#define DLSSNR_PROFILE_UI_TAG_L2(name, value) DLSSNR_PROFILE_TAG_IMPL(name, value)
 #else
 #define DLSSNR_PROFILE_UI_L2(name) ((void)0)
 #define DLSSNR_PROFILE_UI_TAG_L2(name, value) ((void)0)
@@ -171,7 +205,7 @@
 
 #if DLSSNR_PROFILE_TRACY_ENABLED && DLSSNR_PROFILE_VERBOSITY >= 3 && DLSSNR_PROFILE_DOMAIN_UI
 #define DLSSNR_PROFILE_UI_L3(name) ZoneScopedN(name)
-#define DLSSNR_PROFILE_UI_TAG_L3(name, value) ZoneText(name, value)
+#define DLSSNR_PROFILE_UI_TAG_L3(name, value) DLSSNR_PROFILE_TAG_IMPL(name, value)
 #else
 #define DLSSNR_PROFILE_UI_L3(name) ((void)0)
 #define DLSSNR_PROFILE_UI_TAG_L3(name, value) ((void)0)
@@ -180,7 +214,7 @@
 // -- CTL domain ------------------------------------------------------------
 #if DLSSNR_PROFILE_TRACY_ENABLED && DLSSNR_PROFILE_VERBOSITY >= 1 && DLSSNR_PROFILE_DOMAIN_CTL
 #define DLSSNR_PROFILE_CTL_L1(name) ZoneScopedN(name)
-#define DLSSNR_PROFILE_CTL_TAG_L1(name, value) ZoneText(name, value)
+#define DLSSNR_PROFILE_CTL_TAG_L1(name, value) DLSSNR_PROFILE_TAG_IMPL(name, value)
 #else
 #define DLSSNR_PROFILE_CTL_L1(name) ((void)0)
 #define DLSSNR_PROFILE_CTL_TAG_L1(name, value) ((void)0)
@@ -188,7 +222,7 @@
 
 #if DLSSNR_PROFILE_TRACY_ENABLED && DLSSNR_PROFILE_VERBOSITY >= 2 && DLSSNR_PROFILE_DOMAIN_CTL
 #define DLSSNR_PROFILE_CTL_L2(name) ZoneScopedN(name)
-#define DLSSNR_PROFILE_CTL_TAG_L2(name, value) ZoneText(name, value)
+#define DLSSNR_PROFILE_CTL_TAG_L2(name, value) DLSSNR_PROFILE_TAG_IMPL(name, value)
 #else
 #define DLSSNR_PROFILE_CTL_L2(name) ((void)0)
 #define DLSSNR_PROFILE_CTL_TAG_L2(name, value) ((void)0)
@@ -196,7 +230,7 @@
 
 #if DLSSNR_PROFILE_TRACY_ENABLED && DLSSNR_PROFILE_VERBOSITY >= 3 && DLSSNR_PROFILE_DOMAIN_CTL
 #define DLSSNR_PROFILE_CTL_L3(name) ZoneScopedN(name)
-#define DLSSNR_PROFILE_CTL_TAG_L3(name, value) ZoneText(name, value)
+#define DLSSNR_PROFILE_CTL_TAG_L3(name, value) DLSSNR_PROFILE_TAG_IMPL(name, value)
 #else
 #define DLSSNR_PROFILE_CTL_L3(name) ((void)0)
 #define DLSSNR_PROFILE_CTL_TAG_L3(name, value) ((void)0)
