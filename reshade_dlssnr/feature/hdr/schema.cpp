@@ -200,7 +200,7 @@ void RegisterHdrSchema(ctl::Schema& schema) {
   local.Add<ctl::BoolSetting>(kLocalEnabled, "Local Exposure", false)
       .Tooltip("Apply spatially varying exposure correction after the Game "
                "and Adaptive layers.");
-  local.Add<ctl::FloatSetting>(kLocalStrength, "Strength", 1.0f)
+  local.Add<ctl::FloatSetting>(kLocalStrength, "Strength", 0.5f)
       .ClampRange(0.0f, 1.0f)
       .Tooltip("Overall amount of local exposure correction.")
       .EnableWhen(&LayerEnabled, kLocalEnabled);

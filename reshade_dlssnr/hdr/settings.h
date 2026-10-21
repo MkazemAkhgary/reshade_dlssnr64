@@ -44,7 +44,7 @@ struct AdaptiveExposureLayerSettings {
 
 struct LocalExposureLayerSettings {
   bool enabled = false;
-  float strength = 1.0f;
+  float strength = 0.5f;
   float max_brighten = 2.50f;
   float max_darken = 2.50f;
   float midtone = 0.18f;
