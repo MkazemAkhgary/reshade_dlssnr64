@@ -193,10 +193,12 @@ bool HdrState::Ensure(ID3D12Device* device) {
 
   Shutdown();
 
-  if (!CreateUavBuffer(device, kCombinedHistogramBytes,
-                       histogram_.GetAddressOf())) {
-    Shutdown();
-    return false;
+  for (auto& hist : histogram_) {
+    if (!CreateUavBuffer(device, kCombinedHistogramBytes,
+                         hist.GetAddressOf())) {
+      Shutdown();
+      return false;
+    }
   }
 
   if (FAILED(device->CreateFence(0, D3D12_FENCE_FLAG_NONE,
@@ -228,7 +230,9 @@ void HdrState::Shutdown() {
   gain_readback_.Shutdown();
   game_exposure_readback_.Shutdown();
   game_exposure_value_buffer_.Reset();
-  histogram_.Reset();
+  for (auto& hist : histogram_) hist.Reset();
+  current_histogram_index_ = 0;
+  histograms_initialized_ = false;
   fence_.Reset();
   fence_value_ = 0;
   pending_fence_value_ = 0;
@@ -415,11 +419,45 @@ void HdrState::BeginFrame(CommandContext& cmd,
   ID3D12Resource* mask_srv = have_mask ? exposure_mask : source;
   ID3D12Resource* depth_srv = have_depth ? depth_texture : source;
   ID3D12Resource* srvs[kSrvCount] = {source, mask_srv, depth_srv, source};
-  ID3D12Resource* uavs[kUavCount] = {histogram_.Get()};
+
+  constexpr uint32_t kPixelsPerThreadAxis = 8;
+  const uint32_t stride =
+      1u << static_cast<uint32_t>(
+          std::clamp(hdr_settings.metering_density, 0, 3));
+  const uint32_t block_size = 8u * kPixelsPerThreadAxis;
+  const uint32_t grid_x = (width + block_size - 1) / block_size;
+  const uint32_t grid_y = (height + block_size - 1) / block_size;
+
+  // One-time init of the first active buffer. Every subsequent BuildHistogram
+  // clears the inactive buffer in-shader for the next measurement, so only
+  // the very first active buffer needs an explicit zero.
+  if (!histograms_initialized_) {
+    ID3D12Resource* init_target = histogram_[0].Get();
+    ID3D12Resource* init_srvs[kSrvCount] = {
+        init_target, init_target, init_target, init_target};
+    ID3D12Resource* init_uavs[kUavCount] = {init_target};
+    cmd.SetResourceState(init_target, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    cmd.Transition(command_list, init_target,
+                   D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    ComputeConstants init_constants = {};
+    if (!codec.Dispatch("ZeroHistogram", command_list, init_constants,
+                        init_srvs, init_uavs, 2, 1, 1)) {
+      return;
+    }
+    cmd.UavBarrier(command_list, init_target);
+    histograms_initialized_ = true;
+  }
+
+  ID3D12Resource* active = histogram_[current_histogram_index_].Get();
+  ID3D12Resource* inactive = histogram_[1 - current_histogram_index_].Get();
+  ID3D12Resource* uavs[kUavCount] = {active, inactive};
   cmd.SetResourceState(source, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  cmd.SetResourceState(histogram_.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  cmd.Transition(command_list, source, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  cmd.Transition(command_list, histogram_.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  cmd.SetResourceState(active, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  cmd.SetResourceState(inactive, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  cmd.Transition(command_list, source,
+                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  cmd.Transition(command_list, active, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  cmd.Transition(command_list, inactive, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   if (have_mask) {
     cmd.SetResourceState(exposure_mask, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     cmd.Transition(command_list, exposure_mask,
@@ -450,26 +488,27 @@ void HdrState::BeginFrame(CommandContext& cmd,
   constants.histogram.AdaptiveFilter.y = adaptive_filter.depth_near;
   constants.histogram.AdaptiveFilter.z = adaptive_filter.depth_far;
   constants.histogram.AdaptiveFilter.w = depth_inverted ? 1.0f : 0.0f;
-  constants.histogram.Settings.x = hdr_settings.faster_metering ? 1.0f : 0.0f;
+  constants.histogram.Settings.x = static_cast<float>(stride);
+  constants.histogram.Settings.y = static_cast<float>(kPixelsPerThreadAxis);
 
-  if (!codec.Dispatch("ZeroHistogram", command_list, constants, srvs, uavs,
-                      2, 1, 1)) {
+  if (!codec.Dispatch("BuildHistogram", command_list, constants, srvs, uavs,
+                      grid_x, grid_y, 1)) {
     return;
   }
-  cmd.UavBarrier(command_list, histogram_.Get());
-  if (!codec.Dispatch("BuildHistogram", command_list, constants, srvs, uavs)) {
-    return;
-  }
+
+  cmd.UavBarrier(command_list, active);
+  cmd.UavBarrier(command_list, inactive);
 
   const uint64_t next = fence_value_ + 1u;
-  cmd.UavBarrier(command_list, histogram_.Get());
-  cmd.Transition(command_list, histogram_.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE);
-  if (readback_.EnqueueCopy(command_list, histogram_.Get(), kCombinedHistogramBytes,
+  cmd.Transition(command_list, active, D3D12_RESOURCE_STATE_COPY_SOURCE);
+  if (readback_.EnqueueCopy(command_list, active, kCombinedHistogramBytes,
                             fence_.Get(), next)) {
     pending_fence_value_ = next;
     pending_measurement_ = true;
   }
-  cmd.Transition(command_list, histogram_.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  cmd.Transition(command_list, active, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+  current_histogram_index_ = 1 - current_histogram_index_;
 }
 
 bool HdrState::EnqueueGainMapStatsReadback(

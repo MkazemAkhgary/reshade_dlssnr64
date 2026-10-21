@@ -117,7 +117,11 @@ class HdrState {
   void ResolveExposureStack(const HdrSettings& settings);
 
   Microsoft::WRL::ComPtr<ID3D12Device> device_;
-  Microsoft::WRL::ComPtr<ID3D12Resource> histogram_;
+  // Ping-pong histogram buffers. One is built this measurement, the
+  // other is cleared in the same dispatch for the next measurement.
+  Microsoft::WRL::ComPtr<ID3D12Resource> histogram_[2];
+  uint32_t current_histogram_index_ = 0;
+  bool histograms_initialized_ = false;
   Microsoft::WRL::ComPtr<ID3D12Fence> fence_;
 
   Microsoft::WRL::ComPtr<ID3D12Resource> game_exposure_value_buffer_;
