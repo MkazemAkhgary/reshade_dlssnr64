@@ -727,7 +727,12 @@ bool EnumSetting::Draw(const SettingContext& ctx, const Value& resolved,
       (void)id;
     }
   }
-  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+  // GroupButtons submits one item per option and each handles its own
+  // hover tooltip; this post-draw check would otherwise refer to the last
+  // button and overwrite its tooltip with the setting-level one. The
+  // setting tooltip is still shown when the label is hovered above.
+  if (meta_.enum_presentation != EnumPresentation::GroupButtons &&
+      ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("%s", meta_.tooltip.empty() ? meta_.label.c_str() : meta_.tooltip.c_str());
   }
 
