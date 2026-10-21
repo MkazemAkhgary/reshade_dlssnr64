@@ -1360,7 +1360,7 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
                             D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   ComputeConstants stat_constants = constants;
   if (!run.codec->Dispatch("ZeroGainMapStats", run.list, stat_constants,
-                           stats_srvs, stats_uavs, 2, 1, 1)) {
+                           stats_srvs, stats_uavs, 1, 1, 1)) {
     self->FailForStep("failed to initialize HDR gain-map statistics");
     return PipelineStatus::Fail;
   }
