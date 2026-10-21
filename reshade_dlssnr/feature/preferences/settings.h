@@ -21,6 +21,7 @@ inline constexpr const char* kSection = "Preferences";
 inline constexpr const char* kShowTooltips = "show_tooltips";
 inline constexpr const char* kCloneResources = "clone_resources";
 inline constexpr const char* kInvertFallbackDepth = "invert_fallback_depth";
+inline constexpr const char* kFp16Storage = "fp16_storage";
 
 inline constexpr int64_t kKey = 0;  // single instance
 

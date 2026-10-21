@@ -67,7 +67,6 @@ inline constexpr const char* kLocalSamples = "samples";
 inline constexpr const char* kLocalRestoreEnabled = "restore_exposure";
 inline constexpr const char* kLocalRestoreMode = "restore_mode";
 inline constexpr const char* kLocalRestoreStrength = "restore_strength";
-inline constexpr const char* kLocalFp16Reference = "fp16_reference";
 
 }  // namespace hdr
 }  // namespace feature

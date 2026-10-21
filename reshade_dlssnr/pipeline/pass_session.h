@@ -190,7 +190,8 @@ class PassSession {
       unsigned int work_width,
       unsigned int work_height,
       bool allow_identity_input,
-      bool need_graded_input);
+      bool need_graded_input,
+      bool fp16_storage);
 
   // Fills the real NGX parameter block with tuning values, resources, and
   // subrects for the current evaluation.
@@ -329,6 +330,10 @@ class PassSession {
   feature::pass::PassId pass_id_ = 0;
 
   ID3D12CommandQueue* command_queue_ = nullptr;
+
+  // Last observed FP16 storage mode. A change forces the NGX feature to be
+  // released so it recreates against the new input/output texture format.
+  bool fp16_storage_last_ = false;
 
   bool failed_ = false;
   const char* reason_ = "";

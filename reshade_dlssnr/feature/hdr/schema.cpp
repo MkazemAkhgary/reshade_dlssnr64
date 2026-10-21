@@ -282,13 +282,6 @@ void RegisterHdrSchema(ctl::Schema& schema) {
                "make adaptation more local.")
       .Category(kCatAdvanced)
       .EnableWhen(&LayerEnabled, kLocalEnabled);
-  local.Add<ctl::BoolSetting>(kLocalFp16Reference, "FP16 Reference", false)
-      .Tooltip("Store only the unlifted working-resolution composition reference "
-               "in FP16. It does not change NGX input/output or the HDR carrier; "
-               "small reference quantization differences are possible.")
-      .Category(kCatAdvanced)
-      .EnableWhen(&LayerEnabled, kLocalEnabled);
-
 }
 
 }  // namespace feature

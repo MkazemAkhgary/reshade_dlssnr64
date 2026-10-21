@@ -49,7 +49,6 @@ PipelineStatus PassSession::StepBuildHdrUniforms(PassRun& run) {
   run.hdr_uniforms.local_samples = local.samples;
   run.hdr_uniforms.restore_local_exposure = local.restore_exposure;
   run.hdr_uniforms.restore_local_mode = local.restore_mode;
-  run.hdr_uniforms.fp16_unlifted_reference = local.fp16_reference;
   run.hdr_uniforms_ready = true;
   return PipelineStatus::Ok;
 }

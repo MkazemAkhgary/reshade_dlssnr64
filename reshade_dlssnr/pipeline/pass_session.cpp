@@ -103,7 +103,7 @@ uint64_t TemporalSettingsSignature(const PassRun& run) {
   HashTemporalValue(&hash, run.hdr_uniforms.local_edge_protection);
   HashTemporalValue(&hash, run.hdr_uniforms.local_radius_px);
   HashTemporalValue(&hash, run.hdr_uniforms.local_samples);
-  HashTemporalValue(&hash, run.hdr_uniforms.fp16_unlifted_reference);
+  HashTemporalValue(&hash, run.fp16_storage);
   return hash;
 }
 
@@ -314,24 +314,22 @@ bool PassSession::EnsureFrameResources(
     unsigned int work_width,
     unsigned int work_height,
     bool allow_identity_input,
-    bool need_graded_input) {
+    bool need_graded_input,
+    bool fp16_storage) {
   if (!resources_.EnsureCompositeOutput(device, desc)) {
     reason_ = "failed to create DLSSNR composite resource";
     return false;
   }
 
-  // HDR model-domain values may legitimately exceed 1.0. Keep the NGX-facing
-  // input/output working textures in FP32 so super-white values
-  // retain enough precision for the inverse model-domain transfer. The packed
-  // carrier is also RGBA32F; the final published composite uses the game's
-  // native format and therefore retains the format's inherent representable
-  // range and quantization.
   D3D12_RESOURCE_DESC model_desc = desc;
   const HdrFormat frame_format = DetectFormatFromDxgi(desc.Format);
   const bool hdr_frame = frame_format == HdrFormat::ScRgb ||
                          frame_format == HdrFormat::Hdr10;
+  const DXGI_FORMAT hdr_storage_format = fp16_storage
+      ? DXGI_FORMAT_R16G16B16A16_FLOAT
+      : DXGI_FORMAT_R32G32B32A32_FLOAT;
   if (hdr_frame) {
-    model_desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+    model_desc.Format = hdr_storage_format;
   }
 
   const bool identity_input = allow_identity_input && !hdr_frame &&
@@ -351,7 +349,7 @@ bool PassSession::EnsureFrameResources(
   }
 
   if (hdr_frame) {
-    if (!resources_.EnsurePackedOutput(device, desc) ||
+    if (!resources_.EnsurePackedOutput(device, desc, hdr_storage_format) ||
         !resources_.EnsureGainStats(device)) {
       reason_ = "failed to create HDR gain-map resources";
       return false;
@@ -733,6 +731,14 @@ void PassSession::PrepareRun(PassRun& run,
     run.debug_view = feature::debug_log::Read(store, shared);
     run.hdr_state = feature::hdr::Read(store, key);
     run.mask_state = feature::importance_mask::Read(store, key);
+    run.fp16_storage =
+        store.Read(feature::preferences::kSection, shared,
+                   feature::preferences::kFp16Storage).as_bool;
+    if (run.fp16_storage != fp16_storage_last_) {
+      fp16_storage_last_ = run.fp16_storage;
+      feature_.ReleaseFeature(runtime);
+      feature_.SetShouldReset(true);
+    }
   }
 
   run.list = command_list;
@@ -1053,7 +1059,8 @@ PipelineStatus PassSession::StepEnsureFrameResources(PassRun& run) {
       run.hdr_state.format != HdrFormat::Hdr10;
   if (!self->EnsureFrameResources(run.device, run.desc, run.work_width,
                                   run.work_height, allow_identity_input,
-                                  run.grade_input.enabled)) {
+                                  run.grade_input.enabled,
+                                  run.fp16_storage)) {
     self->FailForStep(self->reason_);
     return PipelineStatus::Fail;
   }
@@ -1423,8 +1430,6 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
     ID3D12Resource* global_carrier = self->resources_.GetGlobalHdrCarrier();
     D3D12_RESOURCE_DESC reference_desc =
         self->resources_.GetWorkingInput()->GetDesc();
-    if (run.hdr_uniforms.fp16_unlifted_reference)
-      reference_desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
     if (global_carrier == nullptr ||
         !self->resources_.EnsureUnliftedWorkingInput(
             run.device, reference_desc, run.work_width, run.work_height)) {

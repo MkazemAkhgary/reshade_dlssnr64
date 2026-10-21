@@ -123,7 +123,8 @@ class PassResources {
   bool EnsureOutput(ID3D12Device* device, const D3D12_RESOURCE_DESC& desc);
   void ReleaseOutput();
   bool EnsureCompositeOutput(ID3D12Device* device, const D3D12_RESOURCE_DESC& desc);
-  bool EnsurePackedOutput(ID3D12Device* device, const D3D12_RESOURCE_DESC& desc);
+  bool EnsurePackedOutput(ID3D12Device* device, const D3D12_RESOURCE_DESC& desc,
+                          DXGI_FORMAT format);
   bool EnsureGainStats(ID3D12Device* device);
   bool EnsureWorkingResources(
       ID3D12Device* device,

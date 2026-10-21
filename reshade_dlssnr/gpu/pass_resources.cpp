@@ -142,19 +142,20 @@ bool PassResources::CreateUavBuffer(
 }
 
 bool PassResources::EnsurePackedOutput(
-    ID3D12Device* device, const D3D12_RESOURCE_DESC& desc) {
+    ID3D12Device* device, const D3D12_RESOURCE_DESC& desc,
+    DXGI_FORMAT format) {
   DLSSNR_PROFILE_RESOURCE_L2("PassResources::EnsurePackedOutput");
   if (packed_hdr_sdr != nullptr &&
       packed_width == desc.Width &&
       packed_height == desc.Height &&
-      packed_hdr_sdr->GetDesc().Format == DXGI_FORMAT_R32G32B32A32_FLOAT) {
+      packed_hdr_sdr->GetDesc().Format == format) {
     return true;
   }
 
   Dispose(packed_hdr_sdr);
 
   D3D12_RESOURCE_DESC packed_desc = desc;
-  packed_desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+  packed_desc.Format = format;
   packed_desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
   D3D12_HEAP_PROPERTIES heap = {};
   heap.Type = D3D12_HEAP_TYPE_DEFAULT;
@@ -169,8 +170,9 @@ bool PassResources::EnsurePackedOutput(
   packed_width = static_cast<unsigned int>(desc.Width);
   packed_height = desc.Height;
   trace::NameResource(packed_hdr_sdr.Get(), "packed_hdr_sdr");
-  TRACE_CMD(this, "create packed_hdr_sdr res=%d %ux%u",
-            trace::ResourceId(packed_hdr_sdr.Get()), packed_width, packed_height);
+  TRACE_CMD(this, "create packed_hdr_sdr res=%d %ux%u fmt=%d",
+            trace::ResourceId(packed_hdr_sdr.Get()), packed_width, packed_height,
+            static_cast<int>(format));
   return true;
 }
 

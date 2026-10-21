@@ -254,6 +254,10 @@ struct PassRun {
   DlssGuideState guides = {};
   bool guides_valid = false;
   bool is_first_pass = false;
+  // HDR pipeline storage format: RGBA16F instead of RGBA32F for the
+  // gain-map carrier, model working textures, and unlifted composition
+  // reference. SDR paths are unaffected.
+  bool fp16_storage = false;
 
   // -- frame geometry -------------------------------------------------------
   // `desc` describes the image the pass writes at full resolution: the

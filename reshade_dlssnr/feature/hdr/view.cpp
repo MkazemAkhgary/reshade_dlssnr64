@@ -99,7 +99,6 @@ HdrSnapshotView Read(const ctl::ValueStore& store,
     l.restore_exposure = store.Read(sec, key, kLocalRestoreEnabled).as_bool;
     l.restore_mode = store.Read(sec, key, kLocalRestoreMode).as_float;
     l.restore_strength = store.Read(sec, key, kLocalRestoreStrength).as_float;
-    l.fp16_reference = store.Read(sec, key, kLocalFp16Reference).as_bool;
   }
 
   return s;

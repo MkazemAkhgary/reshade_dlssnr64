@@ -63,7 +63,6 @@ struct LocalExposureLayerSettings {
   // Intermediate values interpolate the correction in log exposure space.
   float restore_mode = 1.0f;
   float restore_strength = 1.0f;
-  bool fp16_reference = false;
 };
 
 // Encoding code consumed by the shaders: 0 sRGB, 1 scRGB, 2 HDR10.

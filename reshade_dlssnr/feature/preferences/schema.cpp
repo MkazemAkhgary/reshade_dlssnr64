@@ -40,6 +40,16 @@ void RegisterPreferencesSchema(ctl::Schema& schema) {
           "Invert the ReShade Generic Depth values when they are used because "
           "the DLSS evaluation did not supply a depth resource. Does not alter "
           "depth supplied by DLSS.");
+
+  prefs
+      .Add<ctl::BoolSetting>(preferences::kFp16Storage, "FP16 Pipeline", true)
+      .Tooltip(
+          "Store the HDR gain-map carrier, model working textures, and "
+          "unlifted composition reference in RGBA16F instead of RGBA32F. "
+          "Halves the bandwidth and footprint of the HDR pipeline at the "
+          "cost of quantization in the carrier-to-HDR multiplier and the "
+          "model-domain deltas. SDR paths are unaffected. Toggling resets "
+          "temporal history and rebuilds the NGX feature.");
 }
 
 }  // namespace feature
