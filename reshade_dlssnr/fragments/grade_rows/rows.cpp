@@ -15,17 +15,17 @@ namespace {
 
 const char* const kLumaModeNames[] = {"Gain", "Gamma", "Exposure", "Soft"};
 const char* const kLumaModeTips[] = {
-    "Multiply luminance by 2^amount. An equal push either way.",
-    "Raise luminance to a power. Black stays black and white stays white, "
-    "so the effect concentrates in the midtones.",
-    "Multiply linear RGB by 2^amount (stops), preserving chromaticity until clipping.",
-    "A parabolic lift, zero at both ends and strongest at mid grey."};
+    "Scales OKLab lightness by a bounded multiplicative curve.",
+    "Apply a signed power curve to OKLab lightness. Neutral black and white "
+    "remain anchored, concentrating the effect in the midtones.",
+    "Multiply linear-light RGB by 2^amount (stops); gamut mapping protects colors "
+    "when the result exceeds the output range.",
+    "A smooth lightness adjustment that fades to zero near black and white."};
 
 const char* const kChromaModeNames[] = {"Saturation", "Vibrance"};
 const char* const kChromaModeTips[] = {
-    "Blend toward luma, so every pixel moves by the same factor.",
-    "Smart saturation: strongly boost muted colours while progressively "
-    "reducing the effect on colours that are already saturated."};
+    "Scale OKLab chroma by the same factor while preserving perceptual hue.",
+    "Boost muted colors more strongly in OKLab, reducing the effect as chroma rises."};
 
 // Setting names are built from the caller's prefix, so two instances on one
 // section cannot collide.
@@ -52,29 +52,30 @@ void Declare(ctl::Section& section, const std::string& prefix,
   group(section.Add<ctl::FloatSetting>(named(names::kBlackLevel).c_str(),
                                        "Black Level", 0.0f))
       .ClampRange(kGradeBlackLevelMin, kGradeBlackLevelMax)
-      .Tooltip("The linear value mapped to black. Raising crushes the "
-               "shadows; lowering lifts black.");
+      .Tooltip("The OKLab lightness value mapped to black. Positive values darken "
+               "only the deepest shadows; negative values lift the toe.");
 
   group(section.Add<ctl::FloatSetting>(named(names::kWhiteLevel).c_str(),
                                        "White Level", 1.0f))
       .ClampRange(kGradeWhiteLevelMin, kGradeWhiteLevelMax)
-      .Tooltip("The linear value mapped to white.");
+      .Tooltip("The OKLab lightness value mapped to white. Raising the point lowers "
+               "the image; out-of-gamut colors are compressed instead of channel-clipped.");
 
   group(section.Add<ctl::FloatSetting>(named(names::kContrast).c_str(), "Contrast",
                                        0.0f))
       .ClampRange(-1.0f, 1.0f)
-      .Tooltip("Stretches the image around mid grey. Positive steepens, "
-               "negative flattens.");
+      .Tooltip("A pivoted S-curve around middle lightness. Positive increases contrast "
+               "and negative reduces it while keeping black and white anchored.");
 
   group(section.Add<ctl::FloatSetting>(named(names::kShadows).c_str(), "Shadows",
                                        0.0f))
       .ClampRange(-1.0f, 1.0f)
-      .Tooltip("Scales the dark end. Fades out before it reaches white.");
+      .Tooltip("Adjusts shadows with a smooth curve that fades out before white.");
 
   group(section.Add<ctl::FloatSetting>(named(names::kHighlights).c_str(),
                                        "Highlights", 0.0f))
       .ClampRange(-1.0f, 1.0f)
-      .Tooltip("Scales the bright end. Fades out before it reaches black.");
+      .Tooltip("Adjusts highlights with a smooth curve that fades out before black.");
 
   group(section.Add<ctl::EnumSetting>(named(names::kLumaMode).c_str(), "Brightness Mode",
                                       0))
@@ -96,7 +97,8 @@ void Declare(ctl::Section& section, const std::string& prefix,
   group(section.Add<ctl::FloatSetting>(named(names::kChroma).c_str(), "Saturation",
                                        0.0f))
       .ClampRange(-0.95f, 1.0f)
-      .Tooltip("Negative desaturates, positive saturates.");
+      .Tooltip("Adjusts perceptual chroma in OKLab. Out-of-gamut colors are compressed "
+               "toward the neutral axis to avoid channel-clipping artifacts.");
 
   group(section.Add<ctl::BoolSetting>(named(names::kEdgeSofteningEnabled).c_str(),
                                       "Edge-Aware Softening", false))

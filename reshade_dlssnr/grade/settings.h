@@ -12,15 +12,15 @@ namespace reshade_dlssnr {
 // are active at a time; stacking two would make them fight.
 
 enum class GradeLumaMode : int {
-  Gain = 0,      // x2^amount on luminance; symmetric, clips at white
-  Gamma = 1,     // power on normalized luma; midtone-weighted, never clips
+  Gain = 0,      // Bounded multiplicative curve on OKLab lightness
+  Gamma = 1,     // Power curve on OKLab lightness; endpoints stay anchored
   Exposure = 2,  // x2^amount on linear RGB; preserves chromaticity until clipping
   Soft = 3,      // parabolic lift; strongest at mid grey
 };
 
 enum class GradeChromaMode : int {
-  Saturation = 0,  // blend toward luma; uniform
-  Vibrance = 1,    // smart saturation; muted colors move more
+  Saturation = 0,  // uniform perceptual chroma scale
+  Vibrance = 1,    // muted colors receive more chroma
 };
 
 struct GradeSettings {
@@ -41,9 +41,9 @@ struct GradeSettings {
 };
 
 constexpr float kGradeBlackLevelMin = -0.25f;
-constexpr float kGradeBlackLevelMax =  0.20f;
+constexpr float kGradeBlackLevelMax =  0.12f;
 
-constexpr float kGradeWhiteLevelMin =  0.25f;
-constexpr float kGradeWhiteLevelMax =  4.0f;
+constexpr float kGradeWhiteLevelMin =  0.90f;
+constexpr float kGradeWhiteLevelMax =  1.5f;
 
 }  // namespace reshade_dlssnr
