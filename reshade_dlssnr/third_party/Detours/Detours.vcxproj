@@ -60,7 +60,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <WholeProgramOptimization>false</WholeProgramOptimization>
       <AdditionalOptions>/GL- %(AdditionalOptions)</AdditionalOptions>
-      <PreprocessorDefinitions>_DEBUG;WIN32;_WINDOWS;_USRDLL;NOMINMAX;WIN32_LEAN_AND_MEAN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;WIN32;_WINDOWS;NOMINMAX;WIN32_LEAN_AND_MEAN;_WIN32_WINNT=0x0602;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
   </ItemDefinitionGroup>
@@ -77,7 +77,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <WholeProgramOptimization>false</WholeProgramOptimization>
       <AdditionalOptions>/GL- %(AdditionalOptions)</AdditionalOptions>
-      <PreprocessorDefinitions>NDEBUG;WIN32;_WINDOWS;_USRDLL;NOMINMAX;WIN32_LEAN_AND_MEAN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;WIN32;_WINDOWS;NOMINMAX;WIN32_LEAN_AND_MEAN;_WIN32_WINNT=0x0602;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
   </ItemDefinitionGroup>
