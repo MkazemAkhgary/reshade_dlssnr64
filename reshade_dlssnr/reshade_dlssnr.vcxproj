@@ -125,7 +125,7 @@
     FileWrites makes Clean (and therefore Rebuild) remove the generated files,
     the expanded FXC sources and the stamp.
   -->
-  <Target Name="GenerateEmbeddedShadersTarget" BeforeTargets="ClCompile" DependsOnTargets="PrepareShaderItems" Inputs="@(ShaderSourceFiles);$(ProjectDir)tools\generate_shaders.ps1;$(ProjectDir)tools\generate_shaders.py" Outputs="$(DlssnrShaderStampDir)\generate.stamp">
+  <Target Name="GenerateEmbeddedShadersTarget" BeforeTargets="ClCompile" DependsOnTargets="PrepareShaderItems" Inputs="@(ShaderSourceFiles->'shaders\%(Identity)');$(ProjectDir)tools\generate_shaders.ps1;$(ProjectDir)tools\generate_shaders.py" Outputs="$(DlssnrShaderStampDir)\generate.stamp">
     <MakeDir Directories="$(DlssnrShaderStampDir)" />
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\generate_shaders.ps1&quot; -ProjectDir &quot;$(DlssnrProjectDir)&quot; -GeneratedDir &quot;$(DlssnrGeneratedDir)&quot;" />
     <Touch Files="$(DlssnrShaderStampDir)\generate.stamp" AlwaysCreate="true" />
@@ -135,7 +135,7 @@
       <FileWrites Include="$(DlssnrShaderStampDir)\generate.stamp" />
     </ItemGroup>
   </Target>
-  <Target Name="VerifyShadersTarget" BeforeTargets="ClCompile" DependsOnTargets="GenerateEmbeddedShadersTarget;ValidateFxcPath" Condition="'$(VerifyShaders)' == 'true'" Inputs="@(ShaderSourceFiles);$(ProjectDir)tools\verify_shaders.ps1" Outputs="$(DlssnrShaderStampDir)\verify.stamp">
+  <Target Name="VerifyShadersTarget" BeforeTargets="ClCompile" DependsOnTargets="GenerateEmbeddedShadersTarget;ValidateFxcPath" Condition="'$(VerifyShaders)' == 'true'" Inputs="@(ShaderSourceFiles->'shaders\%(Identity)');$(ProjectDir)tools\verify_shaders.ps1" Outputs="$(DlssnrShaderStampDir)\verify.stamp">
     <MakeDir Directories="$(DlssnrShaderStampDir)" />
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\verify_shaders.ps1&quot; -ProjectDir &quot;$(DlssnrProjectDir)&quot; -FxcPath &quot;$(FxcPath)&quot;" />
     <Touch Files="$(DlssnrShaderStampDir)\verify.stamp" AlwaysCreate="true" />
@@ -143,7 +143,7 @@
       <FileWrites Include="$(DlssnrShaderStampDir)\verify.stamp" />
     </ItemGroup>
   </Target>
-  <Target Name="PrecompileShadersTarget" BeforeTargets="ClCompile" DependsOnTargets="GenerateEmbeddedShadersTarget;VerifyShadersTarget;ValidateFxcPath" Condition="'$(PrecompileShaders)' == 'true'" Inputs="@(ShaderSourceFiles);$(ProjectDir)tools\precompile_shaders.ps1" Outputs="$(DlssnrShaderStampDir)\precompile.stamp">
+  <Target Name="PrecompileShadersTarget" BeforeTargets="ClCompile" DependsOnTargets="GenerateEmbeddedShadersTarget;VerifyShadersTarget;ValidateFxcPath" Condition="'$(PrecompileShaders)' == 'true'" Inputs="@(ShaderSourceFiles->'shaders\%(Identity)');$(ProjectDir)tools\precompile_shaders.ps1" Outputs="$(DlssnrShaderStampDir)\precompile.stamp">
     <MakeDir Directories="$(DlssnrShaderStampDir)" />
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\precompile_shaders.ps1&quot; -ProjectDir &quot;$(DlssnrProjectDir)&quot; -GeneratedDir &quot;$(DlssnrGeneratedDir)&quot; -FxcPath &quot;$(FxcPath)&quot;" />
     <Touch Files="$(DlssnrShaderStampDir)\precompile.stamp" AlwaysCreate="true" />
