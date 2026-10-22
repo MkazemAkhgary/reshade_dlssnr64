@@ -34,7 +34,7 @@ constexpr int kMaxHookInstallRetries = 120;
 static decltype(&NVSDK_NGX_D3D12_EvaluateFeature) real_NVSDK_NGX_D3D12_EvaluateFeature = nullptr;
 static decltype(&NVSDK_NGX_D3D12_CreateFeature) real_NVSDK_NGX_D3D12_CreateFeature = nullptr;
 
-static inline std::unordered_map<unsigned int, NVSDK_NGX_Feature> g_handle_to_feature;
+static inline std::unordered_map<const NVSDK_NGX_Handle*, NVSDK_NGX_Feature> g_handle_to_feature;
 static inline std::mutex g_handle_to_feature_mutex;
 
 // Logged once: whether the game's command list had to be resolved. ReShade
@@ -90,7 +90,7 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_CreateFeature(
 
   if (result == NVSDK_NGX_Result_Success && out_handle != nullptr && *out_handle != nullptr) {
     std::lock_guard<std::mutex> lock(g_handle_to_feature_mutex);
-    g_handle_to_feature[(*out_handle)->Id] = feature_id;
+    g_handle_to_feature[*out_handle] = feature_id;
   }
 
   return result;
@@ -538,7 +538,7 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
   NVSDK_NGX_Feature feature_id = NVSDK_NGX_Feature_Reserved0;
   if (feature_handle != nullptr) {
     std::lock_guard<std::mutex> lock(g_handle_to_feature_mutex);
-    auto it = g_handle_to_feature.find(feature_handle->Id);
+    auto it = g_handle_to_feature.find(feature_handle);
     if (it != g_handle_to_feature.end()) feature_id = it->second;
   }
 
