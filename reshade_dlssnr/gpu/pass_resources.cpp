@@ -6,6 +6,7 @@
 #include <reshade.hpp>
 
 #include "pipeline_trace.h"
+#include "gpu/d3d12_utils.h"
 
 namespace reshade_dlssnr {
 
@@ -35,19 +36,7 @@ bool PassResources::CreateUavTexture(
     const D3D12_RESOURCE_DESC& desc,
     ID3D12Resource** out_resource) {
   DLSSNR_PROFILE_RESOURCE_L2("PassResources::CreateUavTexture");
-  D3D12_HEAP_PROPERTIES heap = {};
-  heap.Type = D3D12_HEAP_TYPE_DEFAULT;
-
-  D3D12_RESOURCE_DESC resource_desc = desc;
-  resource_desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-
-  return SUCCEEDED(device->CreateCommittedResource(
-      &heap,
-      D3D12_HEAP_FLAG_NONE,
-      &resource_desc,
-      D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-      nullptr,
-      IID_PPV_ARGS(out_resource)));
+  return reshade_dlssnr::CreateUavTexture(device, desc, out_resource);
 }
 
 bool PassResources::EnsureOutput(
@@ -117,28 +106,7 @@ bool PassResources::CreateUavBuffer(
     uint64_t byte_width,
     ID3D12Resource** out_resource) {
   DLSSNR_PROFILE_RESOURCE_L2("PassResources::CreateUavBuffer");
-  if (device == nullptr || out_resource == nullptr || byte_width == 0) {
-    return false;
-  }
-
-  D3D12_HEAP_PROPERTIES heap = {};
-  heap.Type = D3D12_HEAP_TYPE_DEFAULT;
-
-  D3D12_RESOURCE_DESC desc = {};
-  desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-  desc.Width = byte_width;
-  desc.Height = 1;
-  desc.DepthOrArraySize = 1;
-  desc.MipLevels = 1;
-  desc.Format = DXGI_FORMAT_UNKNOWN;
-  desc.SampleDesc.Count = 1;
-  desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-  desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-
-  return SUCCEEDED(device->CreateCommittedResource(
-      &heap, D3D12_HEAP_FLAG_NONE, &desc,
-      D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr,
-      IID_PPV_ARGS(out_resource)));
+  return reshade_dlssnr::CreateUavBuffer(device, byte_width, out_resource);
 }
 
 bool PassResources::EnsurePackedOutput(

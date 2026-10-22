@@ -19,6 +19,7 @@
 #include "feature/pass/view.h"
 #include "pipeline_graph.h"
 #include "pipeline_trace.h"
+#include "gpu/d3d12_utils.h"
 #include "state/settings.h"
 #include "streamline_compat.h"
 
@@ -26,28 +27,6 @@ namespace reshade_dlssnr {
 
 namespace {
 std::mutex g_direct_mutex;
-
-
-
-// Creates a UAV-capable texture matching `desc`.
-//
-// The grade copies its source into this and then dispatches back over the
-// source, so the two descriptors have to match exactly — which is why this
-// takes the source's own descriptor rather than building one from the frame
-// geometry.
-bool CreateUavTexture(ID3D12Device* device, const D3D12_RESOURCE_DESC& desc,
-                      ID3D12Resource** out_resource) {
-  D3D12_HEAP_PROPERTIES heap = {};
-  heap.Type = D3D12_HEAP_TYPE_DEFAULT;
-
-  D3D12_RESOURCE_DESC resource_desc = desc;
-  resource_desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-
-  return SUCCEEDED(device->CreateCommittedResource(
-      &heap, D3D12_HEAP_FLAG_NONE, &resource_desc,
-      D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr,
-      IID_PPV_ARGS(out_resource)));
-}
 }  // namespace
 
 AddonController& AddonController::Get() {
