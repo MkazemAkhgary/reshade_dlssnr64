@@ -142,9 +142,6 @@ void ResetBackbufferGrade(void* /*context*/) {
 // Reorder the pass_order vector. `order` holds the source position of each
 // destination position. Nothing in the store moves: each pass's values are
 // keyed by its stable id.
-// True when the pass at `position` is enabled, read from the store. The tab
-// bar and the body both need it, and both key it by the pass's stable id.
-
 void ApplyPassReorder(Settings& settings, const int* order, bool& changed) {
   DLSSNR_PROFILE_UI_L2("ApplyPassReorder");
   const size_t total = settings.pass_order.size();
