@@ -11,3 +11,5 @@
 [submodule "third_party/tracy"]
 	path = reshade_dlssnr/third_party/tracy
 	url = https://github.com/wolfpld/tracy
+	sparseCheckout = true
+	sparseCheckoutPaths = public/
