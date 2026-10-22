@@ -516,6 +516,28 @@ struct PreDlssColorOverride {
   }
 };
 
+
+// Classify an NGX handle by the parameters of the evaluation call. Used when
+// the handle is not in the map because CreateFeature ran before the hook was
+// installed. Only SuperSampling uses Color and Output together; other NGX
+// features take different parameter names or none of these.
+static NVSDK_NGX_Feature ClassifyFeatureByParameters(
+    const NVSDK_NGX_Parameter* parameters) {
+  if (parameters == nullptr) return NVSDK_NGX_Feature_Reserved0;
+
+  ID3D12Resource* color = nullptr;
+  ID3D12Resource* output = nullptr;
+  if (parameters->Get(NVSDK_NGX_Parameter_Color, &color) ==
+          NVSDK_NGX_Result_Success &&
+      color != nullptr &&
+      parameters->Get(NVSDK_NGX_Parameter_Output, &output) ==
+          NVSDK_NGX_Result_Success &&
+      output != nullptr) {
+    return NVSDK_NGX_Feature_SuperSampling;
+  }
+  return NVSDK_NGX_Feature_Reserved0;
+}
+
 static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
     ID3D12GraphicsCommandList* command_list,
     const NVSDK_NGX_Handle* feature_handle,
@@ -539,7 +561,28 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
   if (feature_handle != nullptr) {
     std::lock_guard<std::mutex> lock(g_handle_to_feature_mutex);
     auto it = g_handle_to_feature.find(feature_handle);
-    if (it != g_handle_to_feature.end()) feature_id = it->second;
+    if (it != g_handle_to_feature.end()) {
+      feature_id = it->second;
+    } else {
+      // The handle was not recorded by CreateFeature. Classify by the
+      // parameter block and remember the result so later evaluations hit
+      // the fast path.
+      NVSDK_NGX_Feature guess = ClassifyFeatureByParameters(parameters);
+      if (guess != NVSDK_NGX_Feature_Reserved0) {
+        g_handle_to_feature[feature_handle] = guess;
+        feature_id = guess;
+        static bool logged_fallback = false;
+        if (!logged_fallback) {
+          logged_fallback = true;
+          reshade::log::message(
+              reshade::log::level::info,
+              "DLSSNR: an NGX feature was created before the addon could "
+              "hook CreateFeature; identified as DLSS-SR because the "
+              "EvaluateFeature call supplies both "
+              "NVSDK_NGX_Parameter_Color and NVSDK_NGX_Parameter_Output");
+        }
+      }
+    }
   }
 
   const Settings& settings = GetSettings();
