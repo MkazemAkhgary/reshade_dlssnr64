@@ -626,10 +626,6 @@ void PassSession::PrepareRun(PassRun& run,
         store.Read(feature::pass::kGradeInputSection, key,
                    feature::pass::kGradeInputApplyToPreGrade)
             .as_bool;
-    run.input_grade_apply_to_pre_grade =
-        store.Read(feature::pass::kGradeInputSection, key,
-                   feature::pass::kGradeInputApplyToPreGrade)
-            .as_bool;
 
     // HDR metering and Importance Mask settings are pass-keyed just like the
     // model and its two grade boundaries. Each pass has its own state/history.
