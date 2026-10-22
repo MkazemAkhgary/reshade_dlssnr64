@@ -23,3 +23,8 @@
 	url = https://github.com/NVIDIA/DLSS.git
 	sparseCheckout = true
 	sparseCheckoutPaths = include/
+[submodule "reshade_dlssnr/third_party/d3dx"]
+	path = reshade_dlssnr/third_party/d3dx
+	url = https://github.com/microsoft/DirectX-Headers.git
+	sparseCheckout = true
+	sparseCheckoutPaths = include/directx/
