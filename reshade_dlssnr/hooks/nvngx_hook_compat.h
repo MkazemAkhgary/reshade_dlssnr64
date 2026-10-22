@@ -33,6 +33,7 @@ constexpr int kMaxHookInstallRetries = 120;
 
 static decltype(&NVSDK_NGX_D3D12_EvaluateFeature) real_NVSDK_NGX_D3D12_EvaluateFeature = nullptr;
 static decltype(&NVSDK_NGX_D3D12_CreateFeature) real_NVSDK_NGX_D3D12_CreateFeature = nullptr;
+static decltype(&NVSDK_NGX_D3D12_ReleaseFeature) real_NVSDK_NGX_D3D12_ReleaseFeature = nullptr;
 
 static inline std::unordered_map<const NVSDK_NGX_Handle*, NVSDK_NGX_Feature> g_handle_to_feature;
 static inline std::mutex g_handle_to_feature_mutex;
@@ -95,6 +96,26 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_CreateFeature(
 
   return result;
 }
+
+// Erase the handle from the feature map on release. Without this, the map
+// keeps a stale entry after the game releases a handle, and if the SDK
+// reuses that handle's storage for a subsequent CreateFeature of a different
+// feature type the lookup returns the wrong type. unordered_map::erase
+// compares the pointer value without dereferencing it, so erasing after the
+// real ReleaseFeature is safe even when the release freed the handle.
+static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_ReleaseFeature(
+    NVSDK_NGX_Handle* handle) {
+  const NVSDK_NGX_Result result =
+      real_NVSDK_NGX_D3D12_ReleaseFeature(handle);
+
+  if (handle != nullptr) {
+    std::lock_guard<std::mutex> lock(g_handle_to_feature_mutex);
+    g_handle_to_feature.erase(handle);
+  }
+
+  return result;
+}
+
 
 static ID3D12Resource* GetResourceParameter(NVSDK_NGX_Parameter* parameters,
                                                 const char* name) {
@@ -760,6 +781,7 @@ using HookItem = local_vtable::HookItem;
 static const std::vector<HookItem> DLSS_HOOKS = {
     {"NVSDK_NGX_D3D12_CreateFeature", (void**)&real_NVSDK_NGX_D3D12_CreateFeature, (void*)&hooked_NVSDK_NGX_D3D12_CreateFeature},
     {"NVSDK_NGX_D3D12_EvaluateFeature", (void**)&real_NVSDK_NGX_D3D12_EvaluateFeature, (void*)&hooked_NVSDK_NGX_D3D12_EvaluateFeature},
+    {"NVSDK_NGX_D3D12_ReleaseFeature", (void**)&real_NVSDK_NGX_D3D12_ReleaseFeature, (void*)&hooked_NVSDK_NGX_D3D12_ReleaseFeature},
 };
 
 // Installs the NGX hooks. Safe to call until it succeeds.
