@@ -6,6 +6,8 @@
 [submodule "reshade_dlssnr/third_party/FidelityFX-CAS"]
 	path = reshade_dlssnr/third_party/FidelityFX-CAS
 	url = https://github.com/GPUOpen-Effects/FidelityFX-CAS.git
+	sparseCheckout = true
+	sparseCheckoutPaths = ffx-cas/
 [submodule "third_party/tracy"]
 	path = reshade_dlssnr/third_party/tracy
 	url = https://github.com/wolfpld/tracy
