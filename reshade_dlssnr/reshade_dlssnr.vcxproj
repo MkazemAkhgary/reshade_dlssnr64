@@ -143,6 +143,9 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/experimental:deterministic /pathmap:"$(ProjectDir)=./" %(AdditionalOptions)</AdditionalOptions>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <ForcedIncludeFiles>pch.h</ForcedIncludeFiles>
       <Optimization>Disabled</Optimization>
       <!-- Tracy requires a constexpr __LINE__. Edit And Continue (/ZI)
            makes __LINE__ a runtime value, so Tracy's ZoneScopedN
@@ -173,6 +176,9 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/experimental:deterministic /pathmap:"$(ProjectDir)=./" %(AdditionalOptions)</AdditionalOptions>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <ForcedIncludeFiles>pch.h</ForcedIncludeFiles>
       <ErrorLog>$(IntDir)$(MSBuildProjectName).error.log</ErrorLog>
       <ObjectFileName>$(IntDir)%(RelativeDir)%(Filename).obj</ObjectFileName>
       <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)generated;$(ProjectDir)third_party\reshade\include;$(ProjectDir)third_party\reshade;$(ProjectDir)third_party\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\nvngx_dlss_sdk\include;$(ProjectDir)third_party\d3dx\include\directx;$(ProjectDir)third_party\Detours\detours\src;$(ProjectDir)third_party\tracy\public;$(ProjectDir)third_party\tracy\public\tracy;$(ProjectDir)gpu;$(ProjectDir)model;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)compose;$(ProjectDir)grade;$(ProjectDir)hdr;$(ProjectDir)importance_mask;$(ProjectDir)debug;$(ProjectDir)temporal;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -188,13 +194,27 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="project_constants.h" />
+    <ClInclude Include="pch.h" />
     <ClInclude Include="profiling\tracy_integration.h" />
     <ClInclude Include="profiling\profile.h" />
     <ClCompile Include="addon.cpp" />
+    <ClCompile Include="pch.cpp">
+      <PrecompiledHeader>Create</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+    </ClCompile>
     <ClCompile Include="profiling\tracy_integration.cpp" />
-    <ClCompile Include="third_party\tracy\public\TracyClient.cpp" Condition="'$(DlssnrTracyEnabled)' == 'true'" />
-    <ClCompile Include="generated\shader_sources.cpp" />
-    <ClCompile Include="generated\shader_bytecode.cpp" />
+    <ClCompile Include="third_party\tracy\public\TracyClient.cpp" Condition="'$(DlssnrTracyEnabled)' == 'true'">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+    </ClCompile>
+    <ClCompile Include="generated\shader_sources.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+    </ClCompile>
+    <ClCompile Include="generated\shader_bytecode.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+    </ClCompile>
     <ClCompile Include="gpu\compute_engine.cpp" />
     <ClCompile Include="gpu\compute_passes.cpp" />
     <ClCompile Include="gpu\command_context.cpp" />
