@@ -204,6 +204,7 @@
     <ClCompile Include="hooks\d3d12_state.cpp" />
     <ClCompile Include="hooks\dlss_guides.cpp" />
     <ClCompile Include="pipeline\addon_controller.cpp" />
+    <ClCompile Include="pipeline\addon_controller_release.cpp" />
     <ClCompile Include="debug\debug_view.cpp" />
     <ClCompile Include="debug\steps.cpp" />
     <ClCompile Include="model\feature_lifecycle.cpp" />
