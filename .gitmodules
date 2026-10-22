@@ -18,3 +18,8 @@
 	url = https://github.com/microsoft/Detours.git
 	sparseCheckout = true
 	sparseCheckoutPaths = src/ include/
+[submodule "reshade_dlssnr/third_party/nvngx_dlss_sdk"]
+	path = reshade_dlssnr/third_party/nvngx_dlss_sdk
+	url = https://github.com/NVIDIA/DLSS.git
+	sparseCheckout = true
+	sparseCheckoutPaths = include/
