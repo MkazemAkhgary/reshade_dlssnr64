@@ -36,8 +36,54 @@
     <DlssnrProfileDomainCtl Condition="'$(DlssnrProfileDomainCtl)' == ''">1</DlssnrProfileDomainCtl>
     <DlssnrProfileDomainGpu Condition="'$(DlssnrProfileDomainGpu)' == ''">0</DlssnrProfileDomainGpu>
   </PropertyGroup>
+  <!--
+    Every shader source file, explicit. ShaderRootFiles below derives
+    from this list; adding a shader here is the only place to register
+    it in the project. Paths are relative to shaders/.
+  -->
+  <!--
+    Every shader source file, explicit. Paths are relative to the
+    project file and include the shaders/ prefix.
+  -->
   <ItemGroup>
-    <ShaderSourceFiles Include="$(ProjectDir)shaders\**\*.*" />
+    <ShaderSourceFiles Include="common\color_constants.h" />
+    <ShaderSourceFiles Include="common\params.h" />
+    <ShaderSourceFiles Include="common\bindings.hlsli" />
+    <ShaderSourceFiles Include="common\box_filter.hlsli" />
+    <ShaderSourceFiles Include="common\cbuffer.hlsli" />
+    <ShaderSourceFiles Include="common\color.hlsli" />
+    <ShaderSourceFiles Include="common\compose_common.hlsli" />
+    <ShaderSourceFiles Include="common\compose_upsample.hlsli" />
+    <ShaderSourceFiles Include="common\grade.hlsli" />
+    <ShaderSourceFiles Include="common\hdr_local_exposure.hlsli" />
+    <ShaderSourceFiles Include="common\hdr_transfer.hlsli" />
+    <ShaderSourceFiles Include="common\luma.hlsli" />
+    <ShaderSourceFiles Include="common\math.hlsli" />
+    <ShaderSourceFiles Include="common\registers.hlsli" />
+    <ShaderSourceFiles Include="compose\compose_model_output.hlsl" />
+    <ShaderSourceFiles Include="compose\compose_model_output_hdr.hlsl" />
+    <ShaderSourceFiles Include="debug\debug_display.hlsl" />
+    <ShaderSourceFiles Include="debug\debug_hdr_roundtrip.hlsl" />
+    <ShaderSourceFiles Include="grade\apply_cas.hlsl" />
+    <ShaderSourceFiles Include="grade\apply_grade.hlsl" />
+    <ShaderSourceFiles Include="hdr\build_effective_local_exposure.hlsl" />
+    <ShaderSourceFiles Include="hdr\build_gain_map_stats.hlsl" />
+    <ShaderSourceFiles Include="hdr\build_histogram.hlsl" />
+    <ShaderSourceFiles Include="hdr\gain_map_split.hlsl" />
+    <ShaderSourceFiles Include="hdr\read_game_exposure.hlsl" />
+    <ShaderSourceFiles Include="hdr\reduce_local_exposure_global.hlsl" />
+    <ShaderSourceFiles Include="hdr\reduce_local_exposure_tiles.hlsl" />
+    <ShaderSourceFiles Include="hdr\zero_gain_map_stats.hlsl" />
+    <ShaderSourceFiles Include="hdr\zero_histogram.hlsl" />
+    <ShaderSourceFiles Include="importance_mask\build_importance_mask.hlsl" />
+    <ShaderSourceFiles Include="importance_mask\classify_importance_mask.hlsl" />
+    <ShaderSourceFiles Include="model\prepare_model_input.hlsl" />
+    <ShaderSourceFiles Include="temporal\apply_edit.hlsl" />
+    <ShaderSourceFiles Include="temporal\clear_stats.hlsl" />
+    <ShaderSourceFiles Include="temporal\commit_history.hlsl" />
+    <ShaderSourceFiles Include="temporal\reconstruct_motion_vectors.hlsl" />
+    <ShaderSourceFiles Include="temporal\reproject_edit.hlsl" />
+    <ShaderSourceFiles Include="temporal\validate_depth.hlsl" />
   </ItemGroup>
 
   <ItemGroup>
@@ -48,7 +94,21 @@
   </ItemGroup>
   <!-- Rebuild removes only explicit outputs owned by this project. Unrelated
        files and directories under generated/ are preserved. -->
-  <Target Name="CleanGeneratedShaderOutputsBeforeRebuild" BeforeTargets="Rebuild">
+  <!--
+    Derived shader items are created here, not at evaluation time:
+    %(Extension) in an ItemGroup Condition is rejected by MSBuild
+    before the project loads, but is legal inside a target body.
+    ShaderSourceFiles remains the single explicit source list.
+  -->
+  <Target Name="PrepareShaderItems" BeforeTargets="Clean;ClCompile">
+    <ItemGroup>
+      <ShaderRootFiles Include="@(ShaderSourceFiles)" Condition="'%(Extension)' == '.hlsl'" />
+      <ExpandedShaderFiles Include="@(ShaderRootFiles->'$(DlssnrGeneratedDir)\expanded_shaders\%(Identity)')" />
+      <ShaderCacheFiles Include="@(ShaderRootFiles->'$(DlssnrGeneratedDir)\shader_cache\%(Filename).cso')" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="CleanGeneratedShaderOutputsBeforeRebuild" BeforeTargets="Rebuild" DependsOnTargets="PrepareShaderItems">
     <Delete Files="$(DlssnrGeneratedFiles);$(DlssnrShaderStampDir)\generate.stamp;$(DlssnrShaderStampDir)\verify.stamp;$(DlssnrShaderStampDir)\precompile.stamp;@(ExpandedShaderFiles);@(ShaderCacheFiles)" />
   </Target>
   <Target Name="ValidateFxcPath" Condition="('$(VerifyShaders)' == 'true' or '$(PrecompileShaders)' == 'true') and '$(FxcPath)' == ''">
@@ -64,7 +124,7 @@
     FileWrites makes Clean (and therefore Rebuild) remove the generated files,
     the expanded FXC sources and the stamp.
   -->
-  <Target Name="GenerateEmbeddedShadersTarget" BeforeTargets="ClCompile" Inputs="@(ShaderSourceFiles);$(ProjectDir)tools\generate_shaders.ps1;$(ProjectDir)tools\generate_shaders.py" Outputs="$(DlssnrShaderStampDir)\generate.stamp">
+  <Target Name="GenerateEmbeddedShadersTarget" BeforeTargets="ClCompile" DependsOnTargets="PrepareShaderItems" Inputs="@(ShaderSourceFiles);$(ProjectDir)tools\generate_shaders.ps1;$(ProjectDir)tools\generate_shaders.py" Outputs="$(DlssnrShaderStampDir)\generate.stamp">
     <MakeDir Directories="$(DlssnrShaderStampDir)" />
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\generate_shaders.ps1&quot; -ProjectDir &quot;$(DlssnrProjectDir)&quot; -GeneratedDir &quot;$(DlssnrGeneratedDir)&quot;" />
     <Touch Files="$(DlssnrShaderStampDir)\generate.stamp" AlwaysCreate="true" />
@@ -355,8 +415,6 @@
     <ClInclude Include="feature\preferences\settings.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="shaders\common\color_constants.h" />
-    <None Include="shaders\common\params.h" />
     <None Include="tools\generate_shaders.py" />
     <None Include="tools\generate_shaders.ps1" />
     <None Include="tools\verify_shaders.ps1" />
@@ -365,98 +423,14 @@
     <None Include="ctl\test_imgui_stubs.cpp" />
     <None Include="ctl\test_row_stubs.cpp" />
   </ItemGroup>
-  <ItemGroup>
-    <None Include="shaders\common\bindings.hlsli" />
-    <None Include="shaders\common\box_filter.hlsli" />
-    <None Include="shaders\common\cbuffer.hlsli" />
-    <None Include="shaders\common\color.hlsli" />
-    <None Include="shaders\common\compose_common.hlsli" />
-    <None Include="shaders\common\compose_upsample.hlsli" />
-    <None Include="shaders\common\grade.hlsli" />
-    <None Include="shaders\common\hdr_local_exposure.hlsli" />
-    <None Include="shaders\common\hdr_transfer.hlsli" />
-    <None Include="shaders\common\luma.hlsli" />
-    <None Include="shaders\common\math.hlsli" />
-    <None Include="shaders\common\registers.hlsli" />
-  </ItemGroup>
-  <ItemGroup>
-    <ShaderRootFiles Include="compose\compose_model_output.hlsl">
-      <CacheName>compose_compose_model_output_hlsl</CacheName>
-    </ShaderRootFiles>
-    <ShaderRootFiles Include="compose\compose_model_output_hdr.hlsl">
-      <CacheName>compose_compose_model_output_hdr_hlsl</CacheName>
-    </ShaderRootFiles>
-    <ShaderRootFiles Include="debug\debug_display.hlsl">
-      <CacheName>debug_debug_display_hlsl</CacheName>
-    </ShaderRootFiles>
-    <ShaderRootFiles Include="debug\debug_hdr_roundtrip.hlsl">
-      <CacheName>debug_debug_hdr_roundtrip_hlsl</CacheName>
-    </ShaderRootFiles>
-    <ShaderRootFiles Include="grade\apply_grade.hlsl">
-      <CacheName>grade_apply_grade_hlsl</CacheName>
-    </ShaderRootFiles>
-    <ShaderRootFiles Include="grade\apply_cas.hlsl">
-      <CacheName>grade_apply_cas_hlsl</CacheName>
-    </ShaderRootFiles>
-    <ShaderRootFiles Include="hdr\build_effective_local_exposure.hlsl">
-      <CacheName>hdr_build_effective_local_exposure_hlsl</CacheName>
-    </ShaderRootFiles>
-    <ShaderRootFiles Include="hdr\build_gain_map_stats.hlsl">
-      <CacheName>hdr_build_gain_map_stats_hlsl</CacheName>
-    </ShaderRootFiles>
-    <ShaderRootFiles Include="hdr\build_histogram.hlsl">
-      <CacheName>hdr_build_histogram_hlsl</CacheName>
-    </ShaderRootFiles>
-    <ShaderRootFiles Include="hdr\gain_map_split.hlsl">
-      <CacheName>hdr_gain_map_split_hlsl</CacheName>
-    </ShaderRootFiles>
-    <ShaderRootFiles Include="hdr\reduce_local_exposure_tiles.hlsl">
-      <CacheName>hdr_reduce_local_exposure_tiles_hlsl</CacheName>
-    </ShaderRootFiles>
-    <ShaderRootFiles Include="hdr\reduce_local_exposure_global.hlsl">
-      <CacheName>hdr_reduce_local_exposure_global_hlsl</CacheName>
-    </ShaderRootFiles>
-    <ShaderRootFiles Include="hdr\read_game_exposure.hlsl">
-      <CacheName>hdr_read_game_exposure_hlsl</CacheName>
-    </ShaderRootFiles>
-    <ShaderRootFiles Include="hdr\zero_gain_map_stats.hlsl">
-      <CacheName>hdr_zero_gain_map_stats_hlsl</CacheName>
-    </ShaderRootFiles>
-    <ShaderRootFiles Include="hdr\zero_histogram.hlsl">
-      <CacheName>hdr_zero_histogram_hlsl</CacheName>
-    </ShaderRootFiles>
-    <ShaderRootFiles Include="importance_mask\build_importance_mask.hlsl">
-      <CacheName>importance_mask_build_importance_mask_hlsl</CacheName>
-    </ShaderRootFiles>
-    <ShaderRootFiles Include="importance_mask\classify_importance_mask.hlsl">
-      <CacheName>importance_mask_classify_importance_mask_hlsl</CacheName>
-    </ShaderRootFiles>
-    <ShaderRootFiles Include="model\prepare_model_input.hlsl">
-      <CacheName>model_prepare_model_input_hlsl</CacheName>
-    </ShaderRootFiles>
-    <ShaderRootFiles Include="temporal\apply_edit.hlsl">
-      <CacheName>temporal_apply_edit_hlsl</CacheName>
-    </ShaderRootFiles>
-    <ShaderRootFiles Include="temporal\clear_stats.hlsl">
-      <CacheName>temporal_clear_stats_hlsl</CacheName>
-    </ShaderRootFiles>
-    <ShaderRootFiles Include="temporal\commit_history.hlsl">
-      <CacheName>temporal_commit_history_hlsl</CacheName>
-    </ShaderRootFiles>
-    <ShaderRootFiles Include="temporal\reproject_edit.hlsl">
-      <CacheName>temporal_reproject_edit_hlsl</CacheName>
-    </ShaderRootFiles>
-    <ShaderRootFiles Include="temporal\reconstruct_motion_vectors.hlsl">
-      <CacheName>temporal_reconstruct_motion_vectors_hlsl</CacheName>
-    </ShaderRootFiles>
-    <ShaderRootFiles Include="temporal\validate_depth.hlsl">
-      <CacheName>temporal_validate_depth_hlsl</CacheName>
-    </ShaderRootFiles>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="@(ShaderRootFiles->'shaders\%(Identity)')" />
-    <ExpandedShaderFiles Include="@(ShaderRootFiles->'$(DlssnrGeneratedDir)\expanded_shaders\%(Identity)')" />
-    <ShaderCacheFiles Include="@(ShaderRootFiles->'$(DlssnrGeneratedDir)\shader_cache\%(CacheName).cso')" />
+<!--
+    Shader roots: the .hlsl entries in ShaderSourceFiles. CacheName
+    matches the .cso name precompile_shaders.ps1 writes for the same
+    relative path, so ShaderCacheFiles addresses the produced files.
+  -->
+  
+    <ItemGroup>
+    <None Include="@(ShaderSourceFiles->'shaders\%(Identity)')" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="third_party\Detours\Detours.vcxproj">

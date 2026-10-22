@@ -37,7 +37,8 @@ $entries = @()
 foreach ($shader in $roots) {
   $rel = $shader.FullName.Substring($expandedShaderRoot.Length + 1).Replace('\','/')
   $safe = [regex]::Replace($rel, '[^A-Za-z0-9_]', '_')
-  $cso = Join-Path $csodir ($safe + '.cso')
+  $name = [System.IO.Path]::GetFileNameWithoutExtension($rel)
+  $cso = Join-Path $csodir ($name + '.cso')
   $fxcOutput = @(& $FxcPath /nologo /T cs_5_1 /E CSMain /O3 /I $shaderRoot /Fo $cso $shader.FullName 2>&1)
   $fxcExitCode = $LASTEXITCODE
   foreach ($line in $fxcOutput) {
