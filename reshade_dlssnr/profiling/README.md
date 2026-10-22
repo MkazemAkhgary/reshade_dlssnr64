@@ -1,12 +1,12 @@
-# Optick profiling policy
+# Tracy profiling policy
 
-Optick scopes are emitted through `profiling/profile.h`. The MSBuild properties
+Tracy scopes are emitted through `profiling/profile.h`. The MSBuild properties
 below become preprocessor constants, so disabled verbosity levels and domains
 compile to no-ops instead of leaving dormant per-frame instrumentation branches.
 
 | Level | Intended coverage | Cost |
 |---:|---|---|
-| 0 | No addon scopes or frame markers | Lowest; Optick source remains linked for the optional GPU integration surface |
+| 0 | No addon scopes or frame markers | Lowest; Tracy source remains linked for the optional GPU integration surface |
 | 1 | Major callbacks, frame boundaries, pass-stage entry, UI overlay entry | Low |
 | 2 | Individual pipeline steps, allocations, queue/fence operations, readback and async workers, per-dispatch CPU scopes | Moderate |
 | 3 | Deep helper paths, individual schema/settings rows, detailed validation and nested UI/ctl operations | Highest; use for short diagnostic captures |
