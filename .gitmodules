@@ -13,3 +13,8 @@
 	url = https://github.com/wolfpld/tracy
 	sparseCheckout = true
 	sparseCheckoutPaths = public/
+[submodule "reshade_dlssnr/third_party/Detours/detours"]
+	path = reshade_dlssnr/third_party/Detours/detours
+	url = https://github.com/microsoft/Detours.git
+	sparseCheckout = true
+	sparseCheckoutPaths = src/ include/
