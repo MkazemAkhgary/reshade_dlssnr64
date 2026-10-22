@@ -22,6 +22,11 @@ extern PendingPassAction g_pending_pass_action;
 // invalidate the active frame's tab layout.
 void DrawPassToolbar(Settings& settings, bool& changed);
 
+// Save/restore UI for named presets (ReShade.ini). One row per stored
+// profile; loading a profile rebuilds the settings store from that
+// profile's keys and reconciles the live session map.
+void DrawSavedProfilesSection(Settings& settings, bool& changed);
+
 void DrawStatusSection(Settings& settings, bool& changed);
 
 // Pass bookkeeping. The pass body itself is declared in the ctl schema; these
