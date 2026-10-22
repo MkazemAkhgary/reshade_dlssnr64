@@ -90,8 +90,8 @@
   <ItemGroup>
     <UpToDateCheckOutput Include="$(DlssnrGeneratedFiles)" />
     <UpToDateCheckOutput Include="$(DlssnrShaderStampDir)\generate.stamp" />
-    <UpToDateCheckOutput Include="$(DlssnrShaderStampDir)\verify.stamp" />
-    <UpToDateCheckOutput Include="$(DlssnrShaderStampDir)\precompile.stamp" />
+    <UpToDateCheckOutput Include="$(DlssnrShaderStampDir)\verify.stamp" Condition="'$(VerifyShaders)' == 'true'" />
+    <UpToDateCheckOutput Include="$(DlssnrShaderStampDir)\precompile.stamp" Condition="'$(PrecompileShaders)' == 'true'" />
   </ItemGroup>
   <!-- Rebuild removes only explicit outputs owned by this project. Unrelated
        files and directories under generated/ are preserved. -->
