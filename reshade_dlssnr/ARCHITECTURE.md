@@ -737,7 +737,7 @@ These are retained as user-reported symptoms whose root causes are not establish
 
 ## Build
 
-The project is a Visual Studio x64 DLL/addon build. Release builds use speed optimization by default. UI-only drawing, schema/UI-hook, and ctl rendering translation units override this with size optimization and disabled inline expansion; these source files are also compiled without whole-program IR so link-time optimization cannot inline their functions back into the runtime modules. Pipeline, GPU, shader-dispatch, and other runtime translation units retain speed optimization.
+The project is a Visual Studio x64 DLL/addon build. Release builds use speed optimization and whole-program optimization by default. UI-only drawing, schema/UI-hook, and ctl rendering translation units override the optimization level with size optimization and disabled inline expansion to keep those TUs small; link-time optimization still sees their functions and may inline them into the runtime modules. Pipeline, GPU, shader-dispatch, and other runtime translation units retain speed optimization.
 
 - Solution: `reshade_dlssnr.sln`
 - Project: `reshade_dlssnr.vcxproj`
