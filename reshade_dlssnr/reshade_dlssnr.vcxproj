@@ -60,6 +60,8 @@
     <ShaderSourceFiles Include="common\luma.hlsli" />
     <ShaderSourceFiles Include="common\math.hlsli" />
     <ShaderSourceFiles Include="common\params.h" />
+    <ShaderSourceFiles Include="common\temporal_helpers.hlsli" />
+    <ShaderSourceFiles Include="common\temporal_motion.hlsli" />
     <ShaderSourceFiles Include="common\registers.hlsli" />
     <ShaderSourceFiles Include="compose\compose_model_output.hlsl" />
     <ShaderSourceFiles Include="compose\compose_model_output_hdr.hlsl" />

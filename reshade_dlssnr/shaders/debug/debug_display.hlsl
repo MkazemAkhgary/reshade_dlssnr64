@@ -32,17 +32,12 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     } else if (mode == 2 || mode == 3) {
         rgb = c.rrr;
     } else if (mode == 4) {
-        // Packed HDR gain-map RGB is linear SDR. Display it directly; ReShade
-        // will perform the final presentation transform.
         rgb = c.rgb;
     } else if (mode == 5) {
-        // Alpha stores the carrier-to-HDR reconstruction multiplier; display its log2
-        // value as stops, mapped from [-4, +6] to [0, 1].
         float stops = log2(max(c.a, 1.0e-20));
         float g = saturate((stops + 4.0) / 10.0);
         rgb = g.xxx;
     } else if (mode == 9) {
-        // Exposure is shown in stops; magenta marks unavailable data.
         if (kGameExposureAvailable < 0.5) {
             rgb = float3(1.0, 0.0, 1.0);
         } else {
@@ -50,26 +45,21 @@ void CSMain(uint3 id : SV_DispatchThreadID)
             float t = saturate((stops + 4.0) / 8.0);
             rgb = t.xxx;
         }
-    } else if (mode == 10) {
-        // Candidate alpha: 0 = rejected, 1 = eligible, 2 = photometric mismatch.
-        rgb = kTemporalDebugAvailable < 0.5 ? float3(0.04, 0.12, 0.55) :
-              c.a < 0.5 ? float3(0.85, 0.04, 0.04) :
-              c.a < 1.5 ? float3(0.04, 0.80, 0.10) :
-                          float3(1.00, 0.60, 0.02);
-    } else if (mode == 11) {
-        // Validated alpha: 0 = no candidate, 1 = accepted, 2 = photo mismatch,
-        // 3 = depth/guide rejection.
-        rgb = kTemporalDebugAvailable < 0.5 ? float3(0.04, 0.12, 0.55) :
-              c.a < 0.5 ? float3(0.85, 0.04, 0.04) :
-              c.a < 1.5 ? float3(0.04, 0.80, 0.10) :
-              c.a < 2.5 ? float3(1.00, 0.60, 0.02) :
-                          float3(1.00, 0.02, 0.85);
+    } else if (mode == 10 || mode == 11) {
+        // Confidence stored in alpha, displayed as grayscale. White = fully
+        // trusted, black = no usable history. Dark blue = no candidate
+        // available this frame.
+        rgb = kTemporalDebugAvailable < 0.5
+            ? float3(0.04, 0.12, 0.55)
+            : c.a.xxx;
     } else if (mode == 12) {
-        // Per-channel log gain: neutral is gray; invalid pixels are dark.
-        rgb = kTemporalDebugAvailable < 0.5 ? float3(0.04, 0.12, 0.55) :
-              (c.a >= 0.5 && c.a < 2.5)
-            ? saturate(0.5 + c.rgb / (2.0 * 0.69314718056))
-            : float3(0.03, 0.00, 0.03);
+        // Per-channel log gain: neutral is gray; zero-confidence pixels are
+        // dark. Confidence > 0.01 is treated as a real edit.
+        rgb = kTemporalDebugAvailable < 0.5
+            ? float3(0.04, 0.12, 0.55)
+            : (c.a > 0.01
+                ? saturate(0.5 + c.rgb / (2.0 * 0.69314718056))
+                : float3(0.03, 0.00, 0.03));
     } else {
         rgb = c.rgb;
     }

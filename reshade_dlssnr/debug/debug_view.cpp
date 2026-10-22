@@ -185,13 +185,15 @@ const DebugViewDef kDebugViews[] = {
      "values move toward white/black. Magenta means no valid value was read.",
      DebugDisplayMode::GameExposure, SelectSource},
     {"Temporal Candidate Status",
-     "Status of the motion-reprojected prior edit before depth validation: "
-     "red = rejected motion/history/coordinates, green = eligible, yellow = "
-     "photometric mismatch. Unavailable until a previous edit can be reprojected.",
+     "Reprojection confidence before depth validation, shown as grayscale "
+     "(white = fully trusted, black = rejected). Confidence combines local "
+     "edit-clamp agreement, photometric agreement, and previous confidence. "
+     "Unavailable until a previous edit can be reprojected.",
      DebugDisplayMode::TemporalCandidateStatus, SelectTemporalCandidate},
     {"Temporal Validation Status",
-     "Status after depth validation: red = no candidate, green = accepted, "
-     "yellow = photometric mismatch, magenta = invalid depth or guide mapping.",
+     "Confidence after depth validation, shown as grayscale. Confidence "
+     "scales the applied edit weight; low values fade the edit toward the "
+     "input.",
      DebugDisplayMode::TemporalValidationStatus, SelectTemporalValidatedCandidate},
     {"Temporal Reprojected Edit",
      "Validated per-channel log-gain from the previous frame, mapped so "

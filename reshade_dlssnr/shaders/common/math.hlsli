@@ -2,6 +2,9 @@
 
 #include "bindings.hlsli"
 
+// Natural log of 2: the log-gain <-> linear-gain conversion constant.
+static const float kLn2 = 0.69314718056;
+
 
 float SoftCompress(float x, float max_pos, float max_neg, float knee)
 {

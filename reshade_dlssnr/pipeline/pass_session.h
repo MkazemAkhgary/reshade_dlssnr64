@@ -299,6 +299,11 @@ class PassSession {
   bool synthetic_motion_history_valid_ = false;
   uint64_t synthetic_motion_history_frame_ = 0;
   bool temporal_feedback_valid_ = false;
+  // Frames spent waiting for the first usable temporal feedback
+  // sample. If this exceeds a small bound the readback is treated as
+  // unavailable and reuse is allowed with a conservative estimate, so
+  // a broken feedback path cannot disable reuse permanently.
+  uint32_t temporal_feedback_wait_frames_ = 0;
   float temporal_invalid_fraction_ = 1.0f;
   uint64_t temporal_last_refresh_frame_ = 0;
   uint64_t temporal_last_frame_id_ = 0;

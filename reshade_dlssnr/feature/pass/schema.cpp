@@ -270,7 +270,7 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .Tooltip("Reject reprojection when motion exceeds this many working-" 
                "resolution pixels.");
   pass.Add<ctl::FloatSetting>(kTemporalMaxInvalidPercent,
-                              "Max Invalid %", 5.0f)
+                              "Max Invalid %", 15.0f)
       .ClampRange(1.0f, 50.0f)
       .EnableWhen(&TemporalEnabled)
       .Category(kCatTemporal)

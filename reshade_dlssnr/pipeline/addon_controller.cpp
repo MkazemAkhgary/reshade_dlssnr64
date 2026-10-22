@@ -465,6 +465,22 @@ void AddonController::OnPresent(
           "DLSSNR: deferred resource release / temporal feedback; GPU queue marker failed");
     }
   } else if (need_queue_marker) {
+    // The release list could not be opened (for example because the
+    // command context failed to initialize). The temporal feedback copy
+    // was still recorded on the game's list with a predicted fence value.
+    // Signal that value directly on the queue so the readback can complete;
+    // otherwise can_skip is permanently false and the model runs every
+    // frame while the temporal passes are pure overhead.
+    if (temporal_feedback_pending_ && command_queue != nullptr) {
+      ID3D12Fence* feedback_fence = release_command_.GetFence();
+      const uint64_t predicted = release_command_.GetNextFenceValue() - 1;
+      if (feedback_fence != nullptr && predicted != 0) {
+        command_queue->Signal(feedback_fence, predicted);
+        temporal_feedback_pending_ = false;
+        TRACE_EVT(this, "feedback_fence_direct_signal value=%llu",
+                  static_cast<unsigned long long>(predicted));
+      }
+    }
     reshade::log::message(
         reshade::log::level::warning,
         "DLSSNR: deferred resource release; GPU queue marker unavailable");

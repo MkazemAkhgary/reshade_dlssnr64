@@ -286,6 +286,12 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
     self->temporal_feedback_valid_ = false;
     self->temporal_invalid_fraction_ = 1.0f;
     self->temporal_last_refresh_frame_ = 0;
+    // A settings change must not be masked by the fallback that forces reuse
+    // when stats never arrive. Without this reset, a slider edit changes the
+    // constants but the fallback immediately re-arms reuse on the next frame,
+    // so the new values are never given a frame in which to drain and take
+    // visible effect.
+    self->temporal_feedback_wait_frames_ = 0;
   }
   self->temporal_last_mode_ = mode;
   self->temporal_settings_signature_ = signature;
@@ -362,11 +368,13 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
       if (sample_valid) {
         self->temporal_invalid_fraction_ = fraction;
         self->temporal_feedback_valid_ = true;
+        self->temporal_feedback_wait_frames_ = 0;
       } else if (fraction >= 1.0f && !self->temporal_history_valid_) {
         self->temporal_feedback_valid_ = false;
       }
     }
   }
+
 
   const bool duplicate_frame = run.frame_id != 0 &&
       run.frame_id == self->temporal_last_frame_id_;
@@ -409,26 +417,16 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
   constants.temporal.Thresholds.w =
       run.pass_state.temporal_depth_rel_threshold;
   constants.temporal.MotionLimits.x = run.pass_state.temporal_max_displacement;
-  ID3D12Resource* repeated_srvs[kSrvCount] = {
-      run.model_color, run.model_color, run.model_color, run.model_color};
-  ID3D12Resource* stats_uavs[kUavCount] = {stats};
-  if (!run.codec->Dispatch("TemporalClearStats", list, constants,
-                           repeated_srvs, stats_uavs, 1, 1, 1)) {
-    self->temporal_history_valid_ = false;
-    self->temporal_feedback_valid_ = false;
-    run.temporal_active = false;
-    TRACE_EVT(self, "temporal fallback pass=%u reason=clear_stats", self->pass_id_);
-    return PipelineStatus::Ok;
-  }
-  self->command_.UavBarrier(list, stats);
-
+  // The stats buffer is cleared at the start of the reproject dispatch
+  // (see reproject_edit.hlsl) rather than by a separate TemporalClearStats
+  // dispatch. This removes one full-resolution pass per frame.
   bool have_candidate = self->temporal_history_valid_ && !contract_changed &&
       previous_input != nullptr && previous_edit != nullptr &&
       previous_depth != nullptr;
   if (have_candidate) {
     ID3D12Resource* reproject_srvs[kSrvCount] = {
         run.model_color, previous_input, previous_edit, run.guides.motion};
-    ID3D12Resource* candidate_uavs[kUavCount] = {candidate};
+    ID3D12Resource* candidate_uavs[kUavCount] = {candidate, stats};
     constants.temporal.MotionScaleBase.x = run.guides.mv_scale_x;
     constants.temporal.MotionScaleBase.y = run.guides.mv_scale_y;
     constants.temporal.MotionScaleBase.z =
@@ -460,6 +458,9 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
       return PipelineStatus::Ok;
     }
     self->command_.UavBarrier(list, candidate);
+    // Stats is written by reproject (clear) and validate (atomic counts);
+    // a UAV barrier between them makes the clear visible to the atomics.
+    self->command_.UavBarrier(list, stats);
     self->command_.Transition(list, candidate,
                               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
@@ -503,20 +504,58 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
     self->command_.Transition(list, stats, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   }
 
+  // Bounded fallback: if the readback never completes, allow reuse with a
+  // conservative invalid fraction after a few frames. A dead feedback path
+  // must not disable reuse forever; the per-pixel confidence blend still
+  // limits ghosting, and the fallback fraction is deliberately low enough
+  // that the reuse gate can open.
+  if (!self->temporal_feedback_valid_ && have_candidate) {
+    ++self->temporal_feedback_wait_frames_;
+    if (self->temporal_feedback_wait_frames_ > 4) {
+      self->temporal_invalid_fraction_ = 0.0f;
+      self->temporal_feedback_valid_ = true;
+      TRACE_EVT(self, "temporal feedback fallback activated pass=%u",
+                self->pass_id_);
+      static bool logged = false;
+      if (!logged) {
+        logged = true;
+        reshade::log::message(
+            reshade::log::level::warning,
+            "DLSSNR: temporal feedback readback did not complete; reuse "
+            "allowed with a conservative invalid-fraction estimate");
+      }
+    }
+  }
+
   const uint64_t age = run.frame_id >= self->temporal_last_refresh_frame_
       ? run.frame_id - self->temporal_last_refresh_frame_ : UINT64_MAX;
   uint64_t cadence = 4;
   if (mode == 2) cadence = 2;
-  // Adaptive and Every 4 both have a hard four-frame maximum age. Adaptive's
-  // refresh is driven by the same validation threshold; Every 4 adds the
-  // deterministic cadence floor, while failed validation always refreshes.
+  // The per-pixel confidence blend in apply_edit already limits ghosting at
+  // pixel granularity; a low-confidence pixel fades to the current input
+  // rather than showing the stale edit. The invalid fraction is a population
+  // statistic ("X% of pixels had low-confidence edit this frame"), not a
+  // whole-frame "history is unusable" verdict, and gating reuse on it
+  // disables reuse whenever the scene moves -- which is most of the time,
+  // and is exactly what a temporal filter exists to smooth.
+  //
+  // So the invalid fraction does not gate reuse. It shortens the cadence:
+  // above the user's configured max_invalid%, the reuse window halves so
+  // fresh evaluations arrive twice as often, bounding staleness without
+  // turning reuse off. Below it, the configured cadence applies.
   float max_invalid_percent = run.pass_state.temporal_max_invalid_percent;
   max_invalid_percent = std::clamp(max_invalid_percent, 1.0f, 50.0f);
   const float max_invalid_fraction = max_invalid_percent * 0.01f;
+  const bool invalid_high = self->temporal_invalid_fraction_ >= max_invalid_fraction;
+  uint64_t effective_cadence = cadence;
+  if (invalid_high) {
+    // At least 2 so a hypothetical cadence of 1 cannot bypass reuse entirely.
+    effective_cadence = cadence >= 4 ? 2u : std::max<uint64_t>(2u, cadence);
+  }
   const bool can_skip = have_candidate && !duplicate_frame && run.frame_id != 0 &&
       self->temporal_feedback_valid_ &&
-      self->temporal_invalid_fraction_ < max_invalid_fraction &&
-      self->temporal_last_refresh_frame_ != 0 && age > 0 && age < cadence;
+      self->temporal_last_refresh_frame_ != 0 && age > 0 &&
+      age < effective_cadence;
   if (can_skip) {
     self->command_.Transition(list, validated,
                               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -543,6 +582,25 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
 
   if (!run.temporal_reuse && run.frame_id != 0 && !duplicate_frame) {
     self->temporal_last_refresh_frame_ = run.frame_id;
+
+    // Trace the reason a frame that had a candidate and valid feedback did
+    // not reuse. Without this, "reuse is not firing" is only visible as an
+    // absence of trace events, which is the wrong shape for diagnosis.
+    if (have_candidate && self->temporal_feedback_valid_) {
+      const char* reason =
+          (self->temporal_last_refresh_frame_ == 0) ? "no_history" :
+          (age == 0) ? "age_zero" :
+          (age >= effective_cadence) ? "cadence_elapsed" :
+          "unknown";
+      TRACE_EVT(self, "temporal refresh pass=%u reason=%s "
+                "age=%llu cadence=%llu invalid=%.4f invalid_high=%d "
+                "mode=%d",
+                self->pass_id_, reason,
+                static_cast<unsigned long long>(age),
+                static_cast<unsigned long long>(effective_cadence),
+                self->temporal_invalid_fraction_,
+                invalid_high ? 1 : 0, mode);
+    }
   }
   return PipelineStatus::Ok;
 }
