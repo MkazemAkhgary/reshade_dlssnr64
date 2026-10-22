@@ -2276,15 +2276,31 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
   const model_pipeline::HdrUniforms* hdr_ptr =
       hdr_active ? &run.hdr_uniforms : nullptr;
 
+  // Restore exposure applies to the model output at every intensity, so the
+  // composition must see the model output (and its restored scale) even when
+  // intensity is zero. Bypass the model output only when no such correction
+  // is active.
+  const bool restore_exposure_active =
+      hdr_active &&
+      run.hdr_state.enable &&
+      run.hdr_state.local_exposure.enabled &&
+      run.hdr_state.local_exposure.restore_exposure &&
+      run.hdr_uniforms.local_exposure_strength > 0.0f &&
+      run.hdr_state.local_exposure.restore_strength > 0.0f &&
+      self->resources_.GetPackedOutput() != nullptr &&
+      self->resources_.GetGlobalHdrCarrier() != nullptr;
+  const bool bypass_model =
+      run.pass_state.intensity <= 0.0f && !restore_exposure_active;
+
   // Intensity == 0 means the model edit is explicitly disabled. Use the
   // exact model input as the compose reference so NGX/evaluation noise cannot
   // create a residual when the model output is intentionally bypassed.
   ID3D12Resource* enhanced_for_compose =
-      run.pass_state.intensity <= 0.0f ? run.model_color : run.model_output;
+      bypass_model ? run.model_color : run.model_output;
 
   ID3D12Resource* compose_input = run.compose_reference;
   if (compose_input == nullptr) compose_input = run.model_input;
-  if (hdr_active && run.pass_state.intensity > 0.0f &&
+  if (hdr_active && !bypass_model &&
       run.hdr_uniforms.local_exposure_strength > 0.0f &&
       self->resources_.GetUnliftedWorkingInput() != nullptr) {
     compose_input = self->resources_.GetUnliftedWorkingInput();
@@ -2299,9 +2315,6 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
       run.model_color != nullptr && run.model_output != nullptr;
   if (apply_edit_to_pre_grade) {
     compose_input = run.model_color;
-    enhanced_for_compose = run.pass_state.intensity <= 0.0f
-                               ? run.model_color
-                               : run.model_output;
   }
 
   if (!model_pipeline::ComposeOutput(
