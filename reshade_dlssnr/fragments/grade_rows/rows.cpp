@@ -85,7 +85,7 @@ void Declare(ctl::Section& section, const std::string& prefix,
 
   group(section.Add<ctl::FloatSetting>(named(names::kLuma).c_str(), "Brightness",
                                        0.0f))
-      .ClampRange(-1.0f, 1.0f)
+      .ClampRange(-2.0f, 2.0f)
       .Tooltip("In Exposure mode, the value is in stops (-1 halves linear light; +1 doubles it). Other modes use their own brightness curve.");
 
   group(section.Add<ctl::EnumSetting>(named(names::kChromaMode).c_str(),
@@ -96,7 +96,7 @@ void Declare(ctl::Section& section, const std::string& prefix,
 
   group(section.Add<ctl::FloatSetting>(named(names::kChroma).c_str(), "Saturation",
                                        0.0f))
-      .ClampRange(-0.95f, 1.0f)
+      .ClampRange(-1.0f, 1.5f)
       .Tooltip("Adjusts perceptual chroma in OKLab. Out-of-gamut colors are compressed "
                "toward the neutral axis to avoid channel-clipping artifacts.");
 

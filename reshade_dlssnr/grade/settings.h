@@ -40,10 +40,13 @@ struct GradeSettings {
   float cas_sharpness = 0.5f;
 };
 
-constexpr float kGradeBlackLevelMin = -0.25f;
-constexpr float kGradeBlackLevelMax =  0.12f;
+// Bounds chosen so the levels curve stays useful: past ~0.2 the black point
+// eats the whole shadow range, and below ~0.7 the white point has nothing left
+// to compress.
+constexpr float kGradeBlackLevelMin = -0.40f;
+constexpr float kGradeBlackLevelMax =  0.20f;
 
-constexpr float kGradeWhiteLevelMin =  0.90f;
-constexpr float kGradeWhiteLevelMax =  1.5f;
+constexpr float kGradeWhiteLevelMin =  0.70f;
+constexpr float kGradeWhiteLevelMax =  2.00f;
 
 }  // namespace reshade_dlssnr

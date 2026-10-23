@@ -14,8 +14,9 @@ bool GradeIsSdr()
 float GradeLevelsFwd(float lightness, bool sdr)
 {
     float result = lightness;
-    const float black = clamp(kGradeBlackLevel, -0.25, 0.12);
-    const float white = max(clamp(kGradeWhiteLevel, 0.90, 1.5), black + 0.05);
+    // Must match kGradeBlackLevel*/kGradeWhiteLevel* in grade/settings.h.
+    const float black = clamp(kGradeBlackLevel, -0.40, 0.20);
+    const float white = max(clamp(kGradeWhiteLevel, 0.70, 2.00), black + 0.05);
     result = (lightness - black) / (white - black);
     if (sdr)
         result = saturate(result);
