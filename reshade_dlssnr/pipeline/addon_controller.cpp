@@ -682,6 +682,20 @@ StatusSnapshot AddonController::GetStatus() const {
   return status_;
 }
 
+void AddonController::SetPreDlssBlocked(const char* reason) {
+  std::lock_guard<std::mutex> lock(g_direct_mutex);
+
+  if (reason == nullptr || reason[0] == '\0') {
+    pre_dlss_blocked_ = false;
+    pre_dlss_block_reason_[0] = '\0';
+    return;
+  }
+
+  pre_dlss_blocked_ = true;
+  std::snprintf(pre_dlss_block_reason_, sizeof(pre_dlss_block_reason_), "%s",
+                reason);
+}
+
 void AddonController::SetPostDlssBlocked(const char* reason) {
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
@@ -743,6 +757,8 @@ void AddonController::FinishRestartAfterFence() {
   runtime_.Shutdown();
   post_dlss_blocked_ = false;
   post_dlss_block_reason_[0] = '\0';
+  pre_dlss_blocked_ = false;
+  pre_dlss_block_reason_[0] = '\0';
   status_.Reset();
   restart_waiting_for_fence_ = false;
   restart_fence_value_ = 0;
@@ -803,6 +819,13 @@ void AddonController::RefreshStatus(const Settings& settings) {
     std::snprintf(status_.post_dlss_block_reason,
                   sizeof(status_.post_dlss_block_reason), "%s",
                   post_dlss_block_reason_);
+  }
+
+  status_.pre_dlss_blocked = pre_dlss_blocked_;
+  if (pre_dlss_blocked_) {
+    std::snprintf(status_.pre_dlss_block_reason,
+                  sizeof(status_.pre_dlss_block_reason), "%s",
+                  pre_dlss_block_reason_);
   }
 
   HdrSnapshot hdr = {};

@@ -74,6 +74,10 @@ class AddonController {
   // so the value only persists while the condition does.
   void SetPostDlssBlocked(const char* reason);
 
+  // Same contract for the Pre-DLSS stage: nullptr clears, anything else is a
+  // reason the stage cannot run in this game.
+  void SetPreDlssBlocked(const char* reason);
+
   // Copies frame_debug.output to the swapchain backbuffer. The debug image
   // was already rendered (at pass time) into a resource we own; this is
   // purely a present-time override so the game's rendering is unaffected.
@@ -261,6 +265,8 @@ class AddonController {
   // status snapshot by RefreshStatus.
   bool post_dlss_blocked_ = false;
   char post_dlss_block_reason_[kStatusTextLength] = {};
+  bool pre_dlss_blocked_ = false;
+  char pre_dlss_block_reason_[kStatusTextLength] = {};
 };
 
 }  // namespace reshade_dlssnr

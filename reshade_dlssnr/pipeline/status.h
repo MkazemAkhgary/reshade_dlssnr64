@@ -58,6 +58,12 @@ struct StatusSnapshot {
   bool post_dlss_blocked = false;
   char post_dlss_block_reason[kStatusTextLength] = {};
 
+  // Pre-DLSS path blocked for this game. Ray Reconstruction is the current
+  // case: its Color arrives through a subrect the compact-color path cannot
+  // rewrite safely, so the stage is skipped rather than risking the GPU.
+  bool pre_dlss_blocked = false;
+  char pre_dlss_block_reason[kStatusTextLength] = {};
+
   // HDR stage (shared across Pre-DLSS/Post-DLSS game-resource passes).
   bool hdr_ready = false;        // has consumed at least one measurement
   float hdr_exposure = 1.0f;
@@ -83,6 +89,8 @@ struct StatusSnapshot {
     guides_valid = false;
     post_dlss_blocked = false;
     std::fill_n(post_dlss_block_reason, kStatusTextLength, '\0');
+    pre_dlss_blocked = false;
+    std::fill_n(pre_dlss_block_reason, kStatusTextLength, '\0');
 
     hdr_ready = false;
     hdr_exposure = 0.0f;
