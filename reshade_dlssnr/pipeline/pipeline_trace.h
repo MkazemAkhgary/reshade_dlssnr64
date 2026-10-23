@@ -31,6 +31,14 @@
 
 #include <d3d12.h>
 
+// Compile-time gate. Off strips every TRACE_* macro and reduces the
+// trace entry points to empty functions, so no format string or line
+// writer survives in the binary. DLSSNR_TRACE still selects whether a
+// build that has tracing compiled in writes anything at runtime.
+#ifndef DLSSNR_TRACE_ENABLED
+#define DLSSNR_TRACE_ENABLED 0
+#endif
+
 namespace reshade_dlssnr::trace {
 
 // Reads DLSSNR_TRACE once. Safe to call from any thread; idempotent.
@@ -120,6 +128,14 @@ const char* StatePairName(D3D12_RESOURCE_STATES before,
 
 }  // namespace reshade_dlssnr::trace
 
+#if !DLSSNR_TRACE_ENABLED
+
+#define TRACE_CMD(obj, ...) ((void)0)
+#define TRACE_EVT(obj, ...) ((void)0)
+#define TRACE_CFG(...) ((void)0)
+
+#else
+
 // Record a command when tracing is on. `obj` identifies the owning object
 // (CommandContext*, ComputeEngine*, PassSession*) so concurrent streams can
 // be told apart.
@@ -153,3 +169,5 @@ const char* StatePairName(D3D12_RESOURCE_STATES before,
                                     __VA_ARGS__);                    \
     }                                                                \
   } while (0)
+
+#endif  // !DLSSNR_TRACE_ENABLED

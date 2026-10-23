@@ -10,6 +10,33 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+#if !DLSSNR_TRACE_ENABLED
+
+// Tracing compiled out: the entry points stay so callers do not need their own
+// #if, and every one of them folds to a constant.
+namespace reshade_dlssnr::trace {
+
+void TraceInit() {}
+bool Enabled() { return false; }
+int ResourceId(const void*) { return -1; }
+const char* ResourceName(const void*) { return nullptr; }
+const char* ResourceNameOr(const void*, const char* fallback) { return fallback; }
+void NameResource(const void*, const char*) {}
+void Line(const char*, const char*, const void*, const char*, ...) {}
+void Flush() {}
+uint64_t BeginFrame(FrameStream) { return 0; }
+void EndFrame(FrameStream) {}
+void Shutdown() {}
+const char* StateName(D3D12_RESOURCE_STATES) { return "UNKNOWN"; }
+const char* StatePairName(D3D12_RESOURCE_STATES, D3D12_RESOURCE_STATES) {
+  return "UNKNOWN";
+}
+
+}  // namespace reshade_dlssnr::trace
+
+#else
+
 namespace reshade_dlssnr::trace {
 
 namespace {
@@ -348,3 +375,5 @@ TraceShutdown g_trace_shutdown;
 }  // namespace
 
 }  // namespace reshade_dlssnr::trace
+
+#endif  // !DLSSNR_TRACE_ENABLED
