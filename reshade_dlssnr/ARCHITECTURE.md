@@ -680,7 +680,7 @@ Use Status for information that must remain visible as current state. Do not rep
 
 ### Pipeline trace
 
-Set `DLSSNR_TRACE=<path>` to enable the command/event trace. The trace maintains separate counters for `PreDLSS`, `PostDLSS`, and `Present` streams, assigns stable resource ids in first-seen order, and records frame boundaries. `TRACE_CMD` covers resource transitions, barriers, copies and dispatches; `TRACE_EVT` records control-flow decisions such as skips and failures.
+Set `DLSSNR_TRACE=<path>` to enable the command/event trace. The macros and the writer are compiled in by default; `DlssnrTraceEnabled=false` removes them from the binary. The trace maintains separate counters for `PreDLSS`, `PostDLSS`, and `Present` streams, assigns stable resource ids in first-seen order, and records frame boundaries. `TRACE_CMD` covers resource transitions, barriers, copies and dispatches; `TRACE_EVT` records control-flow decisions such as skips and failures.
 
 Because trace lines are intentionally flushed immediately, the file is suitable for diagnosing the final commands leading into a crash. The trace should still be bounded to a deterministic test scene because a full frame contains many transitions and dispatches.
 
@@ -692,7 +692,7 @@ When tracing is enabled, `ctl::TraceRecorder` enumerates registered sections, in
 
 ### CPU/GPU profiling
 
-Profiling uses the external Tracy source tree at `third_party/tracy` (the user supplies the submodule; it is not vendored by this project). The Visual Studio project compiles `public/TracyClient.cpp` into the addon and includes `public` and `public/tracy` for headers. CPU zones are emitted through the `ZoneScopedN` family; `FrameMark` marks the end of each Present. GPU zones are recorded with `TracyD3D12Zone` against a `TracyD3D12Context` created once for the native ReShade D3D12 device and graphics queue; the context is collected at Present via `TracyD3D12Collect`. GPU profiling is opt-in at verbosity 2 or higher. Use the Tracy GUI to capture and inspect CPU/GPU timelines.
+Profiling uses the external Tracy source tree at `third_party/tracy` (the user supplies the submodule; it is not vendored by this project), with `public` and `public/tracy` on the include path. CPU zones are emitted through the `ZoneScopedN` family; `FrameMark` marks the end of each Present. GPU zones are recorded with `TracyD3D12Zone` against a `TracyD3D12Context` created once for the native ReShade D3D12 device and graphics queue; the context is collected at Present via `TracyD3D12Collect`. Use the Tracy GUI to capture and inspect CPU/GPU timelines.
 
 ## Extending
 
@@ -775,13 +775,21 @@ The project is a Visual Studio x64 DLL/addon build. Release builds use speed opt
 - Debug output: `build\Debug\reshade_dlssnr64.addon64`
 - Linked system/local libraries: `d3d12.lib`, `dxgi.lib`, `detours.lib`, `d3dcompiler.lib`
 
-MSBuild shader properties:
+MSBuild switches. Every one is a project property with a default, so a build only has to pass the ones it wants to change (`/p:Name=value`); the defaults are what a plain build produces.
 
-| Property | Default | Meaning |
+| Property | Default | Effect |
 |---|---|---|
 | `VerifyShaders` | `true` | Run FXC verification before the C++ compile |
 | `PrecompileShaders` | `false` | Generate embedded shader bytecode instead of using the empty bytecode table |
 | `FxcPath` | auto-detected | Optional explicit path to x64 `fxc.exe` |
+| `DlssnrTracyEnabled` | `true` | Compile `third_party/tracy/public/TracyClient.cpp` in and define `TRACY_ENABLE`, `TRACY_ON_DEMAND`, `TRACY_NO_BROADCAST`. Off removes the profiler from the binary; `profiling/profile.h` then expands every zone macro to nothing. |
+| `DlssnrProfileVerbosity` | `1` | `DLSSNR_PROFILE_VERBOSITY`. Zones above this level are compiled out; GPU zones need 2 or more. |
+| `DlssnrProfileDomainCore` | `1` | One `DLSSNR_PROFILE_DOMAIN_*` per subsystem (`Core`, `Render`, `Resource`, `Async`, `Ui`, `Ctl`). Zero compiles that domain's zones out and leaves the rest. |
+| `DlssnrProfileDomainGpu` | `0` | Same, for the GPU zones. |
+| `DlssnrTraceEnabled` | `true` | `DLSSNR_TRACE_ENABLED`. Off compiles the pipeline trace out entirely: `TRACE_CMD`, `TRACE_EVT` and `TRACE_CFG` become `((void)0)` and the trace entry points in `pipeline_trace.cpp` become empty functions, so no format string or file writer survives. |
+| `DlssnrMutexCompatibility` | `true` | `_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR`, described below. |
+
+`DlssnrMutexCompatibility` exists because `std::mutex` construction is not ABI-neutral. The current toolset builds the critical section in situ and imports only `_Mtx_lock`/`_Mtx_unlock`; a game that ships an older `msvcp140.dll` (Alan Wake 2 ships 14.34) resolves those against a critical-section pointer that was never allocated, and the first lock faults. The switch makes the constructor call `_Mtx_init_in_situ` on the runtime that is actually loaded, so the layout matches whatever the game brought. Turning it off is safe only when every target runtime is at least the toolset's own version; leaving it on costs a heap allocation per `std::mutex` construction and makes the type non-`constexpr`-constructible.
 
 The shader target order is:
 
