@@ -68,7 +68,7 @@ $out += 'const EmbeddedShaderBytecode kEmbeddedShaderBytecodes[] = {'
 foreach ($e in $entries) {
   $safe = [regex]::Replace($e.Name, '[^A-Za-z0-9_]', '_')
   $sym = 'kEmbeddedShaderBytecode_' + $safe
-  $out += "  {\"$($e.Name)\", $sym, sizeof($sym)},"
+  $out += ('  {{"{0}", {1}, sizeof({1})}},' -f $e.Name, $sym)
 }
 $out += '};'
 $out += 'const std::size_t kEmbeddedShaderBytecodeCount = sizeof(kEmbeddedShaderBytecodes) / sizeof(kEmbeddedShaderBytecodes[0]);'
