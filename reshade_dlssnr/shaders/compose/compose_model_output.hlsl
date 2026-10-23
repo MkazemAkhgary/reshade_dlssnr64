@@ -105,7 +105,12 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     residual_log = clamp(residual_log,
                          log(max(kRatioDarken, 1e-4)),
                          log(max(kRatioBrighten, 1e-4)));
-    const float3 residual_shaped = ShapeResidualSdr(residual_log, original.rgb);
+    // Region protection has to be evaluated in the domain the edit was measured
+    // in. With kApplyEditToPreGrade the endpoints are the graded image while
+    // the base is the pre-grade one, so the base's luma would protect the wrong
+    // regions and the edit would land with the wrong strength there.
+    const float3 protection_rgb = kApplyEditToPreGrade > 0.5 ? in_rgb : original.rgb;
+    const float3 residual_shaped = ShapeResidualSdr(residual_log, protection_rgb);
     float3 edited = original.rgb * exp(residual_shaped);
     float3 final_rgb = BlendYCbCr(original.rgb, edited,
                                   kLumaStrength, kChromaStrength);
