@@ -26,6 +26,11 @@
     <DlssnrGeneratedFiles>$(DlssnrGeneratedDir)\shader_sources.cpp;$(DlssnrGeneratedDir)\shader_sources.h;$(DlssnrGeneratedDir)\shader_bytecode.cpp;$(DlssnrGeneratedDir)\shader_bytecode.h</DlssnrGeneratedFiles>
     <VerifyShaders Condition="'$(VerifyShaders)' == ''">true</VerifyShaders>
     <PrecompileShaders Condition="'$(PrecompileShaders)' == ''">false</PrecompileShaders>
+    <!-- The two bytecode tables define the same symbols. Each build compiles
+         exactly one of them so a precompiled table cannot survive into a
+         runtime-compile build. -->
+    <DlssnrBytecodeSource Condition="'$(PrecompileShaders)' == 'true'">generated\shader_bytecode_precompiled.cpp</DlssnrBytecodeSource>
+    <DlssnrBytecodeSource Condition="'$(PrecompileShaders)' != 'true'">generated\shader_bytecode.cpp</DlssnrBytecodeSource>
     <DlssnrMutexCompatibility Condition="'$(DlssnrMutexCompatibility)' == ''">true</DlssnrMutexCompatibility>
     <DlssnrMutexDefine Condition="'$(DlssnrMutexCompatibility)' == 'true'">_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;</DlssnrMutexDefine>
     <DlssnrTraceEnabled Condition="'$(DlssnrTraceEnabled)' == ''">true</DlssnrTraceEnabled>
@@ -98,6 +103,7 @@
     <UpToDateCheckOutput Include="$(DlssnrShaderStampDir)\generate.stamp" />
     <UpToDateCheckOutput Include="$(DlssnrShaderStampDir)\verify.stamp" Condition="'$(VerifyShaders)' == 'true'" />
     <UpToDateCheckOutput Include="$(DlssnrShaderStampDir)\precompile.stamp" Condition="'$(PrecompileShaders)' == 'true'" />
+    <UpToDateCheckOutput Include="$(DlssnrGeneratedDir)\shader_bytecode_precompiled.cpp" Condition="'$(PrecompileShaders)' == 'true'" />
   </ItemGroup>
   <!-- Rebuild removes only explicit outputs owned by this project. Unrelated
        files and directories under generated/ are preserved. -->
@@ -116,7 +122,7 @@
   </Target>
 
   <Target Name="CleanGeneratedShaderOutputsBeforeRebuild" BeforeTargets="Rebuild" DependsOnTargets="PrepareShaderItems">
-    <Delete Files="$(DlssnrGeneratedFiles);$(DlssnrShaderStampDir)\generate.stamp;$(DlssnrShaderStampDir)\verify.stamp;$(DlssnrShaderStampDir)\precompile.stamp;@(ExpandedShaderFiles);@(ShaderCacheFiles)" />
+    <Delete Files="$(DlssnrGeneratedFiles);$(DlssnrGeneratedDir)\shader_bytecode_precompiled.cpp;$(DlssnrShaderStampDir)\generate.stamp;$(DlssnrShaderStampDir)\verify.stamp;$(DlssnrShaderStampDir)\precompile.stamp;@(ExpandedShaderFiles);@(ShaderCacheFiles)" />
   </Target>
   <Target Name="ValidateFxcPath" Condition="('$(VerifyShaders)' == 'true' or '$(PrecompileShaders)' == 'true') and '$(FxcPath)' == ''">
     <Error Text="FxcPath is not set. Set /p:FxcPath=... or ensure a Windows SDK is installed." />
@@ -155,6 +161,7 @@
     <Touch Files="$(DlssnrShaderStampDir)\precompile.stamp" AlwaysCreate="true" />
     <ItemGroup>
       <FileWrites Include="$(DlssnrShaderStampDir)\precompile.stamp" />
+      <FileWrites Include="$(DlssnrGeneratedDir)\shader_bytecode_precompiled.cpp" />
       <FileWrites Include="@(ShaderCacheFiles)" />
     </ItemGroup>
   </Target>
@@ -352,7 +359,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <ForcedIncludeFiles></ForcedIncludeFiles>
     </ClCompile>
-    <ClCompile Include="generated\shader_bytecode.cpp">
+    <ClCompile Include="$(DlssnrBytecodeSource)">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <ForcedIncludeFiles></ForcedIncludeFiles>
     </ClCompile>
