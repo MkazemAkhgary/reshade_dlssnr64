@@ -254,13 +254,20 @@ namespace pass {
 
 // Hook body for the last row of the Temporal Reprojection category. The
 // category header owns the collapsible; this only draws the readout.
-bool DrawTemporalStats(const void* /*context*/, ctl::ValueStore& /*store*/,
+//
+// Every row is always drawn. Rows that appear only once data exists change the
+// block's height while the user is watching it, which shifts everything below
+// the category on and off the cursor.
+bool DrawTemporalStats(const void* /*context*/, ctl::ValueStore& store,
                        const ctl::DrawOptions& /*options*/,
-                       const std::string& /*section*/,
-                       const ctl::InstanceKey& /*key*/, bool& /*changed*/) {
+                       const std::string& section,
+                       const ctl::InstanceKey& key, bool& /*changed*/) {
   DLSSNR_PROFILE_UI_L3("DrawTemporalStats");
+  if (store.Read(section, key, kTemporalMode).as_int == 0) return true;
+
   IndentScope indent;
-  const temporal_stats::Snapshot& snap = temporal_stats::Get();  auto row = [](const char* label, const ImVec4& color, const char* value,
+  const temporal_stats::Snapshot& snap = temporal_stats::Get();
+  auto row = [](const char* label, const ImVec4& color, const char* value,
                 const char* tooltip) {
     const float h = ImGui::GetTextLineHeight();
     const ImVec2 p = ImGui::GetCursorScreenPos();
@@ -276,61 +283,73 @@ bool DrawTemporalStats(const void* /*context*/, ctl::ValueStore& /*store*/,
     }
   };
 
-  if (!snap.active) {
-    row("Temporal", ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "idle",
-        "No pass has run a temporal step since the addon was last reloaded.");
-    return true;
-  }
-
   const ImVec4 kGood(0.4f, 0.9f, 0.4f, 1.0f);
   const ImVec4 kWarn(0.95f, 0.75f, 0.3f, 1.0f);
   const ImVec4 kBad(0.9f, 0.4f, 0.4f, 1.0f);
-
-  const uint64_t total = snap.reuse_frames + snap.refresh_frames;
-  const float reuse_percent = total == 0
-      ? 0.0f
-      : 100.0f * static_cast<float>(snap.reuse_frames) /
-            static_cast<float>(total);
+  const ImVec4 kIdle(0.6f, 0.6f, 0.6f, 1.0f);
 
   char buf[128];
-  std::snprintf(buf, sizeof(buf), "%s · age %llu/%llu",
-                snap.reuse ? "reuse (NGX skipped)" : "refresh (NGX ran)",
-                static_cast<unsigned long long>(snap.age),
-                static_cast<unsigned long long>(snap.cadence));
-  row("This frame", snap.reuse ? kGood : kWarn, buf,
-      "Whether the model was evaluated this frame. The age/cadence pair is "
-      "the frames since the last evaluation over the effective reuse window.");
+  if (!snap.active) {
+    row("This frame", kIdle, "idle",
+        "No pass has run a temporal step since the addon was last reloaded.");
+  } else {
+    std::snprintf(buf, sizeof(buf), "%s · age %llu/%llu",
+                  snap.reuse ? "reuse (NGX skipped)" : "refresh (NGX ran)",
+                  static_cast<unsigned long long>(snap.age),
+                  static_cast<unsigned long long>(snap.cadence));
+    row("This frame", snap.reuse ? kGood : kWarn, buf,
+        "Whether the model was evaluated this frame. The age/cadence pair is "
+        "the frames since the last evaluation over the effective reuse window.");
+  }
 
-  std::snprintf(buf, sizeof(buf), "%.1f%% (%llu reuse / %llu refresh)",
-                static_cast<double>(reuse_percent),
-                static_cast<unsigned long long>(snap.reuse_frames),
-                static_cast<unsigned long long>(snap.refresh_frames));
-  row("Reuse ratio", kGood, buf,
-      "Share of frames that skipped the model since the addon loaded.");
+  const uint64_t total = snap.reuse_frames + snap.refresh_frames;
+  if (total == 0) {
+    row("Reuse ratio", kIdle, "no frames yet",
+        "Share of frames that skipped the model since the addon loaded.");
+  } else {
+    const float reuse_percent = 100.0f *
+        static_cast<float>(snap.reuse_frames) / static_cast<float>(total);
+    std::snprintf(buf, sizeof(buf), "%.1f%% (%llu reuse / %llu refresh)",
+                  static_cast<double>(reuse_percent),
+                  static_cast<unsigned long long>(snap.reuse_frames),
+                  static_cast<unsigned long long>(snap.refresh_frames));
+    row("Reuse ratio", kGood, buf,
+        "Share of frames that skipped the model since the addon loaded.");
+  }
 
-  std::snprintf(buf, sizeof(buf), "%.2f%%%s",
-                static_cast<double>(snap.invalid_fraction * 100.0f),
-                snap.feedback_valid ? "" : " (no sample yet)");
-  row("Invalid pixels",
-      snap.invalid_fraction > 0.15f ? kBad
-                                    : (snap.invalid_fraction > 0.05f ? kWarn : kGood),
-      buf,
-      "Pixels whose reprojected edit fell below the reuse confidence "
-      "threshold. Delayed by the readback, so it lags the current frame.");
+  if (!snap.feedback_valid) {
+    row("Invalid pixels", kIdle, "no sample yet",
+        "Pixels whose reprojected edit fell below the reuse confidence "
+        "threshold. Delayed by the readback, so it lags the current frame.");
+  } else {
+    std::snprintf(buf, sizeof(buf), "%.2f%%",
+                  static_cast<double>(snap.invalid_fraction * 100.0f));
+    row("Invalid pixels",
+        snap.invalid_fraction > 0.15f ? kBad
+                                      : (snap.invalid_fraction > 0.05f ? kWarn : kGood),
+        buf,
+        "Pixels whose reprojected edit fell below the reuse confidence "
+        "threshold. Delayed by the readback, so it lags the current frame.");
+  }
 
-  if (snap.gpu_valid) {
+  if (!snap.gpu_valid) {
+    row("GPU sample", kIdle, "no sample yet",
+        "Mean candidate confidence and mean absolute log gain of the "
+        "reprojected edit over the last completed GPU sample.");
+  } else {
     std::snprintf(buf, sizeof(buf), "conf %.3f · |edit| %.4f",
                   static_cast<double>(snap.mean_conf),
                   static_cast<double>(snap.mean_edit));
     row("GPU sample", snap.mean_conf < 0.75f ? kWarn : kGood, buf,
-        "Mean candidate confidence and mean absolute log-gain of the "
+        "Mean candidate confidence and mean absolute log gain of the "
         "reprojected edit over the last completed GPU sample.");
-  } else {
-    row("GPU sample", kBad, "unavailable",
-        "The stats readback has not completed yet. Reuse stays gated until it does.");
   }
 
-  if (snap.dt_reuse_ms > 0.0f && snap.dt_refresh_ms > 0.0f) {
+  if (snap.dt_reuse_ms <= 0.0f || snap.dt_refresh_ms <= 0.0f) {
+    row("Frame time", kIdle, "needs one frame of each class",
+        "Smoothed frame interval for each class. A large step is judder: the "
+        "eye sees it as discontinuity no matter how high the average fps is.");
+  } else {
     const float step = snap.dt_refresh_ms - snap.dt_reuse_ms;
     std::snprintf(buf, sizeof(buf), "reuse %.2f ms · refresh %.2f ms · step %+.2f ms",
                   static_cast<double>(snap.dt_reuse_ms),
@@ -339,14 +358,16 @@ bool DrawTemporalStats(const void* /*context*/, ctl::ValueStore& /*store*/,
     row("Frame time", step > 4.0f ? kBad : (step > 2.0f ? kWarn : kGood), buf,
         "Smoothed frame interval for each class. A large step is judder: the "
         "eye sees it as discontinuity no matter how high the average fps is.");
-  } else {
-    row("Frame time", kWarn, "warming up",
-        "Needs at least one frame of each class.");
   }
 
-  if (snap.cadence_short) {
-    std::snprintf(buf, sizeof(buf),
-                  "halved to %llu (invalid above the configured maximum)",
+  if (!snap.cadence_short) {
+    std::snprintf(buf, sizeof(buf), "configured window (%llu)",
+                  static_cast<unsigned long long>(snap.cadence));
+    row("Cadence", kGood, buf,
+        "The invalid fraction exceeded Max Invalid %, so the reuse window was "
+        "shortened. Latched with hysteresis so it cannot flip every frame.");
+  } else {
+    std::snprintf(buf, sizeof(buf), "halved to %llu",
                   static_cast<unsigned long long>(snap.cadence));
     row("Cadence", kWarn, buf,
         "The invalid fraction exceeded Max Invalid %, so the reuse window was "
