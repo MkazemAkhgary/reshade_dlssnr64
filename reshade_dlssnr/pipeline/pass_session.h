@@ -6,6 +6,7 @@
 #include <windows.h>
 #include <wrl/client.h>
 
+#include <chrono>
 #include <cstddef>
 #include <memory>
 
@@ -309,6 +310,9 @@ class PassSession {
   // flips 4<->2 whenever the invalid fraction wobbles across the threshold,
   // which turns a steady refresh rhythm into a beat.
   bool temporal_cadence_short_ = false;
+  // Frame-interval sampling for the live readout.
+  std::chrono::steady_clock::time_point temporal_last_tick_{};
+  bool temporal_last_tick_valid_ = false;
   uint64_t temporal_last_refresh_frame_ = 0;
   uint64_t temporal_last_frame_id_ = 0;
   uint64_t temporal_last_guide_serial_ = 0;

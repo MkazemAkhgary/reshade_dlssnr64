@@ -2,6 +2,7 @@
 #include "profiling/profile.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <type_traits>
@@ -11,6 +12,7 @@
 #include "pass_resources.h"
 #include "pipeline_graph.h"
 #include "pipeline_trace.h"
+#include "temporal/stats.h"
 
 namespace reshade_dlssnr {
 
@@ -87,22 +89,41 @@ uint64_t TemporalSettingsSignature(const PassRun& run) {
   return hash;
 }
 
-// One completed GPU feedback sample.
-float TemporalReadInvalidFraction(GpuReadback& readback, ID3D12Fence* fence,
-                                  unsigned int width, unsigned int height,
-                                  bool* out_valid) {
-  if (out_valid != nullptr) *out_valid = false;
+// One completed GPU feedback sample. The invalid fraction drives policy; the
+// two means are for the overlay only.
+struct TemporalSample {
+  float invalid_fraction = 1.0f;
+  float mean_conf = 0.0f;
+  float mean_edit = 0.0f;
+  bool valid = false;
+};
+
+TemporalSample TemporalReadSample(GpuReadback& readback, ID3D12Fence* fence,
+                                  unsigned int width, unsigned int height) {
+  TemporalSample result;
   uint32_t bytes = 0;
   const void* data = readback.TryGet(fence, &bytes);
-  if (data == nullptr || bytes < sizeof(uint32_t) * 2 || width == 0 || height == 0)
-    return 1.0f;
+  if (data == nullptr || bytes < temporal_stats::kBytes || width == 0 ||
+      height == 0) {
+    return result;
+  }
   const auto* values = static_cast<const uint32_t*>(data);
-  if (out_valid != nullptr) *out_valid = values[1] != 0;
-  return std::min(1.0f, static_cast<float>(values[0]) /
-                           static_cast<float>(static_cast<uint64_t>(width) * height));
+  result.valid = values[1] != 0;
+  const float pixels =
+      static_cast<float>(static_cast<uint64_t>(width) * height);
+  result.invalid_fraction =
+      std::min(1.0f, static_cast<float>(values[0]) / pixels);
+  const uint32_t contributing = values[4];
+  if (contributing != 0) {
+    result.mean_conf =
+        (static_cast<float>(values[2]) / 255.0f) / static_cast<float>(contributing);
+    result.mean_edit =
+        (static_cast<float>(values[3]) / 255.0f) / static_cast<float>(contributing);
+  }
+  return result;
 }
 
-}
+}  // namespace
 // Temporal edit amortization. This stage runs after the actual model input has
 // been prepared and graded, but before NGX is called. When all evidence from a
 // completed prior frame permits reuse, it writes current_input * exp(warpedGain)
@@ -117,6 +138,39 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
       run.work_width == 0 || run.work_height == 0) {
     return PipelineStatus::Ok;
   }
+
+  // Live readout. Cleared up front so an early return below reads as "temporal
+  // did not run" instead of leaving the previous frame's numbers on screen.
+  // The accumulated fields survive the reset.
+  temporal_stats::Snapshot& live = temporal_stats::Mutable();
+  const float dt_ms_ema = live.dt_ms;
+  const float dt_reuse_ema = live.dt_reuse_ms;
+  const float dt_refresh_ema = live.dt_refresh_ms;
+  const uint64_t reuse_frames = live.reuse_frames;
+  const uint64_t refresh_frames = live.refresh_frames;
+  const bool gpu_valid = live.gpu_valid;
+  const float mean_conf = live.mean_conf;
+  const float mean_edit = live.mean_edit;
+  live = temporal_stats::Snapshot{};
+  live.dt_ms = dt_ms_ema;
+  live.dt_reuse_ms = dt_reuse_ema;
+  live.dt_refresh_ms = dt_refresh_ema;
+  live.reuse_frames = reuse_frames;
+  live.refresh_frames = refresh_frames;
+  live.gpu_valid = gpu_valid;
+  live.mean_conf = mean_conf;
+  live.mean_edit = mean_edit;
+
+  // Frame interval, split by reuse/refresh. This is the judder amplitude: the
+  // reuse window only pays off if the two stay close.
+  const auto now = std::chrono::steady_clock::now();
+  float dt_ms = 0.0f;
+  if (self->temporal_last_tick_valid_) {
+    dt_ms = std::chrono::duration<float, std::milli>(
+                now - self->temporal_last_tick_).count();
+  }
+  self->temporal_last_tick_ = now;
+  self->temporal_last_tick_valid_ = true;
 
   // A newly available native guide or a disabled option invalidates any old
   // synthetic-frame correspondence, preventing vectors from spanning a gap.
@@ -361,17 +415,20 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
   ID3D12Fence* feedback_fence = run.stage != nullptr && run.stage->owns_submit
       ? self->command_.GetFence() : run.temporal_feedback_fence;
   if (feedback_fence != nullptr) {
-    if (self->temporal_readback_.Ensure(run.device, 2u * sizeof(uint32_t))) {
-      bool sample_valid = false;
-      const float fraction = TemporalReadInvalidFraction(
+    if (self->temporal_readback_.Ensure(run.device, temporal_stats::kBytes)) {
+      const TemporalSample sample = TemporalReadSample(
           self->temporal_readback_, feedback_fence, run.work_width,
-          run.work_height, &sample_valid);
+          run.work_height);
       // Feedback validity is carried separately from the invalid fraction.
-      if (sample_valid) {
-        self->temporal_invalid_fraction_ = fraction;
+      if (sample.valid) {
+        self->temporal_invalid_fraction_ = sample.invalid_fraction;
         self->temporal_feedback_valid_ = true;
         self->temporal_feedback_wait_frames_ = 0;
-      } else if (fraction >= 1.0f && !self->temporal_history_valid_) {
+        live.gpu_valid = true;
+        live.mean_conf = sample.mean_conf;
+        live.mean_edit = sample.mean_edit;
+      } else if (sample.invalid_fraction >= 1.0f &&
+                 !self->temporal_history_valid_) {
         self->temporal_feedback_valid_ = false;
       }
     }
@@ -497,10 +554,11 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
     copy_fence_value = run.temporal_feedback_fence_value;
   }
   if (copy_fence != nullptr && copy_fence_value != 0 &&
-      self->temporal_readback_.Ensure(run.device, 2u * sizeof(uint32_t))) {
+      self->temporal_readback_.Ensure(run.device, temporal_stats::kBytes)) {
     self->command_.Transition(list, stats, D3D12_RESOURCE_STATE_COPY_SOURCE);
     if (!self->temporal_readback_.EnqueueCopy(
-            list, stats, 2u * sizeof(uint32_t), copy_fence, copy_fence_value)) {
+            list, stats, temporal_stats::kBytes, copy_fence,
+            copy_fence_value)) {
       TRACE_EVT(self, "temporal feedback copy deferred pass=%u", self->pass_id_);
     }
     self->command_.Transition(list, stats, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
@@ -616,6 +674,33 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
                 static_cast<unsigned long long>(effective_cadence),
                 self->temporal_invalid_fraction_,
                 invalid_high ? 1 : 0, mode);
+    }
+  }
+
+  live.active = true;
+  live.reuse = run.temporal_reuse;
+  live.feedback_valid = self->temporal_feedback_valid_;
+  live.cadence_short = invalid_high;
+  live.age = age;
+  live.cadence = effective_cadence;
+  live.invalid_fraction = self->temporal_invalid_fraction_;
+  if (run.temporal_reuse) {
+    ++live.reuse_frames;
+  } else if (run.frame_id != 0 && !duplicate_frame) {
+    ++live.refresh_frames;
+  }
+  if (dt_ms > 0.0f && dt_ms < 1000.0f) {
+    // ~20 frame time constant: fast enough to see a cadence change, slow
+    // enough to read.
+    constexpr float kAlpha = 0.05f;
+    auto ema = [&](float& target) {
+      target = target <= 0.0f ? dt_ms : target + kAlpha * (dt_ms - target);
+    };
+    ema(live.dt_ms);
+    if (run.temporal_reuse) {
+      ema(live.dt_reuse_ms);
+    } else {
+      ema(live.dt_refresh_ms);
     }
   }
   return PipelineStatus::Ok;

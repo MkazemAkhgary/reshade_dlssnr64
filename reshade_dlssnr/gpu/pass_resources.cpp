@@ -7,6 +7,7 @@
 
 #include "pipeline_trace.h"
 #include "gpu/d3d12_utils.h"
+#include "temporal/stats.h"
 
 namespace reshade_dlssnr {
 
@@ -530,9 +531,9 @@ bool PassResources::EnsureTemporalResources(
     return false;
   }
 
-  // Two uints: invalid-pixel count and a marker that distinguishes a real
-  // reprojection sample from the deliberately empty first-history frame.
-  if (!CreateUavBuffer(device, 2u * sizeof(uint32_t),
+  // invalid count, marker, conf sum (Q8), edit-luma sum (Q10), contributing
+  // pixel count, then padding. Layout documented in validate_depth.hlsl.
+  if (!CreateUavBuffer(device, temporal_stats::kBytes,
                        temporal_stats.GetAddressOf())) {
     Dispose(temporal_previous_input);
     Dispose(temporal_previous_edit);

@@ -21,6 +21,9 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     if (id.x == 0u && id.y == 0u) {
       gStats[0] = 0u;
       gStats[1] = 0u;
+      gStats[2] = 0u;
+      gStats[3] = 0u;
+      gStats[4] = 0u;
     }
     gCandidate[id.xy] = float4(0.0, 0.0, 0.0, 0.0);
 

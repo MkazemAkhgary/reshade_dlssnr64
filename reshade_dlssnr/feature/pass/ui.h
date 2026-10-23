@@ -13,6 +13,11 @@
 
 #include "ctl/values.h"
 
+namespace ctl {
+class DrawOptions;
+class ValueStore;
+}  // namespace ctl
+
 namespace reshade_dlssnr {
 
 namespace feature {
@@ -36,6 +41,16 @@ inline ctl::InstanceKey PassKey(PassId id) {
 // vector is the runtime/UI mirror: adding a pass appends an id, removing a
 // pass erases it, and each pass keeps its settings under a stable key.
 using PassOrder = std::vector<PassId>;
+
+// Live temporal-reprojection readout, drawn as the last row of the Temporal
+// Reprojection category. Read-only: it never writes the store.
+//
+// Declared here but defined in ui/ui_status.cpp to avoid adding a translation
+// unit, which would require regenerating the project file.
+bool DrawTemporalStats(const void* context, ctl::ValueStore& store,
+                       const ctl::DrawOptions& options,
+                       const std::string& section,
+                       const ctl::InstanceKey& key, bool& changed);
 
 }  // namespace pass
 }  // namespace feature

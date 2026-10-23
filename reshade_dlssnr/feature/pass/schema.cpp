@@ -280,6 +280,10 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .Category(kCatTemporal)
       .Tooltip("Store temporal edit/candidate textures in FP16. Reduces history "
                "bandwidth and memory with small quantization differences on reused edits.");
+  // Live readout, last row of the category. The category header is the
+  // collapsible; the hook only draws the body.
+  pass.AddHookAfter(kTemporalFp16History, "TemporalStats", &DrawTemporalStats)
+      .Category(kCatTemporal);
 
   // --- Advanced ----------------------------------------------------------
   pass.Add<ctl::BoolSetting>(kSoftCompressionEnabled, "Soft Compression", false)

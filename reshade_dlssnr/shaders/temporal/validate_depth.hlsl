@@ -14,6 +14,12 @@ RWBuffer<uint>      gStats       : register(u1);
 // confidence.
 static const float kReuseConfidenceThreshold = 0.25;
 
+// Stats layout, mirrored by kTemporalStatsBytes in temporal/steps.cpp.
+//   0 invalid pixel count
+//   1 marker bit (sample validity)
+//   2 sum of confidence, Q8
+//   3 sum of |edit luma|, Q8
+//   4 number of pixels contributing to 2 and 3
 void WriteValidated(uint2 pixel, float4 value)
 {
     gValidated[pixel] = value;
@@ -21,6 +27,15 @@ void WriteValidated(uint2 pixel, float4 value)
     {
         uint ignored;
         InterlockedAdd(gStats[0], 1u, ignored);
+    }
+    if (value.a > 0.0)
+    {
+        uint ignored;
+        // Q8 on both sums: Q10 overflows uint32 past ~4M pixels.
+        InterlockedAdd(gStats[2], uint(saturate(value.a) * 255.0), ignored);
+        const float edit_luma = abs(dot(value.rgb, float3(0.2126, 0.7152, 0.0722)));
+        InterlockedAdd(gStats[3], uint(min(edit_luma, 1.0) * 255.0), ignored);
+        InterlockedAdd(gStats[4], 1u, ignored);
     }
     if (pixel.x == 0u && pixel.y == 0u)
     {
