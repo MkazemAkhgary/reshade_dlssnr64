@@ -47,7 +47,7 @@ bool DrawComboRow(const char*, const char*, const char*, int*,
 }
 
 int DrawGroupButtons(const char*, const char* const*, const char* const*, int,
-                     int, const bool*, float) {
+                     int, const bool*, const bool*, const char* const*, float) {
   return -1;
 }
 

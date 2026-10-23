@@ -281,6 +281,23 @@ class EnumSetting : public Setting {
                      int count);
   EnumSetting& Items(ItemProvider provider);
 
+  // Per-item availability, re-evaluated on every draw. An unavailable item is
+  // still selectable -- it is drawn dimmed and its tooltip carries the reason,
+  // because a stage that cannot run now may run later.
+  struct ItemAvailability {
+    bool available = true;
+    const char* reason = nullptr;
+  };
+  using ItemAvailabilityProvider =
+      void (*)(const void* context, int index, ItemAvailability* out);
+
+  EnumSetting& Availability(ItemAvailabilityProvider provider,
+                            const void* context = nullptr) {
+    availability_provider_ = provider;
+    availability_context_ = context;
+    return *this;
+  }
+
   EnumSetting& AsGroup(bool on = true) {
     meta_.enum_presentation = on ? EnumPresentation::GroupButtons
                                  : EnumPresentation::Combo;
@@ -315,6 +332,8 @@ class EnumSetting : public Setting {
 
   int default_ = 0;
   ItemProvider provider_ = nullptr;
+  ItemAvailabilityProvider availability_provider_ = nullptr;
+  const void* availability_context_ = nullptr;
   mutable bool resolved_ = false;
   mutable std::vector<std::string> names_;
   mutable std::vector<std::string> tips_;

@@ -698,9 +698,24 @@ bool EnumSetting::Draw(const SettingContext& ctx, const Value& resolved,
       tooltips.reserve(tips_.size());
       for (const std::string& name : names_) labels.push_back(name.c_str());
       for (const std::string& tip : tips_) tooltips.push_back(tip.c_str());
-      const int clicked = DrawGroupButtons(meta_.name.c_str(), labels.data(),
-                                           tooltips.data(), count, display,
-                                           nullptr);
+      // At most a handful of items; the array keeps the draw allocation-free.
+      constexpr int kMaxItems = 16;
+      bool unavailable[kMaxItems] = {};
+      const char* reasons[kMaxItems] = {};
+      if (availability_provider_ != nullptr && count <= kMaxItems) {
+        for (int i = 0; i < count; ++i) {
+          ItemAvailability state;
+          availability_provider_(availability_context_, i, &state);
+          unavailable[i] = !state.available;
+          reasons[i] = state.reason;
+        }
+      }
+      const bool have_availability =
+          availability_provider_ != nullptr && count <= kMaxItems;
+      const int clicked = DrawGroupButtons(
+          meta_.name.c_str(), labels.data(), tooltips.data(), count, display,
+          nullptr, have_availability ? unavailable : nullptr,
+          have_availability ? reasons : nullptr);
       if (clicked >= 0 && clicked != display) {
         display = clicked;
         changed = true;

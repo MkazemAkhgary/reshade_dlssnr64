@@ -20,6 +20,8 @@
 #include "project_constants.h"
 #include "feature/pass/ui.h"
 #include "fragments/grade_rows/rows.h"
+#include "pipeline/addon_controller.h"
+#include "state/settings.h"
 
 namespace reshade_dlssnr {
 namespace feature {
@@ -73,6 +75,33 @@ bool TemporalEnabled(const void*, const ctl::ValueStore& store,
                      const std::string& section) {
   DLSSNR_PROFILE_CTL_L3("TemporalEnabled");
   return store.Read(section, key, kTemporalMode).as_int != 0;
+}
+
+// Availability of each target stage in this game, shown dimmed in the button
+// row when the stage cannot run right now. The choice stays selectable: the
+// reason is in the tooltip, and the stage can become available again (a
+// different upscaler, or a fix for the blocked case).
+void TargetAvailability(const void*, int index,
+                        ctl::EnumSetting::ItemAvailability* out) {
+  out->available = true;
+  out->reason = nullptr;
+
+  // The snapshot is a copy, so the reason text has to outlive this call.
+  static char reason[kStatusTextLength] = {};
+  const StatusSnapshot status = AddonController::Get().GetStatus();
+
+  const bool blocked =
+      index == static_cast<int>(InjectionStage::PreDLSS) ? status.pre_dlss_blocked
+      : index == static_cast<int>(InjectionStage::PostDLSS) ? status.post_dlss_blocked
+                                                            : false;
+  if (!blocked) return;
+
+  std::snprintf(reason, sizeof(reason), "%s",
+                index == static_cast<int>(InjectionStage::PreDLSS)
+                    ? status.pre_dlss_block_reason
+                    : status.post_dlss_block_reason);
+  out->available = false;
+  out->reason = reason;
 }
 
 const char* const kTargetNames[] = {"Pre-DLSS", "Post-DLSS", "Backbuffer"};
@@ -153,6 +182,7 @@ void RegisterPassSchema(ctl::Schema& schema) {
   pass.Add<ctl::EnumSetting>(kTarget, "Target", 2)
       .Items(kTargetNames, kTargetTips, 3)
       .AsGroup()
+      .Availability(&TargetAvailability)
       .Tooltip("Each pass can independently target Pre-DLSS, Post-DLSS, or "
                "Backbuffer. Execution order is grouped by stage; passes "
                "within each stage follow their pass-tab order.");

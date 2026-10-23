@@ -386,6 +386,8 @@ int DrawGroupButtons(const char* id,
                      int count,
                      int selected,
                      const bool* disabled,
+                     const bool* unavailable,
+                     const char* const* unavailable_reasons,
                      float fixed_button_width) {
   DLSSNR_PROFILE_UI_L3("UI Group Buttons");
   if (count <= 0 || labels == nullptr) return -1;
@@ -410,8 +412,16 @@ int DrawGroupButtons(const char* id,
 
     const bool is_selected = (i == selected);
     const bool is_disabled = (disabled != nullptr && disabled[i]);
+    const bool is_unavailable = (unavailable != nullptr && unavailable[i]);
 
     if (is_disabled) ImGui::BeginDisabled();
+    if (is_unavailable) {
+      // Still clickable, but visibly not usable right now.
+      ImGui::PushStyleColor(ImGuiCol_Text,
+                            ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+      ImGui::PushStyleVar(ImGuiStyleVar_Alpha,
+                          ImGui::GetStyle().Alpha * 0.55f);
+    }
 
     const int pushed = is_selected ? 3 : 0;
     if (is_selected) {
@@ -429,12 +439,20 @@ int DrawGroupButtons(const char* id,
     }
 
     if (pushed > 0) ImGui::PopStyleColor(pushed);
+    if (is_unavailable) {
+      ImGui::PopStyleVar();
+      ImGui::PopStyleColor();
+    }
 
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      const bool has_reason = is_unavailable && unavailable_reasons != nullptr &&
+                              unavailable_reasons[i] != nullptr;
       const bool has_item_tooltip = tooltips != nullptr && tooltips[i] != nullptr;
       const std::string item_tooltip =
           CStrToString(has_item_tooltip ? tooltips[i] : nullptr);
-      if (has_item_tooltip) {
+      if (has_reason) {
+        Tip("%s", unavailable_reasons[i]);
+      } else if (has_item_tooltip) {
         Tip("%s", item_tooltip.c_str());
       } else {
         Tip("Select %s.", item_label.c_str());

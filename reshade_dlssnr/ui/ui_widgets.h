@@ -86,12 +86,16 @@ bool DrawComboRow(const char* id,
                   const char* const* item_tooltips,
                   int item_count);
 
+// `unavailable` marks items that can still be chosen but cannot run right now;
+// they are drawn dimmed and their tooltip prefers `unavailable_reasons[i]`.
 int DrawGroupButtons(const char* id,
                      const char* const* labels,
                      const char* const* tooltips,
                      int count,
                      int selected,
                      const bool* disabled,
+                     const bool* unavailable = nullptr,
+                     const char* const* unavailable_reasons = nullptr,
                      float fixed_button_width = 0.0f);
 
 bool DrawGroupRow(const char* id,
