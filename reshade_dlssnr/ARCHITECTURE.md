@@ -614,6 +614,8 @@ Debug views show the pre-depth candidate, post-depth validation result, and per-
 
 **Debug selection is global, rendering is pass-local.** The Debug section's `ctl` value is snapshotted into each `PassRun`; only the active pass renders the selected view.
 
+**The debug image lives for an evaluation, not for a presentation.** Each evaluate entry point clears it before its passes run; Present never does. A frame can be presented more than once per evaluation — frame generation presents twice — and clearing at Present strips the overlay from every presentation after the first.
+
 ### Settings and UI
 
 **Guide/output cloning is one shared advanced option.** `CloneResources` defaults to false and is read atomically by the NGX hook at the next evaluation boundary. Off uses current game resources directly; on clones current depth/motion and, only for Post-DLSS, the post-evaluation color output. The same toggle governs Pre-DLSS, Post-DLSS, and the guides available to Backbuffer, so it can compare copy-path costs without reverting to stale guides.
@@ -755,8 +757,6 @@ The overlay owns cross-feature layout and coordination. A feature's ordinary row
 ## Reported but not investigated
 
 These are retained as user-reported symptoms whose root causes are not established by the current code review.
-
-**Occasional debug-view frames are skipped.** A selected debug view can be absent on an intermittent frame after reconfiguration. `RenderDebugView` intentionally returns without rendering when the codec is not ready, the selected source is unavailable, dimensions are zero, or the debug target has been recreated; the symptom may therefore be a benign skipped render, a resource-lifecycle problem, or a ring/resource reuse issue. It has not been conclusively isolated.
 
 **Model-output grading can be too strong in HDR.** Backbuffer grading is separate and currently behaves differently from grading the model output inside the HDR compose path. The exact intended grade space for the model-output boundary in HDR has not been established as a user-visible contract and should be treated carefully before changing it.
 
