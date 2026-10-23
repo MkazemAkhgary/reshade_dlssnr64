@@ -638,7 +638,10 @@ void PassSession::PrepareRun(PassRun& run,
                    feature::preferences::kFp16Storage).as_bool;
     if (run.fp16_storage != fp16_storage_last_) {
       fp16_storage_last_ = run.fp16_storage;
-      feature_.ReleaseFeature(runtime);
+      // Releasing the feature here crashes the streamline v1 runtime: this runs
+      // while the frame that still references the feature is in flight. The
+      // preference only selects the format of our own intermediate buffers,
+      // which are recreated below, so the feature does not need rebuilding.
       feature_.SetShouldReset(true);
     }
   }
