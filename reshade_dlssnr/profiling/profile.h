@@ -239,7 +239,11 @@ inline std::string FormatProfileTag(const char* name, T value) {
 // -- Frame marker ----------------------------------------------------------
 // The argument is ignored: Tracy's FrameMark has no name. Keeping the
 // argument preserves the existing call sites.
+#if DLSSNR_PROFILE_TRACY_ENABLED && DLSSNR_PROFILE_VERBOSITY >= 1
 #define DLSSNR_PROFILE_FRAME_L1(name) FrameMark
+#else
+#define DLSSNR_PROFILE_FRAME_L1(name) ((void)0)
+#endif
 
 // -- GPU zones -------------------------------------------------------------
 // DLSSNR_PROFILE_GPU_CONTEXT_L2 stashes the command list so
