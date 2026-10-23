@@ -17,6 +17,14 @@
 
 namespace reshade_dlssnr {
 
+namespace {
+
+// Weight of the fresh model edit when it is accumulated into the stored one.
+// 1.0 makes every refresh a step; lower converges over several refreshes.
+constexpr float kFreshEditBlend = 0.5f;
+
+}  // namespace
+
 // Select the image the model consumes. Backbuffer reads the swapchain image;
 // PreDLSS reads the game's Color input; PostDLSS reads the captured DLSS
 // output. Chained game-resource passes snapshot the previous result.
@@ -420,6 +428,7 @@ PipelineStatus PassSession::StepModelOutputBarrier(PassRun& run) {
   constants.temporal.GuideBaseSize.w =
       static_cast<float>(run.guides.guide_subrect_height);
   constants.temporal.HistoryControl.x = run.temporal_reuse ? 1.0f : 0.0f;
+  constants.temporal.HistoryControl.y = kFreshEditBlend;
   ID3D12Resource* history_srvs[kSrvCount] = {
       run.model_color, run.model_output, validated, run.guides.depth};
   ID3D12Resource* history_uavs[kUavCount] = {previous_edit, previous_depth};
@@ -430,6 +439,27 @@ PipelineStatus PassSession::StepModelOutputBarrier(PassRun& run) {
   }
   self->command_.UavBarrier(list, previous_edit);
   self->command_.UavBarrier(list, previous_depth);
+
+  // Build the output from the stored edit on refresh frames too. Otherwise a
+  // refresh frame shows the raw model output while reuse frames show
+  // input * exp(edit), and that difference is the break at every refresh.
+  if (!run.temporal_reuse) {
+    self->command_.Transition(list, previous_edit,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    self->command_.Transition(list, run.model_output,
+                              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    ID3D12Resource* apply_srvs[kSrvCount] = {
+        run.model_color, previous_edit, previous_edit, previous_edit};
+    ID3D12Resource* apply_uavs[kUavCount] = {run.model_output};
+    if (run.codec->Dispatch("TemporalApplyEdit", list, constants,
+                            apply_srvs, apply_uavs)) {
+      self->command_.UavBarrier(list, run.model_output);
+    }
+    self->command_.Transition(list, run.model_output,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    self->command_.Transition(list, previous_edit,
+                              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  }
 
   // Advance the photometric reference on every processed frame. The source is
   // exactly the input seen by NGX (after preparation and input grade).

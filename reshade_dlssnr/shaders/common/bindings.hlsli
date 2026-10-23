@@ -71,6 +71,9 @@
 #define kTemporalGuideSize              temporal.GuideBaseSize.zw
 
 #define kTemporalUseValidatedHistory temporal.HistoryControl.x
+// Weight of the fresh edit accumulated into the stored one: 1 replaces it,
+// lower converges over several refreshes.
+#define kTemporalFreshEditBlend temporal.HistoryControl.y
 
 #define kHistogramSampleStride histogram.Settings.x
 #define kHistogramPixelsPerThreadAxis histogram.Settings.y

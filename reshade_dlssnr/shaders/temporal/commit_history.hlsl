@@ -98,12 +98,20 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
         if (fresh_ok > 0.5)
         {
-            // History is the last fresh edit. Averaging it against the
-            // reprojected candidate only adds lag, and that lag is what makes
-            // a reuse frame differ from the fresh frame that follows.
-            // Alpha is a presence flag downstream, not a weight.
+            // A hard replace makes the applied edit jump to the new fresh value
+            // in a single frame, and the jump grows with the reuse window
+            // because the model's history has been starved for longer. That
+            // jump is the visible break at every refresh. Blending bounds it to
+            // (1 - blend) per refresh. The reprojected prediction is only a
+            // usable reference where it is trusted, so low confidence falls
+            // back to a full replace. Alpha is a presence flag downstream.
+            const float blend = saturate(kTemporalFreshEditBlend);
+            const float t = 1.0 - (1.0 - blend) * saturate(cand_conf);
+            const float3 accumulated = lerp(
+                clamp(candidate.rgb, -kLn2, kLn2),
+                clamp(fresh.rgb, -kLn2, kLn2), t);
             gHistoryEdit[pixel] = float4(
-                clamp(fresh.rgb, -kLn2, kLn2), 1.0);
+                clamp(accumulated, -kLn2, kLn2), 1.0);
         }
         else if (cand_conf > 0.01)
         {
