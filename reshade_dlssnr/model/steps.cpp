@@ -383,8 +383,14 @@ PipelineStatus PassSession::StepModelOutputBarrier(PassRun& run) {
     self->command_.Transition(list, run.model_output,
                               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   }
-  if (!run.temporal_store_history || run.guides.depth == nullptr ||
-      run.guides.motion == nullptr ||
+  // A repeated evaluation of the same frame does not advance time, so the
+  // stored history still describes this content. Keep it and skip the
+  // duplicate store: invalidating here leaves the next frame with no history,
+  // which is a visible gap in every temporal debug view.
+  if (!run.temporal_store_history) {
+    return PipelineStatus::Ok;
+  }
+  if (run.guides.depth == nullptr || run.guides.motion == nullptr ||
       (!run.temporal_reuse && run.eval_result != NVSDK_NGX_Result_Success)) {
     self->temporal_history_valid_ = false;
     return PipelineStatus::Ok;
