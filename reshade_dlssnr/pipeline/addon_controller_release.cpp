@@ -73,6 +73,12 @@ PipelineStatus RunWriteDebugToBackbuffer(PassRun& run) {
   if (run.frame_debug == nullptr || !run.frame_debug->valid) {
     return PipelineStatus::Ok;
   }
+  // With no view selected nothing renders, so the image left over from the
+  // previous selection would be presented on every frame from here on.
+  if (run.debug_view == 0) {
+    run.frame_debug->Reset();
+    return PipelineStatus::Ok;
+  }
   TRACE_EVT(run.session, "present_debug_output");
   controller.PresentDebugOutput(run.command_queue, run.swapchain,
                                 *run.frame_debug);
