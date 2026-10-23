@@ -1,5 +1,5 @@
 #include "compute_engine.h"
-#include "profiling/profile.h"
+#include "profiling/tracy_integration.h"
 
 
 #include <cstdio>
