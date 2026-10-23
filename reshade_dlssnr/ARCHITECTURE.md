@@ -423,7 +423,7 @@ The 512-byte CBV is:
 
 The resulting `ComputeConstants` size and `BindAndDispatch` stride are both 512 bytes, rounded to the D3D12 constant-buffer alignment. `TemporalBlock` owns the photometric/depth thresholds, maximum motion displacement, motion-vector coordinate metadata, and guide subrect metadata. `TemporalBlock.HistoryControl.x` selects whether history is committed from the validated candidate or from a fresh model evaluation; `.y` is the weight of the fresh edit when it is accumulated into the stored one. Temporal kernels use a dedicated `TemporalBlock`; they do not borrow HDR or generic shader-parameter slots. `HdrBlock.LocalExposureParams.x/y` carry the local-exposure radius and sample count; `.z` is reserved and kept zero. The `LocalExposureControlBlock` occupies previously unused trailing cbuffer space and carries the directional curve, detail-retention, and protection controls without changing existing block offsets.
 
-The shader-side aliases in `bindings.hlsli` turn fields such as `hdr.Exposure` into the semantic names used by shader code (`kExposure` and so on). The Strength/Soft-Compression settings (`PassSettings::strength` / `::soft_compression`, compose/settings.h) are written field-by-field into `ShaderBlock.Params0` and `Params1` by `ComposeOutput` in compose/compose.cpp. `Params1.w` carries the per-dispatch `Apply Edit to Pre-Grade Image` flag for composition. In HDR mode, when local exposure is active, that option transfers the edit onto the local-exposed pre-grade base by undoing only the global carrier scale; the normal path continues to use the original HDR source and packed carrier-to-HDR multiplier.
+The shader-side aliases in `bindings.hlsli` turn fields such as `hdr.Exposure` into the semantic names used by shader code (`kExposure` and so on). The strength settings (`PassSettings::strength`, compose/settings.h) are written field-by-field into `ShaderBlock.Params0` by `ComposeOutput` in compose/compose.cpp. `Params1.w` carries the per-dispatch `Apply Edit to Pre-Grade Image` flag for composition. In HDR mode, when local exposure is active, that option transfers the edit onto the local-exposed pre-grade base by undoing only the global carrier scale; the normal path continues to use the original HDR source and packed carrier-to-HDR multiplier.
 
 The same option means the model is fed the graded image and the edit it produces lands on the pre-grade image. `compose/steps.cpp` selects the graded endpoint as the residual reference, and the SDR compose evaluates highlight/shadow region protection against that endpoint rather than the pre-grade base, because protection has to be weighted in the domain the edit was measured in. The residual stays a ratio in the graded domain: the model reconstructs a plausible image, so its edit has to land as the model produced it, and inverting the grade first would move the result away from the model's intent rather than toward it.
 
@@ -713,7 +713,7 @@ The build automatically embeds the new shader and the verification target compil
 4. Write the value through the typed cbuffer field instead of a numeric slot offset.
 5. Add the HLSL alias in `shaders/common/bindings.hlsli` if the shader-facing semantic name is not already present.
 
-`ShaderBlock.Params0` and `Params1` hold the Strength/Soft-Compression parameters; the cbuffer layout is asserted in `gpu/compute_constants.h`.
+`ShaderBlock.Params0` and `Params1` hold the composition parameters; the cbuffer layout is asserted in `gpu/compute_constants.h`.
 
 ### Add a debug view
 

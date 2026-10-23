@@ -22,8 +22,6 @@ SamplerState        s0           : register(s0);
 // because the input spaces differ and the region protection reads a
 // different luma; the sliders are the same.
 float3 ShapeResidualSdr(float3 delta, float3 original_srgb) {
-    // When kSoftCompression is enabled, the SDR caller already applies the
-    // luma/chroma-specific soft compression once before this function.
     if (kEditGamma != 1.0 && kEditGamma > 0.0) {
         delta = sign(delta) * pow(abs(delta), kEditGamma);
     }
@@ -78,29 +76,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     // The model's edit as a per-channel ratio, held in log space so the
     // compression sliders can bound it on both sides.
-    float3 residual_log;
-    if (kSoftCompression != 0) {
-        float in_luma = max(dot(in_rgb, float3(0.2126, 0.7152, 0.0722)), 1e-6);
-        float out_luma = max(dot(out_rgb, float3(0.2126, 0.7152, 0.0722)), 1e-6);
-
-        float residual_luma = safe_log(out_luma) - safe_log(in_luma);
-        float3 residual_chroma =
-            safe_log3(out_rgb) - safe_log(out_luma) -
-            safe_log3(in_rgb) + safe_log(in_luma);
-
-        residual_luma = SoftCompress(
-            residual_luma, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
-        residual_chroma.x = SoftCompress(
-            residual_chroma.x, kSoftMaxChroma, kSoftMaxChroma, kSoftKnee);
-        residual_chroma.y = SoftCompress(
-            residual_chroma.y, kSoftMaxChroma, kSoftMaxChroma, kSoftKnee);
-        residual_chroma.z = SoftCompress(
-            residual_chroma.z, kSoftMaxChroma, kSoftMaxChroma, kSoftKnee);
-
-        residual_log = residual_luma + residual_chroma;
-    } else {
-        residual_log = safe_log3(out_rgb) - safe_log3(in_rgb);
-    }
+    float3 residual_log = safe_log3(out_rgb) - safe_log3(in_rgb);
 
     residual_log = clamp(residual_log,
                          log(max(kRatioDarken, 1e-4)),

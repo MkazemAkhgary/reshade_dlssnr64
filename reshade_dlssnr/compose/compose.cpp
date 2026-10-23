@@ -15,7 +15,6 @@ bool ComposeOutput(
     unsigned int full_width,
     unsigned int full_height,
     const StrengthSettings& strength,
-    const SoftCompressionSettings& soft_compression,
     const ResidualSettings& residual,
     const HdrUniforms* hdr,
     bool apply_edit_to_pre_grade) {
@@ -30,11 +29,6 @@ bool ComposeOutput(
   constants.Height = full_height;
   constants.shader.Params0.x = strength.luma_strength;
   constants.shader.Params0.y = strength.chroma_strength;
-  constants.shader.Params0.z = soft_compression.enabled ? 1.0f : 0.0f;
-  constants.shader.Params0.w = soft_compression.max_brighten;
-  constants.shader.Params1.x = soft_compression.max_darken;
-  constants.shader.Params1.y = soft_compression.max_chroma;
-  constants.shader.Params1.z = soft_compression.knee;
   constants.shader.Params1.w = apply_edit_to_pre_grade ? 1.0f : 0.0f;
   constants.residual.EditStrength = residual.edit_strength;
   constants.residual.ChromaStrength = residual.chroma_strength;

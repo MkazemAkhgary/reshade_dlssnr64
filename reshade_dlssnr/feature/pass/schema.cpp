@@ -38,7 +38,6 @@ bool NeverVisible(const void*, const ctl::ValueStore&,
 // -- which is why the two grades cannot share one.
 constexpr const char* kCatModel = "Model";
 constexpr const char* kCatStrength = "Strength";
-constexpr const char* kCatSoftCompression = "Soft Compression";
 constexpr const char* kCatResidualEdits = "Residual Edits";
 constexpr const char* kCatTemporal = "Temporal Reprojection";
 
@@ -57,13 +56,6 @@ bool AutoMaskOn(const void*, const ctl::ValueStore& store,
                 const ctl::InstanceKey& key, const std::string& section) {
   DLSSNR_PROFILE_CTL_L3("AutoMaskOn");
   return store.Read(section, key, kAutoMask).as_bool;
-}
-
-// Soft-compression parameter rows follow its own enable checkbox.
-bool SoftCompressionOn(const void*, const ctl::ValueStore& store,
-                       const ctl::InstanceKey& key, const std::string& section) {
-  DLSSNR_PROFILE_CTL_L3("SoftCompressionOn");
-  return store.Read(section, key, kSoftCompressionEnabled).as_bool;
 }
 
 // The ratio rows are Backbuffer-only. That is a property of this pass's target,
@@ -286,31 +278,6 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .Category(kCatTemporal);
 
   // --- Advanced ----------------------------------------------------------
-  pass.Add<ctl::BoolSetting>(kSoftCompressionEnabled, "Soft Compression", false)
-      .Category(kCatSoftCompression)
-      .CategoryToggle()
-      .Tooltip("Enable rational soft clamp of log residuals.");
-  pass.Add<ctl::FloatSetting>(kSoftMaxBrighten, "Max Brighten", 0.5f)
-      .ClampRange(0.0f, 2.0f)
-      .EnableWhen(&SoftCompressionOn)
-      .Category(kCatSoftCompression)
-      .Tooltip("Maximum allowed log-luma brightening.");
-  pass.Add<ctl::FloatSetting>(kSoftMaxDarken, "Max Darken", 0.5f)
-      .ClampRange(0.0f, 2.0f)
-      .EnableWhen(&SoftCompressionOn)
-      .Category(kCatSoftCompression)
-      .Tooltip("Maximum allowed log-luma darkening.");
-  pass.Add<ctl::FloatSetting>(kSoftMaxChroma, "Max Chroma", 0.5f)
-      .ClampRange(0.0f, 2.0f)
-      .EnableWhen(&SoftCompressionOn)
-      .Category(kCatSoftCompression)
-      .Tooltip("Maximum allowed log-chroma change per channel.");
-  pass.Add<ctl::FloatSetting>(kSoftKnee, "Knee", 1.0f)
-      .ClampRange(0.0f, 4.0f)
-      .EnableWhen(&SoftCompressionOn)
-      .Category(kCatSoftCompression)
-      .Tooltip("Controls how early compression starts (linear range).");
-
   pass.Add<ctl::FloatSetting>(kEditStrength, "Edit Strength", 1.0f)
       .ClampRange(0.0f, 2.0f)
       .Category(kCatResidualEdits)

@@ -25,7 +25,6 @@ bool ComposeOutput(
     unsigned int full_width,
     unsigned int full_height,
     const StrengthSettings& strength,
-    const SoftCompressionSettings& soft_compression = {},
     const ResidualSettings& residual = {},
     const HdrUniforms* hdr = nullptr,
     bool apply_edit_to_pre_grade = false);

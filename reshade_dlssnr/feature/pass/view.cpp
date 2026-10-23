@@ -49,16 +49,6 @@ PassSnapshot Read(const ctl::ValueStore& store, const ctl::InstanceKey& key) {
   p.strength.chroma_strength =
       store.Read(section, key, kChromaStrength).as_float;
 
-  p.soft_compression.enabled =
-      store.Read(section, key, kSoftCompressionEnabled).as_bool;
-  p.soft_compression.max_brighten =
-      store.Read(section, key, kSoftMaxBrighten).as_float;
-  p.soft_compression.max_darken =
-      store.Read(section, key, kSoftMaxDarken).as_float;
-  p.soft_compression.max_chroma =
-      store.Read(section, key, kSoftMaxChroma).as_float;
-  p.soft_compression.knee = store.Read(section, key, kSoftKnee).as_float;
-
   p.residual.edit_strength =
       store.Read(section, key, kEditStrength).as_float;
   p.residual.chroma_strength =

@@ -50,12 +50,6 @@ float3 BlendYCbCr(float3 original, float3 edited,
 
 
 float3 ShapeResidual(float3 delta, float luma) {
-    if (kSoftCompression != 0) {
-        delta.r = SoftCompress(delta.r, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
-        delta.g = SoftCompress(delta.g, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
-        delta.b = SoftCompress(delta.b, kSoftMaxBrighten, kSoftMaxDarken, kSoftKnee);
-    }
-
     // Response curve. Sign-preserving: a brightening and a darkening of the
     // same magnitude get shaped the same way, and 0 stays 0.
     if (kEditGamma != 1.0 && kEditGamma > 0.0) {

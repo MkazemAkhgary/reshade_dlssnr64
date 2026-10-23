@@ -64,7 +64,6 @@ struct PassSnapshot {
   StrengthSettings strength;
 
   // Advanced group.
-  SoftCompressionSettings soft_compression;
   ResidualSettings residual;
 };
 

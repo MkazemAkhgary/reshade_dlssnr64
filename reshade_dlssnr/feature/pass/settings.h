@@ -49,11 +49,6 @@ inline constexpr const char* kTemporalMaxInvalidPercent = "temporal_max_invalid_
 inline constexpr const char* kTemporalFp16History = "temporal_fp16_history";
 
 // Category "Advanced".
-inline constexpr const char* kSoftCompressionEnabled = "soft_compression_enabled";
-inline constexpr const char* kSoftMaxBrighten = "soft_max_brighten";
-inline constexpr const char* kSoftMaxDarken = "soft_max_darken";
-inline constexpr const char* kSoftMaxChroma = "soft_max_chroma";
-inline constexpr const char* kSoftKnee = "soft_knee";
 inline constexpr const char* kEditStrength = "edit_strength";
 inline constexpr const char* kResidualChroma = "residual_chroma";
 inline constexpr const char* kResidualGamma = "residual_gamma";

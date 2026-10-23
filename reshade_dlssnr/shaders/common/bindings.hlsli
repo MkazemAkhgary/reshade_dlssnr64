@@ -48,11 +48,6 @@
 // Dynamic shader parameter table
 #define kLumaStrength    shader.Params0.x
 #define kChromaStrength  shader.Params0.y
-#define kSoftCompression shader.Params0.z
-#define kSoftMaxBrighten shader.Params0.w
-#define kSoftMaxDarken   shader.Params1.x
-#define kSoftMaxChroma   shader.Params1.y
-#define kSoftKnee        shader.Params1.z
 #define kApplyEditToPreGrade shader.Params1.w
 #define kUpsampleSharpness hdr.UpsampleSharpness
 

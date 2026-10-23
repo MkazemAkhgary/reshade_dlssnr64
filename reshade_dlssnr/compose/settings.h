@@ -28,14 +28,4 @@ struct StrengthSettings {
   float chroma_strength = 1.0f;
 };
 
-// Soft compression of the residual delta before it is blended onto the
-// source. Sliders are gated on `enabled`.
-struct SoftCompressionSettings {
-  bool enabled = false;
-  float max_brighten = 0.5f;
-  float max_darken = 0.5f;
-  float max_chroma = 0.5f;
-  float knee = 1.0f;
-};
-
 }  // namespace reshade_dlssnr
