@@ -752,6 +752,10 @@ The overlay owns cross-feature layout and coordination. A feature's ordinary row
 
 **Shader register compatibility is a convention, not a separate static analyzer.** The root signature and the HLSL register documentation agree by construction, but the project does not have a compile-time C++/HLSL reflection check that proves every shader declaration matches the descriptor counts. FXC and D3D12 pipeline creation remain the enforcement points.
 
+**Pre-DLSS is skipped under Ray Reconstruction.** RR reads Color through a subrect of a larger allocation and addresses its G-buffer inputs with the same subrect; the compact-Color adapter rewrites Color's geometry and not theirs. Running the stage in that configuration has produced GPU faults. The failure is timing dependent and its root cause is not established, so the stage is skipped rather than risking the device, and the reason is published as `pre_dlss_blocked`. Post-DLSS is unaffected.
+
+The pass target row reflects this: a stage that reports blocked stays selectable but is drawn dimmed, with the reason in its tooltip. Availability is re-evaluated every frame, so the styling follows the game rather than a fixed capability table.
+
 **The optional precompiled shader path is not the default path.** Runtime `D3DCompile` is still the authoritative shipping path unless `PrecompileShaders=true` is explicitly enabled. That means runtime shader source, include resolution and compiler availability remain part of normal deployment.
 
 ## Reported but not investigated
