@@ -86,8 +86,11 @@ void TargetAvailability(const void*, int index,
   out->available = true;
   out->reason = nullptr;
 
-  // The snapshot is a copy, so the reason text has to outlive this call.
-  static char reason[kStatusTextLength] = {};
+  // The snapshot is a copy, so the reason text has to outlive this call. One
+  // buffer per stage: the draw keeps every reason pointer until it has drawn
+  // the whole row.
+  static char reasons[2][kStatusTextLength] = {};
+  char* reason = reasons[index == static_cast<int>(InjectionStage::PreDLSS) ? 0 : 1];
   const StatusSnapshot status = AddonController::Get().GetStatus();
 
   const bool blocked =
@@ -96,7 +99,7 @@ void TargetAvailability(const void*, int index,
                                                             : false;
   if (!blocked) return;
 
-  std::snprintf(reason, sizeof(reason), "%s",
+  std::snprintf(reason, kStatusTextLength, "%s",
                 index == static_cast<int>(InjectionStage::PreDLSS)
                     ? status.pre_dlss_block_reason
                     : status.post_dlss_block_reason);
