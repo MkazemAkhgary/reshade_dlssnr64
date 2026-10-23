@@ -488,7 +488,11 @@ void AddonController::OnPresent(
 
   RefreshStatus(settings);
   AdvanceMaskFrames(true);
-  frame_debug_.Reset();
+  // The debug image is not cleared here. A frame can be presented more than
+  // once per evaluation (frame generation does exactly that), and clearing at
+  // Present left every presentation after the first with no overlay. Each
+  // evaluate entry point resets it instead, so it stays valid for every
+  // presentation of the same evaluation and is replaced by the next one.
   pre_stage_seen_ = false;
   TRACE_EVT(this, "controller_exit stage=Present");
   trace::EndFrame(trace::FrameStream::Present);
