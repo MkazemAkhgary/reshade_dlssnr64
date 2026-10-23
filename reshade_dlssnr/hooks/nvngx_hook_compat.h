@@ -5,6 +5,7 @@
 #include <windows.h>
 #include <wrl/client.h>
 
+#include <atomic>
 #include <cstdio>
 #include <limits>
 #include <mutex>
@@ -31,9 +32,18 @@ namespace reshade_dlssnr::ngx_hook_compat {
 // list, so a retry that never succeeds must not run forever.
 constexpr int kMaxHookInstallRetries = 120;
 
-static decltype(&NVSDK_NGX_D3D12_EvaluateFeature) real_NVSDK_NGX_D3D12_EvaluateFeature = nullptr;
-static decltype(&NVSDK_NGX_D3D12_CreateFeature) real_NVSDK_NGX_D3D12_CreateFeature = nullptr;
-static decltype(&NVSDK_NGX_D3D12_ReleaseFeature) real_NVSDK_NGX_D3D12_ReleaseFeature = nullptr;
+// One set of entry points per NGX module. A game upscales with either DLSS
+// Super Resolution (nvngx_dlss.dll) or Ray Reconstruction (nvngx_dlssd.dll);
+// both take the same depth and motion vectors, so both can supply guides.
+struct NgxHooks {
+  decltype(&NVSDK_NGX_D3D12_EvaluateFeature) evaluate = nullptr;
+  decltype(&NVSDK_NGX_D3D12_CreateFeature) create = nullptr;
+  decltype(&NVSDK_NGX_D3D12_ReleaseFeature) release = nullptr;
+  bool hooked = false;
+};
+
+static NgxHooks g_dlss_hooks;
+static NgxHooks g_dlssd_hooks;
 
 static inline std::unordered_map<const NVSDK_NGX_Handle*, NVSDK_NGX_Feature> g_handle_to_feature;
 static inline std::mutex g_handle_to_feature_mutex;
@@ -81,12 +91,13 @@ static bool EnsureHooks(ID3D12GraphicsCommandList* command_list) {
   return installed;
 }
 
-static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_CreateFeature(
+static NVSDK_NGX_Result NVSDK_CONV CreateFeatureImpl(
+    NgxHooks& hooks,
     ID3D12GraphicsCommandList* command_list,
     NVSDK_NGX_Feature feature_id,
     NVSDK_NGX_Parameter* parameters,
     NVSDK_NGX_Handle** out_handle) {
-  NVSDK_NGX_Result result = real_NVSDK_NGX_D3D12_CreateFeature(
+  NVSDK_NGX_Result result = hooks.create(
       command_list, feature_id, parameters, out_handle);
 
   if (result == NVSDK_NGX_Result_Success && out_handle != nullptr && *out_handle != nullptr) {
@@ -97,16 +108,33 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_CreateFeature(
   return result;
 }
 
+static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_CreateFeature(
+    ID3D12GraphicsCommandList* command_list,
+    NVSDK_NGX_Feature feature_id,
+    NVSDK_NGX_Parameter* parameters,
+    NVSDK_NGX_Handle** out_handle) {
+  return CreateFeatureImpl(g_dlss_hooks, command_list, feature_id, parameters,
+                           out_handle);
+}
+
+static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_CreateFeatureD(
+    ID3D12GraphicsCommandList* command_list,
+    NVSDK_NGX_Feature feature_id,
+    NVSDK_NGX_Parameter* parameters,
+    NVSDK_NGX_Handle** out_handle) {
+  return CreateFeatureImpl(g_dlssd_hooks, command_list, feature_id, parameters,
+                           out_handle);
+}
+
 // Erase the handle from the feature map on release. Without this, the map
 // keeps a stale entry after the game releases a handle, and if the SDK
 // reuses that handle's storage for a subsequent CreateFeature of a different
 // feature type the lookup returns the wrong type. unordered_map::erase
 // compares the pointer value without dereferencing it, so erasing after the
 // real ReleaseFeature is safe even when the release freed the handle.
-static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_ReleaseFeature(
-    NVSDK_NGX_Handle* handle) {
-  const NVSDK_NGX_Result result =
-      real_NVSDK_NGX_D3D12_ReleaseFeature(handle);
+static NVSDK_NGX_Result NVSDK_CONV ReleaseFeatureImpl(
+    NgxHooks& hooks, NVSDK_NGX_Handle* handle) {
+  const NVSDK_NGX_Result result = hooks.release(handle);
 
   if (handle != nullptr) {
     std::lock_guard<std::mutex> lock(g_handle_to_feature_mutex);
@@ -114,6 +142,16 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_ReleaseFeature(
   }
 
   return result;
+}
+
+static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_ReleaseFeature(
+    NVSDK_NGX_Handle* handle) {
+  return ReleaseFeatureImpl(g_dlss_hooks, handle);
+}
+
+static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_ReleaseFeatureD(
+    NVSDK_NGX_Handle* handle) {
+  return ReleaseFeatureImpl(g_dlssd_hooks, handle);
 }
 
 
@@ -559,7 +597,8 @@ static NVSDK_NGX_Feature ClassifyFeatureByParameters(
   return NVSDK_NGX_Feature_Reserved0;
 }
 
-static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
+static NVSDK_NGX_Result NVSDK_CONV EvaluateFeatureImpl(
+    NgxHooks& hooks,
     ID3D12GraphicsCommandList* command_list,
     const NVSDK_NGX_Handle* feature_handle,
     NVSDK_NGX_Parameter* parameters,
@@ -622,7 +661,7 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
   bool hooks_available = false;
   bool guides_captured_before_evaluate = false;
   PreDlssColorOverride pre_dlss_color_override;
-  if (feature_id == NVSDK_NGX_Feature_SuperSampling && settings.enabled &&
+  if (IsUpscalerFeature(feature_id) && settings.enabled &&
       any_pass_enabled && !restart_pending) {
     hooks_available = EnsureHooks(work_list);
     if (hooks_available && !AddonController::Get().RestartPending()) {
@@ -638,7 +677,7 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
     }
   }
 
-  if (feature_id == NVSDK_NGX_Feature_SuperSampling && settings.enabled &&
+  if (IsUpscalerFeature(feature_id) && settings.enabled &&
       any_pre_dlss && !restart_pending) {
     if (!hooks_available) {
       static bool logged_pre_hook_failure = false;
@@ -692,8 +731,8 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
     }
   }
 
-  const NVSDK_NGX_Result result = real_NVSDK_NGX_D3D12_EvaluateFeature(
-      command_list, feature_handle, parameters, callback);
+  const NVSDK_NGX_Result result =
+      hooks.evaluate(command_list, feature_handle, parameters, callback);
 
   // Parameters belong to the game's shared NGX block. Restore the original
   // resource and geometry as soon as this evaluation has recorded its work;
@@ -712,7 +751,7 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
   }
 
   if (result == NVSDK_NGX_Result_Success && feature_handle != nullptr &&
-      parameters != nullptr && feature_id == NVSDK_NGX_Feature_SuperSampling &&
+      parameters != nullptr && IsUpscalerFeature(feature_id) &&
       !restart_pending) {
     if (!hooks_available) hooks_available = EnsureHooks(work_list);
     if (!hooks_available) {
@@ -776,42 +815,94 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
   return result;
 }
 
+static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
+    ID3D12GraphicsCommandList* command_list,
+    const NVSDK_NGX_Handle* feature_handle,
+    NVSDK_NGX_Parameter* parameters,
+    PFN_NVSDK_NGX_ProgressCallback callback) {
+  return EvaluateFeatureImpl(g_dlss_hooks, command_list, feature_handle,
+                             parameters, callback);
+}
+
+static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeatureD(
+    ID3D12GraphicsCommandList* command_list,
+    const NVSDK_NGX_Handle* feature_handle,
+    NVSDK_NGX_Parameter* parameters,
+    PFN_NVSDK_NGX_ProgressCallback callback) {
+  return EvaluateFeatureImpl(g_dlssd_hooks, command_list, feature_handle,
+                             parameters, callback);
+}
+
 using HookItem = local_vtable::HookItem;
 
-static const std::vector<HookItem> DLSS_HOOKS = {
-    {"NVSDK_NGX_D3D12_CreateFeature", (void**)&real_NVSDK_NGX_D3D12_CreateFeature, (void*)&hooked_NVSDK_NGX_D3D12_CreateFeature},
-    {"NVSDK_NGX_D3D12_EvaluateFeature", (void**)&real_NVSDK_NGX_D3D12_EvaluateFeature, (void*)&hooked_NVSDK_NGX_D3D12_EvaluateFeature},
-    {"NVSDK_NGX_D3D12_ReleaseFeature", (void**)&real_NVSDK_NGX_D3D12_ReleaseFeature, (void*)&hooked_NVSDK_NGX_D3D12_ReleaseFeature},
-};
+// Separate thunks per module: each detour has to call its own module's
+// original entry point.
+static std::vector<HookItem> HookItems(NgxHooks& hooks, bool ray_reconstruction) {
+  return {
+      {"NVSDK_NGX_D3D12_CreateFeature", (void**)&hooks.create,
+       ray_reconstruction ? (void*)&hooked_NVSDK_NGX_D3D12_CreateFeatureD
+                          : (void*)&hooked_NVSDK_NGX_D3D12_CreateFeature},
+      {"NVSDK_NGX_D3D12_EvaluateFeature", (void**)&hooks.evaluate,
+       ray_reconstruction ? (void*)&hooked_NVSDK_NGX_D3D12_EvaluateFeatureD
+                          : (void*)&hooked_NVSDK_NGX_D3D12_EvaluateFeature},
+      {"NVSDK_NGX_D3D12_ReleaseFeature", (void**)&hooks.release,
+       ray_reconstruction ? (void*)&hooked_NVSDK_NGX_D3D12_ReleaseFeatureD
+                          : (void*)&hooked_NVSDK_NGX_D3D12_ReleaseFeature},
+  };
+}
 
-// Installs the NGX hooks. Safe to call until it succeeds.
-static bool TryHookNgx() {
-  if (real_NVSDK_NGX_D3D12_EvaluateFeature != nullptr) return true;
+static bool HookModule(const wchar_t* file_name, NgxHooks& hooks,
+                       bool ray_reconstruction, bool load_if_missing) {
+  if (hooks.hooked) return true;
 
-  HMODULE nvngx_dlss = GetModuleHandleW(L"nvngx_dlss.dll");
-  if (nvngx_dlss == nullptr) {
-    // nvngx_dlss.dll is loaded on demand, so load it to get the hook in place
-    // ahead of the first CreateFeature -- a feature created before this
-    // attaches would never be recognised and nothing would run. Checking
-    // GetModuleHandle first means an instance Streamline has already loaded is
-    // never shadowed by a second copy.
-    nvngx_dlss = LoadLibraryW(L"nvngx_dlss.dll");
-  }
-  if (nvngx_dlss == nullptr) return false;
+  HMODULE module = GetModuleHandleW(file_name);
+  if (module == nullptr && load_if_missing) module = LoadLibraryW(file_name);
+  if (module == nullptr) return false;
 
-  if (!local_vtable::Hook(nvngx_dlss, DLSS_HOOKS)) return false;
+  const std::vector<HookItem> items = HookItems(hooks, ray_reconstruction);
+  if (!local_vtable::Hook(module, items)) return false;
 
-  static bool logged = false;
-  LogOnce(logged, reshade::log::level::info,
-          "Hooked NVSDK_NGX_D3D12_CreateFeature/EvaluateFeature in nvngx_dlss.dll");
+  hooks.hooked = true;
+
+  wchar_t path[MAX_PATH] = {};
+  GetModuleFileNameW(module, path, MAX_PATH);
+  char message[MAX_PATH * 2];
+  std::snprintf(message, sizeof(message),
+                "Hooked NVSDK_NGX_D3D12_CreateFeature/EvaluateFeature in '%ls'",
+                path);
+  reshade::log::message(reshade::log::level::info, message);
   return true;
 }
 
-static void UnhookNgx() {
-  HMODULE nvngx_dlss = GetModuleHandleW(L"nvngx_dlss.dll");
-  if (nvngx_dlss == nullptr) return;
+// Installs the NGX hooks. Safe to call until both modules are hooked.
+//
+// nvngx_dlss.dll is loaded here on demand: a feature created before the hook
+// attaches would never be recognised and nothing would run. Checking
+// GetModuleHandle first means an instance Streamline has already loaded is
+// never shadowed by a second copy. nvngx_dlssd.dll is only hooked once the
+// game loads it -- it is ~80 MB and most games never touch it.
+static bool TryHookNgx() {
+  const bool dlss = HookModule(L"nvngx_dlss.dll", g_dlss_hooks, false, true);
+  const bool dlssd = HookModule(L"nvngx_dlssd.dll", g_dlssd_hooks, true, false);
+  return dlss || dlssd;
+}
 
-  local_vtable::Unhook(nvngx_dlss, DLSS_HOOKS);
+static bool NgxHooksComplete() {
+  return g_dlss_hooks.hooked && g_dlssd_hooks.hooked;
+}
+
+static void UnhookNgx() {
+  HMODULE dlss = GetModuleHandleW(L"nvngx_dlss.dll");
+  if (dlss != nullptr) {
+    local_vtable::Unhook(dlss, HookItems(g_dlss_hooks, false));
+    g_dlss_hooks = {};
+  }
+
+  HMODULE dlssd = GetModuleHandleW(L"nvngx_dlssd.dll");
+  if (dlssd != nullptr) {
+    local_vtable::Unhook(dlssd, HookItems(g_dlssd_hooks, true));
+    g_dlssd_hooks = {};
+  }
 }
 
 }  // namespace reshade_dlssnr::ngx_hook_compat

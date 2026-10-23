@@ -39,6 +39,7 @@ bool g_ngx_hooked = false;
 bool g_ngx_hook_warned = false;
 int g_ngx_hook_presents = 0;
 int g_device_hook_retries = 0;
+bool g_ngx_hooks_complete = false;
 
 
 void PinAddonModule() {
@@ -113,17 +114,25 @@ void OnPresent(
   // Two installs that can miss the first time: nvngx_dlss.dll is not loaded
   // when the addon starts, and the device hook runs at init_device. Retry
   // both here, once per present, until each reports success.
-  if (!g_ngx_hooked) {
-    g_ngx_hooked = reshade_dlssnr::ngx_hook_compat::TryHookNgx();
+  //
+  // Ray Reconstruction's module only appears when the game enables it, so
+  // "hooked one" is not "done": keep trying until both are hooked or the
+  // retry budget is spent, then treat the missing one as not in use.
+  if (!g_ngx_hooks_complete) {
+    g_ngx_hooked = reshade_dlssnr::ngx_hook_compat::TryHookNgx() || g_ngx_hooked;
+    g_ngx_hooks_complete = reshade_dlssnr::ngx_hook_compat::NgxHooksComplete();
 
-    // The Pre-DLSS and Post-DLSS stages require this hook, and it used to fail
-    // silently. Say so once it is clear the module is not coming.
-    if (!g_ngx_hooked && ++g_ngx_hook_presents > kMaxDeviceHookRetries &&
-        !g_ngx_hook_warned) {
-      g_ngx_hook_warned = true;
-      reshade::log::message(
-          reshade::log::level::warning,
-          "nvngx_dlss.dll never appeared; Pre-DLSS/Post-DLSS stages cannot run, but Backbuffer passes remain available");
+    if (!g_ngx_hooks_complete && ++g_ngx_hook_presents > kMaxDeviceHookRetries) {
+      g_ngx_hooks_complete = true;
+
+      // The Pre-DLSS and Post-DLSS stages require this hook, and it used to
+      // fail silently. Say so once it is clear no module is coming.
+      if (!g_ngx_hooked && !g_ngx_hook_warned) {
+        g_ngx_hook_warned = true;
+        reshade::log::message(
+            reshade::log::level::warning,
+            "No NGX upscaler module appeared; Pre-DLSS/Post-DLSS stages cannot run, but Backbuffer passes remain available");
+      }
     }
   }
 

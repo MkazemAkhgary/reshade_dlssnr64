@@ -247,7 +247,7 @@ void DlssGuides::CaptureGuides(
   }
   state_.clone_resources = clone_resources_;
 
-  if (feature_id != NVSDK_NGX_Feature_SuperSampling ||
+  if (!IsUpscalerFeature(feature_id) ||
       command_list == nullptr || params == nullptr) {
     state_ = {};
     state_.clone_resources = clone_resources_;
@@ -261,6 +261,15 @@ void DlssGuides::CaptureGuides(
       params, NVSDK_NGX_Parameter_MotionVectors, "DLSSD.MotionVectors");
 
   if (depth == nullptr || motion == nullptr) {
+    static bool logged_missing_guides = false;
+    if (!logged_missing_guides) {
+      logged_missing_guides = true;
+      reshade::log::message(
+          reshade::log::level::warning,
+          depth == nullptr
+              ? "DLSS guides: the NGX evaluation has no Depth parameter"
+              : "DLSS guides: the NGX evaluation has no MotionVectors parameter");
+    }
     // In direct mode the retained game resources must not keep an obsolete
     // frame's guides alive indefinitely if the game temporarily stops
     // supplying guides. In clone mode, allocations can be reused later.
@@ -451,7 +460,7 @@ void DlssGuides::CaptureOutput(
   state_.dlss_output_color = nullptr;
   state_.output_width = 0;
   state_.output_height = 0;
-  if (feature_id != NVSDK_NGX_Feature_SuperSampling ||
+  if (!IsUpscalerFeature(feature_id) ||
       command_list == nullptr || params == nullptr || !state_.valid) {
     return;
   }

@@ -13,6 +13,13 @@
 
 namespace reshade_dlssnr {
 
+// Both upscalers produce the image the addon grades and both consume depth
+// and motion vectors, so either one can supply guides.
+inline bool IsUpscalerFeature(NVSDK_NGX_Feature feature_id) {
+  return feature_id == NVSDK_NGX_Feature_SuperSampling ||
+         feature_id == NVSDK_NGX_Feature_RayReconstruction;
+}
+
 struct DlssGuideState {
   ID3D12Resource* depth = nullptr;
   ID3D12Resource* motion = nullptr;
