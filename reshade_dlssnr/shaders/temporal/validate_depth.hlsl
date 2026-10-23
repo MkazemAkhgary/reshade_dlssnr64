@@ -14,7 +14,7 @@ RWBuffer<uint>      gStats       : register(u1);
 // confidence.
 static const float kReuseConfidenceThreshold = 0.25;
 
-// Stats layout, mirrored by kTemporalStatsBytes in temporal/steps.cpp.
+// Stats layout, read by temporal/stats.h.
 //   0 invalid pixel count
 //   1 marker bit (sample validity)
 //   2 sum of confidence, Q8

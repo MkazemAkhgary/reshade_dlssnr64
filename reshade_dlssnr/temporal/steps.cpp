@@ -589,27 +589,16 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
 
   const uint64_t age = run.frame_id >= self->temporal_last_refresh_frame_
       ? run.frame_id - self->temporal_last_refresh_frame_ : UINT64_MAX;
-  // A refresh frame costs ~20 ms of NGX, a reuse frame ~12 ms. The cadence
-  // therefore sets the *period* of an unavoidable frame-time step, and that
-  // step is what reads as discontinuous motion -- not the reuse itself.
-  // Adaptive and Every 2 use the short window: a step every other frame beats
-  // faster than the eye resolves judder, and the longer window only trades
-  // visible stutter for a few extra frames per second. Every 4 stays available
-  // as the explicit maximum-reuse option.
+  // A refresh frame costs far more than a reuse frame, so the cadence sets the
+  // period of an unavoidable frame-time step. A step every other frame beats
+  // faster than the eye resolves judder; a longer window only buys a few extra
+  // frames per second in exchange for visible stutter.
   uint64_t cadence = 4;
   if (mode == 1 || mode == 2) cadence = 2;
-  // The per-pixel confidence blend in apply_edit already limits ghosting at
-  // pixel granularity; a low-confidence pixel fades to the current input
-  // rather than showing the stale edit. The invalid fraction is a population
-  // statistic ("X% of pixels had low-confidence edit this frame"), not a
-  // whole-frame "history is unusable" verdict, and gating reuse on it
-  // disables reuse whenever the scene moves -- which is most of the time,
-  // and is exactly what a temporal filter exists to smooth.
-  //
-  // So the invalid fraction does not gate reuse. It shortens the cadence:
-  // above the user's configured max_invalid%, the reuse window halves so
-  // fresh evaluations arrive twice as often, bounding staleness without
-  // turning reuse off. Below it, the configured cadence applies.
+  // The invalid fraction is a population statistic, not a whole-frame "history
+  // is unusable" verdict. Gating reuse on it disables reuse whenever the scene
+  // moves, which is most of the time. It only shortens the reuse window, and
+  // per-pixel confidence already handles the pixels that went stale.
   float max_invalid_percent = run.pass_state.temporal_max_invalid_percent;
   max_invalid_percent = std::clamp(max_invalid_percent, 1.0f, 50.0f);
   const float max_invalid_fraction = max_invalid_percent * 0.01f;

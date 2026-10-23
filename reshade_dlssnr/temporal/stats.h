@@ -1,9 +1,6 @@
-// Live temporal-reprojection readout.
-//
-// The temporal stage publishes one snapshot per frame; the overlay reads it.
-// Header-only on purpose: no new translation unit, so the generated project
-// does not need regenerating. Last writer wins, which means the panel shows
-// the most recently executed pass.
+// Live temporal-reprojection readout: the temporal stage publishes one snapshot
+// per frame and the overlay reads it. Last writer wins, so with several passes
+// the panel shows the most recently executed one.
 #pragma once
 
 #include <cstdint>
@@ -11,7 +8,7 @@
 namespace reshade_dlssnr {
 namespace temporal_stats {
 
-// GPU stats buffer size. Layout lives in validate_depth.hlsl.
+// GPU stats buffer size; the layout is defined by validate_depth.hlsl.
 inline constexpr unsigned int kBytes = 8u * sizeof(unsigned int);
 
 struct Snapshot {

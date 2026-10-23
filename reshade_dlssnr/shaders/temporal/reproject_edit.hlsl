@@ -54,16 +54,13 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     gPreviousEdit.GetDimensions(history_size.x, history_size.y);
     const float4 raw_edit = SampleHistoryCatmullRom(
         gPreviousEdit, gLinearClamp, prev_uv, history_size);
-    // 0.01 was an "is alpha zero?" test under the binary scheme. Under
-    // continuous confidence it can reject a merely low-confidence history
-    // and starve the candidate. Only reject genuinely absent history.
+    // Alpha is a presence flag, not a weight: a low-confidence history is still
+    // usable, only an absent one is not.
     if (!all(isfinite(raw_edit)) || raw_edit.a <= 0.0001) return;
 
     // Neighbourhood agreement, used ONLY as a confidence signal. The value is
-    // never clipped: this buffer is committed back as the history on reuse
-    // frames, so clipping it feeds back and decays the edit toward the local
-    // mean over the reuse window, then snaps back on the fresh frame -- a
-    // cadence-locked sawtooth (dim on reuse, full on refresh).
+    // never clipped: this buffer is written back as the history on reuse
+    // frames, so a clip feeds back and decays the edit toward the local mean.
     const int2 history_center = int2(prev_uv * history_size);
     float clamp_conf = 1.0;
     VarianceClipNeighbourhood(
