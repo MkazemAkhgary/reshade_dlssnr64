@@ -87,6 +87,7 @@ uint64_t TemporalSettingsSignature(const PassRun& run) {
   return hash;
 }
 
+// One completed GPU feedback sample.
 float TemporalReadInvalidFraction(GpuReadback& readback, ID3D12Fence* fence,
                                   unsigned int width, unsigned int height,
                                   bool* out_valid) {
@@ -292,6 +293,7 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
     // so the new values are never given a frame in which to drain and take
     // visible effect.
     self->temporal_feedback_wait_frames_ = 0;
+    self->temporal_cadence_short_ = false;
   }
   self->temporal_last_mode_ = mode;
   self->temporal_settings_signature_ = signature;
@@ -529,8 +531,15 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
 
   const uint64_t age = run.frame_id >= self->temporal_last_refresh_frame_
       ? run.frame_id - self->temporal_last_refresh_frame_ : UINT64_MAX;
+  // A refresh frame costs ~20 ms of NGX, a reuse frame ~12 ms. The cadence
+  // therefore sets the *period* of an unavoidable frame-time step, and that
+  // step is what reads as discontinuous motion -- not the reuse itself.
+  // Adaptive and Every 2 use the short window: a step every other frame beats
+  // faster than the eye resolves judder, and the longer window only trades
+  // visible stutter for a few extra frames per second. Every 4 stays available
+  // as the explicit maximum-reuse option.
   uint64_t cadence = 4;
-  if (mode == 2) cadence = 2;
+  if (mode == 1 || mode == 2) cadence = 2;
   // The per-pixel confidence blend in apply_edit already limits ghosting at
   // pixel granularity; a low-confidence pixel fades to the current input
   // rather than showing the stale edit. The invalid fraction is a population
@@ -546,7 +555,14 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
   float max_invalid_percent = run.pass_state.temporal_max_invalid_percent;
   max_invalid_percent = std::clamp(max_invalid_percent, 1.0f, 50.0f);
   const float max_invalid_fraction = max_invalid_percent * 0.01f;
-  const bool invalid_high = self->temporal_invalid_fraction_ >= max_invalid_fraction;
+  // Hysteresis: enter at the threshold, leave only below half of it, so a
+  // wobbling invalid fraction cannot flip the cadence every frame.
+  if (self->temporal_invalid_fraction_ >= max_invalid_fraction) {
+    self->temporal_cadence_short_ = true;
+  } else if (self->temporal_invalid_fraction_ < max_invalid_fraction * 0.5f) {
+    self->temporal_cadence_short_ = false;
+  }
+  const bool invalid_high = self->temporal_cadence_short_;
   uint64_t effective_cadence = cadence;
   if (invalid_high) {
     // At least 2 so a hypothetical cadence of 1 cannot bypass reuse entirely.

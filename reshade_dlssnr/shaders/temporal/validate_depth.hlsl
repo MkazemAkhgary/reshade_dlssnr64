@@ -1,5 +1,6 @@
 #include "common/bindings.hlsli"
 #include "common/math.hlsli"
+#include "common/temporal_helpers.hlsli"
 #include "common/temporal_motion.hlsli"
 
 Texture2D<float4> gCandidate     : register(t0);
@@ -101,8 +102,9 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         const float rel_tol = max(kTemporalDepthRelThreshold, 0.0);
         const float ref_d   = max(abs(d_now), abs(d_old));
         const float tol     = max(abs_tol, rel_tol * ref_d);
-        const float err     = abs(d_now - d_old);
-        conf *= saturate(1.0 - err / tol);
+        // Depth is a disocclusion gate, not a confidence measure. Deadzone so
+        // the ordinary reprojection error on a moving surface costs nothing.
+        conf *= DeadzoneConfidence(abs(d_now - d_old), tol);
     }
 
     WriteValidated(pixel, float4(clamp(candidate.rgb, -kLn2, kLn2), conf));

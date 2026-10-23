@@ -56,21 +56,16 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     // and starve the candidate. Only reject genuinely absent history.
     if (!all(isfinite(raw_edit)) || raw_edit.a <= 0.0001) return;
 
-    // Variance clipping in YCoCg. 3x3 neighbourhood: the standard TAA
-    // neighbourhood (Bevy, Godot). The confidence returned here measures how
-    // far the reprojected edit sat outside the local edit distribution.
-    int2 history_center = int2(prev_uv * history_size);
+    // Neighbourhood agreement, used ONLY as a confidence signal. The value is
+    // never clipped: this buffer is committed back as the history on reuse
+    // frames, so clipping it feeds back and decays the edit toward the local
+    // mean over the reuse window, then snaps back on the fresh frame -- a
+    // cadence-locked sawtooth (dim on reuse, full on refresh).
+    const int2 history_center = int2(prev_uv * history_size);
     float clamp_conf = 1.0;
-    // Radius 1 plus-shape = the 5-tap cross (center + N/S/E/W).
-    // Bump radius to 2 for the 9-tap 5x5 plus if a wider footprint
-    // turns out to be needed; both are supported.
-    // Gamma 2.0: a looser clip than the classic Salvi 1.0. Shadows have low
-    // local variance; a tight box resets the history on every shadow-map
-    // texel crossing, which strobes between dim and correct. Gamma 2.0 keeps
-    // the history alive across those events while still clipping genuine
-    // disocclusion ghosts.
-    const float4 clamped_edit = VarianceClipNeighbourhood(
+    VarianceClipNeighbourhood(
         gPreviousEdit, history_center, 1, true, 2.0, raw_edit, clamp_conf);
+    const float3 edit_rgb = clamp(raw_edit.rgb, -kLn2, kLn2);
 
     const float4 current  = gCurrentInput.Load(int3(id.xy, 0));
     const float4 previous = gPreviousInput.SampleLevel(gLinearClamp, prev_uv, 0.0);
@@ -81,19 +76,11 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     const float abs_thr = max(kTemporalPhotometricAbsThreshold, 0.0);
     const float rel_thr = max(kTemporalPhotometricRelThreshold, 0.0);
     const float luma_thr = abs_thr + rel_thr * max(yc, yp);
-    const float luma_err = abs(yc - yp);
-    const float photo_conf = saturate(1.0 - luma_err / max(luma_thr, 1e-6));
-
-    // Karis (2014) anti-flicker: when the current sample is an outlier
-    // relative to the accumulated history, its own contribution to the
-    // moving average is reduced.
-    const float history_luma = dot(max(clamped_edit.rgb, 0.0), kLuma);
-    const float current_history_err = abs(yc - history_luma);
-    const float anti_flicker_thr = max(0.1, history_luma * 0.5);
-    const float anti_flicker = saturate(1.0 - current_history_err / anti_flicker_thr);
+    const float photo_conf =
+        DeadzoneConfidence(abs(yc - yp), luma_thr);
 
     // Confidence is this frame's agreement only; multiplying in the previous
     // confidence compounds it every frame.
-    const float out_conf  = clamp_conf * photo_conf * anti_flicker;
-    gCandidate[id.xy] = float4(clamp(clamped_edit.rgb, -kLn2, kLn2), out_conf);
+    const float out_conf = clamp_conf * photo_conf;
+    gCandidate[id.xy] = float4(edit_rgb, out_conf);
 }

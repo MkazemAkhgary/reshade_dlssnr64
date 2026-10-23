@@ -28,6 +28,20 @@ float3 YCoCg_to_RGB(float3 c)
 }
 
 // ---------------------------------------------------------------------------
+// Deadzone confidence.
+//
+// 1.0 for any error inside half the tolerance, falling to 0 at the tolerance.
+// A bare saturate(1 - err/tol) leaks weight on *every* pixel on *every* reuse
+// frame, and since a reuse frame is compared against a full-weight fresh
+// frame, any leak becomes a periodic gain step at the refresh cadence.
+// ---------------------------------------------------------------------------
+float DeadzoneConfidence(float err, float tol)
+{
+    const float t = max(tol, 1.0e-6);
+    return saturate((t - err) / (0.5 * t));
+}
+
+// ---------------------------------------------------------------------------
 // Variance clipping.
 //
 // Compute the mean and standard deviation of the valid history samples in
@@ -114,6 +128,11 @@ float4 VarianceClipNeighbourhood(
 // 5-bilinear-tap form from JMS55/Bevy (also used by Godot and EEVEE-Next).
 //
 // `tex_size` is the history texture's width/height in texels.
+//
+// The result is clamped to the min/max of the five taps. Catmull-Rom
+// overshoots at discontinuities (edit fields are piecewise-smooth with hard
+// breaks at object edges), and that overshoot is a per-frame gain spike --
+// exactly the flicker the C1 continuity is supposed to remove.
 // ---------------------------------------------------------------------------
 float4 SampleHistoryCatmullRom(
     Texture2D<float4> history_tex,
@@ -135,11 +154,20 @@ float4 SampleHistoryCatmullRom(
     const float2 texel_pos3  = (texel_center + 2.0) / tex_size;
     const float2 texel_pos12 = (texel_center + w2 / w12) / tex_size;
 
+    const float4 s0 = history_tex.SampleLevel(samp, float2(texel_pos12.x, texel_pos0.y), 0.0);
+    const float4 s1 = history_tex.SampleLevel(samp, float2(texel_pos0.x,  texel_pos12.y), 0.0);
+    const float4 s2 = history_tex.SampleLevel(samp, float2(texel_pos12.x, texel_pos12.y), 0.0);
+    const float4 s3 = history_tex.SampleLevel(samp, float2(texel_pos3.x,  texel_pos12.y), 0.0);
+    const float4 s4 = history_tex.SampleLevel(samp, float2(texel_pos12.x, texel_pos3.y), 0.0);
+
     float4 result = 0.0;
-    result += history_tex.SampleLevel(samp, float2(texel_pos12.x, texel_pos0.y), 0.0) * w12.x * w0.y;
-    result += history_tex.SampleLevel(samp, float2(texel_pos0.x,  texel_pos12.y), 0.0) * w0.x  * w12.y;
-    result += history_tex.SampleLevel(samp, float2(texel_pos12.x, texel_pos12.y), 0.0) * w12.x * w12.y;
-    result += history_tex.SampleLevel(samp, float2(texel_pos3.x,  texel_pos12.y), 0.0) * w3.x  * w12.y;
-    result += history_tex.SampleLevel(samp, float2(texel_pos12.x, texel_pos3.y), 0.0) * w12.x * w3.y;
-    return result;
+    result += s0 * w12.x * w0.y;
+    result += s1 * w0.x  * w12.y;
+    result += s2 * w12.x * w12.y;
+    result += s3 * w3.x  * w12.y;
+    result += s4 * w12.x * w3.y;
+
+    const float4 lo = min(min(min(s0, s1), min(s2, s3)), s4);
+    const float4 hi = max(max(max(s0, s1), max(s2, s3)), s4);
+    return clamp(result, lo, hi);
 }

@@ -97,12 +97,11 @@ const char* const kTargetTips[] = {
 const char* const kTemporalNames[] = {"Off", "Adaptive", "Every 2", "Every 4"};
 const char* const kTemporalTips[] = {
     "Evaluate the neural model on every frame.",
-    "Reuse the reprojected edit while asynchronous validation stays below the "
-    "configured invalid-pixel limit; force a refresh at least every four frames.",
-    "Target one model evaluation every two frames, but refresh early when "
-    "validation is unavailable or exceeds the invalid-pixel limit.",
-    "Target one model evaluation every four frames, but refresh early when "
-    "validation is unavailable or exceeds the invalid-pixel limit."};
+    "Reuse the reprojected edit as far as per-pixel confidence allows, forcing "
+    "a refresh at least every two frames. Shortest window, least judder.",
+    "Target one model evaluation every two frames.",
+    "Target one model evaluation every four frames. Highest frame rate, but a "
+    "longer judder period: only pick this if the stutter does not bother you."};
 
 const char* const kPresetNames[] = {"A", "B", "C"};
 // Presets are a name, not an enum: the C++ type is an int the model reads.

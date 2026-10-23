@@ -101,15 +101,16 @@ void CSMain(uint3 id : SV_DispatchThreadID)
             // History is the last fresh edit. Averaging it against the
             // reprojected candidate only adds lag, and that lag is what makes
             // a reuse frame differ from the fresh frame that follows.
+            // Alpha is a presence flag downstream, not a weight.
             gHistoryEdit[pixel] = float4(
-                clamp(fresh.rgb, -kLn2, kLn2), max(cand_conf, 0.25));
+                clamp(fresh.rgb, -kLn2, kLn2), 1.0);
         }
         else if (cand_conf > 0.01)
         {
             // No valid fresh edit (NGX output below signal floor). Keep the
             // reprojected history rather than overwriting it with zeros.
             gHistoryEdit[pixel] = float4(
-                clamp(candidate.rgb, -kLn2, kLn2), cand_conf * 0.95);
+                clamp(candidate.rgb, -kLn2, kLn2), 1.0);
         }
         else
         {

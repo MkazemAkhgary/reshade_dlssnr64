@@ -305,6 +305,10 @@ class PassSession {
   // a broken feedback path cannot disable reuse permanently.
   uint32_t temporal_feedback_wait_frames_ = 0;
   float temporal_invalid_fraction_ = 1.0f;
+  // Latched "short cadence" state. Without hysteresis the effective cadence
+  // flips 4<->2 whenever the invalid fraction wobbles across the threshold,
+  // which turns a steady refresh rhythm into a beat.
+  bool temporal_cadence_short_ = false;
   uint64_t temporal_last_refresh_frame_ = 0;
   uint64_t temporal_last_frame_id_ = 0;
   uint64_t temporal_last_guide_serial_ = 0;
