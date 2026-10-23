@@ -108,7 +108,12 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     // Region protection has to be evaluated in the domain the edit was measured
     // in. With kApplyEditToPreGrade the endpoints are the graded image while
     // the base is the pre-grade one, so the base's luma would protect the wrong
-    // regions and the edit would land with the wrong strength there.
+    // regions and the edit would land at the wrong strength there.
+    //
+    // The residual stays a ratio in the graded domain on purpose. The model
+    // reconstructs a plausible image, so its edit has to land as the model
+    // produced it; inverting the grade first would move the result away from
+    // that intent, not toward it.
     const float3 protection_rgb = kApplyEditToPreGrade > 0.5 ? in_rgb : original.rgb;
     const float3 residual_shaped = ShapeResidualSdr(residual_log, protection_rgb);
     float3 edited = original.rgb * exp(residual_shaped);
