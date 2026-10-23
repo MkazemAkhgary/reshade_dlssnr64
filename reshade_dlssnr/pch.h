@@ -41,3 +41,12 @@
 
 // Stable addon headers.
 #include "profiling/profile.h"
+
+// ctl core and the value store: the heaviest addon includes, and the ones that
+// change least.
+#include "ctl/builtin_settings.h"
+#include "ctl/draw.h"
+#include "ctl/schema.h"
+#include "ctl/types.h"
+#include "ctl/values.h"
+#include "feature/settings_store.h"
