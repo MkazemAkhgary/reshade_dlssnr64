@@ -73,14 +73,12 @@ reshade_dlssnr/
   shaders/importance_mask/
     build_importance_mask.hlsl             Builds the per-frame Importance Mask from model input/output difference
   shaders/temporal/
-    extract_edit.hlsl               Extracts the current model's multiplicative edit
-    reproject_edit.hlsl             Motion-reprojects the previous edit and tests photometric agreement
-    validate_depth.hlsl              Rejects reprojections across depth discontinuities
-    count_invalid.hlsl               Counts rejected/mismatched pixels for asynchronous reuse policy
-    apply_edit.hlsl                  Applies a validated edit to the current model input
-    commit_edit.hlsl                 Publishes the edit used as next-frame history
-    store_depth.hlsl                 Stores the current depth history
-    clear_stats.hlsl                 Clears temporal feedback counters
+    reproject_edit.hlsl             Motion-reprojects the previous edit, samples it with Catmull-Rom, and scores its confidence
+    validate_depth.hlsl             Folds the depth-discontinuity test into the confidence and accumulates reuse statistics
+    apply_edit.hlsl                 Applies a validated edit to the current model input
+    commit_history.hlsl             Accumulates the fresh edit into the stored history and stores the current depth
+    reconstruct_motion_vectors.hlsl Estimates a motion field from depth when the game supplies none
+    clear_stats.hlsl                Clears temporal feedback counters
 
   ctl/                             Declarative settings framework
     ctl.h                           Framework umbrella header
@@ -185,12 +183,15 @@ reshade_dlssnr/
     trace.h                         Settings trace interface
     trace.cpp                       Settings change tracing
     version.h                       Addon version constant
+  temporal/
+    steps.cpp                       Temporal prepare/commit steps and reuse policy
+    stats.h                         Live reprojection snapshot published to the overlay
   ui/
     ui.h                            Overlay entry point
     ui.cpp                          Main overlay, section orchestration, and pass selection
     ui_pass.cpp                     Pass toolbar and reset controls
     ui_sections.h                   Section-drawer declarations
-    ui_status.cpp                   Status and retry controls
+    ui_status.cpp                   Status, temporal readout, and retry controls
     ui_widgets.h                    Shared widget declarations
     ui_widgets.cpp                  Shared widget implementation
 
@@ -420,9 +421,11 @@ The 512-byte CBV is:
 | 384 | `LocalExposureControlBlock` | 32 |
 | 416 | alignment padding | 96 |
 
-The resulting `ComputeConstants` size and `BindAndDispatch` stride are both 512 bytes, rounded to the D3D12 constant-buffer alignment. `TemporalBlock` owns the photometric/depth thresholds, maximum motion displacement, motion-vector coordinate metadata, and guide subrect metadata. Temporal kernels use a dedicated `TemporalBlock`; they do not borrow HDR or generic shader-parameter slots. `HdrBlock.LocalExposureParams.x/y` carry the local-exposure radius and sample count; `.z` is reserved and kept zero. The `LocalExposureControlBlock` occupies previously unused trailing cbuffer space and carries the directional curve, detail-retention, and protection controls without changing existing block offsets.
+The resulting `ComputeConstants` size and `BindAndDispatch` stride are both 512 bytes, rounded to the D3D12 constant-buffer alignment. `TemporalBlock` owns the photometric/depth thresholds, maximum motion displacement, motion-vector coordinate metadata, and guide subrect metadata. `TemporalBlock.HistoryControl.x` selects whether history is committed from the validated candidate or from a fresh model evaluation; `.y` is the weight of the fresh edit when it is accumulated into the stored one. Temporal kernels use a dedicated `TemporalBlock`; they do not borrow HDR or generic shader-parameter slots. `HdrBlock.LocalExposureParams.x/y` carry the local-exposure radius and sample count; `.z` is reserved and kept zero. The `LocalExposureControlBlock` occupies previously unused trailing cbuffer space and carries the directional curve, detail-retention, and protection controls without changing existing block offsets.
 
 The shader-side aliases in `bindings.hlsli` turn fields such as `hdr.Exposure` into the semantic names used by shader code (`kExposure` and so on). The Strength/Soft-Compression settings (`PassSettings::strength` / `::soft_compression`, compose/settings.h) are written field-by-field into `ShaderBlock.Params0` and `Params1` by `ComposeOutput` in compose/compose.cpp. `Params1.w` carries the per-dispatch `Apply Edit to Pre-Grade Image` flag for composition. In HDR mode, when local exposure is active, that option transfers the edit onto the local-exposed pre-grade base by undoing only the global carrier scale; the normal path continues to use the original HDR source and packed carrier-to-HDR multiplier.
+
+The same option means the model is fed the graded image and the edit it produces lands on the pre-grade image. `compose/steps.cpp` selects the graded endpoint as the residual reference, and the SDR compose evaluates highlight/shadow region protection against that endpoint rather than the pre-grade base, because protection has to be weighted in the domain the edit was measured in. The residual stays a ratio in the graded domain: the model reconstructs a plausible image, so its edit has to land as the model produced it, and inverting the grade first would move the result away from the model's intent rather than toward it.
 
 The layout intentionally avoids `float2`, `float3`, `packoffset`, platform headers and HLSL-only utility code in `params.h`. Every nested block is explicitly 16-byte aligned and padded.
 
@@ -507,11 +510,29 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 ### Temporal edit reprojection
 
-Temporal reprojection runs after `GradeModelInput` and before `FillEvaluateParams`/NGX evaluation on each pass. It extracts the model's per-channel multiplicative edit as bounded log gain, reprojects the previous edit with current motion vectors, then rejects history that fails coordinate/motion, photometric, or depth validation. Accepted history is applied to the current model input to synthesize the model output; any unavailable history, failed GPU step, missing fresh guides, or feedback above the configured invalid percentage fails open to a fresh NGX evaluation. A fresh model result replaces the stored edit/depth/input history. The feedback readback is fence-delayed and asynchronous; the render path does not wait for the CPU to learn the invalid fraction.
+Temporal reprojection runs after `GradeModelInput` and before `FillEvaluateParams`/NGX evaluation on each pass. It expresses the model's per-channel edit as bounded log gain, reprojects the stored edit with the current motion vectors, and scores how far that reprojected value can be trusted.
 
-The mode selector offers `Off`, `Adaptive`, `Every 2`, and `Every 4`. The photometric test compares current and motion-reprojected previous input luma against an absolute-plus-relative allowance. Depth validation compares current depth against the previous depth at the reprojected coordinate using the larger of the absolute and relative limits. Motion beyond the maximum displacement is rejected. The default limits are absolute/relative photometric `0.06`/`0.10`, absolute/relative depth `0.005`/`0.03`, maximum displacement `40` working-resolution pixels, and maximum invalid/mismatched fraction `5%`. Lower thresholds reject more history and increase fresh model evaluations; higher thresholds trade validation strictness for reuse.
+**Confidence is continuous, and each term is a deadzone.** The score combines agreement with the stored edit's own neighbourhood in YCoCg, photometric agreement between the current and reprojected previous input, and a depth-discontinuity test. Each term is full confidence inside half its tolerance and falls to zero at the tolerance. A term that leaks weight on every pixel becomes a periodic gain step, because a reuse frame sits between two full-weight fresh frames. Depth is a disocclusion gate, not a confidence measure, so it is weighted the same way rather than scaling linearly with the depth error.
 
-Debug views show the pre-depth candidate, post-depth validation result, and per-channel reprojected log edit. Candidate/validation status is encoded by alpha in the temporal working textures; debug views translate it to readable colors. They are rendered on the pass command list while the produced resources are still in known states.
+**The reprojected edit is applied at full weight above the confidence knee.** Linear attenuation would dim the edit on every reuse frame while the fresh frames apply it fully, which is a gain step at the cadence rather than a smoother result. Above the knee the edit lands unchanged; below it, the pixel fades to the current input.
+
+**Variance clipping scores the edit, it never rewrites it.** The stored edit is written back as history on reuse frames, so clipping the value feeds back and decays the edit toward its local mean, then snaps back on the fresh frame. An edit field is piecewise smooth with hard breaks at object edges; mean-clamping it dims the correction exactly where it matters.
+
+**History is sampled with 5-tap Catmull-Rom, clamped to the min/max of its taps.** The spline is C1, which removes the derivative step bilinear leaves at texel boundaries under sub-pixel motion. It also overshoots at edit-field discontinuities, and that overshoot is a per-frame gain spike, so the result is clamped to the range of the five taps it was built from.
+
+**Motion vectors are read from the centre texel and widened only when the centre has no data.** The widened pick takes the largest-magnitude neighbour: a hole beside a moving object belongs to that object, and taking the smallest vector there snaps the silhouette back to the background motion.
+
+**The fresh edit is accumulated into the stored edit, and every frame renders `current * exp(stored edit)`.** A refresh frame runs NGX, extracts the fresh edit, and blends it in; a reuse frame reprojects the stored edit. A hard replace makes the applied edit jump to the new value in one frame, and the jump grows with the reuse window because the model's own temporal history has been starved for that long. Blending bounds the jump to a fraction of the difference per refresh. Where the reprojected prediction has low confidence it is not a usable reference, so the accumulation falls back to a full replace. The current frame is always the base; the edit only steers it.
+
+**The cadence sets the period of the frame-time step, not its size.** A refresh frame costs substantially more than a reuse frame, and no image-side treatment changes that. `Adaptive` and `Every 2` use the short window because a step every other frame beats faster than the eye resolves judder; `Every 4` is the explicit maximum-reuse option. The invalid fraction does not gate reuse: it is a population statistic, and gating on it disables reuse whenever the scene moves, which is most of the time. It only shortens the reuse window, and that shortening latches with hysteresis so a wobbling fraction cannot flip the cadence every frame.
+
+Any unavailable history, failed GPU step, missing fresh guides, or feedback above the configured invalid percentage fails open to a fresh NGX evaluation. The feedback readback is fence-delayed and asynchronous; the render path does not wait for the CPU to learn the invalid fraction.
+
+The photometric test compares current and motion-reprojected previous input luma against an absolute-plus-relative allowance. Depth validation compares current depth against the previous depth at the reprojected coordinate using the larger of the absolute and relative limits. Motion beyond the maximum displacement is rejected. The default limits are absolute/relative photometric `0.06`/`0.10`, absolute/relative depth `0.005`/`0.03`, maximum displacement `40` working-resolution pixels, and maximum invalid/mismatched fraction `15%`. Lower thresholds reject more history and increase fresh model evaluations; higher thresholds trade validation strictness for reuse.
+
+Debug views show the pre-depth candidate, post-depth validation result, and per-channel reprojected log edit. Confidence is stored in alpha in the temporal working textures; debug views translate it to readable colors. They are rendered on the pass command list while the produced resources are still in known states.
+
+**The Temporal Reprojection category ends with a live readout.** It reports reuse or refresh for the current frame with its age over the effective cadence, the reuse ratio since load, the invalid fraction from the GPU readback, mean confidence and mean absolute log gain of the reprojected edit, and the smoothed frame interval for each class with the step between them. That step is the judder amplitude, and nothing else in the addon exposes it. `temporal/stats.h` holds the snapshot; the temporal stage publishes it once per frame and the overlay reads it. The GPU side accumulates the invalid count, a marker, the confidence sum, and the edit-luma sum in one small buffer that the reproject dispatch clears and the validate dispatch fills.
 
 ### Streamline
 
@@ -532,6 +553,8 @@ Debug views show the pre-depth candidate, post-depth validation result, and per-
 **The DLSSNR feature is rebuilt only when its full-resolution build size changes.** Working scale changes only the per-frame evaluation size; they do not recreate the feature.
 
 **Model tuning is applied at feature creation and again for evaluation.** Preset, intensity, local structure/tone, skin structure, auto-mask and UI-correction controls are not feature-rebuild triggers.
+
+**The FP16 pipeline preference never releases the feature.** It selects the format of the addon's own intermediate buffers and is not passed to NGX, so the feature does not depend on it. Releasing it from the preference path runs while the frame that still references the feature is in flight, which takes the streamline v1 runtime down; the buffers are recreated on their own, and the next evaluation resets the model history.
 
 **The feature creation frame is skipped for evaluation.** `FeatureLifecycle::ConsumeJustRebuilt()` gives the caller one frame to let a new feature initialize before the next evaluation.
 
@@ -599,6 +622,8 @@ Debug views show the pre-depth candidate, post-depth validation result, and per-
 
 **Brightness mode `Exposure` operates in linear light.** It multiplies all three linear RGB channels by `2^stops` before output encoding, which changes scene intensity while preserving chromaticity until gamut limits/clipping. It replaces the former Lift mode; the shared mode index is retained so profile serialization remains stable. Gain, Gamma, and Soft keep their separate luminance-shaped curves.
 
+**Level ranges are bounded by the curve, not by the control.** Black Level spans `-0.40..0.20` and White Level `0.70..2.00`: past roughly `0.2` the black point consumes the whole shadow range, and below roughly `0.7` the white point has nothing left to compress. The clamps in `shaders/common/grade.hlsli` mirror `grade/settings.h` and move with it; a wider UI range with narrower shader clamps silently does nothing.
+
 
 **Saved profiles use stable `ProfileId` keys.** `UserPresetOrder` is the comma-separated display order and `UserPresetNextId` preserves the allocation high-water mark. A profile's name and enabled state live at `UserPreset.<id>.Name` and `.Enabled`; its `ctl` settings, including the typed `Pass Order.ids` integer list, live under `UserPreset.<id>.Data`. The pass-order setting is loaded before instanced sections, and its stable IDs supply the instance keys for pass settings. Profile persistence excludes settings marked global-only; loading a profile preserves the current global overlay UI state. Rename edits the selected profile name in place and confirms only after validation, while Enter saves and Escape cancels. Deletion removes one ID and its schema-defined keys without shifting another profile's data.
 
@@ -615,7 +640,7 @@ Debug views show the pre-depth candidate, post-depth validation result, and per-
 
 **Synthetic Motion Guides are optional and pass-scoped.** When enabled and no native motion texture is available, the pass searches the previous image at working resolution and scores candidates against current/previous depth to reject cross-surface matches. The generated current-to-previous vector field is supplied to NGX and temporal reprojection; ambiguous/disoccluded pixels fall back to zero motion. The extra optical-flow dispatch is opt-in because of its GPU cost, and requires a usable depth guide.
 
-**Temporal reprojection is configured per pass and sits before Advanced/model grading.** The `Temporal Reprojection` section follows Strength and precedes the Advanced settings and grade-boundary sections. Mode defaults to Off. Its controls expose absolute/relative photometric thresholds, absolute/relative depth thresholds, maximum working-resolution motion displacement, and the maximum invalid-pixel percentage that permits reuse. Defaults preserve the existing acceptance limits: 0.06/0.10 photometric, 0.005/0.03 depth, 40 working pixels, and 5% invalid/mismatched pixels. Threshold changes are included in the temporal-history signature and invalidate stale history. The pass-tab row wraps when buttons no longer fit beside the toolbar.
+**Temporal reprojection is configured per pass and sits before Advanced/model grading.** The `Temporal Reprojection` section follows Strength and precedes the Advanced settings and grade-boundary sections. Mode defaults to Off. Its controls expose absolute/relative photometric thresholds, absolute/relative depth thresholds, maximum working-resolution motion displacement, and the maximum invalid-pixel percentage that shortens the reuse window. Defaults are 0.06/0.10 photometric, 0.005/0.03 depth, 40 working pixels, and 15% invalid/mismatched pixels. Threshold changes are included in the temporal-history signature and invalidate stale history. The category ends with the live reprojection readout, drawn as a schema hook row rather than a separate section, so its collapsible is the category header. The pass-tab row wraps when buttons no longer fit beside the toolbar.
 
 **ImGui IDs are scoped by section identity and instance identity.** `ctl::DrawSection` pushes a scope derived from the schema section name and `InstanceKey`, so equal visible labels in different sections or instances do not share collapsing-header IDs. All persisted overlay open/closed states are schema settings in `Overlay UI State`, marked global-only so profile loads cannot change them. The overlay callbacks still implement the same header interactions, but read and write the ctl store rather than manually maintained `Settings` booleans.
 
@@ -738,6 +763,8 @@ These are retained as user-reported symptoms whose root causes are not establish
 ## Build
 
 The project is a Visual Studio x64 DLL/addon build. Release builds use speed optimization and whole-program optimization for every translation unit.
+
+`pch.h` carries the SDK headers plus the addon headers that are both heavy and stable: `profiling/profile.h`, the `ctl` core (`builtin_settings`, `draw`, `schema`, `types`, `values`), and `feature/settings_store.h`. Anything that churns costs more in PCH rebuilds than it saves in parse time.
 
 - Solution: `reshade_dlssnr.sln`
 - Project: `reshade_dlssnr.vcxproj`
