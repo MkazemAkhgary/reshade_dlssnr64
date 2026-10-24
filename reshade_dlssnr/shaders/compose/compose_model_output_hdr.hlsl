@@ -29,17 +29,14 @@ float3 EncodeHdr(float3 lin)
     return HdrEncodeTarget(lin, (int)(kFormat + 0.5), kSdrReferenceWhiteNits);
 }
 
-// Gain-Map Residual measures the model edit as a relative change in the
-// actual linear model domain. Do not invert the nonlinear gamut fit on both
-// endpoints: near white, tiny model changes would become enormous HDR deltas.
-// The stored reciprocal multiplier transfers the relative edit back onto the
-// original HDR source without altering its exposure or highlight range.
+// Gain-Map Residual measures the model edit as a per-channel log ratio of
+// its SDR input and output and applies it multiplicatively to the composition
+// base. Do not invert the nonlinear gamut fit on both endpoints: near white,
+// tiny model changes would become enormous HDR deltas.
 float3 ComposeHdrInverse(float3 sdr_base, float3 hdr_src,
-                         float3 low_in, float3 low_out,
-                         float carrier_to_hdr_scale)
+                         float3 low_in, float3 low_out)
 {
     float3 composition_base = hdr_src;
-    float carrier_to_composition_scale = carrier_to_hdr_scale;
 
     // In this mode the residual is measured against the actual Grade Model
     // Input result, then applied to the image just before that grade. The
@@ -62,15 +59,14 @@ float3 ComposeHdrInverse(float3 sdr_base, float3 hdr_src,
             : 0.0;
         const float inverse_global_scale = rcp(max(global_scale, 1e-8));
         composition_base = max(sdr_base, 0.0) * inverse_global_scale;
-        carrier_to_composition_scale = inverse_global_scale;
     }
 
     float3 result = composition_base;
-    float3 low_in_lin = max(SrgbToLinearExt(low_in), 0.0);
-    float3 low_out_lin = max(SrgbToLinearExt(low_out), 0.0);
+    const float3 low_in_lin = max(SrgbToLinearExt(low_in), 0.0);
+    const float3 low_out_lin = max(SrgbToLinearExt(low_out), 0.0);
 
-    const float3 model_delta = low_out_lin - low_in_lin;
-    if (!all(model_delta == 0.0))
+    const float3 log_gain = safe_log3(low_out_lin) - safe_log3(low_in_lin);
+    if (!all(log_gain == 0.0))
     {
         const float3 kL = HdrLumaWeights();
         const float3 model_sdr_base = GamutFitModelInput(max(sdr_base, 0.0));
@@ -78,18 +74,9 @@ float3 ComposeHdrInverse(float3 sdr_base, float3 hdr_src,
         if (kLocalExposureStrength > 0.0)
             base_luma = max(dot(low_in_lin, kL), 0.0);
 
-        const float3 model_denominator = max(abs(low_in_lin), 0.001.xxx);
-        const float3 relative_delta = model_delta / model_denominator;
-        const float3 shaped = ShapeResidual(relative_delta, base_luma);
-        // In the normal composition path, packed.rgb * packed.a reconstructs
-        // this pixel's scene-referred source scale. Applying the relative edit
-        // in this domain preserves super-whites without inverting the model's
-        // nonlinear gamut fit. The pre-grade path substitutes the inverse
-        // global carrier scale above.
-        const float3 carrier_delta = max(sdr_base, 0.0) * shaped;
+        const float3 shaped = ShapeResidual(log_gain, base_luma);
         const float3 hdr_edited = max(
-            composition_base + carrier_delta *
-                max(carrier_to_composition_scale, 0.0), 0.0);
+            composition_base * exp(shaped), 0.0);
         result = BlendYCbCr(
             composition_base, hdr_edited, kLumaStrength, kChromaStrength);
     }
@@ -127,9 +114,8 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     }
 
     const float3 sdr_base = DecodePackedHdr(packed);
-    const float carrier_to_hdr_scale = max(packed.a, 0.0);
     const float3 final_lin = ComposeHdrInverse(
-        sdr_base, hdr_src, low_in, low_out, carrier_to_hdr_scale);
+        sdr_base, hdr_src, low_in, low_out);
     const float3 encoded_result = EncodeHdr(final_lin);
     // Preserve native-format codes in untouched channels rather than running
     // their source values through a lossy decode/encode pair.
