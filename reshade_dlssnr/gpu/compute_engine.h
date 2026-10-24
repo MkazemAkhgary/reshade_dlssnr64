@@ -50,7 +50,7 @@ struct TransparentStringEqual {
 constexpr uint32_t kMaxFramesInFlight = 16;  // DXGI's maximum swapchain buffers
 // The ring covers the prior twelve per-pass dispatches plus up to seven
 // temporal edit/reprojection/validation/history dispatches, one game-exposure
-// read, HDR histogram work, Release grading, and Importance Mask. Descriptors
+// read, HDR histogram work, Release grading, and Exposure Mask. Descriptors
 // and constants are consumed asynchronously by the GPU.
 constexpr uint32_t kMaxDispatchesPerFrame = kMaxPasses * 19 + 10 + 3;
 constexpr uint32_t kDescriptorRingSize =

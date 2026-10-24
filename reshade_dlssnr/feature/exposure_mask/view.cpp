@@ -1,20 +1,20 @@
-// Importance Mask view implementation. See view.h.
+// Exposure Mask view implementation. See view.h.
 
-#include "feature/importance_mask/view.h"
+#include "feature/exposure_mask/view.h"
 #include "profiling/profile.h"
 
 #include "ctl/values.h"
-#include "feature/importance_mask/settings.h"
+#include "feature/exposure_mask/settings.h"
 
 namespace reshade_dlssnr {
 namespace feature {
-namespace importance_mask {
+namespace exposure_mask {
 
-ImportanceMaskSnapshot Read(const ctl::ValueStore& store,
+ExposureMaskSnapshot Read(const ctl::ValueStore& store,
                             const ctl::InstanceKey& key) {
   DLSSNR_PROFILE_CTL_L3("Read");
   const std::string sec = kSection;
-  ImportanceMaskSnapshot s;
+  ExposureMaskSnapshot s;
   s.enable = store.Read(sec, key, kEnable).as_bool;
   s.edit_strength = store.Read(sec, key, kEditStrength).as_float;
   s.mask_smoothing = store.Read(sec, key, kSmoothing).as_float;
@@ -25,6 +25,6 @@ ImportanceMaskSnapshot Read(const ctl::ValueStore& store,
   return s;
 }
 
-}  // namespace importance_mask
+}  // namespace exposure_mask
 }  // namespace feature
 }  // namespace reshade_dlssnr

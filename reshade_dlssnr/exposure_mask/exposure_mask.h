@@ -7,14 +7,14 @@
 
 #include "command_context.h"
 #include "compute_engine.h"
-#include "importance_mask/settings.h"
+#include "exposure_mask/settings.h"
 
 namespace reshade_dlssnr {
 
 enum class PipelineNodeId : uint32_t;
 struct PipelineStepDef;
 
-class ImportanceMask {
+class ExposureMask {
  public:
   struct Output {
     ID3D12Resource* mask = nullptr;
@@ -41,7 +41,7 @@ class ImportanceMask {
              ID3D12Device* device,
              ID3D12Resource* model_input,
              ID3D12Resource* model_output,
-             const ImportanceMaskSettings& settings);
+             const ExposureMaskSettings& settings);
 
  private:
   bool EnsureResources(ID3D12Device* device,
@@ -63,6 +63,6 @@ class ImportanceMask {
   bool generated_this_frame_ = false;
 };
 
-const PipelineStepDef* ImportanceMaskStepFor(PipelineNodeId id);
+const PipelineStepDef* ExposureMaskStepFor(PipelineNodeId id);
 
 }  // namespace reshade_dlssnr

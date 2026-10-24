@@ -18,7 +18,7 @@
 #include "model/feature_lifecycle.h"
 #include "debug/frame_debug_context.h"
 #include "hdr_state.h"
-#include "importance_mask/importance_mask.h"
+#include "exposure_mask/exposure_mask.h"
 #include "model/model_pipeline.h"
 #include "pass_resources.h"
 #include "gpu_readback.h"
@@ -29,7 +29,7 @@
 
 namespace reshade_dlssnr {
 
-class ImportanceMask;
+class ExposureMask;
 
 class PassSession {
  public:
@@ -53,7 +53,7 @@ class PassSession {
                           HdrState* hdr,
                           HdrState* previous_hdr,
                           CommandContext* hdr_cmd,
-                          ImportanceMask* importance_mask,
+                          ExposureMask* exposure_mask,
                           ID3D12Resource* game_exposure_texture,
                           ID3D12CommandQueue* command_queue,
                           IDXGISwapChain* swapchain,
@@ -75,8 +75,8 @@ class PassSession {
 
   HdrState& Hdr() { return hdr_state_; }
   const HdrState& Hdr() const { return hdr_state_; }
-  ImportanceMask& Mask() { return importance_mask_; }
-  void AdvanceMaskFrame(bool enabled) { importance_mask_.AdvanceFrame(enabled); }
+  ExposureMask& Mask() { return exposure_mask_; }
+  void AdvanceMaskFrame(bool enabled) { exposure_mask_.AdvanceFrame(enabled); }
 
   // The list a stage records on: the session's own list for the Present
   // stage, the game's for PostDLSS. Steps that touch GPU state go through
@@ -165,7 +165,7 @@ class PassSession {
                   HdrState* hdr,
                   HdrState* previous_hdr,
                   CommandContext* hdr_cmd,
-                  ImportanceMask* importance_mask,
+                  ExposureMask* exposure_mask,
                   ID3D12Resource* game_exposure_texture,
                   ID3D12CommandQueue* command_queue,
                   IDXGISwapChain* swapchain,
@@ -291,7 +291,7 @@ class PassSession {
   PassResources resources_;
   FeatureLifecycle feature_;
   HdrState hdr_state_;
-  ImportanceMask importance_mask_;
+  ExposureMask exposure_mask_;
 
   // Per-pass temporal amortization state. GPU history lives in PassResources;
   // only feedback samples and policy bookkeeping are CPU-side.

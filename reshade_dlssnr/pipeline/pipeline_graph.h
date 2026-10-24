@@ -30,7 +30,7 @@
 #include "feature/pass/ui.h"
 #include "feature/pass/view.h"
 #include "hdr/settings.h"
-#include "importance_mask/settings.h"
+#include "exposure_mask/settings.h"
 #include "model/model_pipeline.h"
 
 namespace reshade_dlssnr {
@@ -42,7 +42,7 @@ class HdrState;
 class NgxRuntime;
 class PassResources;
 class PassSession;
-class ImportanceMask;
+class ExposureMask;
 struct FrameDebugContext;
 struct PipelineStageDef;
 struct Settings;
@@ -127,7 +127,7 @@ enum class PipelineNodeId : uint32_t {
   ModelOutputBarrier = 26,
 
   // -- post-evaluation analysis and composition ----------------------------
-  BuildImportanceMask = 27,
+  BuildExposureMask = 27,
   ComposeModelOutput = 28,
   ComposeModelOutputHdr = 29,
   GradeModelOutput = 30,
@@ -196,7 +196,7 @@ struct PassRun {
   NgxRuntime* runtime = nullptr;
   HdrState* hdr = nullptr;                 // per-pass; null in Backbuffer stage
   HdrState* previous_hdr = nullptr;        // prior pass in the same stage chain
-  ImportanceMask* importance_mask = nullptr; // null in Backbuffer stage
+  ExposureMask* exposure_mask = nullptr; // null in Backbuffer stage
   // Game-owned NGX ExposureTexture captured from the current DLSS evaluate.
   ID3D12Resource* game_exposure_texture = nullptr;
   // Scratch command context the HDR histogram records through. Owned by the
@@ -307,7 +307,7 @@ struct PassRun {
   // whole point of the snapshot: the render path deals in what to draw with,
   // not in where the setting lives.
   //
-  // HDR and the importance mask are single-instance sections, so their
+  // HDR and the exposure mask are single-instance sections, so their
   // snapshots are plain values on the run rather than something looked up per
   // pass. They are filled wherever the store is reachable for that stage --
   // BindRun for the pass stages, the stage entry points for HDR preparation
@@ -319,7 +319,7 @@ struct PassRun {
   // the graded input and applied to the pre-grade image.
   bool input_grade_apply_to_pre_grade = false;
   HdrSettings hdr_state = {};
-  ImportanceMaskSettings mask_state = {};
+  ExposureMaskSettings mask_state = {};
 
   // -- bookkeeping ----------------------------------------------------------
   // Bitmask over PipelineNodeId, set by the runner after each successful step.
@@ -723,7 +723,7 @@ inline constexpr PipelineNodeId kPreDlssStepNodes[] = {
     PipelineNodeId::FillEvaluateParams,
     PipelineNodeId::EvaluateFeature,
     PipelineNodeId::ModelOutputBarrier,
-    PipelineNodeId::BuildImportanceMask,
+    PipelineNodeId::BuildExposureMask,
     PipelineNodeId::GradeModelOutput,
     PipelineNodeId::ComposeModelOutput,
     PipelineNodeId::RenderDebugView,
@@ -751,7 +751,7 @@ inline constexpr PipelineNodeId kPostDlssStepNodes[] = {
     PipelineNodeId::FillEvaluateParams,
     PipelineNodeId::EvaluateFeature,
     PipelineNodeId::ModelOutputBarrier,
-    PipelineNodeId::BuildImportanceMask,
+    PipelineNodeId::BuildExposureMask,
     PipelineNodeId::GradeModelOutput,
     PipelineNodeId::ComposeModelOutput,
     PipelineNodeId::RenderDebugView,
@@ -769,7 +769,7 @@ inline constexpr PipelineNodeId kReleaseStepNodes[] = {
 // does not own is required. FindPipelineStep() consults them in order.
 const PipelineStepDef* SessionStepFor(PipelineNodeId id);
 const PipelineStepDef* HdrStepFor(PipelineNodeId id);
-const PipelineStepDef* ImportanceMaskStepFor(PipelineNodeId id);
+const PipelineStepDef* ExposureMaskStepFor(PipelineNodeId id);
 const PipelineStepDef* DebugStepFor(PipelineNodeId id);
 const PipelineStepDef* ControllerStepFor(PipelineNodeId id);
 
@@ -783,7 +783,7 @@ extern const uint32_t kPipelineStageCount;
 const PipelineStageDef* FindPipelineStageForInjection(int injection_stage);
 
 // A non-selectable utility stage that meters HDR from the current source before
-// the first Pre/Post-DLSS pass. Importance Mask generation happens after model evaluation.
+// the first Pre/Post-DLSS pass. Exposure Mask generation happens after model evaluation.
 
 // The release stage: work that runs once per frame after every pass stage,
 // against the swapchain rather than the game's resources.

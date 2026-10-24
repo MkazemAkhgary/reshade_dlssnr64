@@ -27,8 +27,8 @@ void RegisterUiStateSchema(ctl::Schema& schema) {
       .GlobalOnly();
   section.Add<ctl::BoolSetting>(ui_state::kHdrDiagnosticsOpen,
                                 "HDR Diagnostics Open", false).GlobalOnly();
-  section.Add<ctl::BoolSetting>(ui_state::kImportanceMaskOpen,
-                                "Importance Mask Open", true).GlobalOnly();
+  section.Add<ctl::BoolSetting>(ui_state::kExposureMaskOpen,
+                                "Exposure Mask Open", true).GlobalOnly();
   section.Add<ctl::BoolSetting>(ui_state::kHdrAdvancedOpen,
                                 "HDR Advanced Open", false).GlobalOnly();
   section.Add<ctl::BoolSetting>(ui_state::kHdrGameOpen,

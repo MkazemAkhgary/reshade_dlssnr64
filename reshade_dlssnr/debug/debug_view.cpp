@@ -81,11 +81,11 @@ ID3D12Resource* SelectDepth(const DebugSnapshot& s,
   return s.depth;
 }
 
-ID3D12Resource* SelectImportanceMask(const DebugSnapshot& s,
+ID3D12Resource* SelectExposureMask(const DebugSnapshot& s,
                                     unsigned int* w, unsigned int* h) {
-  *w = s.importance_width;
-  *h = s.importance_height;
-  return s.importance_mask;
+  *w = s.exposure_width;
+  *h = s.exposure_height;
+  return s.exposure_mask;
 }
 
 ID3D12Resource* SelectTemporalCandidate(const DebugSnapshot& s,
@@ -139,7 +139,7 @@ const DebugViewDef kDebugViews[] = {
     {"Model Output (post-grade)",
      "The model output after the Output Grade ran, in the model's own "
      "sRGB-encoded SDR domain - symmetric to the Input Grade on the model "
-     "input. Everything downstream (compose, importance mask, writeback) "
+     "input. Everything downstream (compose, exposure mask, writeback) "
      "consumes this as if the model had produced it.",
      DebugDisplayMode::Color, SelectPostGradeOutput, false, false},
     {"Model Output (composed)",
@@ -153,9 +153,9 @@ const DebugViewDef kDebugViews[] = {
     {"Depth",
      "The depth buffer the game supplied to DLSS. Shown as grayscale.",
      DebugDisplayMode::Depth, SelectDepth},
-    {"Importance Mask",
+    {"Exposure Mask",
      "The current frame's mask from the actual model input (including input grading and Local Exposure) versus the raw model output. It is published for exposure use on the next frame.",
-     DebugDisplayMode::Mask, SelectImportanceMask},
+     DebugDisplayMode::Mask, SelectExposureMask},
     {"SDR Base (pre-model)",
      "Full-resolution linear SDR carrier produced by the BT.2446C split. "
      "This is the RGB payload the model is downsampled from.",

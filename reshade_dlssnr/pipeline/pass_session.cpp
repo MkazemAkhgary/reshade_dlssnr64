@@ -20,7 +20,7 @@
 #include "feature/debug_log/view.h"
 #include "feature/grade/view.h"
 #include "feature/hdr/view.h"
-#include "feature/importance_mask/view.h"
+#include "feature/exposure_mask/view.h"
 #include "feature/pass/settings.h"
 #include "feature/preferences/settings.h"
 #include "feature/pass/ui.h"
@@ -28,7 +28,7 @@
 #include "model/ngx_model_params.h"
 #include "pipeline_graph.h"
 #include "pipeline_trace.h"
-#include "importance_mask/importance_mask.h"
+#include "exposure_mask/exposure_mask.h"
 #include "streamline_compat.h"
 
 namespace reshade_dlssnr {
@@ -550,7 +550,7 @@ void PassSession::Shutdown(NgxRuntime& runtime) {
   temporal_mv_scale_x_ = temporal_mv_scale_y_ = 1.0f;
   feature_.Shutdown(runtime);
   resources_.Shutdown();
-  importance_mask_.Shutdown();
+  exposure_mask_.Shutdown();
   hdr_state_.Shutdown();
   command_.Shutdown();
 
@@ -576,7 +576,7 @@ void PassSession::PrepareRun(PassRun& run,
                              HdrState* hdr,
                              HdrState* previous_hdr,
                              CommandContext* hdr_cmd,
-                             ImportanceMask* importance_mask,
+                             ExposureMask* exposure_mask,
                              ID3D12Resource* game_exposure_texture,
                              ID3D12CommandQueue* command_queue,
                              IDXGISwapChain* swapchain,
@@ -595,7 +595,7 @@ void PassSession::PrepareRun(PassRun& run,
   run.hdr = hdr;
   run.previous_hdr = previous_hdr;
   run.hdr_cmd = hdr_cmd;
-  run.importance_mask = importance_mask;
+  run.exposure_mask = exposure_mask;
   run.game_exposure_texture = game_exposure_texture;
   run.frame_debug = &frame_debug;
   run.frame_id = frame_id;
@@ -627,12 +627,12 @@ void PassSession::PrepareRun(PassRun& run,
                    feature::pass::kGradeInputApplyToPreGrade)
             .as_bool;
 
-    // HDR metering and Importance Mask settings are pass-keyed just like the
+    // HDR metering and Exposure Mask settings are pass-keyed just like the
     // model and its two grade boundaries. Each pass has its own state/history.
     const ctl::InstanceKey shared = ctl::InstanceKey::FromInt(0);
     run.debug_view = feature::debug_log::Read(store, shared);
     run.hdr_state = feature::hdr::Read(store, key);
-    run.mask_state = feature::importance_mask::Read(store, key);
+    run.mask_state = feature::exposure_mask::Read(store, key);
     run.fp16_storage =
         store.Read(feature::preferences::kSection, shared,
                    feature::preferences::kFp16Storage).as_bool;
@@ -672,7 +672,7 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
                                      HdrState* hdr,
                                      HdrState* previous_hdr,
                                      CommandContext* hdr_cmd,
-                                     ImportanceMask* importance_mask,
+                                     ExposureMask* exposure_mask,
                                      ID3D12Resource* game_exposure_texture,
                                      ID3D12CommandQueue* command_queue,
                                      IDXGISwapChain* swapchain,
@@ -710,7 +710,7 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
 
   PassRun run;
   PrepareRun(run, settings, codec, runtime, command_list, output_resource,
-             is_first_pass, frame_debug, hdr, previous_hdr, hdr_cmd, importance_mask,
+             is_first_pass, frame_debug, hdr, previous_hdr, hdr_cmd, exposure_mask,
              game_exposure_texture, command_queue, swapchain, pass_id,
              frame_id, temporal_feedback_fence,
              temporal_feedback_fence_value);
@@ -1341,7 +1341,7 @@ static_assert(
 // kMaxFramesInFlight promises.
 static_assert(kMaxDispatchesPerFrame >= kMaxPasses * 9 + 4 + 3,
               "kMaxDispatchesPerFrame no longer covers a frame at kMaxPasses "
-              "with the extra Importance Mask build dispatch - raise it, and kDescriptorRingSize with it");
+              "with the extra Exposure Mask build dispatch - raise it, and kDescriptorRingSize with it");
 
 const PipelineStepDef* SessionStepFor(PipelineNodeId id) {
   for (const PipelineStepDef& def : kSessionSteps) {

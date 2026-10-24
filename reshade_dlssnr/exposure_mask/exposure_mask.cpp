@@ -1,4 +1,4 @@
-#include "importance_mask/importance_mask.h"
+#include "exposure_mask/exposure_mask.h"
 #include "profiling/profile.h"
 
 #include <algorithm>
@@ -49,72 +49,72 @@ bool CreateMaskResource(ID3D12Device* device,
              IID_PPV_ARGS(&output))) && output != nullptr;
 }
 
-PipelineStatus RunBuildImportanceMask(PassRun& run) {
-  DLSSNR_PROFILE_RENDER_L2("RunBuildImportanceMask");
+PipelineStatus RunBuildExposureMask(PassRun& run) {
+  DLSSNR_PROFILE_RENDER_L2("RunBuildExposureMask");
   // Compare the exact post-preparation, post-input-grade resource sent to NGX.
   // The builder is scheduled only after this pass's output barrier. A failed
   // NGX evaluation must not publish a mask derived from stale output memory.
   if (run.stage == nullptr || run.stage->owns_submit ||
       (!run.stage->is_pre_dlss && !run.stage->is_post_dlss) ||
       !run.hdr_state.enable || !run.mask_state.enable ||
-      run.importance_mask == nullptr ||
+      run.exposure_mask == nullptr ||
       run.model_color == nullptr || run.model_output == nullptr ||
       run.eval_result != NVSDK_NGX_Result_Success || run.temporal_reuse ||
       run.session == nullptr ||
       run.cmd == nullptr || run.codec == nullptr ||
       run.device == nullptr || run.hdr == nullptr || !run.hdr->Enabled() ||
-      !run.importance_mask->CanBuildThisFrame()) {
+      !run.exposure_mask->CanBuildThisFrame()) {
     return PipelineStatus::Ok;
   }
 
-  if (!run.importance_mask->Build(
+  if (!run.exposure_mask->Build(
           *run.cmd, *run.codec, run.session->StageList(run, *run.cmd),
           run.device, run.model_color, run.model_output,
           run.mask_state)) {
-    TRACE_EVT(run.session, "importance_mask BUILD_SKIP");
+    TRACE_EVT(run.session, "exposure_mask BUILD_SKIP");
   }
   return PipelineStatus::Ok;
 }
 
-constexpr PipelineNodeId kImportanceMaskRequires[] = {
+constexpr PipelineNodeId kExposureMaskRequires[] = {
     PipelineNodeId::ModelOutputBarrier,
     PipelineNodeId::Count};
 
-constexpr PipelineStepDef kImportanceMaskSteps[] = {
-    {PipelineNodeId::BuildImportanceMask, "BuildImportanceMask",
-     &RunBuildImportanceMask, kImportanceMaskRequires,
+constexpr PipelineStepDef kExposureMaskSteps[] = {
+    {PipelineNodeId::BuildExposureMask, "BuildExposureMask",
+     &RunBuildExposureMask, kExposureMaskRequires,
      StageInput::CommandList | StageInput::Stage, /*requires_hdr_aware=*/true},
 };
 
 static_assert(
     PrerequisitesPrecedeSteps(kPreDlssStepNodes,
                               ArrayCount(kPreDlssStepNodes),
-                              kImportanceMaskSteps,
-                              ArrayCount(kImportanceMaskSteps)),
-    "Importance Mask requires ModelOutputBarrier before its build step");
+                              kExposureMaskSteps,
+                              ArrayCount(kExposureMaskSteps)),
+    "Exposure Mask requires ModelOutputBarrier before its build step");
 static_assert(
     PrerequisitesPrecedeSteps(kPostDlssStepNodes,
                               ArrayCount(kPostDlssStepNodes),
-                              kImportanceMaskSteps,
-                              ArrayCount(kImportanceMaskSteps)),
-    "Importance Mask requires ModelOutputBarrier before its build step");
+                              kExposureMaskSteps,
+                              ArrayCount(kExposureMaskSteps)),
+    "Exposure Mask requires ModelOutputBarrier before its build step");
 static_assert(
     StageInputsCoverSteps(kPreDlssStepNodes, ArrayCount(kPreDlssStepNodes),
-                          kImportanceMaskSteps, ArrayCount(kImportanceMaskSteps),
+                          kExposureMaskSteps, ArrayCount(kExposureMaskSteps),
                           StageInput::CommandList | StageInput::OutputResource |
                               StageInput::Stage),
-    "Importance Mask requires inputs the Pre-DLSS stage does not provide");
+    "Exposure Mask requires inputs the Pre-DLSS stage does not provide");
 static_assert(
     StageInputsCoverSteps(kPostDlssStepNodes, ArrayCount(kPostDlssStepNodes),
-                          kImportanceMaskSteps, ArrayCount(kImportanceMaskSteps),
+                          kExposureMaskSteps, ArrayCount(kExposureMaskSteps),
                           StageInput::CommandList | StageInput::OutputResource |
                               StageInput::Stage),
-    "Importance Mask requires inputs the Post-DLSS stage does not provide");
+    "Exposure Mask requires inputs the Post-DLSS stage does not provide");
 
 }  // namespace
 
-void ImportanceMask::Shutdown() {
-  DLSSNR_PROFILE_RESOURCE_L2("ImportanceMask::Shutdown");
+void ExposureMask::Shutdown() {
+  DLSSNR_PROFILE_RESOURCE_L2("ExposureMask::Shutdown");
   RetireSlot(masks_[0]);
   RetireSlot(masks_[1]);
   RetireSlot(classifier_);
@@ -130,8 +130,8 @@ void ImportanceMask::Shutdown() {
   generated_this_frame_ = false;
 }
 
-void ImportanceMask::AdvanceFrame(bool enabled) {
-  DLSSNR_PROFILE_CORE_L2("ImportanceMask::AdvanceFrame");
+void ExposureMask::AdvanceFrame(bool enabled) {
+  DLSSNR_PROFILE_CORE_L2("ExposureMask::AdvanceFrame");
   built_this_frame_ = false;
   generated_this_frame_ = false;
   if (!enabled) {
@@ -148,13 +148,13 @@ void ImportanceMask::AdvanceFrame(bool enabled) {
   }
 }
 
-ImportanceMask::Output ImportanceMask::GetFrameOutput() const {
+ExposureMask::Output ExposureMask::GetFrameOutput() const {
   if (!frame_valid_ || masks_[frame_index_] == nullptr) return {};
   return {masks_[frame_index_].Get(), mask_width_[frame_index_],
           mask_height_[frame_index_], true};
 }
 
-ImportanceMask::Output ImportanceMask::GetGeneratedOutput() const {
+ExposureMask::Output ExposureMask::GetGeneratedOutput() const {
   if (!generated_this_frame_ || !latest_valid_ ||
       masks_[latest_index_] == nullptr) {
     return {};
@@ -163,7 +163,7 @@ ImportanceMask::Output ImportanceMask::GetGeneratedOutput() const {
           mask_height_[latest_index_], true};
 }
 
-bool ImportanceMask::EnsureResources(ID3D12Device* device,
+bool ExposureMask::EnsureResources(ID3D12Device* device,
                                      unsigned int width,
                                      unsigned int height,
                                      uint32_t destination_index) {
@@ -213,13 +213,13 @@ bool ImportanceMask::EnsureResources(ID3D12Device* device,
   return masks_[frame_index_] != nullptr;
 }
 
-bool ImportanceMask::Build(CommandContext& command,
+bool ExposureMask::Build(CommandContext& command,
                            ComputeEngine& codec,
                            ID3D12GraphicsCommandList* command_list,
                            ID3D12Device* device,
                            ID3D12Resource* model_input,
                            ID3D12Resource* model_output,
-                           const ImportanceMaskSettings& settings) {
+                           const ExposureMaskSettings& settings) {
   if (built_this_frame_) return true;
   if (command_list == nullptr || device == nullptr || model_input == nullptr ||
       model_output == nullptr) {
@@ -276,7 +276,7 @@ bool ImportanceMask::Build(CommandContext& command,
   ID3D12Resource* classify_srvs[kSrvCount] = {
       model_input, model_output, previous, model_input};
   ID3D12Resource* classify_uavs[kUavCount] = {classifier_.Get()};
-  if (!codec.Dispatch("ClassifyImportanceMask", command_list,
+  if (!codec.Dispatch("ClassifyExposureMask", command_list,
                       classify_constants, classify_srvs, classify_uavs)) {
     command.Transition(command_list, classifier_.Get(),
                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -297,7 +297,7 @@ bool ImportanceMask::Build(CommandContext& command,
   ID3D12Resource* smooth_srvs[kSrvCount] = {
       classifier_.Get(), classifier_.Get(), previous, classifier_.Get()};
   ID3D12Resource* smooth_uavs[kUavCount] = {destination};
-  if (!codec.Dispatch("BuildImportanceMask", command_list,
+  if (!codec.Dispatch("BuildExposureMask", command_list,
                       smooth_constants, smooth_srvs, smooth_uavs)) {
     command.Transition(command_list, destination,
                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -314,8 +314,8 @@ bool ImportanceMask::Build(CommandContext& command,
   return true;
 }
 
-const PipelineStepDef* ImportanceMaskStepFor(PipelineNodeId id) {
-  for (const PipelineStepDef& def : kImportanceMaskSteps) {
+const PipelineStepDef* ExposureMaskStepFor(PipelineNodeId id) {
+  for (const PipelineStepDef& def : kExposureMaskSteps) {
     if (def.id == id) return &def;
   }
   return nullptr;

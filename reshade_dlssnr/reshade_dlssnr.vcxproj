@@ -87,8 +87,8 @@
     <ShaderSourceFiles Include="hdr\reduce_local_exposure_tiles.hlsl" />
     <ShaderSourceFiles Include="hdr\zero_gain_map_stats.hlsl" />
     <ShaderSourceFiles Include="hdr\zero_histogram.hlsl" />
-    <ShaderSourceFiles Include="importance_mask\build_importance_mask.hlsl" />
-    <ShaderSourceFiles Include="importance_mask\classify_importance_mask.hlsl" />
+    <ShaderSourceFiles Include="exposure_mask\build_exposure_mask.hlsl" />
+    <ShaderSourceFiles Include="exposure_mask\classify_exposure_mask.hlsl" />
     <ShaderSourceFiles Include="model\prepare_model_input.hlsl" />
     <ShaderSourceFiles Include="temporal\apply_edit.hlsl" />
     <ShaderSourceFiles Include="temporal\clear_stats.hlsl" />
@@ -227,7 +227,7 @@
            them. Program Database (/Zi) is the correct format here. -->
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <ObjectFileName>$(IntDir)%(RelativeDir)%(Filename).obj</ObjectFileName>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)generated;$(ProjectDir)third_party\reshade\include;$(ProjectDir)third_party\reshade;$(ProjectDir)third_party\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\nvngx_dlss_sdk\include;$(ProjectDir)third_party\d3dx\include\directx;$(ProjectDir)third_party\Detours\detours\src;$(ProjectDir)third_party\tracy\public;$(ProjectDir)third_party\tracy\public\tracy;$(ProjectDir)gpu;$(ProjectDir)model;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)compose;$(ProjectDir)grade;$(ProjectDir)hdr;$(ProjectDir)importance_mask;$(ProjectDir)debug;$(ProjectDir)temporal;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)generated;$(ProjectDir)third_party\reshade\include;$(ProjectDir)third_party\reshade;$(ProjectDir)third_party\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\nvngx_dlss_sdk\include;$(ProjectDir)third_party\d3dx\include\directx;$(ProjectDir)third_party\Detours\detours\src;$(ProjectDir)third_party\tracy\public;$(ProjectDir)third_party\tracy\public\tracy;$(ProjectDir)gpu;$(ProjectDir)model;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)compose;$(ProjectDir)grade;$(ProjectDir)hdr;$(ProjectDir)exposure_mask;$(ProjectDir)debug;$(ProjectDir)temporal;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -255,7 +255,7 @@
       <ForcedIncludeFiles>pch.h</ForcedIncludeFiles>
       <ErrorLog>$(IntDir)$(MSBuildProjectName).error.log</ErrorLog>
       <ObjectFileName>$(IntDir)%(RelativeDir)%(Filename).obj</ObjectFileName>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)generated;$(ProjectDir)third_party\reshade\include;$(ProjectDir)third_party\reshade;$(ProjectDir)third_party\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\nvngx_dlss_sdk\include;$(ProjectDir)third_party\d3dx\include\directx;$(ProjectDir)third_party\Detours\detours\src;$(ProjectDir)third_party\tracy\public;$(ProjectDir)third_party\tracy\public\tracy;$(ProjectDir)gpu;$(ProjectDir)model;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)compose;$(ProjectDir)grade;$(ProjectDir)hdr;$(ProjectDir)importance_mask;$(ProjectDir)debug;$(ProjectDir)temporal;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)generated;$(ProjectDir)third_party\reshade\include;$(ProjectDir)third_party\reshade;$(ProjectDir)third_party\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\nvngx_dlss_sdk\include;$(ProjectDir)third_party\d3dx\include\directx;$(ProjectDir)third_party\Detours\detours\src;$(ProjectDir)third_party\tracy\public;$(ProjectDir)third_party\tracy\public\tracy;$(ProjectDir)gpu;$(ProjectDir)model;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)compose;$(ProjectDir)grade;$(ProjectDir)hdr;$(ProjectDir)exposure_mask;$(ProjectDir)debug;$(ProjectDir)temporal;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -308,8 +308,8 @@
     <ClInclude Include="compose\settings.h" />
     <ClInclude Include="grade\grade.h" />
     <ClInclude Include="grade\settings.h" />
-    <ClInclude Include="importance_mask\importance_mask.h" />
-    <ClInclude Include="importance_mask\settings.h" />
+    <ClInclude Include="exposure_mask\exposure_mask.h" />
+    <ClInclude Include="exposure_mask\settings.h" />
     <ClInclude Include="state\settings.h" />
     <ClInclude Include="state\trace.h" />
     <ClInclude Include="state\version.h" />
@@ -335,8 +335,8 @@
     <ClInclude Include="feature\hdr\settings.h" />
     <ClInclude Include="feature\hdr\ui.h" />
     <ClInclude Include="feature\hdr\view.h" />
-    <ClInclude Include="feature\importance_mask\settings.h" />
-    <ClInclude Include="feature\importance_mask\view.h" />
+    <ClInclude Include="feature\exposure_mask\settings.h" />
+    <ClInclude Include="feature\exposure_mask\view.h" />
     <ClInclude Include="feature\pass\settings.h" />
     <ClInclude Include="feature\pass\ui.h" />
     <ClInclude Include="feature\pass\view.h" />
@@ -391,7 +391,7 @@
     <ClCompile Include="grade\grade.cpp" />
     <ClCompile Include="grade\steps.cpp" />
     <ClCompile Include="temporal\steps.cpp" />
-    <ClCompile Include="importance_mask\importance_mask.cpp" />
+    <ClCompile Include="exposure_mask\exposure_mask.cpp" />
     <ClCompile Include="state\settings.cpp" />
     <ClCompile Include="state\trace.cpp" />
     <ClCompile Include="ui\ui.cpp" />
@@ -417,8 +417,8 @@
     <ClCompile Include="feature\hdr\schema.cpp" />
     <ClCompile Include="feature\hdr\ui.cpp" />
     <ClCompile Include="feature\hdr\view.cpp" />
-    <ClCompile Include="feature\importance_mask\schema.cpp" />
-    <ClCompile Include="feature\importance_mask\view.cpp" />
+    <ClCompile Include="feature\exposure_mask\schema.cpp" />
+    <ClCompile Include="feature\exposure_mask\view.cpp" />
     <ClCompile Include="feature\pass\schema.cpp" />
     <ClCompile Include="feature\pass\view.cpp" />
     <ClCompile Include="feature\preferences\schema.cpp" />

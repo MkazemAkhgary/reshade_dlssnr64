@@ -15,7 +15,7 @@
 #include "ctl/values.h"
 #include "feature/debug_log/settings.h"
 #include "feature/hdr/settings.h"
-#include "feature/importance_mask/settings.h"
+#include "feature/exposure_mask/settings.h"
 #include "feature/pass/settings.h"
 #include "feature/pass/ui.h"
 #include "feature/preferences/settings.h"
@@ -200,7 +200,7 @@ void SyncPassOrder(Settings& settings, bool ensure_nonempty) {
 
 // The key source reads the pass-order setting directly from the store. The
 // Pass Order section is registered before every pass-keyed instanced section
-// (Pass, its two model grades, the four HDR sections, and Importance Mask)
+// (Pass, its two model grades, the four HDR sections, and Exposure Mask)
 // so ctl's schema-order load has already populated it when those sections
 // ask for their instance keys.
 std::vector<ctl::InstanceKey> InstanceKeysForSections(
@@ -212,7 +212,7 @@ std::vector<ctl::InstanceKey> InstanceKeysForSections(
                             section == feature::hdr::kGameSection ||
                             section == feature::hdr::kAdaptiveSection ||
                             section == feature::hdr::kLocalSection ||
-                            section == feature::importance_mask::kSection;
+                            section == feature::exposure_mask::kSection;
   if (!pass_indexed) return {};
 
   const auto& store = *static_cast<const ctl::ValueStore*>(context);
@@ -345,7 +345,7 @@ void SaveSettings() {
 
 void ErasePassKeys(feature::pass::PassId id) {
   // Every pass-keyed section erases here: the Pass section itself, its two
-  // hosted model grades, the four HDR sections, and Importance Mask. Their
+  // hosted model grades, the four HDR sections, and Exposure Mask. Their
   // persisted layout is documented in ctl/serialize.h:
   //   <prefix>.S.<Section>.K.<keytext>.<setting>
   // With an empty prefix this becomes "S.<Section>.K.<keytext>.<setting>".
@@ -365,7 +365,7 @@ void ErasePassKeys(feature::pass::PassId id) {
       feature::hdr::kGameSection,
       feature::hdr::kAdaptiveSection,
       feature::hdr::kLocalSection,
-      feature::importance_mask::kSection,
+      feature::exposure_mask::kSection,
   };
   for (const char* section_name : pass_sections) {
     const ctl::Section* section = schema.FindSection(section_name);

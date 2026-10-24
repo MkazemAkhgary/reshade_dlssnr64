@@ -105,7 +105,7 @@ PipelineStatus PassSession::StepGradeModelInput(PassRun& run) {
 }
 
 // Runs right after the model output barrier, before anything consumes the
-// model output: compose, the importance mask, and the debug views. Grades
+// model output: compose, the exposure mask, and the debug views. Grades
 // the model output in place, in the model's sRGB-encoded SDR domain —
 // symmetric to the Input Grade on the model input — so downstream steps see
 // it as if the model had produced the graded SDR.

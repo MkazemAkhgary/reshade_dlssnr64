@@ -59,7 +59,7 @@ ProfileId NewProfileId();
 // Erase the persisted keys for one pass. Called when a pass is removed so
 // that its retired id leaves no orphan keys in the config. Every pass-keyed
 // section is touched: the Pass section, its two hosted model grades, the
-// four HDR sections, and Importance Mask. Only the given id's keys are
+// four HDR sections, and Exposure Mask. Only the given id's keys are
 // removed.
 void ErasePassKeys(feature::pass::PassId id);
 

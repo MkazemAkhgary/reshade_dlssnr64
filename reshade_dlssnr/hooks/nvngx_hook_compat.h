@@ -821,7 +821,7 @@ static NVSDK_NGX_Result NVSDK_CONV EvaluateFeatureImpl(
       if (settings.enabled) {
         // Capture the current upscaled output only when PostDLSS passes need it.
         // HDR measurement runs before the first Pre/Post-DLSS pass, using the
-        // published previous-frame Importance Mask. The new mask is generated
+        // published previous-frame Exposure Mask. The new mask is generated
         // after the first successful model evaluation. Backbuffer-only setups
         // never enter that path.
         ID3D12Resource* output = nullptr;

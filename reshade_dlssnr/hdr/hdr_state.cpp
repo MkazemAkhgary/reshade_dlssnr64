@@ -12,7 +12,7 @@
 #include "gpu/d3d12_utils.h"
 #include "pipeline/pipeline_graph.h"
 #include "state/settings.h"
-#include "importance_mask/importance_mask.h"
+#include "exposure_mask/exposure_mask.h"
 #include "pipeline/pipeline_trace.h"
 
 namespace reshade_dlssnr {
@@ -456,7 +456,7 @@ void HdrState::BeginFrame(CommandContext& cmd,
   constants.shader.Params0.w = 0.0f;
   const auto filter_flags = [&](const ExposureFilterSettings& filter) {
     uint32_t flags = 0;
-    if (filter.importance_mask && have_mask) flags |= 1u;
+    if (filter.exposure_mask && have_mask) flags |= 1u;
     if (filter.depth && have_depth) flags |= 2u;
     return flags;
   };
@@ -612,7 +612,7 @@ void HdrState::UpdateExposure(const uint32_t* full_bins,
   if (adaptive_total != 0) {
     adaptive_.Update(adaptive_bins, adaptive_params, dt);
     const bool adaptive_uses_filters =
-        adaptive_settings.filters.importance_mask || adaptive_settings.filters.depth ||
+        adaptive_settings.filters.exposure_mask || adaptive_settings.filters.depth ||
         adaptive_settings.filters.percentile_range;
     adaptive_.metering_source = adaptive_uses_filters
         ? MeteringSource::FilteredPopulation : MeteringSource::FullFrame;
@@ -693,8 +693,8 @@ PipelineStatus RunHdrBeginFrame(PassRun& run) {
   ID3D12Resource* exposure_mask = nullptr;
   unsigned int exposure_mask_width = 0;
   unsigned int exposure_mask_height = 0;
-  if (run.mask_state.enable && run.importance_mask != nullptr) {
-    const ImportanceMask::Output detection = run.importance_mask->GetFrameOutput();
+  if (run.mask_state.enable && run.exposure_mask != nullptr) {
+    const ExposureMask::Output detection = run.exposure_mask->GetFrameOutput();
     if (detection.valid && detection.mask != nullptr && detection.width != 0 &&
         detection.height != 0) {
       exposure_mask = detection.mask;

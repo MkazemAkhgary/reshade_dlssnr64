@@ -8,7 +8,7 @@
 
 #include "d3d12_utils.h"
 #include "dlss_guides.h"
-#include "importance_mask/importance_mask.h"
+#include "exposure_mask/exposure_mask.h"
 #include "pass_resources.h"
 #include "pipeline_graph.h"
 #include "pipeline_trace.h"

@@ -21,7 +21,7 @@ ExposureFilterSettings ReadFilters(const ctl::ValueStore& store,
   DLSSNR_PROFILE_CTL_L3("ReadFilters");
   using namespace hdr_filter_rows::names;
   ExposureFilterSettings f;
-  f.importance_mask = store.Read(section, key, kImportanceMask).as_bool;
+  f.exposure_mask = store.Read(section, key, kExposureMask).as_bool;
   f.depth = store.Read(section, key, kDepth).as_bool;
   f.percentile_range = store.Read(section, key, kPercentileRange).as_bool;
   f.depth_near = store.Read(section, key, kDepthNear).as_float;

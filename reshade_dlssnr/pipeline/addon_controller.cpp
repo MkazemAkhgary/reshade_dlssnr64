@@ -14,7 +14,7 @@
 #include "feature/debug_log/view.h"
 #include "feature/grade/view.h"
 #include "feature/hdr/view.h"
-#include "feature/importance_mask/view.h"
+#include "feature/exposure_mask/view.h"
 #include "feature/pass/settings.h"
 #include "feature/pass/view.h"
 #include "pipeline_graph.h"
@@ -117,7 +117,7 @@ PipelineStatus AddonController::RunSingleStage(
 
   // Release only grades the backbuffer, presents debug output, and signals
   // outstanding per-pass HDR readbacks. None of those settings are global HDR
-  // or Importance Mask settings.
+  // or Exposure Mask settings.
   {
     const ctl::ValueStore& store = feature::SettingsStore();
     const ctl::InstanceKey shared = ctl::InstanceKey::FromInt(0);
@@ -774,7 +774,7 @@ void AddonController::AdvanceMaskFrames(bool master_enabled) {
     const ctl::InstanceKey key = feature::pass::PassKey(entry.first);
     const bool enabled = master_enabled &&
         feature::hdr::Read(store, key).enable &&
-        feature::importance_mask::Read(store, key).enable;
+        feature::exposure_mask::Read(store, key).enable;
     entry.second->AdvanceMaskFrame(enabled);
   }
 }

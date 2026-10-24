@@ -81,12 +81,12 @@ SPECIAL_SOURCES = [
 
 HEADER_DIR_ORDER = [
     "", "profiling", "generated", "gpu", "hooks", "pipeline", "debug",
-    "model", "hdr", "compose", "grade", "temporal", "importance_mask",
+    "model", "hdr", "compose", "grade", "temporal", "exposure_mask",
     "state", "ui", "ctl", "fragments", "feature",
 ]
 SOURCE_DIR_ORDER = [
     "", "profiling", "gpu", "hooks", "pipeline", "debug", "model", "hdr",
-    "compose", "grade", "temporal", "importance_mask", "state", "ui", "ctl",
+    "compose", "grade", "temporal", "exposure_mask", "state", "ui", "ctl",
     "fragments", "feature",
 ]
 

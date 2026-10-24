@@ -1,4 +1,4 @@
-// Importance Mask schema.
+// Exposure Mask schema.
 //
 // The mask is built by the first Pre/Post-DLSS pass from the model's actual
 // input/output difference. Every row is gated by the section toggle alone.
@@ -13,11 +13,11 @@
 #include "profiling/profile.h"
 #include "ctl/schema.h"
 #include "ctl/values.h"
-#include "feature/importance_mask/settings.h"
+#include "feature/exposure_mask/settings.h"
 
 namespace reshade_dlssnr {
 namespace feature {
-namespace importance_mask {
+namespace exposure_mask {
 
 namespace {
 
@@ -30,18 +30,18 @@ bool MaskEditable(const void*, const ctl::ValueStore& store,
 
 }  // namespace
 
-}  // namespace importance_mask
+}  // namespace exposure_mask
 
-void RegisterImportanceMaskSchema(ctl::Schema& schema) {
-  DLSSNR_PROFILE_CTL_L3("RegisterImportanceMaskSchema");
-  using namespace importance_mask;
+void RegisterExposureMaskSchema(ctl::Schema& schema) {
+  DLSSNR_PROFILE_CTL_L3("RegisterExposureMaskSchema");
+  using namespace exposure_mask;
 
   ctl::Section& mask =
       schema.AddSection(kSection, ctl::SectionKind::Instanced);
   mask.HeaderToggle(kEnable);
 
   mask.Add<ctl::BoolSetting>(kEnable, "Enable", false)
-      .Tooltip("This pass builds its Importance Mask after model evaluation. "
+      .Tooltip("This pass builds its Exposure Mask after model evaluation. "
                "The mask affects only this pass's next-frame HDR metering.");
 
   mask.Add<ctl::FloatSetting>(kEditStrength, "Edit Strength", 1.0f)
@@ -51,7 +51,7 @@ void RegisterImportanceMaskSchema(ctl::Schema& schema) {
       .EnableWhen(&MaskEditable);
   mask.Add<ctl::FloatSetting>(kSmoothing, "Spatial Smoothing", 0.5f)
       .ClampRange(0.0f, 1.0f)
-      .Tooltip("Majority-filter the binary importance votes in a small "
+      .Tooltip("Majority-filter the binary exposure votes in a small "
                "neighborhood.")
       .EnableWhen(&MaskEditable);
   mask.Add<ctl::FloatSetting>(kResponse, "Temporal Response", 0.15f)

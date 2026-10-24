@@ -45,7 +45,7 @@ const char* const kNodeNames[] = {
     "FillEvaluateParams",
     "EvaluateFeature",
     "ModelOutputBarrier",
-    "BuildImportanceMask",
+    "BuildExposureMask",
     "ComposeModelOutput",
     "ComposeModelOutputHdr",
     "GradeModelOutput",
@@ -118,7 +118,7 @@ const PipelineStepDef* const* StepIndex() {
   const Source sources[] = {
       {"pass_session.cpp", &SessionStepFor},
       {"hdr_state.cpp", &HdrStepFor},
-      {"importance_mask.cpp", &ImportanceMaskStepFor},
+      {"exposure_mask.cpp", &ExposureMaskStepFor},
       {"debug_view.cpp", &DebugStepFor},
       {"addon_controller.cpp", &ControllerStepFor},
   };
@@ -218,7 +218,7 @@ constexpr PipelinePhaseDef kPresentPhases[] = {
 
 // -- Pre-DLSS stage ---------------------------------------------------------
 // Runs on the game's input Color resource before the original EvaluateFeature.
-// Every pass meters its live target with its own previous-frame Importance Mask.
+// Every pass meters its live target with its own previous-frame Exposure Mask.
 // Its new mask is generated after that pass's successful model evaluation.
 constexpr PipelineNodeId kPreDlssSteps[] = {
     PipelineNodeId::ResolveDevice,
@@ -241,7 +241,7 @@ constexpr PipelineNodeId kPreDlssSteps[] = {
     PipelineNodeId::FillEvaluateParams,
     PipelineNodeId::EvaluateFeature,
     PipelineNodeId::ModelOutputBarrier,
-    PipelineNodeId::BuildImportanceMask,
+    PipelineNodeId::BuildExposureMask,
     PipelineNodeId::GradeModelOutput,
     PipelineNodeId::ComposeModelOutput,
     PipelineNodeId::RenderDebugView,
@@ -262,7 +262,7 @@ constexpr PipelinePhaseDef kPreDlssPhases[] = {
 constexpr PipelineNodeId kPostDlssSteps[] = {
     PipelineNodeId::ResolveDevice,        // GetDevice + runtime.Initialize
     // This pass meters its live target before preparing model input. Its own
-    // Importance Mask is built after the model output barrier.
+    // Exposure Mask is built after the model output barrier.
     PipelineNodeId::EnsureHdr,
     PipelineNodeId::EnsureComputeEngine,  // codec.Init + IsReady
     PipelineNodeId::HdrBeginFrame,
@@ -282,7 +282,7 @@ constexpr PipelineNodeId kPostDlssSteps[] = {
     PipelineNodeId::FillEvaluateParams,
     PipelineNodeId::EvaluateFeature,
     PipelineNodeId::ModelOutputBarrier,
-    PipelineNodeId::BuildImportanceMask,
+    PipelineNodeId::BuildExposureMask,
     PipelineNodeId::GradeModelOutput,
     PipelineNodeId::ComposeModelOutput,
     PipelineNodeId::RenderDebugView,

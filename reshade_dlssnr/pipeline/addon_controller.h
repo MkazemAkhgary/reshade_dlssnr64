@@ -20,7 +20,7 @@
 #include "pipeline_graph.h"
 #include "model/runtime.h"
 #include "state/settings.h"
-#include "importance_mask/importance_mask.h"
+#include "exposure_mask/exposure_mask.h"
 #include "status.h"
 
 namespace reshade_dlssnr {

@@ -33,9 +33,9 @@ bool Checked(const void* context, const ctl::ValueStore& store,
 
 void Declare(ctl::Section& section, const char* category) {
   DLSSNR_PROFILE_CTL_L3("Declare");
-  section.Add<ctl::BoolSetting>(kImportanceMask, "Importance Mask", false)
+  section.Add<ctl::BoolSetting>(kExposureMask, "Exposure Mask", false)
       .Tooltip("Meter or correct only pixels weighted by the persistent "
-               "Importance Mask mask.")
+               "Exposure Mask mask.")
       .Category(category);
   section.Add<ctl::BoolSetting>(kDepth, "Depth", false)
       .Tooltip("Restrict this layer to the selected normalized depth interval.")

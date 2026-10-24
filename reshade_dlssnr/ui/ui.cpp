@@ -19,7 +19,7 @@
 #include "feature/grade/settings.h"
 #include "feature/grade/view.h"
 #include "feature/hdr/settings.h"
-#include "feature/importance_mask/settings.h"
+#include "feature/exposure_mask/settings.h"
 #include "feature/pass/settings.h"
 #include "feature/pass/ui.h"
 #include "feature/preferences/settings.h"
@@ -61,7 +61,7 @@ const char* SectionOpenSetting(const std::string& name) {
   if (name == feature::hdr::kAdaptiveSection) return feature::ui_state::kHdrAdaptiveOpen;
   if (name == feature::hdr::kLocalSection) return feature::ui_state::kHdrLocalOpen;
   if (name == feature::pass::kSection) return feature::ui_state::kPassesOpen;
-  if (name == feature::importance_mask::kSection) return feature::ui_state::kImportanceMaskOpen;
+  if (name == feature::exposure_mask::kSection) return feature::ui_state::kExposureMaskOpen;
   return nullptr;
 }
 
@@ -242,7 +242,7 @@ namespace {
 
 bool FeatureRowGate(void*, ctl::ValueStore& store, const std::string& section,
                     const ctl::InstanceKey& key) {
-  if (section != feature::importance_mask::kSection) return true;
+  if (section != feature::exposure_mask::kSection) return true;
   return store.Read(feature::hdr::kSection, key, feature::hdr::kEnable).as_bool;
 }
 
@@ -407,7 +407,7 @@ void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
   local_changed = false;
   ctl::DrawOptions mask_options = MakeOptions(/*headers=*/true, /*indent=*/true);
   mask_options.row_gate = &FeatureRowGate;
-  ctl::DrawSection(store, feature::importance_mask::kSection, key,
+  ctl::DrawSection(store, feature::exposure_mask::kSection, key,
                    local_changed, mask_options);
   changed |= local_changed;
 }
@@ -435,7 +435,7 @@ void DrawOne(ctl::ValueStore& store, const char* name, bool& changed,
   bool local_changed = false;
   ctl::DrawOptions options = MakeOptions(/*headers=*/true, /*indent=*/true);
   options.header_action = header_action;
-  if (std::string(name) == feature::importance_mask::kSection) {
+  if (std::string(name) == feature::exposure_mask::kSection) {
     options.row_gate = &FeatureRowGate;
   }
   ctl::DrawSection(store, name, ctl::InstanceKey::FromInt(0), local_changed,

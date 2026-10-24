@@ -20,7 +20,7 @@ namespace hdr_filter_rows {
 // (feature/hdr/view.cpp) uses these, so the spelling appears once here and the
 // fragment and its readers cannot drift apart.
 namespace names {
-inline constexpr const char* kImportanceMask = "filter_importance_mask";
+inline constexpr const char* kExposureMask = "filter_exposure_mask";
 inline constexpr const char* kDepth = "filter_depth";
 inline constexpr const char* kPercentileRange = "filter_percentile_range";
 inline constexpr const char* kDepthNear = "depth_near";

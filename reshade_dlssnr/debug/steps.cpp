@@ -3,7 +3,7 @@
 
 #include "debug/debug_view.h"
 #include "pipeline/pipeline_graph.h"
-#include "importance_mask/importance_mask.h"
+#include "exposure_mask/exposure_mask.h"
 
 namespace reshade_dlssnr {
 
@@ -63,11 +63,11 @@ PipelineStatus PassSession::StepRenderDebugView(PassRun& run) {
   debug.composed_output = self->resources_.GetCompositeOutput();
   debug.composed_output_width = run.width;
   debug.composed_output_height = run.height;
-  debug.importance_width = run.eval_width;
-  debug.importance_height = run.eval_height;
-  if (run.importance_mask != nullptr) {
-    const ImportanceMask::Output mask = run.importance_mask->GetGeneratedOutput();
-    if (mask.valid) debug.importance_mask = mask.mask;
+  debug.exposure_width = run.eval_width;
+  debug.exposure_height = run.eval_height;
+  if (run.exposure_mask != nullptr) {
+    const ExposureMask::Output mask = run.exposure_mask->GetGeneratedOutput();
+    if (mask.valid) debug.exposure_mask = mask.mask;
   }
   if (run.guides_valid) {
     debug.motion = run.guides.motion;
