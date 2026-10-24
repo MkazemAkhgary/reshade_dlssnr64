@@ -78,9 +78,11 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     // compression sliders can bound it on both sides.
     float3 residual_log = safe_log3(out_rgb) - safe_log3(in_rgb);
 
-    residual_log = clamp(residual_log,
-                         log(max(kRatioDarken, 1e-4)),
-                         log(max(kRatioBrighten, 1e-4)));
+    if (kRatioClampsEnabled) {
+        residual_log = clamp(residual_log,
+                             log(max(kRatioDarken, 1e-4)),
+                             log(max(kRatioBrighten, 1e-4)));
+    }
     // Region protection has to be evaluated in the domain the edit was measured
     // in. With kApplyEditToPreGrade the endpoints are the graded image while
     // the base is the pre-grade one, so the base's luma would protect the wrong

@@ -30,6 +30,7 @@ bool ComposeOutput(
   constants.shader.Params0.x = strength.luma_strength;
   constants.shader.Params0.y = strength.chroma_strength;
   constants.shader.Params1.w = apply_edit_to_pre_grade ? 1.0f : 0.0f;
+  constants.shader.Params1.z = residual.ratio_clamps_enabled ? 1.0f : 0.0f;
   constants.residual.EditStrength = residual.edit_strength;
   constants.residual.ChromaStrength = residual.chroma_strength;
   constants.residual.EditGamma = residual.edit_gamma;

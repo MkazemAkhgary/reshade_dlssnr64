@@ -60,14 +60,12 @@ bool AutoMaskOn(const void*, const ctl::ValueStore& store,
   return store.Read(section, key, kAutoMask).as_bool;
 }
 
-// The ratio rows are Backbuffer-only. That is a property of this pass's target,
-// which is itself a row in this section -- so the gate just reads it, exactly
-// like every other "follows that checkbox" rule here.
-bool BackbufferTarget(const void*, const ctl::ValueStore& store,
-                      const ctl::InstanceKey& key,
-                      const std::string& section) {
-  DLSSNR_PROFILE_CTL_L3("BackbufferTarget");
-  return store.Read(section, key, kTarget).as_int == 2;
+// Ratio Clamps gates the three ratio settings below.
+bool RatioClampsEnabled(const void*, const ctl::ValueStore& store,
+                        const ctl::InstanceKey& key,
+                        const std::string& section) {
+  DLSSNR_PROFILE_CTL_L3("RatioClampsEnabled");
+  return store.Read(section, key, kRatioClampsEnabled).as_bool;
 }
 
 bool TemporalEnabled(const void*, const ctl::ValueStore& store,
@@ -342,29 +340,29 @@ void RegisterPassSchema(ctl::Schema& schema) {
                "blend more smoothly across the low-resolution neighborhood. "
                "This does not scale the model edit.");
 
-  // Ratio rows apply to Backbuffer passes only, which is a value in this same
-  // section -- so the gate reads it exactly like every other "follows that
-  // checkbox" rule, with no hook.
+  pass.Add<ctl::BoolSetting>(kRatioClampsEnabled, "Ratio Clamps", true)
+      .Category(kCatResidualEdits)
+      .Tooltip("Bound the per-channel model residual log ratio to the "
+               "[Ratio Darken, Ratio Brighten] range before shaping. "
+               "Applies to both SDR and HDR composition.");
   pass.Add<ctl::FloatSetting>(kRatioEps, "Ratio Eps", 1e-2f)
       .ClampRange(1e-6f, 0.5f)
-      .VisibleWhen(&BackbufferTarget)
       .Category(kCatResidualEdits)
-      .Tooltip("Backbuffer passes only: denominator floor for the per-channel "
-               "ratio. This has no effect on Pre-DLSS or Post-DLSS passes.");
+      .Tooltip("Denominator floor for the per-channel residual log ratio. "
+               "Keeps the residual finite when a channel is near zero. "
+               "Applies to both SDR and HDR composition.");
   pass.Add<ctl::FloatSetting>(kRatioBrighten, "Ratio Brighten", 64.0f)
       .ClampRange(1.0f, 256.0f)
-      .VisibleWhen(&BackbufferTarget)
+      .EnableWhen(&RatioClampsEnabled)
       .Category(kCatResidualEdits)
-      .Tooltip("Backbuffer passes only: upper bound on per-channel ratio "
-               "brightening. This has no effect on Pre-DLSS or Post-DLSS "
-               "passes.");
+      .Tooltip("Upper bound on the per-channel residual ratio when Ratio "
+               "Clamps is enabled. Applies to both SDR and HDR composition.");
   pass.Add<ctl::FloatSetting>(kRatioDarken, "Ratio Darken", 1.0f / 16.0f)
       .ClampRange(1.0f / 256.0f, 1.0f)
-      .VisibleWhen(&BackbufferTarget)
+      .EnableWhen(&RatioClampsEnabled)
       .Category(kCatResidualEdits)
-      .Tooltip("Backbuffer passes only: lower bound on per-channel ratio "
-               "darkening. This has no effect on Pre-DLSS or Post-DLSS "
-               "passes.");
+      .Tooltip("Lower bound on the per-channel residual ratio when Ratio "
+               "Clamps is enabled. Applies to both SDR and HDR composition.");
 
   // --- The two model grades ----------------------------------------------
   ctl::Section& grade_input =

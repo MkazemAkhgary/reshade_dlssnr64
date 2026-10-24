@@ -64,6 +64,8 @@ PassSnapshot Read(const ctl::ValueStore& store, const ctl::InstanceKey& key) {
   p.residual.ratio_brighten =
       store.Read(section, key, kRatioBrighten).as_float;
   p.residual.ratio_darken = store.Read(section, key, kRatioDarken).as_float;
+  p.residual.ratio_clamps_enabled =
+      store.Read(section, key, kRatioClampsEnabled).as_bool;
 
   return p;
 }

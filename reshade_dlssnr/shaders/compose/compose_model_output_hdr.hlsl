@@ -65,7 +65,12 @@ float3 ComposeHdrInverse(float3 sdr_base, float3 hdr_src,
     const float3 low_in_lin = max(SrgbToLinearExt(low_in), 0.0);
     const float3 low_out_lin = max(SrgbToLinearExt(low_out), 0.0);
 
-    const float3 log_gain = safe_log3(low_out_lin) - safe_log3(low_in_lin);
+    float3 log_gain = safe_log3(low_out_lin) - safe_log3(low_in_lin);
+    if (kRatioClampsEnabled) {
+        log_gain = clamp(log_gain,
+                         log(max(kRatioDarken, 1e-4)),
+                         log(max(kRatioBrighten, 1e-4)));
+    }
     if (!all(log_gain == 0.0))
     {
         const float3 kL = HdrLumaWeights();

@@ -49,6 +49,7 @@
 #define kLumaStrength    shader.Params0.x
 #define kChromaStrength  shader.Params0.y
 #define kApplyEditToPreGrade shader.Params1.w
+#define kRatioClampsEnabled (shader.Params1.z > 0.5)
 #define kUpsampleSharpness hdr.UpsampleSharpness
 
 // Temporal reprojection settings and motion/depth guide mapping.

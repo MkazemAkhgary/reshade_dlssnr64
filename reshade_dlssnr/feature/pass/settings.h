@@ -58,6 +58,7 @@ inline constexpr const char* kUpsampleSharpness = "upsample_sharpness";
 inline constexpr const char* kRatioEps = "ratio_eps";
 inline constexpr const char* kRatioBrighten = "ratio_brighten";
 inline constexpr const char* kRatioDarken = "ratio_darken";
+inline constexpr const char* kRatioClampsEnabled = "ratio_clamps_enabled";
 
 // The two model grade sections. Each is a section of its own, so "enabled" is
 // unqualified within it.
