@@ -19,6 +19,28 @@ namespace reshade_dlssnr {
 
 constexpr uint32_t kStatusTextLength = 160;
 
+// One GPU allocation owned by a pass. Captured from a live PassResources
+// every frame, so it reflects the current allocation rather than a lifetime
+// high-water mark. A texture is identified by width * height * bpp; a buffer
+// has height == 0 and its width is the byte size.
+constexpr uint32_t kMaxPassResourceEntries = 32;
+
+struct ResourceInfoEntry {
+  char name[32] = {};
+  uint32_t width = 0;
+  uint32_t height = 0;
+  // DXGI_FORMAT for textures; UNKNOWN for buffers. Kept numeric so this
+  // header does not pull in d3d12.h for its consumers.
+  uint32_t format = 0;
+  uint64_t bytes = 0;
+};
+
+struct PassResourceStats {
+  ResourceInfoEntry entries[kMaxPassResourceEntries];
+  uint32_t count = 0;
+  uint64_t total_bytes = 0;
+};
+
 // Per-pass status. Split by ownership:
 //   - `enabled` is setting-owned. Populated by AddonController::RefreshStatus
 //     from the current settings; the session itself has no access to them.
@@ -33,6 +55,10 @@ struct PassStatus {
   bool failed = false;                           // failed at some point
   bool has_feature = false;                      // NGX feature handle exists
   char reason[kStatusTextLength] = {};           // failure reason, or ""
+  // Current allocations from this pass's PassResources. Populated by
+  // PassSession::GetStatus; empty for a pass whose session has not been
+  // created yet.
+  PassResourceStats resources;
 };
 
 struct PassStatusEntry {
@@ -80,6 +106,18 @@ struct StatusSnapshot {
   // by assuming the vector's position has identity semantics.
   std::vector<PassStatusEntry> passes;
 
+  // Sum of every pass's PassResources::total_bytes at the last refresh. Does
+  // not include the shared compute engine's descriptor heap, constants
+  // buffer, or the controller's release command context; those are addon-wide
+  // rather than per-pass.
+  uint64_t total_vram_bytes = 0;
+
+  // Resources waiting for a queue-ordered fence before release. Nonzero means
+  // a recent allocation change retired something this frame; zero is the
+  // steady state.
+  uint32_t retired_game_resources = 0;
+  uint32_t retired_addon_resources = 0;
+
   // Clears all fields without releasing vector capacity. Once steady state is
   // reached, RefreshStatus can rebuild the snapshot without allocating.
   void Reset() {
@@ -103,6 +141,9 @@ struct StatusSnapshot {
     std::fill_n(hdr_reason, kStatusTextLength, '\0');
 
     passes.clear();
+    total_vram_bytes = 0;
+    retired_game_resources = 0;
+    retired_addon_resources = 0;
   }
 };
 

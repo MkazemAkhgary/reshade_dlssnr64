@@ -122,6 +122,76 @@ void PassSession::Retry(NgxRuntime& runtime) {
                         "DLSSNR pass: retrying after failure");
 }
 
+namespace {
+
+// Bytes per pixel for the DXGI formats this addon creates. Anything else is
+// counted as 4 bytes, which is a harmless over/under-estimate for a format
+// the addon does not itself allocate.
+uint32_t BytesPerPixel(DXGI_FORMAT format) {
+  switch (format) {
+    case DXGI_FORMAT_R8_UNORM:
+      return 1;
+    case DXGI_FORMAT_R8G8_UNORM:
+    case DXGI_FORMAT_R16_UNORM:
+    case DXGI_FORMAT_R16_FLOAT:
+    case DXGI_FORMAT_R16_TYPELESS:
+      return 2;
+    case DXGI_FORMAT_R8G8B8A8_UNORM:
+    case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+    case DXGI_FORMAT_B8G8R8A8_UNORM:
+    case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
+    case DXGI_FORMAT_R10G10B10A2_UNORM:
+    case DXGI_FORMAT_R11G11B10_FLOAT:
+    case DXGI_FORMAT_R32_FLOAT:
+    case DXGI_FORMAT_R32_UINT:
+    case DXGI_FORMAT_R32_TYPELESS:
+      return 4;
+    case DXGI_FORMAT_R16G16_FLOAT:
+    case DXGI_FORMAT_R16G16_UNORM:
+    case DXGI_FORMAT_R16G16B16A16_FLOAT:
+    case DXGI_FORMAT_R16G16B16A16_UNORM:
+    case DXGI_FORMAT_R32G32_FLOAT:
+      return 8;
+    case DXGI_FORMAT_R32G32B32A32_FLOAT:
+    case DXGI_FORMAT_R32G32B32A32_UINT:
+      return 16;
+    default:
+      return 4;
+  }
+}
+
+uint64_t EstimateBytes(ID3D12Resource* resource) {
+  if (resource == nullptr) return 0;
+  const D3D12_RESOURCE_DESC desc = resource->GetDesc();
+  if (desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER) {
+    return desc.Width;
+  }
+  return static_cast<uint64_t>(desc.Width) * desc.Height *
+         BytesPerPixel(desc.Format);
+}
+
+void AppendResource(PassResourceStats& stats, const char* name,
+                    ID3D12Resource* resource) {
+  if (resource == nullptr || stats.count >= kMaxPassResourceEntries) return;
+  const D3D12_RESOURCE_DESC desc = resource->GetDesc();
+  ResourceInfoEntry& entry = stats.entries[stats.count++];
+  std::snprintf(entry.name, sizeof(entry.name), "%s", name);
+  if (desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER) {
+    entry.width = static_cast<uint32_t>(desc.Width);
+    entry.height = 0;
+    entry.format = static_cast<uint32_t>(DXGI_FORMAT_UNKNOWN);
+    entry.bytes = desc.Width;
+  } else {
+    entry.width = static_cast<uint32_t>(desc.Width);
+    entry.height = desc.Height;
+    entry.format = static_cast<uint32_t>(desc.Format);
+    entry.bytes = EstimateBytes(resource);
+  }
+  stats.total_bytes += entry.bytes;
+}
+
+}  // namespace
+
 PassStatus PassSession::GetStatus() const {
   // Only the runtime-owned fields are populated here. `enabled` is
   // setting-owned and is filled in by AddonController::RefreshStatus.
@@ -131,6 +201,58 @@ PassStatus PassSession::GetStatus() const {
   s.has_feature = feature_.HasFeature();
   if (reason_ != nullptr && reason_[0] != '\0') {
     std::snprintf(s.reason, sizeof(s.reason), "%s", reason_);
+  }
+
+  // Enumerate the pass's own GPU allocations. Every accessor is const and
+  // returns the live resource, so a reallocation between frames is reflected
+  // on the next Present without any explicit invalidation. The order groups
+  // related resources so a related set (working-scale buffers, temporal
+  // history, synthetic guides) reads as a block in the UI.
+  AppendResource(s.resources, "output", resources_.GetOutput());
+  AppendResource(s.resources, "composite_output",
+                 resources_.GetCompositeOutput());
+  AppendResource(s.resources, "packed_hdr_sdr", resources_.GetPackedOutput());
+  AppendResource(s.resources, "working_input", resources_.GetWorkingInput());
+  AppendResource(s.resources, "working_output", resources_.GetWorkingOutput());
+  AppendResource(s.resources, "graded_working_input",
+                 resources_.GetGradedWorkingInput());
+  AppendResource(s.resources, "unlifted_working_input",
+                 resources_.GetUnliftedWorkingInput());
+  AppendResource(s.resources, "effective_exposure_map",
+                 resources_.GetEffectiveExposureMap());
+  AppendResource(s.resources, "local_exposure_partial_sums",
+                 resources_.GetLocalExposurePartialSums());
+  AppendResource(s.resources, "local_exposure_global_scale",
+                 resources_.GetLocalExposureGlobalScale());
+  AppendResource(s.resources, "gain_stats", resources_.GetGainStats());
+  AppendResource(s.resources, "temporal_previous_input",
+                 resources_.GetTemporalPreviousInput());
+  AppendResource(s.resources, "temporal_previous_edit",
+                 resources_.GetTemporalPreviousEdit());
+  AppendResource(s.resources, "temporal_previous_depth",
+                 resources_.GetTemporalPreviousDepth());
+  AppendResource(s.resources, "temporal_candidate",
+                 resources_.GetTemporalCandidate());
+  AppendResource(s.resources, "temporal_validated_candidate",
+                 resources_.GetTemporalValidatedCandidate());
+  AppendResource(s.resources, "temporal_stats",
+                 resources_.GetTemporalStats());
+  AppendResource(s.resources, "temporal_cheap_input",
+                 resources_.GetCheapTemporalInput());
+  AppendResource(s.resources, "temporal_cheap_output",
+                 resources_.GetCheapTemporalOutput());
+  AppendResource(s.resources, "synthetic_previous_input",
+                 resources_.GetSyntheticPreviousInput());
+  AppendResource(s.resources, "synthetic_previous_depth",
+                 resources_.GetSyntheticPreviousDepth());
+  AppendResource(s.resources, "synthetic_current_depth",
+                 resources_.GetSyntheticCurrentDepth());
+  AppendResource(s.resources, "synthetic_motion",
+                 resources_.GetSyntheticMotion());
+  for (uint32_t i = 0; i < kScratchCount; ++i) {
+    char name[16];
+    std::snprintf(name, sizeof(name), "scratch[%u]", i);
+    AppendResource(s.resources, name, resources_.GetScratch(i));
   }
   return s;
 }

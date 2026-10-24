@@ -7,6 +7,7 @@ namespace ui_state {
 
 inline constexpr const char* kSection = "Overlay UI State";
 inline constexpr const char* kStatusOpen = "status_open";
+inline constexpr const char* kResourcesOpen = "resources_open";
 inline constexpr const char* kPreferencesOpen = "preferences_open";
 inline constexpr const char* kPresetsOpen = "presets_open";
 inline constexpr const char* kPassesOpen = "passes_open";

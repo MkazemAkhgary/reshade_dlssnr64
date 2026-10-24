@@ -863,8 +863,17 @@ void AddonController::RefreshStatus(const Settings& settings) {
     entry.status.enabled =
         store.Read(feature::pass::kSection, feature::pass::PassKey(id),
                    feature::pass::kPassEnabled).as_bool;
+    status_.total_vram_bytes += entry.status.resources.total_bytes;
     status_.passes.push_back(entry);
   }
+
+  // `guides` above is the DlssGuideState snapshot; the retired queues are
+  // owned by the DlssGuides singleton, not by that snapshot.
+  DlssGuides& guide_owner = DlssGuides::Get();
+  status_.retired_game_resources =
+      static_cast<uint32_t>(guide_owner.RetiredGameResourceCount());
+  status_.retired_addon_resources =
+      static_cast<uint32_t>(guide_owner.RetiredResourceCount());
 }
 
 void AddonController::EnsureSessions(

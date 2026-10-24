@@ -14,6 +14,7 @@
 #include "feature/pass/settings.h"
 #include "feature/pass/ui.h"
 #include "feature/pass/view.h"
+#include "gpu/d3d12_utils.h"
 #include "state/settings.h"
 #include "status.h"
 #include "temporal/stats.h"
@@ -24,6 +25,22 @@ namespace reshade_dlssnr {
 
 
 namespace {
+
+void FormatBytes(uint64_t bytes, char* out, size_t out_size) {
+  if (bytes >= 1024ull * 1024 * 1024) {
+    std::snprintf(out, out_size, "%.2f GB",
+                  static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0));
+  } else if (bytes >= 1024ull * 1024) {
+    std::snprintf(out, out_size, "%.1f MB",
+                  static_cast<double>(bytes) / (1024.0 * 1024.0));
+  } else if (bytes >= 1024) {
+    std::snprintf(out, out_size, "%.1f KB",
+                  static_cast<double>(bytes) / 1024.0);
+  } else {
+    std::snprintf(out, out_size, "%llu B",
+                  static_cast<unsigned long long>(bytes));
+  }
+}
 
 void FormatPassStatus(const PassStatus& pass,
                       InjectionStage stage,
@@ -245,6 +262,120 @@ void DrawStatusSection(Settings& settings, bool& changed) {
       if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         Tip("Current runtime status for this pass, including its target stage, working scale, initialization state, and any failure reason.");
       }
+    }
+  }
+
+  // GPU resource breakdown. Collapsed by default so the fast-glance health
+  // and per-pass status stay at the top of the panel; the numbers here matter
+  // when tuning Working Scale / x2 or diagnosing VRAM pressure.
+  ImGui::Separator();
+  if (PersistentSettingHeader(
+          "GPU Resources", feature::ui_state::kResourcesOpen, changed,
+          "Currently allocated per-pass GPU resources. Totals do not include "
+          "the shared compute engine's descriptor heap, its constant buffer, "
+          "or the release command context.")) {
+    IndentScope resources_indent;
+
+    char total_buf[32];
+    FormatBytes(snap.total_vram_bytes, total_buf, sizeof(total_buf));
+    ImGui::AlignTextToFramePadding();
+    ImGui::Text("%s across %u pass%s", total_buf,
+                static_cast<unsigned>(snap.passes.size()),
+                snap.passes.size() == 1 ? "" : "es");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      Tip("Sum of every live pass's allocated GPU resources at the last "
+          "refresh. Reallocations are not counted twice; retired resources "
+          "waiting on the GPU fence are shown separately below.");
+    }
+
+    // Retired queues sit directly under the total: they are memory the addon
+    // still holds but which is not part of any pass's total_bytes, and it is
+    // what makes the total appear to lag after a scale change.
+    if (snap.retired_game_resources != 0 || snap.retired_addon_resources != 0) {
+      ImGui::TextDisabled("Pending release: %u game · %u addon",
+                          snap.retired_game_resources,
+                          snap.retired_addon_resources);
+      if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        Tip("Resources retired on a reallocation that are still alive until "
+            "the GPU queue fence for their last reader completes.");
+      }
+    }
+
+    // Per-pass tables. Skipped for passes that have not produced a session
+    // yet, since their resources are genuinely empty rather than zero-sized.
+    const ImGuiTableFlags table_flags =
+        ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg |
+        ImGuiTableFlags_BordersInnerH;
+    const ImGuiTreeNodeFlags pass_flags =
+        ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
+
+    for (const PassStatusEntry& entry : snap.passes) {
+      if (entry.status.resources.count == 0) continue;
+
+      const auto position_it = position_by_id.find(entry.id);
+      const uint32_t position =
+          position_it == position_by_id.end()
+              ? 0u : static_cast<uint32_t>(position_it->second + 1);
+
+      const feature::pass::PassSnapshot pass = feature::pass::Read(
+          feature::SettingsStore(), feature::pass::PassKey(entry.id));
+      const char* stage_name =
+          pass.target == 0 ? "Pre-DLSS" :
+          pass.target == 1 ? "Post-DLSS" : "Backbuffer";
+
+      char pass_label[96];
+      char pass_bytes[32];
+      FormatBytes(entry.status.resources.total_bytes, pass_bytes,
+                  sizeof(pass_bytes));
+      std::snprintf(pass_label, sizeof(pass_label), "Pass %u (%s) — %s",
+                    position, stage_name, pass_bytes);
+
+      ImGui::PushID(static_cast<int>(entry.id));
+      if (ImGui::TreeNodeEx("##pass_resources", pass_flags, "%s", pass_label)) {
+        if (ImGui::BeginTable("pass_resource_table", 4, table_flags)) {
+          ImGui::TableSetupColumn("Resource",
+              ImGuiTableColumnFlags_WidthStretch);
+          ImGui::TableSetupColumn("Dims",
+              ImGuiTableColumnFlags_WidthFixed, 90.0f);
+          ImGui::TableSetupColumn("Format",
+              ImGuiTableColumnFlags_WidthFixed, 150.0f);
+          ImGui::TableSetupColumn("Size",
+              ImGuiTableColumnFlags_WidthFixed, 80.0f);
+          ImGui::TableHeadersRow();
+
+          for (uint32_t i = 0; i < entry.status.resources.count; ++i) {
+            const ResourceInfoEntry& res = entry.status.resources.entries[i];
+            ImGui::TableNextRow();
+
+            ImGui::TableSetColumnIndex(0);
+            ImGui::TextUnformatted(res.name);
+
+            ImGui::TableSetColumnIndex(1);
+            if (res.height == 0) {
+              ImGui::Text("%u B", res.width);
+            } else {
+              ImGui::Text("%ux%u", res.width, res.height);
+            }
+
+            ImGui::TableSetColumnIndex(2);
+            if (res.height == 0) {
+              ImGui::TextDisabled("buffer");
+            } else {
+              ImGui::TextUnformatted(
+                  FormatName(static_cast<DXGI_FORMAT>(res.format)));
+            }
+
+            ImGui::TableSetColumnIndex(3);
+            char entry_buf[32];
+            FormatBytes(res.bytes, entry_buf, sizeof(entry_buf));
+            ImGui::TextUnformatted(entry_buf);
+          }
+
+          ImGui::EndTable();
+        }
+        ImGui::TreePop();
+      }
+      ImGui::PopID();
     }
   }
 }

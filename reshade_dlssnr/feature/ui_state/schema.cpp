@@ -13,6 +13,8 @@ void RegisterUiStateSchema(ctl::Schema& schema) {
       schema.AddSection(ui_state::kSection, ctl::SectionKind::Single);
   section.Add<ctl::BoolSetting>(ui_state::kStatusOpen, "Status Open", true)
       .GlobalOnly();
+  section.Add<ctl::BoolSetting>(ui_state::kResourcesOpen, "Resources Open",
+                                false).GlobalOnly();
   section.Add<ctl::BoolSetting>(ui_state::kPreferencesOpen,
                                 "Preferences Open", false).GlobalOnly();
   section.Add<ctl::BoolSetting>(ui_state::kPresetsOpen, "Presets Open", false)

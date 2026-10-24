@@ -34,6 +34,10 @@ inline const char* FormatName(DXGI_FORMAT format) {
   switch (format) {
     case DXGI_FORMAT_UNKNOWN:
       return "UNKNOWN";
+    case DXGI_FORMAT_R8_UNORM:
+      return "R8_UNORM";
+    case DXGI_FORMAT_R8G8_UNORM:
+      return "R8G8_UNORM";
     case DXGI_FORMAT_R8G8B8A8_UNORM:
       return "R8G8B8A8_UNORM";
     case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
@@ -50,6 +54,12 @@ inline const char* FormatName(DXGI_FORMAT format) {
       return "R16G16B16A16_FLOAT";
     case DXGI_FORMAT_R16G16B16A16_UNORM:
       return "R16G16B16A16_UNORM";
+    case DXGI_FORMAT_R32_FLOAT:
+      return "R32_FLOAT";
+    case DXGI_FORMAT_R32_UINT:
+      return "R32_UINT";
+    case DXGI_FORMAT_R32G32_FLOAT:
+      return "R32G32_FLOAT";
     case DXGI_FORMAT_R32G32B32A32_FLOAT:
       return "R32G32B32A32_FLOAT";
     default:
