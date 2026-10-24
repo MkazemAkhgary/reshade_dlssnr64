@@ -89,6 +89,13 @@ class PassResources {
   Microsoft::WRL::ComPtr<ID3D12Resource> temporal_validated_candidate;
   Microsoft::WRL::ComPtr<ID3D12Resource> temporal_stats;
 
+  // Cheap model input/output at cheap_scale x working resolution, used on
+  // reuse frames to fill low-confidence reprojection gaps.
+  Microsoft::WRL::ComPtr<ID3D12Resource> temporal_cheap_input;
+  Microsoft::WRL::ComPtr<ID3D12Resource> temporal_cheap_output;
+  unsigned int temporal_cheap_width = 0;
+  unsigned int temporal_cheap_height = 0;
+
   // Optional synthesized motion guides for stages with depth but no native MVec.
   // Motion is estimated at working resolution; current depth is reduced into
   // the same grid and committed as previous depth after model evaluation.
@@ -153,6 +160,9 @@ class PassResources {
       ID3D12Device* device, const D3D12_RESOURCE_DESC& input_desc,
       unsigned int width, unsigned int height, bool use_fp16_history,
       bool* out_reset_history);
+  bool EnsureCheapTemporalResources(
+      ID3D12Device* device, const D3D12_RESOURCE_DESC& input_desc,
+      unsigned int width, unsigned int height);
 
   // Ensures scratch slot `index` matches the given size and format.
   bool EnsureScratch(
@@ -203,6 +213,10 @@ class PassResources {
   ID3D12Resource* GetTemporalCandidate() const { return temporal_candidate.Get(); }
   ID3D12Resource* GetTemporalValidatedCandidate() const { return temporal_validated_candidate.Get(); }
   ID3D12Resource* GetTemporalStats() const { return temporal_stats.Get(); }
+  ID3D12Resource* GetCheapTemporalInput() const { return temporal_cheap_input.Get(); }
+  ID3D12Resource* GetCheapTemporalOutput() const { return temporal_cheap_output.Get(); }
+  unsigned int CheapTemporalWidth() const { return temporal_cheap_width; }
+  unsigned int CheapTemporalHeight() const { return temporal_cheap_height; }
   // True when slot `index` already holds a texture of the given shape. Lets a
   // caller pick between two slots instead of letting EnsureScratch dispose a
   // matching one in the other.

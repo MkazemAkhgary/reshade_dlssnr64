@@ -557,6 +557,40 @@ bool PassResources::EnsureTemporalResources(
   return true;
 }
 
+bool PassResources::EnsureCheapTemporalResources(
+    ID3D12Device* device, const D3D12_RESOURCE_DESC& input_desc,
+    unsigned int width, unsigned int height) {
+  DLSSNR_PROFILE_RESOURCE_L2("PassResources::EnsureCheapTemporalResources");
+  if (device == nullptr || width == 0 || height == 0) return false;
+
+  const bool matches = temporal_cheap_input != nullptr &&
+      temporal_cheap_output != nullptr &&
+      temporal_cheap_width == width &&
+      temporal_cheap_height == height &&
+      temporal_cheap_input->GetDesc().Format == input_desc.Format;
+  if (matches) return true;
+
+  Dispose(temporal_cheap_input);
+  Dispose(temporal_cheap_output);
+
+  D3D12_RESOURCE_DESC desc = input_desc;
+  desc.Width = width;
+  desc.Height = height;
+
+  if (!CreateUavTexture(device, desc, temporal_cheap_input.GetAddressOf())) {
+    return false;
+  }
+  if (!CreateUavTexture(device, desc, temporal_cheap_output.GetAddressOf())) {
+    Dispose(temporal_cheap_input);
+    return false;
+  }
+  temporal_cheap_width = width;
+  temporal_cheap_height = height;
+  TRACE_NAME(temporal_cheap_input.Get(), "temporal_cheap_input");
+  TRACE_NAME(temporal_cheap_output.Get(), "temporal_cheap_output");
+  return true;
+}
+
 bool PassResources::EnsureScratch(
     ID3D12Device* device,
     const D3D12_RESOURCE_DESC& desc,
@@ -618,6 +652,8 @@ void PassResources::Shutdown() {
   temporal_candidate.Reset();
   temporal_validated_candidate.Reset();
   temporal_stats.Reset();
+  temporal_cheap_input.Reset();
+  temporal_cheap_output.Reset();
   synthetic_previous_input.Reset();
   synthetic_previous_depth.Reset();
   synthetic_current_depth.Reset();
@@ -647,6 +683,8 @@ void PassResources::Shutdown() {
   local_exposure_partial_height = 0;
   temporal_width = temporal_height = 0;
   temporal_input_format = DXGI_FORMAT_UNKNOWN;
+  temporal_cheap_width = 0;
+  temporal_cheap_height = 0;
   temporal_edit_format = DXGI_FORMAT_UNKNOWN;
   working_width = 0;
   working_height = 0;

@@ -621,26 +621,129 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
       self->temporal_last_refresh_frame_ != 0 && age > 0 &&
       age < effective_cadence;
   if (can_skip) {
-    self->command_.Transition(list, validated,
-                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    ID3D12Resource* apply_srvs[kSrvCount] = {
-        run.model_color, validated, validated, validated};
-    ID3D12Resource* output_uavs[kUavCount] = {run.model_output};
-    self->command_.Transition(list, run.model_output,
-                              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    if (run.codec->Dispatch("TemporalApplyEdit", list, constants,
-                             apply_srvs, output_uavs)) {
-      self->command_.UavBarrier(list, run.model_output);
+    bool reuse_ok = false;
+
+    // Try the cheap-model path first: on non-key frames, run the same NGX
+    // feature at a fraction of the working scale and blend its output with
+    // the reprojected high-res edit. Pixels with high reprojection
+    // confidence keep the reprojected edit; pixels with low confidence fall
+    // back to the cheap model output. Any failure in this path falls
+    // through to the reproject-only behavior below.
+    const float cheap_scale = std::clamp(
+        run.pass_state.temporal_cheap_scale, 0.1f, 1.0f);
+    const unsigned int cheap_w = std::max(16u,
+        static_cast<unsigned int>(static_cast<float>(run.work_width) *
+                                  cheap_scale + 0.5f));
+    const unsigned int cheap_h = std::max(16u,
+        static_cast<unsigned int>(static_cast<float>(run.work_height) *
+                                  cheap_scale + 0.5f));
+
+    if (cheap_scale < 0.999f && run.runtime != nullptr &&
+        run.codec != nullptr &&
+        self->feature_.HasFeature()) {
+      const D3D12_RESOURCE_DESC cheap_input_desc =
+          run.model_color->GetDesc();
+      if (self->resources_.EnsureCheapTemporalResources(
+              run.device, cheap_input_desc, cheap_w, cheap_h)) {
+        ID3D12Resource* cheap_input =
+            self->resources_.GetCheapTemporalInput();
+        ID3D12Resource* cheap_output =
+            self->resources_.GetCheapTemporalOutput();
+
+        if (cheap_input != nullptr && cheap_output != nullptr) {
+          // Downsample the working-resolution model input into the cheap
+          // buffer with the same exact box-area average used for the
+          // regular model input.
+          self->command_.Transition(list, run.model_color,
+                                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+          self->command_.Transition(list, cheap_input,
+                                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+          ComputeConstants cheap_prep = {};
+          cheap_prep.Width = cheap_w;
+          cheap_prep.Height = cheap_h;
+          ID3D12Resource* prep_srvs[kSrvCount] = {
+              run.model_color, run.model_color, run.model_color,
+              run.model_color};
+          ID3D12Resource* prep_uavs[kUavCount] = {cheap_input};
+          if (run.codec->Dispatch("PrepareModelInput", list, cheap_prep,
+                                   prep_srvs, prep_uavs)) {
+            self->command_.UavBarrier(list, cheap_input);
+            self->command_.Transition(list, cheap_input,
+                                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+            if (self->FillEvaluateParams(
+                    *run.runtime, run.pass_state, run.guides,
+                    cheap_input, cheap_output, cheap_w, cheap_h,
+                    run.width, run.height)) {
+              const NVSDK_NGX_Result cheap_result =
+                  run.runtime->EvaluateFeature(
+                      list, self->feature_.FeatureHandle(),
+                      run.runtime->Parameters().Get(), nullptr);
+              run.codec->InvalidateBindings();
+
+              if (cheap_result == NVSDK_NGX_Result_Success) {
+                self->command_.UavBarrier(list, cheap_output);
+                self->command_.Transition(list, cheap_output,
+                                          D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+                self->command_.Transition(list, validated,
+                                          D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+                self->command_.Transition(list, run.model_output,
+                                          D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+                ComputeConstants blend_constants = {};
+                blend_constants.Width = run.work_width;
+                blend_constants.Height = run.work_height;
+                ID3D12Resource* blend_srvs[kSrvCount] = {
+                    run.model_color, validated, cheap_output, cheap_output};
+                ID3D12Resource* blend_uavs[kUavCount] = {run.model_output};
+
+                if (run.codec->Dispatch("TemporalBlendCheap", list,
+                                         blend_constants, blend_srvs,
+                                         blend_uavs)) {
+                  self->command_.UavBarrier(list, run.model_output);
+                  reuse_ok = true;
+                  TRACE_EVT(self, "temporal reuse+cheap pass=%u age=%llu "
+                            "invalid=%.4f mode=%d cheap=%ux%u",
+                            self->pass_id_,
+                            static_cast<unsigned long long>(age),
+                            self->temporal_invalid_fraction_, mode,
+                            cheap_w, cheap_h);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (!reuse_ok) {
+      // Fall back to the existing reproject-only path.
+      self->command_.Transition(list, validated,
+                                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+      ID3D12Resource* apply_srvs[kSrvCount] = {
+          run.model_color, validated, validated, validated};
+      ID3D12Resource* output_uavs[kUavCount] = {run.model_output};
+      self->command_.Transition(list, run.model_output,
+                                D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+      if (run.codec->Dispatch("TemporalApplyEdit", list, constants,
+                               apply_srvs, output_uavs)) {
+        self->command_.UavBarrier(list, run.model_output);
+        reuse_ok = true;
+        TRACE_EVT(self, "temporal reuse pass=%u age=%llu invalid=%.4f mode=%d",
+                  self->pass_id_, static_cast<unsigned long long>(age),
+                  self->temporal_invalid_fraction_, mode);
+      }
+    }
+
+    if (reuse_ok) {
       run.temporal_reuse = true;
       run.eval_result = NVSDK_NGX_Result_Success;
-      TRACE_EVT(self, "temporal reuse pass=%u age=%llu invalid=%.4f mode=%d",
-                self->pass_id_, static_cast<unsigned long long>(age),
-                self->temporal_invalid_fraction_, mode);
     } else {
       self->temporal_history_valid_ = false;
       self->temporal_feedback_valid_ = false;
       run.temporal_reuse = false;
-      TRACE_EVT(self, "temporal refresh pass=%u reason=apply_dispatch", self->pass_id_);
+      TRACE_EVT(self, "temporal refresh pass=%u reason=apply_dispatch",
+                self->pass_id_);
     }
   }
 

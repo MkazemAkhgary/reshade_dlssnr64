@@ -91,6 +91,7 @@
     <ShaderSourceFiles Include="exposure_mask\classify_exposure_mask.hlsl" />
     <ShaderSourceFiles Include="model\prepare_model_input.hlsl" />
     <ShaderSourceFiles Include="temporal\apply_edit.hlsl" />
+    <ShaderSourceFiles Include="temporal\blend_cheap.hlsl" />
     <ShaderSourceFiles Include="temporal\clear_stats.hlsl" />
     <ShaderSourceFiles Include="temporal\commit_history.hlsl" />
     <ShaderSourceFiles Include="temporal\reconstruct_motion_vectors.hlsl" />
