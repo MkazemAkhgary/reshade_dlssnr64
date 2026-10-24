@@ -461,6 +461,57 @@ bool ComputeEngine::IsPassFailed(const char* pass_name) {
   return failed_passes_.find(pass_name) != failed_passes_.end();
 }
 
+#if DLSSNR_TRACE_ENABLED
+namespace {
+
+// Records one dispatch. Kept out of Dispatch so the params buffer only exists
+// while tracing is on.
+void TraceDispatch(const ComputeEngine* owner, const char* pass_name,
+                   const ComputeConstants& constants,
+                   ID3D12Resource* const* srvs, ID3D12Resource* const* uavs,
+                   uint32_t threads_x, uint32_t threads_y, uint32_t threads_z) {
+  if (!trace::Enabled()) return;
+
+  // The blocks overlay one another, so print the float view up to the last
+  // non-zero value rather than every field.
+  const float* params = &constants.shader.Params0.x;
+  constexpr uint32_t kParamCapacity =
+      (sizeof(ShaderBlock) + sizeof(GradeBlock) + sizeof(ResidualBlock) +
+       sizeof(HdrBlock) + sizeof(HistogramBlock) + sizeof(TemporalBlock) +
+       sizeof(LocalExposureControlBlock)) / sizeof(float);
+  uint32_t param_count = 0;
+  for (uint32_t i = 0; i < kParamCapacity; ++i) {
+    if (params[i] != 0.0f) param_count = i + 1;
+  }
+
+  char params_text[48 * 10] = {};
+  int used = 0;
+  for (uint32_t i = 0;
+       i < param_count && used < static_cast<int>(sizeof(params_text)) - 12; ++i) {
+    const int n = std::snprintf(params_text + used, sizeof(params_text) - used,
+                                "%s%.6g", i == 0 ? "" : ",",
+                                static_cast<double>(params[i]));
+    if (n <= 0) break;
+    used += n;
+  }
+
+  trace::Line("cmd", "Dispatch", owner,
+              "dispatch pass=%s w=%u h=%u grid=%u,%u,%u "
+              "srv=[%d,%d,%d,%d] uav=[%d] params=[%s]",
+              pass_name, constants.Width, constants.Height,
+              threads_x != 0 ? threads_x : (constants.Width + 7) / 8,
+              threads_y != 0 ? threads_y : (constants.Height + 7) / 8,
+              threads_z != 0 ? threads_z : 1,
+              trace::ResourceId(srvs[0]),
+              kSrvCount > 1 ? trace::ResourceId(srvs[1]) : -1,
+              kSrvCount > 2 ? trace::ResourceId(srvs[2]) : -1,
+              kSrvCount > 3 ? trace::ResourceId(srvs[3]) : -1,
+              trace::ResourceId(uavs[0]), params_text);
+}
+
+}  // namespace
+#endif
+
 bool ComputeEngine::Dispatch(
     const char* pass_name,
     ID3D12GraphicsCommandList* command_list,
@@ -528,40 +579,7 @@ bool ComputeEngine::Dispatch(
   // Logged before BindAndDispatch so the pass name and constants line up with
   // the transitions that precede and follow it in the trace.
 #if DLSSNR_TRACE_ENABLED
-  if (trace::Enabled()) {
-    const float* params = &constants.shader.Params0.x;
-    constexpr uint32_t kParamCapacity =
-        (sizeof(ShaderBlock) + sizeof(GradeBlock) + sizeof(ResidualBlock) +
-         sizeof(HdrBlock) + sizeof(HistogramBlock) + sizeof(TemporalBlock) +
-         sizeof(LocalExposureControlBlock)) / sizeof(float);
-    uint32_t param_count = 0;
-    for (uint32_t i = 0; i < kParamCapacity; ++i) {
-      if (params[i] != 0.0f) param_count = i + 1;
-    }
-
-    char params_text[48 * 10] = {};
-    int used = 0;
-    for (uint32_t i = 0;
-         i < param_count && used < static_cast<int>(sizeof(params_text)) - 12; ++i) {
-      const int n = std::snprintf(params_text + used, sizeof(params_text) - used,
-                                  "%s%.6g", i == 0 ? "" : ",",
-                                  static_cast<double>(params[i]));
-      if (n <= 0) break;
-      used += n;
-    }
-    trace::Line("cmd", "Dispatch", this,
-                "dispatch pass=%s w=%u h=%u grid=%u,%u,%u "
-                "srv=[%d,%d,%d,%d] uav=[%d] params=[%s]",
-                pass_name, constants.Width, constants.Height,
-                threads_x != 0 ? threads_x : (constants.Width + 7) / 8,
-                threads_y != 0 ? threads_y : (constants.Height + 7) / 8,
-                threads_z != 0 ? threads_z : 1,
-                trace::ResourceId(srvs[0]),
-                kSrvCount > 1 ? trace::ResourceId(srvs[1]) : -1,
-                kSrvCount > 2 ? trace::ResourceId(srvs[2]) : -1,
-                kSrvCount > 3 ? trace::ResourceId(srvs[3]) : -1,
-                trace::ResourceId(uavs[0]), params_text);
-  }
+  TraceDispatch(this, pass_name, constants, srvs, uavs, threads_x, threads_y, threads_z);
 #endif
 
   DLSSNR_PROFILE_GPU_CONTEXT_L2(command_list);
