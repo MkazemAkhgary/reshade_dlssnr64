@@ -29,6 +29,7 @@ inline constexpr const char* kTarget = "target";
 // Free-text tab label. Empty means show the positional default ("Pass N").
 inline constexpr const char* kCustomName = "custom_name";
 inline constexpr const char* kWorkingScale = "working_scale";
+inline constexpr const char* kWorkingScaleX2 = "working_scale_x2";
 inline constexpr const char* kPreset = "preset";
 inline constexpr const char* kIntensity = "intensity";
 inline constexpr const char* kLocalTone = "local_tone";

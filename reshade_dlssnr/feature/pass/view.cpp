@@ -21,6 +21,7 @@ PassSnapshot Read(const ctl::ValueStore& store, const ctl::InstanceKey& key) {
 
   p.preset = store.Read(section, key, kPreset).as_int;
   p.working_scale = store.Read(section, key, kWorkingScale).as_float;
+  p.working_scale_x2 = store.Read(section, key, kWorkingScaleX2).as_bool;
   p.intensity = store.Read(section, key, kIntensity).as_float;
   p.temporal_mode = store.Read(section, key, kTemporalMode).as_int;
   p.synthetic_motion_guides =

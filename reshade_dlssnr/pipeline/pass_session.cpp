@@ -1060,7 +1060,8 @@ PipelineStatus PassSession::StepResolveWorkingScale(PassRun& run) {
   if (!run.pass_bound) return PipelineStatus::SkipFrame;
 
   const float working_scale =
-      std::clamp(run.pass_state.working_scale, 0.10f, 1.0f);
+      std::clamp(run.pass_state.working_scale, 0.10f, 1.0f) *
+      (run.pass_state.working_scale_x2 ? 2.0f : 1.0f);
   run.work_width = std::max(
       1u, static_cast<unsigned int>(run.width * working_scale + 0.5f));
   run.work_height = std::max(

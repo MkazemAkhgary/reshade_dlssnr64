@@ -43,6 +43,7 @@ struct PassSnapshot {
   // Model group.
   int preset = 0;
   float working_scale = 1.0f;
+  bool working_scale_x2 = false;
   float intensity = 1.0f;
   // 0=Off, 1=Adaptive, 2=Every 2, 3=Every 4.
   int temporal_mode = 0;

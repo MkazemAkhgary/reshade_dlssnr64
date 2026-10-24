@@ -22,6 +22,7 @@
 #include "fragments/grade_rows/rows.h"
 #include "pipeline/addon_controller.h"
 #include "state/settings.h"
+#include "ui/ui_widgets.h"
 
 namespace reshade_dlssnr {
 namespace feature {
@@ -154,6 +155,98 @@ bool DrawGradeSections(const void*, ctl::ValueStore& store,
   return changed;
 }
 
+bool DrawWorkingScaleRow(const void*, ctl::ValueStore& store,
+                        const ctl::DrawOptions&, const std::string& section,
+                        const ctl::InstanceKey& key, bool& changed) {
+  DLSSNR_PROFILE_UI_L3("DrawWorkingScaleRow");
+  const float scale = store.Read(section, key, kWorkingScale).as_float;
+  const bool x2 = store.Read(section, key, kWorkingScaleX2).as_bool;
+
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted("Working Scale");
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("The resolution the model runs at, as a fraction of the frame. "
+        "Tick x2 to double it for supersampling. Compose and the "
+        "backbuffer stay at frame resolution.");
+  }
+
+  ImGui::SameLine(kSliderLabelWidth);
+
+  const ImGuiStyle& style = ImGui::GetStyle();
+  const float x2_width = ImGui::GetFrameHeight() +
+                         style.ItemInnerSpacing.x +
+                         ImGui::CalcTextSize("x2").x;
+  const float slider_width = std::max(
+      60.0f, ImGui::GetContentRegionAvail().x - x2_width -
+                 kResetButtonWidth - 2.0f * style.ItemSpacing.x);
+  ImGui::SetNextItemWidth(slider_width);
+
+  float new_scale = std::clamp(scale, 0.10f, 1.0f);
+  const bool scale_changed =
+      ImGui::SliderFloat("##working_scale", &new_scale, 0.10f, 1.0f, "%.3f");
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("The model's working resolution as a fraction of the frame.");
+  }
+
+  ImGui::SameLine();
+  bool new_x2 = x2;
+  const bool x2_changed = ImGui::Checkbox("x2##working_scale_x2", &new_x2);
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    if (!new_x2) {
+      Tip("Double the model's working resolution for supersampling.\n\n"
+          "WARNING: enabling this can freeze the game for a brief moment on "
+          "the first frame after toggling, while the larger working-scale "
+          "resources (working input/output, temporal history, unlifted "
+          "reference) are allocated and the previously in-flight buffers "
+          "retire on the GPU.\n\n"
+          "Other hazards:\n"
+          "  - VRAM use roughly quadruples for the working-scale resources.\n"
+          "  - Model evaluation and compose are slower at 2x.\n"
+          "  - The cheap model reused on reuse frames grows with the working "
+          "scale, so reuse frames are more expensive too.\n"
+          "  - A freeze longer than a second or two usually means the device "
+          "has run out of VRAM; toggle this off to recover.");
+    } else {
+      Tip("Currently doubling the model's working resolution for "
+          "supersampling. Uncheck to return to the slider's value.\n\n"
+          "The first frame after unchecking can also freeze briefly while "
+          "smaller resources are allocated and the previous ones retire on "
+          "the GPU.");
+    }
+  }
+
+  ImGui::SameLine();
+  ImGui::PushID("working_scale_reset");
+  const bool reset_clicked =
+      ImGui::Button("R", ImVec2(kResetButtonWidth, 0.0f));
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip("Reset Working Scale and x2 to their defaults.");
+  }
+  ImGui::PopID();
+
+  bool local_changed = false;
+  if (scale_changed) {
+    store.Write(section, key, kWorkingScale,
+                ctl::Value::Float(new_scale), /*from_user=*/true);
+    local_changed = true;
+  }
+  if (x2_changed) {
+    store.Write(section, key, kWorkingScaleX2,
+                ctl::Value::Bool(new_x2), /*from_user=*/true);
+    local_changed = true;
+  }
+  if (reset_clicked) {
+    store.Write(section, key, kWorkingScale,
+                ctl::Value::Float(1.0f), /*from_user=*/true);
+    store.Write(section, key, kWorkingScaleX2,
+                ctl::Value::Bool(false), /*from_user=*/true);
+    local_changed = true;
+  }
+
+  changed |= local_changed;
+  return local_changed;
+}
+
 }  // namespace
 
 }  // namespace pass
@@ -195,9 +288,20 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .Tooltip("Label shown on this pass's tab. Empty shows the positional "
                "default, \"Pass N\".");
 
+  // The working-scale row is drawn by DrawWorkingScaleRow so the x2 toggle
+  // can sit between the slider and its reset button. Both declarations are
+  // hidden from the default drawer; the hook renders the entire row.
   pass.Add<ctl::FloatSetting>(kWorkingScale, "Working Scale", 1.0f)
       .ClampRange(0.10f, 1.0f)
+      .VisibleWhen(&NeverVisible)
       .Tooltip("The resolution the model runs at, as a fraction of the frame.");
+
+  pass.Add<ctl::BoolSetting>(kWorkingScaleX2, "Working Scale x2", false)
+      .VisibleWhen(&NeverVisible)
+      .Tooltip("Double the model's working resolution.");
+
+  pass.AddHookAfter(kWorkingScale, "WorkingScaleRow",
+                    &DrawWorkingScaleRow).Category(nullptr);
 
   // --- Model -------------------------------------------------------------
   pass.Add<ctl::EnumSetting>(kPreset, "Preset", 0)
