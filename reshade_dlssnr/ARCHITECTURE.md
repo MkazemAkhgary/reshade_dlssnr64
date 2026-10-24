@@ -769,7 +769,7 @@ These are retained as user-reported symptoms whose root causes are not establish
 
 The project is a Visual Studio x64 DLL/addon build. Release builds use speed optimization and whole-program optimization for every translation unit.
 
-`pch.h` carries the SDK headers plus the addon headers that are both heavy and stable: `profiling/profile.h`, the `ctl` core (`builtin_settings`, `draw`, `schema`, `types`, `values`), and `feature/settings_store.h`. Anything that churns costs more in PCH rebuilds than it saves in parse time.
+`pch.h` carries the SDK headers plus the addon headers that are both heavy and stable: `profiling/profile.h`, the `ctl` core (`schema`, `types`, `values`), and `d3dx12.h`. `ctl/builtin_settings.h`, `ctl/draw.h` and `feature/settings_store.h` stay out; too few TUs pull them to be worth the rebuild blast radius. Anything that churns costs more in PCH rebuilds than it saves in parse time.
 
 - Solution: `reshade_dlssnr.sln`
 - Project: `reshade_dlssnr.vcxproj`

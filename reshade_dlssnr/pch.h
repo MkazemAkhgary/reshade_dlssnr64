@@ -28,6 +28,7 @@
 
 // D3D12 family.
 #include <d3d12.h>
+#include <d3dx12.h>
 #include <dxgi1_4.h>
 #include <d3dcompiler.h>
 
@@ -42,11 +43,7 @@
 // Stable addon headers.
 #include "profiling/profile.h"
 
-// ctl core and the value store: the heaviest addon includes, and the ones that
-// change least.
-#include "ctl/builtin_settings.h"
-#include "ctl/draw.h"
+// ctl core.
 #include "ctl/schema.h"
 #include "ctl/types.h"
 #include "ctl/values.h"
-#include "feature/settings_store.h"
