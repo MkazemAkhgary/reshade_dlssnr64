@@ -1,4 +1,5 @@
 #include "pass_session.h"
+#include "project_constants.h"
 #include "profiling/profile.h"
 
 #include <algorithm>
@@ -631,12 +632,24 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
     // through to the reproject-only behavior below.
     const float cheap_scale = std::clamp(
         run.pass_state.temporal_cheap_scale, 0.1f, 1.0f);
-    const unsigned int cheap_w = std::max(16u,
+    unsigned int cheap_w = std::max(16u,
         static_cast<unsigned int>(static_cast<float>(run.work_width) *
                                   cheap_scale + 0.5f));
-    const unsigned int cheap_h = std::max(16u,
+    unsigned int cheap_h = std::max(16u,
         static_cast<unsigned int>(static_cast<float>(run.work_height) *
                                   cheap_scale + 0.5f));
+    // Floor the cheap-model resolution the same way as the working scale:
+    // temporal reprojection needs enough data from both models to fill
+    // low-confidence pixels. When the work resolution is already at the
+    // floor, cheap and work run at the same size; that is the guard against
+    // very low resolutions rather than a bug.
+    if (cheap_h < kMinWorkingResolutionHeight) {
+      const float ratio = static_cast<float>(kMinWorkingResolutionHeight) /
+                          static_cast<float>(cheap_h);
+      cheap_w = std::max(1u, static_cast<unsigned int>(
+          static_cast<float>(cheap_w) * ratio + 0.5f));
+      cheap_h = kMinWorkingResolutionHeight;
+    }
 
     if (cheap_scale < 0.999f && run.runtime != nullptr &&
         run.codec != nullptr &&

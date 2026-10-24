@@ -1062,10 +1062,24 @@ PipelineStatus PassSession::StepResolveWorkingScale(PassRun& run) {
   const float working_scale =
       std::clamp(run.pass_state.working_scale, 0.10f, 1.0f) *
       (run.pass_state.working_scale_x2 ? 2.0f : 1.0f);
-  run.work_width = std::max(
+  unsigned int work_w = std::max(
       1u, static_cast<unsigned int>(run.width * working_scale + 0.5f));
-  run.work_height = std::max(
+  unsigned int work_h = std::max(
       1u, static_cast<unsigned int>(run.height * working_scale + 0.5f));
+
+  // Floor the working resolution: very low resolutions leave temporal
+  // history and model input without usable data. Scale both dimensions
+  // together so the frame's aspect ratio is preserved.
+  if (work_h < kMinWorkingResolutionHeight) {
+    const float ratio = static_cast<float>(kMinWorkingResolutionHeight) /
+                        static_cast<float>(work_h);
+    work_w = std::max(1u, static_cast<unsigned int>(
+        static_cast<float>(work_w) * ratio + 0.5f));
+    work_h = kMinWorkingResolutionHeight;
+  }
+
+  run.work_width = work_w;
+  run.work_height = work_h;
   return PipelineStatus::Ok;
 }
 

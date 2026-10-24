@@ -185,7 +185,9 @@ bool DrawWorkingScaleRow(const void*, ctl::ValueStore& store,
   const bool scale_changed =
       ImGui::SliderFloat("##working_scale", &new_scale, 0.10f, 1.0f, "%.3f");
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("The model's working resolution as a fraction of the frame.");
+    Tip("The model's working resolution as a fraction of the frame.\n\n"
+        "Very low values are raised to a minimum of 180p vertical "
+        "resolution, so temporal reprojection always has usable history.");
   }
 
   ImGui::SameLine();
