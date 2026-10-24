@@ -117,14 +117,16 @@ const char* const kTargetTips[] = {
     "when the game does not use DLSS; it is not ordered with Pre/Post-DLSS "
     "passes unless those stages are available."};
 
-const char* const kTemporalNames[] = {"Off", "Adaptive", "Every 2", "Every 4"};
+const char* const kTemporalNames[] = {"Off", "Adaptive", "Fixed"};
 const char* const kTemporalTips[] = {
     "Evaluate the neural model on every frame.",
-    "Reuse the reprojected edit as far as per-pixel confidence allows, forcing "
-    "a refresh at least every two frames. Shortest window, least judder.",
-    "Target one model evaluation every two frames.",
-    "Target one model evaluation every four frames. Highest frame rate, but a "
-    "longer judder period: only pick this if the stutter does not bother you."};
+    "Reuse the reprojected edit as far as per-pixel confidence allows, "
+    "forcing a refresh at least every N frames where N is the Cadence "
+    "slider. The effective cadence halves when the invalid pixel fraction "
+    "is high.",
+    "Reuse the reprojected edit for a fixed number of frames between model "
+    "evaluations, regardless of confidence. The Cadence slider is the "
+    "exact cadence."};
 
 const char* const kPresetNames[] = {"A", "B", "C"};
 // Presets are a name, not an enum: the C++ type is an int the model reads.
@@ -356,13 +358,21 @@ void RegisterPassSchema(ctl::Schema& schema) {
                "motion field by color matching constrained by current and previous depth. "
                "This costs additional GPU work and needs a usable depth guide.");
   pass.Add<ctl::EnumSetting>(kTemporalMode, "Mode", 0)
-      .Items(kTemporalNames, kTemporalTips, 4)
+      .Items(kTemporalNames, kTemporalTips, 3)
       .AsGroup()
       .Category(kCatTemporal)
       .Tooltip("Reuse a motion-reprojected multiplicative model edit instead "
                "of evaluating the model every frame. Requires current-frame "
                "depth and native or synthetic motion guides; uncertain history "
                "forces a fresh evaluation.");
+  pass.Add<ctl::IntSetting>(kTemporalCadence, "Cadence", 2)
+      .ClampRange(2, 8)
+      .EnableWhen(&TemporalEnabled)
+      .Category(kCatTemporal)
+      .Tooltip("Number of frames between model evaluations. In Adaptive mode, "
+               "this is the maximum; the effective cadence halves when the "
+               "invalid pixel fraction is high. In Fixed mode, this is the "
+               "exact cadence.");
   pass.Add<ctl::FloatSetting>(kTemporalCheapScale, "Cheap Model Scale", 0.5f)
       .ClampRange(0.1f, 1.0f)
       .EnableWhen(&TemporalEnabled)

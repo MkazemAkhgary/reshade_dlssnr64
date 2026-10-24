@@ -47,6 +47,7 @@ uint64_t TemporalSettingsSignature(const PassRun& run) {
   HashTemporalValue(&hash, p.temporal_max_displacement);
   HashTemporalValue(&hash, p.temporal_max_invalid_percent);
   HashTemporalValue(&hash, p.temporal_cheap_scale);
+  HashTemporalValue(&hash, p.temporal_cadence);
   HashTemporalValue(&hash, p.temporal_fp16_history);
   HashTemporalValue(&hash, p.synthetic_motion_guides);
   HashTemporalValue(&hash, p.local_tone);
@@ -591,12 +592,11 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
 
   const uint64_t age = run.frame_id >= self->temporal_last_refresh_frame_
       ? run.frame_id - self->temporal_last_refresh_frame_ : UINT64_MAX;
-  // A refresh frame costs far more than a reuse frame, so the cadence sets the
-  // period of an unavoidable frame-time step. A step every other frame beats
-  // faster than the eye resolves judder; a longer window only buys a few extra
-  // frames per second in exchange for visible stutter.
-  uint64_t cadence = 4;
-  if (mode == 1 || mode == 2) cadence = 2;
+  // The Cadence slider is the model-evaluation period: N means evaluate every
+  // N frames. Fixed uses it as-is; Adaptive uses it as a ceiling and shortens
+  // it when the invalid pixel fraction is high.
+  const uint64_t cadence_ceiling = static_cast<uint64_t>(
+      std::clamp(run.pass_state.temporal_cadence, 2, 8));
   // The invalid fraction is a population statistic, not a whole-frame "history
   // is unusable" verdict. Gating reuse on it disables reuse whenever the scene
   // moves, which is most of the time. It only shortens the reuse window, and
@@ -604,18 +604,25 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
   float max_invalid_percent = run.pass_state.temporal_max_invalid_percent;
   max_invalid_percent = std::clamp(max_invalid_percent, 1.0f, 50.0f);
   const float max_invalid_fraction = max_invalid_percent * 0.01f;
-  // Hysteresis: enter at the threshold, leave only below half of it, so a
-  // wobbling invalid fraction cannot flip the cadence every frame.
-  if (self->temporal_invalid_fraction_ >= max_invalid_fraction) {
-    self->temporal_cadence_short_ = true;
-  } else if (self->temporal_invalid_fraction_ < max_invalid_fraction * 0.5f) {
+  uint64_t effective_cadence = cadence_ceiling;
+  bool invalid_high = false;
+  if (mode == 1) {
+    // Adaptive: shorten the ceiling when the invalid fraction is high.
+    // Hysteresis: enter at the threshold, leave only below half of it, so a
+    // wobbling invalid fraction cannot flip the cadence every frame.
+    if (self->temporal_invalid_fraction_ >= max_invalid_fraction) {
+      self->temporal_cadence_short_ = true;
+    } else if (self->temporal_invalid_fraction_ < max_invalid_fraction * 0.5f) {
+      self->temporal_cadence_short_ = false;
+    }
+    invalid_high = self->temporal_cadence_short_;
+    if (invalid_high) {
+      // Halve the ceiling, floor at 2 so a cadence of 2 cannot bypass reuse.
+      effective_cadence = std::max<uint64_t>(2u, cadence_ceiling / 2);
+    }
+  } else {
+    // Fixed: no shortening.
     self->temporal_cadence_short_ = false;
-  }
-  const bool invalid_high = self->temporal_cadence_short_;
-  uint64_t effective_cadence = cadence;
-  if (invalid_high) {
-    // At least 2 so a hypothetical cadence of 1 cannot bypass reuse entirely.
-    effective_cadence = cadence >= 4 ? 2u : std::max<uint64_t>(2u, cadence);
   }
   const bool can_skip = have_candidate && !duplicate_frame && run.frame_id != 0 &&
       self->temporal_feedback_valid_ &&

@@ -40,6 +40,7 @@ inline constexpr const char* kUiCorrection = "ui_correction";
 inline constexpr const char* kLumaStrength = "luma_strength";
 inline constexpr const char* kChromaStrength = "chroma_strength";
 inline constexpr const char* kTemporalMode = "temporal_mode";
+inline constexpr const char* kTemporalCadence = "temporal_cadence";
 inline constexpr const char* kSyntheticMotionGuides = "synthetic_motion_guides";
 inline constexpr const char* kTemporalPhotometricAbsThreshold = "temporal_photometric_abs_threshold";
 inline constexpr const char* kTemporalPhotometricRelThreshold = "temporal_photometric_rel_threshold";

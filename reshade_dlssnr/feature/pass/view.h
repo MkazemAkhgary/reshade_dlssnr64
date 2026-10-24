@@ -45,8 +45,12 @@ struct PassSnapshot {
   float working_scale = 1.0f;
   bool working_scale_x2 = false;
   float intensity = 1.0f;
-  // 0=Off, 1=Adaptive, 2=Every 2, 3=Every 4.
+  // 0=Off, 1=Adaptive, 2=Fixed.
   int temporal_mode = 0;
+  // Frames between model evaluations. Adaptive uses this as a ceiling
+  // and halves it when the invalid pixel fraction is high; Fixed uses it
+  // as the exact cadence.
+  int temporal_cadence = 2;
   bool synthetic_motion_guides = false;
   float temporal_photometric_abs_threshold = 0.06f;
   float temporal_photometric_rel_threshold = 0.10f;
