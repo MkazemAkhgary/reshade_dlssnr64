@@ -53,36 +53,47 @@
 #endif
 
 #if DLSSNR_PROFILE_TRACY_ENABLED
+#include <cassert>
 #include <cstdio>
-#include <string>
 
 namespace reshade_dlssnr::profiling {
 
-// Tracy's ZoneText macro takes (const char*, size_t). These tag macros carry
-// a label plus a value; format them into "label: value" and pass the string's
-// data and length.
-inline std::string FormatProfileTag(const char* name, const char* value) {
-    std::string result(name ? name : "");
-    result += ": ";
-    result += value ? value : "";
-    return result;
+// Converts an snprintf return to a usable length. A tag that does not fit is
+// a call-site bug, so debug builds assert and release builds truncate.
+inline size_t TagLength(int written, size_t capacity) {
+    assert(written >= 0 && static_cast<size_t>(written) < capacity);
+    if (written <= 0) return 0;
+    return static_cast<size_t>(written) < capacity ? static_cast<size_t>(written)
+                                                   : capacity - 1;
+}
+
+inline size_t FormatProfileTag(char* buffer, size_t capacity, const char* name,
+                               const char* value) {
+    return TagLength(std::snprintf(buffer, capacity, "%s: %s",
+                                   name ? name : "", value ? value : ""),
+                     capacity);
 }
 
 template <typename T>
-inline std::string FormatProfileTag(const char* name, T value) {
-    char buf[256];
-    std::snprintf(buf, sizeof(buf), "%s: %lld", name ? name : "",
-                  static_cast<long long>(value));
-    return buf;
+inline size_t FormatProfileTag(char* buffer, size_t capacity, const char* name,
+                               T value) {
+    return TagLength(std::snprintf(buffer, capacity, "%s: %lld",
+                                   name ? name : "",
+                                   static_cast<long long>(value)),
+                     capacity);
 }
 
 }  // namespace reshade_dlssnr::profiling
 
+// The longest tag in the code base is "ComputePass: BuildEffectiveLocalExposure"
+// at 38 characters; 128 leaves room for a longer name without reworking this.
 #define DLSSNR_PROFILE_TAG_IMPL(name, value)                                   \
     do {                                                                       \
-        auto _dlssnr_tag_ =                                                    \
-            ::reshade_dlssnr::profiling::FormatProfileTag((name), (value));    \
-        ZoneText(_dlssnr_tag_.c_str(), _dlssnr_tag_.size());                   \
+        char _dlssnr_tag_[128];                                                \
+        const size_t _dlssnr_tag_len_ =                                        \
+            ::reshade_dlssnr::profiling::FormatProfileTag(                     \
+                _dlssnr_tag_, sizeof(_dlssnr_tag_), (name), (value));          \
+        ZoneText(_dlssnr_tag_, _dlssnr_tag_len_);                              \
     } while (0)
 #endif
 

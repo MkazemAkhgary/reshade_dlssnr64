@@ -33,7 +33,9 @@ class TraceRecorder {
     std::string value;
   };
 
-  std::vector<Entry> Capture(ValueStore& store) const;
+  // Fills `out` from the live store, reusing its existing string buffers.
+  void Capture(ValueStore& store, std::vector<Entry>& out);
+  std::vector<Entry> current_;
   std::vector<Entry> previous_;
   bool has_previous_ = false;
 };

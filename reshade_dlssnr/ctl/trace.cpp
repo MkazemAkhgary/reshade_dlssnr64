@@ -2,17 +2,24 @@
 #include "profiling/profile.h"
 
 #include <algorithm>
-#include <unordered_map>
 
 namespace reshade_dlssnr {
 namespace ctl {
 
-std::vector<TraceRecorder::Entry> TraceRecorder::Capture(
-    ValueStore& store) const {
+void TraceRecorder::Capture(ValueStore& store, std::vector<Entry>& out) {
   DLSSNR_PROFILE_CTL_L3("TraceRecorder::Capture");
-  std::vector<TraceRecorder::Entry> entries;
   const Schema& schema = store.schema();
-  if (!schema.built()) return entries;
+  if (!schema.built()) {
+    out.resize(0);
+    return;
+  }
+
+  // Slots are filled in place so name/value buffers survive across calls.
+  size_t used = 0;
+  auto slot = [&out, &used]() -> Entry& {
+    if (used == out.size()) out.emplace_back();
+    return out[used++];
+  };
 
   for (const auto& section_ptr : schema.sections()) {
     const Section& section = *section_ptr;
@@ -23,67 +30,75 @@ std::vector<TraceRecorder::Entry> TraceRecorder::Capture(
 
     const uint32_t offset = store.SettingOffsetOf(section);
     for (const Instance& instance : instances.instances()) {
-      const std::string instance_prefix = section.instanced()
-          ? section.name() + "[" + instance.key.ToText() + "]."
-          : section.name() + ".";
       for (uint32_t i = 0; i < section.settings().size(); ++i) {
         const Setting& setting = *section.settings()[i];
-        const Value value = store.Resolve(instance, offset + i);
-        entries.push_back(TraceRecorder::Entry{
-            instance_prefix + setting.meta().name, setting.ToString(value)});
+        Entry& entry = slot();
+        entry.name.assign(section.name());
+        if (section.instanced()) {
+          entry.name += '[';
+          entry.name += instance.key.ToText();
+          entry.name += "].";
+        } else {
+          entry.name += '.';
+        }
+        entry.name += setting.meta().name;
+        entry.value = setting.ToString(store.Resolve(instance, offset + i));
       }
     }
   }
+  out.resize(used);
 
-  std::sort(entries.begin(), entries.end(),
-            [](const TraceRecorder::Entry& a, const TraceRecorder::Entry& b) {
-              return a.name < b.name;
-            });
-  return entries;
+  std::sort(out.begin(), out.end(),
+            [](const Entry& a, const Entry& b) { return a.name < b.name; });
 }
 
 void TraceRecorder::Record(ValueStore& store, TraceSink sink, void* context) {
   DLSSNR_PROFILE_CTL_L3("TraceRecorder::Record");
   if (sink == nullptr) return;
 
-  const std::vector<Entry> current = Capture(store);
+  Capture(store, current_);
   if (!has_previous_) {
-    for (const Entry& entry : current) {
+    for (const Entry& entry : current_) {
       sink(context, TraceChange{TraceChangeKind::Initial, entry.name, {},
                                 entry.value});
     }
-    previous_ = current;
+    previous_.swap(current_);
     has_previous_ = true;
     return;
   }
 
-  std::unordered_map<std::string, std::string> previous_values;
-  previous_values.reserve(previous_.size());
-  for (const Entry& entry : previous_)
-    previous_values.emplace(entry.name, entry.value);
-
-  std::unordered_map<std::string, std::string> current_values;
-  current_values.reserve(current.size());
-  for (const Entry& entry : current) {
-    current_values.emplace(entry.name, entry.value);
-    const auto previous = previous_values.find(entry.name);
-    if (previous == previous_values.end()) {
-      sink(context, TraceChange{TraceChangeKind::Initial, entry.name, {},
-                                entry.value});
-    } else if (previous->second != entry.value) {
-      sink(context, TraceChange{TraceChangeKind::Changed, entry.name,
-                                previous->second, entry.value});
+  // Both sides are sorted by name, so one merge pass finds every add, change,
+  // and removal without building lookup tables.
+  size_t prev = 0;
+  size_t cur = 0;
+  while (prev < previous_.size() && cur < current_.size()) {
+    const Entry& p = previous_[prev];
+    const Entry& c = current_[cur];
+    if (p.name < c.name) {
+      sink(context, TraceChange{TraceChangeKind::Removed, p.name, p.value, {}});
+      ++prev;
+    } else if (c.name < p.name) {
+      sink(context, TraceChange{TraceChangeKind::Initial, c.name, {}, c.value});
+      ++cur;
+    } else {
+      if (p.value != c.value) {
+        sink(context, TraceChange{TraceChangeKind::Changed, c.name, p.value,
+                                  c.value});
+      }
+      ++prev;
+      ++cur;
     }
   }
-
-  for (const Entry& entry : previous_) {
-    if (current_values.find(entry.name) == current_values.end()) {
-      sink(context, TraceChange{TraceChangeKind::Removed, entry.name,
-                                entry.value, {}});
-    }
+  for (; prev < previous_.size(); ++prev) {
+    const Entry& p = previous_[prev];
+    sink(context, TraceChange{TraceChangeKind::Removed, p.name, p.value, {}});
+  }
+  for (; cur < current_.size(); ++cur) {
+    const Entry& c = current_[cur];
+    sink(context, TraceChange{TraceChangeKind::Initial, c.name, {}, c.value});
   }
 
-  previous_ = current;
+  previous_.swap(current_);
 }
 
 void TraceRecorder::Reset() {
