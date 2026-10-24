@@ -54,6 +54,7 @@ struct PassSnapshot {
   float temporal_depth_rel_threshold = 0.03f;
   float temporal_max_displacement = 40.0f;
   float temporal_max_invalid_percent = 5.0f;
+  float temporal_cheap_scale = 0.5f;
   bool temporal_fp16_history = false;
   float local_tone = 1.0f;
   float local_structure = 1.0f;

@@ -45,6 +45,7 @@ uint64_t TemporalSettingsSignature(const PassRun& run) {
   HashTemporalValue(&hash, p.temporal_depth_rel_threshold);
   HashTemporalValue(&hash, p.temporal_max_displacement);
   HashTemporalValue(&hash, p.temporal_max_invalid_percent);
+  HashTemporalValue(&hash, p.temporal_cheap_scale);
   HashTemporalValue(&hash, p.temporal_fp16_history);
   HashTemporalValue(&hash, p.synthetic_motion_guides);
   HashTemporalValue(&hash, p.local_tone);

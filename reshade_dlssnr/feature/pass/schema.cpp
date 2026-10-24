@@ -361,6 +361,14 @@ void RegisterPassSchema(ctl::Schema& schema) {
                "of evaluating the model every frame. Requires current-frame "
                "depth and native or synthetic motion guides; uncertain history "
                "forces a fresh evaluation.");
+  pass.Add<ctl::FloatSetting>(kTemporalCheapScale, "Cheap Model Scale", 0.5f)
+      .ClampRange(0.1f, 1.0f)
+      .EnableWhen(&TemporalEnabled)
+      .Category(kCatTemporal)
+      .Tooltip("Resolution of the cheaper model used on frames between model "
+               "evaluations, as a fraction of the working scale. 0.5 means "
+               "50% of the working scale resolution. Lower values are faster "
+               "but fill low-confidence reprojection areas with less detail.");
   pass.Add<ctl::FloatSetting>(kTemporalPhotometricAbsThreshold,
                               "Photo Abs.", 0.06f)
       .ClampRange(0.001f, 0.25f)
