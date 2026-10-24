@@ -61,7 +61,7 @@ bool PassResources::EnsureOutput(
 
   output_width = static_cast<unsigned int>(desc.Width);
   output_height = desc.Height;
-  trace::NameResource(output.Get(), "output");
+  TRACE_NAME(output.Get(), "output");
   TRACE_CMD(this, "create output res=%d %ux%u", trace::ResourceId(output.Get()),
             output_width, output_height);
   return true;
@@ -95,7 +95,7 @@ bool PassResources::EnsureCompositeOutput(
   composite_output_width = static_cast<unsigned int>(desc.Width);
   composite_output_height = desc.Height;
   composite_output_format = desc.Format;
-  trace::NameResource(composite_output.Get(), "composite_output");
+  TRACE_NAME(composite_output.Get(), "composite_output");
   TRACE_CMD(this, "create composite_output res=%d %ux%u",
             trace::ResourceId(composite_output.Get()),
             composite_output_width, composite_output_height);
@@ -138,7 +138,7 @@ bool PassResources::EnsurePackedOutput(
   packed_hdr_sdr.Attach(raw);
   packed_width = static_cast<unsigned int>(desc.Width);
   packed_height = desc.Height;
-  trace::NameResource(packed_hdr_sdr.Get(), "packed_hdr_sdr");
+  TRACE_NAME(packed_hdr_sdr.Get(), "packed_hdr_sdr");
   TRACE_CMD(this, "create packed_hdr_sdr res=%d %ux%u fmt=%d",
             trace::ResourceId(packed_hdr_sdr.Get()), packed_width, packed_height,
             static_cast<int>(format));
@@ -155,7 +155,7 @@ bool PassResources::EnsureGainStats(ID3D12Device* device) {
   if (!CreateUavBuffer(device, kBytes, &raw)) return false;
   gain_stats.Attach(raw);
   gain_stats_bytes = kBytes;
-  trace::NameResource(gain_stats.Get(), "gain_stats");
+  TRACE_NAME(gain_stats.Get(), "gain_stats");
   TRACE_CMD(this, "create gain_stats res=%d bytes=%zu",
             trace::ResourceId(gain_stats.Get()), gain_stats_bytes);
   return true;
@@ -193,7 +193,7 @@ bool PassResources::EnsureEffectiveExposureMap(
   effective_exposure_map.Attach(raw);
   effective_exposure_width = width;
   effective_exposure_height = height;
-  trace::NameResource(effective_exposure_map.Get(), "effective_exposure_map");
+  TRACE_NAME(effective_exposure_map.Get(), "effective_exposure_map");
   TRACE_CMD(this, "create effective_exposure_map res=%d %ux%u",
             trace::ResourceId(effective_exposure_map.Get()),
             width, height);
@@ -253,9 +253,9 @@ bool PassResources::EnsureLocalExposureRestoreResources(
 
   local_exposure_partial_width = partial_width;
   local_exposure_partial_height = partial_height;
-  trace::NameResource(local_exposure_partial_sums.Get(),
+  TRACE_NAME(local_exposure_partial_sums.Get(),
                       "local_exposure_tile_log_scales");
-  trace::NameResource(local_exposure_global_scale.Get(),
+  TRACE_NAME(local_exposure_global_scale.Get(),
                       "local_exposure_global_scale");
   TRACE_CMD(this, "create local exposure restore res=%d/%d tiles=%ux%u",
             trace::ResourceId(local_exposure_partial_sums.Get()),
@@ -325,12 +325,12 @@ bool PassResources::EnsureWorkingResources(
   working_height = work_height;
   working_format = desc.Format;
   if (working_input != nullptr) {
-    trace::NameResource(working_input.Get(), "working_input");
+    TRACE_NAME(working_input.Get(), "working_input");
   }
   if (graded_working_input != nullptr) {
-    trace::NameResource(graded_working_input.Get(), "graded_working_input");
+    TRACE_NAME(graded_working_input.Get(), "graded_working_input");
   }
-  trace::NameResource(working_output.Get(), "working_output");
+  TRACE_NAME(working_output.Get(), "working_output");
   TRACE_CMD(this, "create working res=%d/%d/%d %ux%u input=%d graded=%d",
             working_input != nullptr ? trace::ResourceId(working_input.Get()) : -1,
             graded_working_input != nullptr ? trace::ResourceId(graded_working_input.Get()) : -1,
@@ -367,7 +367,7 @@ bool PassResources::EnsureUnliftedWorkingInput(
   unlifted_working_width = work_width;
   unlifted_working_height = work_height;
   unlifted_working_format = desc.Format;
-  trace::NameResource(unlifted_working_input.Get(), "unlifted_working_input");
+  TRACE_NAME(unlifted_working_input.Get(), "unlifted_working_input");
   TRACE_CMD(this, "create unlifted_working_input res=%d %ux%u",
             trace::ResourceId(unlifted_working_input.Get()),
             work_width, work_height);
@@ -444,10 +444,10 @@ bool PassResources::EnsureSyntheticMotionResources(
   synthetic_width = width;
   synthetic_height = height;
   synthetic_input_format = input_desc.Format;
-  trace::NameResource(synthetic_previous_input.Get(), "synthetic_previous_input");
-  trace::NameResource(synthetic_previous_depth.Get(), "synthetic_previous_depth");
-  trace::NameResource(synthetic_current_depth.Get(), "synthetic_current_depth");
-  trace::NameResource(synthetic_motion.Get(), "synthetic_motion");
+  TRACE_NAME(synthetic_previous_input.Get(), "synthetic_previous_input");
+  TRACE_NAME(synthetic_previous_depth.Get(), "synthetic_previous_depth");
+  TRACE_NAME(synthetic_current_depth.Get(), "synthetic_current_depth");
+  TRACE_NAME(synthetic_motion.Get(), "synthetic_motion");
   if (out_reset_history != nullptr) *out_reset_history = true;
   return true;
 }
@@ -547,12 +547,12 @@ bool PassResources::EnsureTemporalResources(
   temporal_height = height;
   temporal_input_format = input_desc.Format;
   temporal_edit_format = requested_edit_format;
-  trace::NameResource(temporal_previous_input.Get(), "temporal_previous_input");
-  trace::NameResource(temporal_previous_edit.Get(), "temporal_previous_edit");
-  trace::NameResource(temporal_previous_depth.Get(), "temporal_previous_depth");
-  trace::NameResource(temporal_candidate.Get(), "temporal_candidate");
-  trace::NameResource(temporal_validated_candidate.Get(), "temporal_validated_candidate");
-  trace::NameResource(temporal_stats.Get(), "temporal_stats");
+  TRACE_NAME(temporal_previous_input.Get(), "temporal_previous_input");
+  TRACE_NAME(temporal_previous_edit.Get(), "temporal_previous_edit");
+  TRACE_NAME(temporal_previous_depth.Get(), "temporal_previous_depth");
+  TRACE_NAME(temporal_candidate.Get(), "temporal_candidate");
+  TRACE_NAME(temporal_validated_candidate.Get(), "temporal_validated_candidate");
+  TRACE_NAME(temporal_stats.Get(), "temporal_stats");
   if (out_reset_history != nullptr) *out_reset_history = true;
   return true;
 }
@@ -588,11 +588,7 @@ bool PassResources::EnsureScratch(
   scratch_width_[index] = width;
   scratch_height_[index] = height;
   scratch_format_[index] = desc.Format;
-  {
-    char name[32];
-    std::snprintf(name, sizeof(name), "scratch[%u]", index);
-    trace::NameResource(scratch_[index].Get(), name);
-  }
+  TRACE_NAME_FMT(scratch_[index].Get(), 32, "scratch[%u]", index);
   TRACE_CMD(this, "create scratch[%u] res=%d %ux%u", index,
             trace::ResourceId(scratch_[index].Get()), width, height);
   return true;

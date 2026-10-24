@@ -1,9 +1,10 @@
 #include "state/trace.h"
 #include "profiling/profile.h"
 
+#if DLSSNR_TRACE_ENABLED
+
 #include "ctl/trace.h"
 #include "feature/settings_store.h"
-#include "pipeline/pipeline_trace.h"
 
 namespace reshade_dlssnr {
 
@@ -67,3 +68,5 @@ void TraceSettings(const Settings& settings) {
 }
 
 }  // namespace reshade_dlssnr
+
+#endif  // DLSSNR_TRACE_ENABLED

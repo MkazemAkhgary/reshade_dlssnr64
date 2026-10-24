@@ -1,7 +1,10 @@
 // Settings trace: emits a change log when DLSSNR_TRACE is enabled.
 #pragma once
 
+#include "pipeline/pipeline_trace.h"
 #include "state/settings.h"
+
+#if DLSSNR_TRACE_ENABLED
 
 namespace reshade_dlssnr {
 
@@ -11,3 +14,11 @@ namespace reshade_dlssnr {
 void TraceSettings(const Settings& settings);
 
 }  // namespace reshade_dlssnr
+
+#define TRACE_SETTINGS(settings) ::reshade_dlssnr::TraceSettings(settings)
+
+#else
+
+#define TRACE_SETTINGS(settings) ((void)0)
+
+#endif  // DLSSNR_TRACE_ENABLED

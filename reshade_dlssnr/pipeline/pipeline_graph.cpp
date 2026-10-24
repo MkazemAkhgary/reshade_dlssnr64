@@ -510,8 +510,6 @@ bool PipelineRunner::IsCompleted(const PassRun& run, PipelineNodeId id) {
   return (run.completed & (uint64_t{1} << static_cast<uint64_t>(id))) != 0;
 }
 
-bool PipelineRunner::TraceEnabled() { return trace::Enabled(); }
-
 namespace {
 
 // Returns true when every prerequisite of `def` has completed.
@@ -693,11 +691,8 @@ PipelineStatus PipelineRunner::RunStage(const PipelineStageDef& stage,
   DLSSNR_PROFILE_RENDER_L2("PipelineRunner::RunStage");
   run.stage = &stage;
 
-  const bool tracing = TraceEnabled();
-  if (tracing) {
-    trace::Line("evt", "RunStage", run.session, "stage=%s steps=%u phases=%u",
-                stage.name, stage.step_count, stage.phase_count);
-  }
+  TRACE_EVT(run.session, "stage=%s steps=%u phases=%u",
+            stage.name, stage.step_count, stage.phase_count);
 
   // Refuse to start a stage whose declared inputs the caller did not supply.
   //
@@ -723,10 +718,7 @@ PipelineStatus PipelineRunner::RunStage(const PipelineStageDef& stage,
                     stage.name, missing);
       reshade::log::message(reshade::log::level::error, message);
     }
-    if (tracing) {
-      trace::Line("evt", "RunStage", run.session, "stage=%s ABORT missing=%s",
-                  stage.name, missing);
-    }
+    TRACE_EVT(run.session, "stage=%s ABORT missing=%s", stage.name, missing);
     return PipelineStatus::SkipFrame;
   }
 
@@ -738,10 +730,7 @@ PipelineStatus PipelineRunner::RunStage(const PipelineStageDef& stage,
     const PipelinePhaseDef& phase = stage.phases[phase_index];
 
     if (phase.conditional != nullptr && !phase.conditional(run)) {
-      if (tracing) {
-        trace::Line("evt", "RunStage", run.session,
-                    "phase=%s SKIP (conditional)", phase.name);
-      }
+      TRACE_EVT(run.session, "phase=%s SKIP (conditional)", phase.name);
       step_index = phase.first_step + phase.step_count;
       continue;
     }
@@ -757,11 +746,8 @@ PipelineStatus PipelineRunner::RunStage(const PipelineStageDef& stage,
       // A node with no implementation is a documented placeholder: the work
       // it names is currently performed inside a coarser step. Nothing to do.
       if (def == nullptr || def->run == nullptr) {
-        if (tracing) {
-          trace::Line("evt", "RunStage", run.session,
-                      "phase=%s step=%s placeholder", phase.name,
-                      PipelineNodeName(node));
-        }
+        TRACE_EVT(run.session, "phase=%s step=%s placeholder", phase.name,
+                  PipelineNodeName(node));
         continue;
       }
 
@@ -781,10 +767,7 @@ PipelineStatus PipelineRunner::RunStage(const PipelineStageDef& stage,
                         def->name, stage.name);
           reshade::log::message(reshade::log::level::info, message);
         }
-        if (tracing) {
-          trace::Line("evt", "RunStage", run.session,
-                      "step=%s SKIP (stage not hdr_capable)", def->name);
-        }
+        TRACE_EVT(run.session, "step=%s SKIP (stage not hdr_capable)", def->name);
         continue;
       }
 
@@ -807,17 +790,11 @@ PipelineStatus PipelineRunner::RunStage(const PipelineStageDef& stage,
                         def->name, stage.name, missing);
           reshade::log::message(reshade::log::level::error, message);
         }
-        if (tracing) {
-          trace::Line("evt", "RunStage", run.session, "step=%s SKIP (requires %s)",
-                      def->name, missing);
-        }
+        TRACE_EVT(run.session, "step=%s SKIP (requires %s)", def->name, missing);
         continue;
       }
 
-      if (tracing) {
-        trace::Line("evt", "RunStage", run.session, "phase=%s step=%s BEGIN",
-                    phase.name, def->name);
-      }
+      TRACE_EVT(run.session, "phase=%s step=%s BEGIN", phase.name, def->name);
 
       const PipelineStatus status = def->run(run);
 
@@ -825,10 +802,8 @@ PipelineStatus PipelineRunner::RunStage(const PipelineStageDef& stage,
         MarkCompleted(run, node);
       }
 
-      if (tracing) {
-        trace::Line("evt", "RunStage", run.session, "phase=%s step=%s END status=%d",
-                    phase.name, def->name, static_cast<int>(status));
-      }
+      TRACE_EVT(run.session, "phase=%s step=%s END status=%d", phase.name,
+                def->name, static_cast<int>(status));
 
       if (status != PipelineStatus::Ok) {
         // SkipFrame and Fail both stop the stage. They differ in how the
@@ -843,10 +818,8 @@ PipelineStatus PipelineRunner::RunStage(const PipelineStageDef& stage,
     if (stage_status != PipelineStatus::Ok) break;
   }
 
-  if (tracing) {
-    trace::Line("evt", "RunStage", run.session, "stage=%s DONE status=%d",
-                stage.name, static_cast<int>(stage_status));
-  }
+  TRACE_EVT(run.session, "stage=%s DONE status=%d", stage.name,
+            static_cast<int>(stage_status));
 
   return stage_status;
 }

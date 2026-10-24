@@ -27,17 +27,21 @@
 // differs.
 #pragma once
 
+#include <cassert>
 #include <cstdint>
+#include <cstdio>
 
 #include <d3d12.h>
 
-// Compile-time gate. Off strips every TRACE_* macro and reduces the
-// trace entry points to empty functions, so no format string or line
-// writer survives in the binary. DLSSNR_TRACE still selects whether a
-// build that has tracing compiled in writes anything at runtime.
+// Compile-time gate. Off strips every TRACE_* macro and removes the trace
+// entry points entirely, so no format string or line writer survives in the
+// binary. DLSSNR_TRACE still selects whether a build that has tracing compiled
+// in writes anything at runtime.
 #ifndef DLSSNR_TRACE_ENABLED
 #define DLSSNR_TRACE_ENABLED 0
 #endif
+
+#if DLSSNR_TRACE_ENABLED
 
 namespace reshade_dlssnr::trace {
 
@@ -128,14 +132,6 @@ const char* StatePairName(D3D12_RESOURCE_STATES before,
 
 }  // namespace reshade_dlssnr::trace
 
-#if !DLSSNR_TRACE_ENABLED
-
-#define TRACE_CMD(obj, ...) ((void)0)
-#define TRACE_EVT(obj, ...) ((void)0)
-#define TRACE_CFG(...) ((void)0)
-
-#else
-
 // Record a command when tracing is on. `obj` identifies the owning object
 // (CommandContext*, ComputeEngine*, PassSession*) so concurrent streams can
 // be told apart.
@@ -170,4 +166,65 @@ const char* StatePairName(D3D12_RESOURCE_STATES before,
     }                                                                \
   } while (0)
 
-#endif  // !DLSSNR_TRACE_ENABLED
+// Registers a resource role name, so later lines print the name.
+#define TRACE_NAME(resource, name)                                   \
+  do {                                                               \
+    if (::reshade_dlssnr::trace::Enabled()) {                        \
+      ::reshade_dlssnr::trace::NameResource((resource), (name));     \
+    }                                                                \
+  } while (0)
+
+// TRACE_NAME for a name that has to be formatted first.
+// The buffer lives in the macro, so nothing is formatted when tracing is off.
+// Requires at least one format argument. A format literal that cannot fit the
+// buffer fails at compile time; a formatted name that overflows it asserts in
+// debug builds.
+#define TRACE_NAME_FMT(resource, buffer_size, fmt, ...)                  \
+  do {                                                                   \
+    static_assert(sizeof(fmt) <= (buffer_size),                          \
+                  "TRACE_NAME_FMT: format does not fit the buffer");      \
+    if (::reshade_dlssnr::trace::Enabled()) {                             \
+      char _trace_name_[buffer_size];                                     \
+      const int _trace_name_len_ = std::snprintf(                         \
+          _trace_name_, sizeof(_trace_name_), fmt, __VA_ARGS__);          \
+      (void)_trace_name_len_;                                             \
+      assert(_trace_name_len_ >= 0 &&                                     \
+             static_cast<size_t>(_trace_name_len_) < sizeof(_trace_name_)); \
+      ::reshade_dlssnr::trace::NameResource((resource), _trace_name_);    \
+    }                                                                     \
+  } while (0)
+
+// Frame boundary markers for one stream; see FrameStream.
+#define TRACE_BEGIN_FRAME(stream)                                    \
+  do {                                                               \
+    if (::reshade_dlssnr::trace::Enabled()) {                        \
+      ::reshade_dlssnr::trace::BeginFrame(                           \
+          ::reshade_dlssnr::trace::stream);                          \
+    }                                                                \
+  } while (0)
+
+#define TRACE_END_FRAME(stream)                                      \
+  do {                                                               \
+    if (::reshade_dlssnr::trace::Enabled()) {                        \
+      ::reshade_dlssnr::trace::EndFrame(                             \
+          ::reshade_dlssnr::trace::stream);                          \
+    }                                                                \
+  } while (0)
+
+#else  // !DLSSNR_TRACE_ENABLED
+
+// No trace namespace and no entry points: callers only reach tracing through
+// these macros, so the whole subsystem is absent from the build.
+#define TRACE_CMD(obj, ...) ((void)0)
+#define TRACE_EVT(obj, ...) ((void)0)
+#define TRACE_CFG(...) ((void)0)
+#define TRACE_NAME(resource, name) ((void)0)
+#define TRACE_NAME_FMT(resource, buffer_size, fmt, ...)                  \
+  do {                                                                   \
+    static_assert(sizeof(fmt) <= (buffer_size),                          \
+                  "TRACE_NAME_FMT: format does not fit the buffer");      \
+  } while (0)
+#define TRACE_BEGIN_FRAME(stream) ((void)0)
+#define TRACE_END_FRAME(stream) ((void)0)
+
+#endif  // DLSSNR_TRACE_ENABLED

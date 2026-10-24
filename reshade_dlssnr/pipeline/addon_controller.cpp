@@ -47,7 +47,7 @@ void AddonController::RefreshBackbufferFormat(IDXGISwapChain* swapchain) {
   backbuffer_format_ = desc.Format;
   frame_debug_.preferred_width = static_cast<unsigned int>(desc.Width);
   frame_debug_.preferred_height = desc.Height;
-  trace::NameResource(bb.Get(), "backbuffer");
+  TRACE_NAME(bb.Get(), "backbuffer");
 }
 
 PipelineStatus AddonController::RunPassStage(const PipelineStageDef& stage,
@@ -413,7 +413,7 @@ void AddonController::OnPresent(
   // cleared is forgotten and a recurring one logs again. Present is the one
   // entry point that runs every frame, so the counter belongs here.
   PipelineRunner::BeginSkipLogFrame();
-  trace::BeginFrame(trace::FrameStream::Present);
+  TRACE_BEGIN_FRAME(FrameStream::Present);
 
   TRACE_EVT(this, "controller_enter stage=Present fmt_before=%d",
             static_cast<int>(backbuffer_format_));
@@ -495,7 +495,7 @@ void AddonController::OnPresent(
   // presentation of the same evaluation and is replaced by the next one.
   pre_stage_seen_ = false;
   TRACE_EVT(this, "controller_exit stage=Present");
-  trace::EndFrame(trace::FrameStream::Present);
+  TRACE_END_FRAME(FrameStream::Present);
 }
 
 void AddonController::OnPreDlssEvaluate(
@@ -519,7 +519,7 @@ void AddonController::OnPreDlssEvaluate(
   }
   if (!any_pre_dlss) return;
 
-  trace::BeginFrame(trace::FrameStream::PreDlss);
+  TRACE_BEGIN_FRAME(FrameStream::PreDlss);
   TRACE_EVT(this, "controller_enter stage=PreDLSS hdr_init=%d",
             codec_.IsReady() ? 1 : 0);
 
@@ -554,7 +554,7 @@ void AddonController::OnPreDlssEvaluate(
 
   RefreshStatus(settings);
   TRACE_EVT(this, "controller_exit stage=PreDLSS");
-  trace::EndFrame(trace::FrameStream::PreDlss);
+  TRACE_END_FRAME(FrameStream::PreDlss);
 }
 
 void AddonController::OnPostDlssEvaluate(
@@ -569,7 +569,7 @@ void AddonController::OnPostDlssEvaluate(
     return;
   if (command_list == nullptr || output_resource == nullptr) return;
 
-  trace::BeginFrame(trace::FrameStream::PostDlss);
+  TRACE_BEGIN_FRAME(FrameStream::PostDlss);
   TRACE_EVT(this, "controller_enter stage=PostDLSS hdr_init=%d guides_out=%d",
             codec_.IsReady() ? 1 : 0, 0);
 
@@ -606,7 +606,7 @@ void AddonController::OnPostDlssEvaluate(
 
   RefreshStatus(settings);
   TRACE_EVT(this, "controller_exit stage=PostDLSS");
-  trace::EndFrame(trace::FrameStream::PostDlss);
+  TRACE_END_FRAME(FrameStream::PostDlss);
 }
 
 void AddonController::PresentDebugOutput(

@@ -333,12 +333,12 @@ void LoadSettings() {
         feature::preferences::kCloneResources).as_bool;
     DlssGuides::Get().RequestCloneResources(clone_resources);
   }
-  TraceSettings(g_settings);
+  TRACE_SETTINGS(g_settings);
 }
 
 void SaveSettings() {
   DLSSNR_PROFILE_CTL_L1("SaveSettings");
-  TraceSettings(g_settings);
+  TRACE_SETTINGS(g_settings);
   SaveSettingsValues(g_settings, "");
   SaveStore(g_settings, "", ctl::PersistenceTarget::Global);
 }

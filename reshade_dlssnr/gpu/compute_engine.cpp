@@ -527,6 +527,7 @@ bool ComputeEngine::Dispatch(
 
   // Logged before BindAndDispatch so the pass name and constants line up with
   // the transitions that precede and follow it in the trace.
+#if DLSSNR_TRACE_ENABLED
   if (trace::Enabled()) {
     const float* params = &constants.shader.Params0.x;
     constexpr uint32_t kParamCapacity =
@@ -561,6 +562,7 @@ bool ComputeEngine::Dispatch(
                 kSrvCount > 3 ? trace::ResourceId(srvs[3]) : -1,
                 trace::ResourceId(uavs[0]), params_text);
   }
+#endif
 
   DLSSNR_PROFILE_GPU_CONTEXT_L2(command_list);
   DLSSNR_PROFILE_GPU_L2("Compute Dispatch");

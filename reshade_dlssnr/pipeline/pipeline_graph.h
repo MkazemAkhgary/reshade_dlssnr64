@@ -808,9 +808,6 @@ class PipelineRunner {
   static void MarkCompleted(PassRun& run, PipelineNodeId id);
   static bool IsCompleted(const PassRun& run, PipelineNodeId id);
 
-  // Debug aid: when DLSSNR_TRACE is set, every step entry/exit is traced.
-  static bool TraceEnabled();
-
   // Starts a new frame for the skip diagnostics. A step skipped by the runner
   // (unmet prerequisite, or not HDR-capable in a stage that is not) logs once
   // per occurrence rather than once per frame, because a permanent condition
