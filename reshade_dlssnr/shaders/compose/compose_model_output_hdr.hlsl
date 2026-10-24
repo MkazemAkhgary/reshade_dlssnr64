@@ -33,33 +33,14 @@ float3 EncodeHdr(float3 lin)
 // its SDR input and output and applies it multiplicatively to the composition
 // base. Do not invert the nonlinear gamut fit on both endpoints: near white,
 // tiny model changes would become enormous HDR deltas.
-float3 ComposeHdrInverse(float3 sdr_base, float3 hdr_src,
+//
+// `base_scale` carries the local-exposure lift. It is built at working
+// resolution by the caller so it holds no full-resolution contrast, which is
+// what keeps the lift from acting as a sharpening or softening filter.
+float3 ComposeHdrInverse(float3 sdr_base, float3 hdr_src, float3 base_scale,
                          float3 low_in, float3 low_out)
 {
-    float3 composition_base = hdr_src;
-
-    // In this mode the residual is measured against the actual Grade Model
-    // Input result, then applied to the image just before that grade. The
-    // carrier already includes local exposure, so invert only the global
-    // carrier scale here; using the packed reciprocal would cancel the local
-    // exposure that belongs to the pre-grade image.
-    if (kApplyEditToPreGrade > 0.5 && kLocalExposureStrength > 0.0)
-    {
-        const float3 pre_hdr = HdrPreDesaturate(
-            max(hdr_src, 0.0), saturate(kCrosstalk));
-        const float hdr_luma = max(dot(pre_hdr, HdrLumaWeights()), 0.0);
-        const float exposure = max(kExposure, 1e-6);
-        const float y_exposed = hdr_luma * exposure;
-        const float effective_peak_nits = max(
-            kSdrReferenceWhiteNits, max(kEffectiveSceneWhiteNits, 0.01));
-        const float y_curve = y_exposed * kPqPeakNits / effective_peak_nits;
-        const float y_sdr = max(HdrBt2446Forward(y_curve) / 100.0, 0.0);
-        const float global_scale = y_exposed > 0.0
-            ? exposure * (y_sdr / y_exposed)
-            : 0.0;
-        const float inverse_global_scale = rcp(max(global_scale, 1e-8));
-        composition_base = max(sdr_base, 0.0) * inverse_global_scale;
-    }
+    float3 composition_base = max(hdr_src, 0.0) * base_scale;
 
     float3 result = composition_base;
     const float3 low_in_lin = max(SrgbToLinearExt(low_in), 0.0);
@@ -94,33 +75,56 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     if (id.x >= Width || id.y >= Height)
         return;
 
-    float2 uv = (float2(id.xy) + 0.5) / float2(Width, Height);
-
-    float4 packed = gOriginal.Load(int3(id.xy, 0));
     const float3 source_encoded = gHdrSource.Load(int3(id.xy, 0)).rgb;
     const float3 hdr_src = DecodeToLinear(
         source_encoded, (int)(kFormat + 0.5), kSdrReferenceWhiteNits);
 
-    // Reconstruct both model-domain images with the fixed joint-bilateral 3x3 filter.
+    // Under apply-to-pre-grade with local exposure the host binds the
+    // working-resolution local gain to t0 instead of the packed carrier, and
+    // the raw HDR source becomes the guide: the gain has to stay at working
+    // resolution, so it is reconstructed with the same joint-bilateral filter
+    // the model endpoints use. The packed carrier is unused in that branch
+    // because the region-protection luma comes from the model input.
+    const bool pre_grade_lift =
+        kApplyEditToPreGrade > 0.5 && kLocalExposureStrength > 0.0;
+    const int2 full_size_int = int2((int)Width, (int)Height);
+    const int2 full_xy = int2((int)id.x, (int)id.y);
+
     float3 low_in = float3(0.0, 0.0, 0.0);
     float3 low_out = float3(0.0, 0.0, 0.0);
+    float3 base_scale = float3(1.0, 1.0, 1.0);
     uint low_w = 0u;
     uint low_h = 0u;
     gLowInput.GetDimensions(low_w, low_h);
-    if (low_w == Width && low_h == Height) {
+    const bool identity_scale = (low_w == Width && low_h == Height);
+    if (pre_grade_lift) {
+        if (identity_scale) {
+            low_in = gLowInput.Load(int3(id.xy, 0)).rgb;
+            low_out = gLowEnhanced.Load(int3(id.xy, 0)).rgb;
+            base_scale = gOriginal.Load(int3(id.xy, 0)).rgb;
+        } else {
+            JointBilateralUpsamplePair(
+                full_xy, full_size_int, gLowInput, gLowEnhanced, gHdrSource,
+                kUpsampleSharpness, kUpsampleSharpness, low_in, low_out);
+            base_scale = exp(JointBilateralUpsampleLog(
+                full_xy, full_size_int, gOriginal, gHdrSource,
+                kUpsampleSharpness));
+        }
+    } else if (identity_scale) {
         low_in = gLowInput.Load(int3(id.xy, 0)).rgb;
         low_out = gLowEnhanced.Load(int3(id.xy, 0)).rgb;
     } else {
-        const int2 full_size_int = int2((int)Width, (int)Height);
-        const int2 full_xy = int2((int)id.x, (int)id.y);
         JointBilateralUpsamplePair(
             full_xy, full_size_int, gLowInput, gLowEnhanced, gOriginal,
             kUpsampleSharpness, kUpsampleSharpness, low_in, low_out);
     }
 
-    const float3 sdr_base = DecodePackedHdr(packed);
+    float3 sdr_base = float3(0.0, 0.0, 0.0);
+    if (!pre_grade_lift) {
+        sdr_base = DecodePackedHdr(gOriginal.Load(int3(id.xy, 0)));
+    }
     const float3 final_lin = ComposeHdrInverse(
-        sdr_base, hdr_src, low_in, low_out);
+        sdr_base, hdr_src, base_scale, low_in, low_out);
     const float3 encoded_result = EncodeHdr(final_lin);
     // Preserve native-format codes in untouched channels rather than running
     // their source values through a lossy decode/encode pair.

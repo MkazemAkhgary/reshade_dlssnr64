@@ -200,6 +200,32 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
       return PipelineStatus::Fail;
     }
     self->command_.UavBarrier(list, unlifted_input);
+
+    // Apply-to-pre-grade composes onto the pre-grade image, so it has to carry
+    // the local lift itself. Build that lift here, at working resolution, and
+    // reuse the unlifted buffer for it: nothing else reads that buffer in this
+    // mode. Compose reconstructs it with the joint-bilateral filter so the base
+    // keeps its full-resolution detail.
+    ID3D12Resource* packed = self->resources_.GetPackedOutput();
+    if (run.input_grade_apply_to_pre_grade && run.grade_input.enabled &&
+        packed != nullptr) {
+      self->command_.Transition(list, unlifted_input,
+                                D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+      ComputeConstants gain_constants = {};
+      gain_constants.Width = run.work_width;
+      gain_constants.Height = run.work_height;
+      gain_constants.shader.Params0.z = 1.0f;
+      ID3D12Resource* gain_srvs[kSrvCount] = {
+          packed, global_carrier, packed, packed};
+      ID3D12Resource* gain_uavs[kUavCount] = {unlifted_input};
+      if (!run.codec->Dispatch("PrepareModelInput", list, gain_constants,
+                               gain_srvs, gain_uavs)) {
+        self->FailForStep("failed to build the local-exposure gain");
+        return PipelineStatus::Fail;
+      }
+      self->command_.UavBarrier(list, unlifted_input);
+    }
+
     self->command_.Transition(list, unlifted_input,
                               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   }

@@ -22,11 +22,33 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
   const bool hdr_active = run.hdr_uniforms_ready &&
                           run.hdr != nullptr &&
                           run.hdr->ResolvedFormat() != HdrFormat::Sdr;
+
+  // Compare against the actual Grade Model Input result, then apply only the
+  // model residual to the image before that grade section. The option remains
+  // active at zero model intensity: there the comparison endpoints are made
+  // identical, while the HDR compose path retains local exposure in its base.
+  const bool apply_edit_to_pre_grade =
+      run.input_grade_apply_to_pre_grade && run.grade_input.enabled &&
+      run.model_color != nullptr && run.model_output != nullptr;
+
+  // The pre-grade base is the source before the grade, so it has to carry the
+  // local-exposure lift itself. That lift is built at working resolution in
+  // StepPrepareModelInput and replaces the packed carrier in the t0 slot; the
+  // compose reconstructs it instead of re-evaluating it per full-resolution
+  // pixel, which would give the lift full-resolution contrast.
+  const bool pre_grade_lift =
+      apply_edit_to_pre_grade && hdr_active &&
+      run.hdr_uniforms.local_exposure_strength > 0.0f &&
+      self->resources_.GetUnliftedWorkingInput() != nullptr;
+
   ID3D12Resource* original = hdr_active
                                  ? self->resources_.GetPackedOutput()
                                  : (run.stage != nullptr && run.stage->owns_submit
                                         ? run.backbuffer
                                         : run.model_input);
+  if (pre_grade_lift) {
+    original = self->resources_.GetUnliftedWorkingInput();
+  }
 
   const model_pipeline::HdrUniforms* hdr_ptr =
       hdr_active ? &run.hdr_uniforms : nullptr;
@@ -55,7 +77,7 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
 
   ID3D12Resource* compose_input = run.compose_reference;
   if (compose_input == nullptr) compose_input = run.model_input;
-  if (hdr_active && !bypass_model &&
+  if (hdr_active && !bypass_model && !pre_grade_lift &&
       run.hdr_uniforms.local_exposure_strength > 0.0f &&
       self->resources_.GetUnliftedWorkingInput() != nullptr) {
     compose_input = self->resources_.GetUnliftedWorkingInput();
@@ -65,9 +87,6 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
   // model residual to the image before that grade section. The option remains
   // active at zero model intensity: there the comparison endpoints are made
   // identical, while the HDR compose path retains local exposure in its base.
-  const bool apply_edit_to_pre_grade =
-      run.input_grade_apply_to_pre_grade && run.grade_input.enabled &&
-      run.model_color != nullptr && run.model_output != nullptr;
   if (apply_edit_to_pre_grade) {
     compose_input = run.model_color;
   }
