@@ -253,8 +253,8 @@ void RegisterHdrSchema(ctl::Schema& schema) {
                "individual pixel noise.")
       .Category(kCatAdvanced)
       .EnableWhen(&LayerEnabled, kLocalEnabled);
-  local.Add<ctl::IntSetting>(kLocalSamples, "Neighborhood Samples", 12)
-      .ClampRange(4, 48)
+  local.Add<ctl::IntSetting>(kLocalSamples, "Neighborhood Samples", 8)
+      .ClampRange(4, 32)
       .Tooltip("Requested spatial taps in the local log-luminance estimate. The effective "
                "count rounds to groups of four to keep sampling spatially balanced.")
       .Category(kCatAdvanced)

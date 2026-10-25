@@ -11,7 +11,7 @@
 #define kLocalExposureMidtone  hdr.LocalExposure.w
 
 #define kLocalRadiusPx max(hdr.LocalExposureParams.x, 1.0)
-#define kLocalSampleCount ((uint)clamp(round(hdr.LocalExposureParams.y / 4.0) * 4.0, 4.0, 48.0))
+#define kLocalSampleCount ((uint)clamp(round(hdr.LocalExposureParams.y / 4.0) * 4.0, 4.0, 32.0))
 
 float GlobalHdrLumaToSdr(float hdr_luma, float exposure)
 {
