@@ -887,7 +887,7 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
 // they are the session's own work: they touch resources_, feature_, command_
 // and guides_ directly, which is exactly what a free function could not do
 // without a dozen accessors that would only exist to defeat encapsulation.
-// The step signature is the same either way — a static member converts to the
+// The step signature is the same either way - a static member converts to the
 // PipelineStepFn pointer type.
 //
 // Two conventions hold throughout:
@@ -987,7 +987,7 @@ PipelineStatus PassSession::StepResolveDevice(PassRun& run) {
 
     if (run.runtime == nullptr) return PipelineStatus::SkipFrame;
     if (!run.runtime->Initialize(run.device)) {
-      // Not fatal here either — the game may not have loaded the DLSS model
+      // Not fatal here either - the game may not have loaded the DLSS model
       // yet this frame. Log once and keep trying.
       TRACE_EVT(self, "SKIP stage=PostDLSS pass=%u reason=runtime_not_ready",
                 self->pass_id_);
@@ -1311,7 +1311,7 @@ constexpr PipelineNodeId kNoDeps[] = {PipelineNodeId::Count};
 //
 // Only *reads* are declared. A step that assigns run.device or run.backbuffer
 // is producing those for later steps, not consuming them, so requiring them
-// would be wrong — AcquireBackbuffer writes both, and the steps that read them
+// would be wrong - AcquireBackbuffer writes both, and the steps that read them
 // run after it.
 constexpr PipelineNodeId kTemporalPrepareRequires[] = {
     PipelineNodeId::GradeModelInput,

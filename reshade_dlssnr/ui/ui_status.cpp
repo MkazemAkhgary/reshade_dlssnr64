@@ -53,7 +53,7 @@ void FormatPassStatus(const PassStatus& pass,
 
   char scale[24] = "";
   if (pass.enabled && working_scale < 0.999f) {
-    std::snprintf(scale, sizeof(scale), " · %.3gx",
+    std::snprintf(scale, sizeof(scale), " - %.3gx",
                   static_cast<double>(working_scale));
   }
 
@@ -62,21 +62,21 @@ void FormatPassStatus(const PassStatus& pass,
     return;
   }
   if (post_dlss_blocked && stage == InjectionStage::PostDLSS) {
-    std::snprintf(out, out_size, "%s · blocked%s", stage_name, scale);
+    std::snprintf(out, out_size, "%s - blocked%s", stage_name, scale);
     return;
   }
   if (pass.failed) {
-    std::snprintf(out, out_size, "%s · FAILED: %s%s",
+    std::snprintf(out, out_size, "%s - FAILED: %s%s",
                   stage_name,
                   pass.reason[0] != '\0' ? pass.reason : "unknown error",
                   scale);
     return;
   }
   if (!pass.has_feature) {
-    std::snprintf(out, out_size, "%s · initializing%s", stage_name, scale);
+    std::snprintf(out, out_size, "%s - initializing%s", stage_name, scale);
     return;
   }
-  std::snprintf(out, out_size, "%s · running%s", stage_name, scale);
+  std::snprintf(out, out_size, "%s - running%s", stage_name, scale);
 }
 
 }  // namespace
@@ -124,7 +124,7 @@ void DrawStatusSection(Settings& settings, bool& changed) {
   if (snap.runtime_initialized) {
     std::snprintf(runtime_buf, sizeof(runtime_buf), "Initialized");
   } else if (snap.runtime_reason[0] != '\0') {
-    std::snprintf(runtime_buf, sizeof(runtime_buf), "Not initialized — %s",
+    std::snprintf(runtime_buf, sizeof(runtime_buf), "Not initialized - %s",
                   snap.runtime_reason);
   } else {
     std::snprintf(runtime_buf, sizeof(runtime_buf), "Not initialized");
@@ -151,7 +151,7 @@ void DrawStatusSection(Settings& settings, bool& changed) {
   } else if (!hdr_in_use) {
     std::snprintf(hdr_buf, sizeof(hdr_buf), "Inactive (no Pre/Post-DLSS pass)");
   } else if (snap.hdr_ready) {
-    std::snprintf(hdr_buf, sizeof(hdr_buf), "Active · exp %.3f · white %.3f",
+    std::snprintf(hdr_buf, sizeof(hdr_buf), "Active - exp %.3f - white %.3f",
                   snap.hdr_exposure, snap.hdr_scene_white);
   } else {
     std::snprintf(hdr_buf, sizeof(hdr_buf), "Warming up");
@@ -180,7 +180,7 @@ void DrawStatusSection(Settings& settings, bool& changed) {
 
   if (hdr_enabled && hdr_in_use && snap.gain_map_ready) {
     ImGui::Spacing();
-    ImGui::Text("Gain map: %.3f .. %.3f log2 · SDR excursions: %u · gain-range: %u",
+    ImGui::Text("Gain map: %.3f .. %.3f log2 - SDR excursions: %u - gain-range: %u",
                 snap.gain_map_min_log2, snap.gain_map_max_log2,
                 snap.gain_map_sdr_excursion_pixels,
                 snap.gain_map_out_of_range_pixels);
@@ -292,7 +292,7 @@ void DrawStatusSection(Settings& settings, bool& changed) {
     // still holds but which is not part of any pass's total_bytes, and it is
     // what makes the total appear to lag after a scale change.
     if (snap.retired_game_resources != 0 || snap.retired_addon_resources != 0) {
-      ImGui::TextDisabled("Pending release: %u game · %u addon",
+      ImGui::TextDisabled("Pending release: %u game - %u addon",
                           snap.retired_game_resources,
                           snap.retired_addon_resources);
       if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -327,7 +327,7 @@ void DrawStatusSection(Settings& settings, bool& changed) {
       char pass_bytes[32];
       FormatBytes(entry.status.resources.total_bytes, pass_bytes,
                   sizeof(pass_bytes));
-      std::snprintf(pass_label, sizeof(pass_label), "Pass %u (%s) — %s",
+      std::snprintf(pass_label, sizeof(pass_label), "Pass %u (%s) - %s",
                     position, stage_name, pass_bytes);
 
       ImGui::PushID(static_cast<int>(entry.id));
@@ -424,7 +424,7 @@ bool DrawTemporalStats(const void* /*context*/, ctl::ValueStore& store,
     row("This frame", kIdle, "idle",
         "No pass has run a temporal step since the addon was last reloaded.");
   } else {
-    std::snprintf(buf, sizeof(buf), "%s · age %llu/%llu",
+    std::snprintf(buf, sizeof(buf), "%s - age %llu/%llu",
                   snap.reuse ? "reuse (NGX skipped)" : "refresh (NGX ran)",
                   static_cast<unsigned long long>(snap.age),
                   static_cast<unsigned long long>(snap.cadence));
@@ -468,7 +468,7 @@ bool DrawTemporalStats(const void* /*context*/, ctl::ValueStore& store,
         "Mean candidate confidence and mean absolute log gain of the "
         "reprojected edit over the last completed GPU sample.");
   } else {
-    std::snprintf(buf, sizeof(buf), "conf %.3f · |edit| %.4f",
+    std::snprintf(buf, sizeof(buf), "conf %.3f - |edit| %.4f",
                   static_cast<double>(snap.mean_conf),
                   static_cast<double>(snap.mean_edit));
     row("GPU sample", snap.mean_conf < 0.75f ? kWarn : kGood, buf,
@@ -482,7 +482,7 @@ bool DrawTemporalStats(const void* /*context*/, ctl::ValueStore& store,
         "eye sees it as discontinuity no matter how high the average fps is.");
   } else {
     const float step = snap.dt_refresh_ms - snap.dt_reuse_ms;
-    std::snprintf(buf, sizeof(buf), "reuse %.2f ms · refresh %.2f ms · step %+.2f ms",
+    std::snprintf(buf, sizeof(buf), "reuse %.2f ms - refresh %.2f ms - step %+.2f ms",
                   static_cast<double>(snap.dt_reuse_ms),
                   static_cast<double>(snap.dt_refresh_ms),
                   static_cast<double>(step));

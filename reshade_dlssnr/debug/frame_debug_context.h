@@ -34,7 +34,7 @@ struct FrameDebugContext {
 
   void Reset() {
     valid = false;
-    // Note: `output`, target dimensions, `format`, and preferred backbuffer extent are intentionally kept —
+    // Note: `output`, target dimensions, `format`, and preferred backbuffer extent are intentionally kept -
     // the resource is reused across frames to avoid churn.
   }
 

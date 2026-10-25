@@ -14,7 +14,7 @@
 //
 // The file is truncated on first use per process. When the variable is unset
 // (the normal case) TraceInit() short-circuits and every macro below compiles
-// to nothing observable — a single predictable branch on a global.
+// to nothing observable - a single predictable branch on a global.
 //
 // The resource pointer is printed as a stable index rather than a raw address:
 // COM heaps reuse addresses between runs, so raw pointers produce spurious
@@ -22,7 +22,7 @@
 //
 // Every line also carries the two frame counters, so a frame reads straight
 // out of the log without matching markers. A run that drops a frame shifts
-// every later counter, so comparing two captures diverges at that point —
+// every later counter, so comparing two captures diverges at that point -
 // which is the useful direction, because the divergence names the frame that
 // differs.
 #pragma once

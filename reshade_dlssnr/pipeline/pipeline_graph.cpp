@@ -90,7 +90,7 @@ bool PipelineNodeValid(PipelineNodeId id) {
 // bodies stay next to the state they touch.
 //
 // The lookup is indexed by node id rather than scanning the four registries.
-// The cost of the scans was never the point — at ~120 lookups per frame the
+// The cost of the scans was never the point - at ~120 lookups per frame the
 // difference is unmeasurable. What the index buys is a place to notice that
 // two registries claim the same node: the scans took the first match and the
 // second silently never ran, which is the same shape of defect as the
@@ -464,7 +464,7 @@ const PipelineStageDef kPipelineStages[] = {
         /*max_passes=*/1,
         // Entered from RunSingleStage, which supplies the queue and swapchain
         // only. The stage owns a command list but opens it on demand rather
-        // than being handed one, so it is not a declared input — the same
+        // than being handed one, so it is not a declared input - the same
         // shape as Present, which produces run.list from its own session.
         // The release work is a backbuffer write and the HDR present signal,
         // both of which need the queue and the swapchain.
@@ -629,8 +629,8 @@ void FormatMissingPrerequisites(const PipelineStepDef& def, const PassRun& run,
 // every frame in exactly the situations the user is looking at: a
 // mis-flagged step skipped in the wrong stage, or a prerequisite that can
 // never be met. Printing them per frame turns the present path into a log
-// flood, which shows up as stutter and buries the first occurrence — the one
-// that matters — under thousands of identical copies. Keying on the skip
+// flood, which shows up as stutter and buries the first occurrence - the one
+// that matters - under thousands of identical copies. Keying on the skip
 // *state* keeps the transition visible and the steady state silent.
 //
 // Bounded and fixed-size: the pipeline has a compile-time step count, so a
@@ -697,7 +697,7 @@ PipelineStatus PipelineRunner::RunStage(const PipelineStageDef& stage,
   // Refuse to start a stage whose declared inputs the caller did not supply.
   //
   // The steps in a stage are shared with other stages, and the call sites
-  // differ in what they pass — Present has a swapchain and no command list,
+  // differ in what they pass - Present has a swapchain and no command list,
   // PostDLSS the reverse. Checking once here means a step that dereferences a
   // frame input cannot be reached with a null one, so a table edit that moves
   // a step into a stage whose call site does not provide what it needs fails
@@ -753,7 +753,7 @@ PipelineStatus PipelineRunner::RunStage(const PipelineStageDef& stage,
 
       // A step that cannot work without the HDR path never runs in a stage
       // that is not HDR-capable. This is a property of the stage, not a
-      // failure — but it is logged at info level rather than left to the
+      // failure - but it is logged at info level rather than left to the
       // trace, because a silent skip here once hid a real bug (two steps
       // mis-flagged as HDR-only were skipped in Backbuffer, so the model was
       // evaluated with null inputs). A skip that changes behaviour should be
@@ -773,8 +773,8 @@ PipelineStatus PipelineRunner::RunStage(const PipelineStageDef& stage,
 
       // Prerequisite check. A missing prerequisite means the table lists a
       // step before something it depends on, which is a bug in this file
-      // rather than a runtime condition. Log once — at error level so it is
-      // visible without tracing enabled — and skip the step so the frame
+      // rather than a runtime condition. Log once - at error level so it is
+      // visible without tracing enabled - and skip the step so the frame
       // degrades instead of rendering garbage.
       if (!PrerequisitesMet(*def, run)) {
         char missing[256];

@@ -341,7 +341,7 @@ using PipelineStepFn = PipelineStatus (*)(PassRun& run);
 // things available: Backbuffer passes a swapchain and command queue but no
 // command list, game-list stages pass the game's command list and resource
 // but no swapchain. A step that needs something its stage does not receive
-// dereferences a null pointer — and because the steps are shared across
+// dereferences a null pointer - and because the steps are shared across
 // stages, moving one line in a step table is enough to create that.
 //
 // Declaring the requirement on both the step and the stage lets a compile-time
@@ -395,7 +395,7 @@ struct PipelineStepDef {
   // against the live PassRun by the runner at stage entry.
   //
   // Leaving this at None is a claim that the step is safe with every input
-  // null. That claim is not enforced by the language — it is enforced by the
+  // null. That claim is not enforced by the language - it is enforced by the
   // compile-time check, which trusts this field. So a step that dereferences
   // an input and does not declare it here is a bug this system cannot catch;
   // declaring it is what makes the rest work.
@@ -471,7 +471,7 @@ struct PipelineStageDef {
   // a null pointer several steps later.
   //
   // Stage is listed wherever steps read `run.stage` (which the runner sets
-  // itself, so it is always satisfied — it is listed to document intent).
+  // itself, so it is always satisfied - it is listed to document intent).
   StageInput required_inputs = StageInput::None;
 
   // PostDLSS preparation leaves the captured output in SRV state for the first
@@ -500,7 +500,7 @@ const PipelineStepDef* FindPipelineStep(PipelineNodeId id);
 // appear EARLIER in that list.
 //
 // Getting this wrong does not fail to compile and does not crash. The runner
-// logs at error level and skips the step, every frame, forever — which is how
+// logs at error level and skips the step, every frame, forever - which is how
 // a mis-ordered HdrBeginFrame silently disabled HDR measurement entirely.
 // These helpers turn that into a build error.
 //
@@ -514,7 +514,7 @@ const PipelineStepDef* FindPipelineStep(PipelineNodeId id);
 // kPresentStepNodes / kPostDlssStepNodes / kReleaseStepNodes; `defs` is the
 // flat definition table in the owning .cpp. A definition whose node is not in
 // `steps` is skipped, because the same definition may serve a stage that lists
-// it elsewhere — the histogram placeholders are in no stage list at all, with
+// it elsewhere - the histogram placeholders are in no stage list at all, with
 // the work folded into HdrBeginFrame.
 
 // True when `needle` is present in the first `limit` entries of `steps`.
@@ -560,7 +560,7 @@ constexpr bool StepPrerequisitesPrecedeImpl(const PipelineStepDef* def,
 // True when every step in `defs` has all its prerequisites satisfied by an
 // earlier entry in `steps`. Steps whose node is absent from `steps` pass
 // trivially, because the same definition may serve a stage that lists it
-// elsewhere (or not at all) — that is exactly the histogram placeholders'
+// elsewhere (or not at all) - that is exactly the histogram placeholders'
 // situation against the Present list.
 //
 // Note the gap this cannot close: a prerequisite that appears in NO stage list

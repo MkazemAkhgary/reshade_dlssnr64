@@ -23,7 +23,7 @@ std::mutex& Mutex() {
   // translation unit happens to be destroyed first. A namespace-scope
   // std::mutex here would be a live hazard: the TraceShutdown destructor at
   // the bottom of this file calls Shutdown(), which locks it, and the two are
-  // destroyed in reverse order of construction across TUs — so the mutex could
+  // destroyed in reverse order of construction across TUs - so the mutex could
   // already be gone. Both this and `g_file` are deliberately leaked instead.
   static std::mutex* instance = new std::mutex();
   return *instance;

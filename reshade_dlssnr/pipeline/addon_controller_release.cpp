@@ -47,7 +47,7 @@ PipelineStatus RunEnsureHdr(PassRun& run) {
 // rather than on a pass's own resources.
 //
 // Listed first in the Release stage on purpose, so the debug-present override
-// below — which replaces the backbuffer wholesale — still wins.
+// below - which replaces the backbuffer wholesale - still wins.
 PipelineStatus RunGradeBackbuffer(PassRun& run) {
   if (run.settings == nullptr || run.codec == nullptr) return PipelineStatus::Ok;
   if (!run.settings->enabled) return PipelineStatus::Ok;

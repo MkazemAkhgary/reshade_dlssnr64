@@ -148,7 +148,7 @@ ID3D12GraphicsCommandList* AddonController::BeginReleaseCommands(
 
   // Reset and clear once per frame, so the state a step seeds is the state
   // the list starts from. A later caller in the same frame must not do this
-  // again — it would discard the commands already recorded.
+  // again - it would discard the commands already recorded.
   release_command_.Reset();
   release_command_.ClearState();
   release_list_begun_ = true;

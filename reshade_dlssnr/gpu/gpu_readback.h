@@ -26,13 +26,13 @@ class GpuReadback {
 
   // Records a copy of `source` (source_bytes) into the ring's next slot on
   // `command_list`. `fence`/`fence_value` identify the fence signal that
-  // will complete after the copy — the caller must signal that value on
+  // will complete after the copy - the caller must signal that value on
   // `fence` after submitting the command list (typically via
   // CommandContext::WaitGpu, whose next value is exactly what
   // CommandContext::GetNextFenceValue() returns).
   //
   // Returns true if the copy was recorded. Returns false if `source_bytes`
-  // exceeds the slot size or the target slot is still pending on the GPU —
+  // exceeds the slot size or the target slot is still pending on the GPU -
   // in that case the frame's update is simply skipped.
   bool EnqueueCopy(
       ID3D12GraphicsCommandList* command_list,

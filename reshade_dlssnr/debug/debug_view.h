@@ -1,6 +1,6 @@
 // Debug views: display pipeline resources by role.
 //
-// This module is a pure observer — it reads what the pipeline already
+// This module is a pure observer - it reads what the pipeline already
 // produced, and never recomputes anything. The pipeline populates a
 // DebugSnapshot (raw pointers to its live resources) as it runs. If the
 // pipeline changes (e.g. a new stage is added), the snapshot reflects it
@@ -33,7 +33,7 @@ struct DebugSnapshot {
   bool game_exposure_available = false;
   float game_exposure = 1.0f;
 
-  // Model input after HDR normalization and optional resize — what the
+  // Model input after HDR normalization and optional resize - what the
   // model actually sees.
   // Full-resolution HDR gain-map split. Both selectors point at the packed
   // R32G32B32A32_FLOAT texture; RGB is SDR base, A is the linear HDR/carrier multiplier.
@@ -149,7 +149,7 @@ bool DebugViewNeedsPreGradeOutput(int debug_view);
 bool DebugViewNeedsEffectiveExposureMap(int debug_view);
 
 // Renders the selected debug view into `target`, which the caller owns and
-// must have sized to `target_width × target_height`. `debug_view` follows
+// must have sized to `target_width x target_height`. `debug_view` follows
 // the settings convention: 0 = off, N = kDebugViews[N-1].
 // Returns true on success.
 bool RenderDebugView(

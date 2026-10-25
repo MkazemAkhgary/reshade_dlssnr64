@@ -20,7 +20,7 @@ void PassResources::Dispose(Microsoft::WRL::ComPtr<ID3D12Resource>& resource) {
     retire_cb_(resource.Detach(), retire_user_data_);
   } else {
     // No retire callback means we may be about to release a resource the GPU
-    // is still using. Whether that actually faults depends on timing — if the
+    // is still using. Whether that actually faults depends on timing - if the
     // resource was bound by in-flight GPU work, releasing it will hang the
     // device. This path should never run; if it does, log it so the cause is
     // visible rather than manifesting as an unexplained hang.

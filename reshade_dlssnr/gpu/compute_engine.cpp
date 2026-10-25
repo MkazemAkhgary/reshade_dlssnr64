@@ -172,7 +172,7 @@ bool ComputeEngine::BindAndDispatch(
               &constants, sizeof(constants));
 
   // Thread-group grid. Callers can override for passes whose grid is not
-  // tied to the frame size; the built-in 8×8 group passes use the default.
+  // tied to the frame size; the built-in 8x8 group passes use the default.
   const uint32_t grid_x =
       threads_x != 0 ? threads_x : (constants.Width + 7) / 8;
   const uint32_t grid_y =

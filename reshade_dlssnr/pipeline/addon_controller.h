@@ -70,7 +70,7 @@ class AddonController {
   bool RestartPending() const;
 
   // Records why the Post-DLSS path was skipped, for display in the Status
-  // section. Pass nullptr to clear — the hook calls this on every frame,
+  // section. Pass nullptr to clear - the hook calls this on every frame,
   // so the value only persists while the condition does.
   void SetPostDlssBlocked(const char* reason);
 
@@ -242,7 +242,7 @@ class AddonController {
   DXGI_FORMAT grade_scratch_format_ = DXGI_FORMAT_UNKNOWN;
 
   // Command context used only for the HDR histogram dispatch (which does
-  // not submit — it just records state on the game's list).
+  // not submit - it just records state on the game's list).
   CommandContext pass1_command_;
 
   // Shared compute codec for every pass and the HDR histogram. One engine

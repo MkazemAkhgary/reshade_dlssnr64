@@ -76,8 +76,8 @@ class ComputeEngine {
   // contract above for details.
   //
   // By default the thread-group grid is derived from constants.Width/Height
-  // assuming an 8×8 thread group (matches the built-in passes). Pass
-  // non-zero `threads_x`/`threads_y` to override — useful for passes that
+  // assuming an 8x8 thread group (matches the built-in passes). Pass
+  // non-zero `threads_x`/`threads_y` to override - useful for passes that
   // only need a fixed grid regardless of frame size (e.g. a reduction).
   bool Dispatch(
       const char* pass_name,

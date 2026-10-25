@@ -69,7 +69,7 @@ class PassResources {
   unsigned int unlifted_working_height = 0;
   DXGI_FORMAT unlifted_working_format = DXGI_FORMAT_UNKNOWN;
   // Full-resolution combined exposure used by HDR inverse compose. R32_FLOAT
-  // stores global exposure × the exact local exposure factor applied by the
+  // stores global exposure x the exact local exposure factor applied by the
   // gain-map split to that source pixel.
   Microsoft::WRL::ComPtr<ID3D12Resource> effective_exposure_map;
   Microsoft::WRL::ComPtr<ID3D12Resource> local_exposure_partial_sums;
@@ -118,7 +118,7 @@ class PassResources {
 
   // Resources replaced by Ensure*() are handed to this callback rather than
   // being released immediately. The callback takes ownership of the
-  // reference (which is not AddRef'd). This must always be set — a resource
+  // reference (which is not AddRef'd). This must always be set - a resource
   // replaced this frame may still be read by in-flight GPU work on the
   // game's queue, and immediate release causes a use-after-free (which
   // manifests as DXGI_ERROR_DEVICE_HUNG).

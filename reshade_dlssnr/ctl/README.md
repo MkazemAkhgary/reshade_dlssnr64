@@ -1,9 +1,9 @@
-# ctl — the control settings framework
+# ctl - the control settings framework
 
 A declarative settings system. Settings are *declared* in code, one expression
 each; the framework owns storage, UI rendering, and persistence.
 Nothing in this directory knows what a "pass", "layer", "camera", or "preset"
-is — those are the application's words, expressed through sections, instance
+is - those are the application's words, expressed through sections, instance
 keys and parent links.
 
 ```
@@ -79,7 +79,7 @@ let them fall out of a blanket iteration. The caller enumerates.
 
 `Section::Add<T>` returns `T&`, so a setting is configured with fluent setters
 and the whole declaration stays one expression. Declaration order is render
-order — `Schema::Build` records it and the drawer replays it.
+order - `Schema::Build` records it and the drawer replays it.
 
 `SettingMeta` carries `name`, `label`, `tooltip`, `category`, `persist`, and
 `persist_in_profiles` (both persistence flags default to true). Mark a setting
@@ -89,7 +89,7 @@ setting means or which feature owns it.
 
 ### Hooks
 
-A hook is an insertion point for UI the settings model cannot express — a tab
+A hook is an insertion point for UI the settings model cannot express - a tab
 bar, a live readout, a histogram. **Identity is data; only the rendering is
 code.** Where a hook sits (its anchor, placement and name) is declared as plain
 values, which is the whole of what the framework knows about it. The rendering
@@ -112,14 +112,14 @@ hdr.AddHookAppend("Footer",
 The lambda must be captureless, so it converts to a plain function pointer:
 the `Hook` stays trivially copyable and the schema needs no per-hook
 allocation or `std::function`. A lambda that captures is a compile error, and
-that is the point — a hook's position is data, so the code it runs must not
+that is the point - a hook's position is data, so the code it runs must not
 smuggle in per-instance state. Anything a hook needs at run time comes from the
 context it was handed: the store and the instance key.
 
 The callback signature is
 `bool(const void* context, ValueStore&, const DrawOptions&, const std::string& section, const InstanceKey& key, bool& changed)`.
 A hook is handed the store, the options, the section it sits in, and the
-instance key it is running for — the key whole, never a hash or an index
+instance key it is running for - the key whole, never a hash or an index
 derived from it. A hook that draws another section's body for the same
 instance (HDR's layer tabs) gives that key straight back to `DrawSection`, and
 it can only do that if it was given the key. An integer surrogate would work
@@ -136,9 +136,9 @@ readout cannot leak out of a collapsed sub-section.
 
 To add `ColorSetting`:
 
-1. Write the class — derive from `Setting`, implement `DefaultValue`, `Clamp`,
+1. Write the class - derive from `Setting`, implement `DefaultValue`, `Clamp`,
    `Assign`, `ToString`, `FromString`, `Draw`.
-2. Register it — `registry.Register("color", [] { return std::make_unique<ColorSetting>("", ""); });`
+2. Register it - `registry.Register("color", [] { return std::make_unique<ColorSetting>("", ""); });`
 
 Nothing else changes: not the other types, not the manager, not any call site.
 The acceptance harness proves this with its `ColorSetting` (test 27).
@@ -285,12 +285,12 @@ app.store.Write("Pass", InstanceKey::FromInt(pass_index), "intensity",
 
 ## Extending
 
-| To add… | Do this |
+| To add... | Do this |
 | --- | --- |
 | a new setting type | one class + one `registry.Register(...)` line |
 | a new metadata field | add it to `SettingMeta` with a default |
 | a hook | `AddHookBefore` / `AddHookAfter` / `AddHookAppend` |
-| a new scope (layer, camera, preset, material) | an instanced section with a key of that flavour — no framework change |
+| a new scope (layer, camera, preset, material) | an instanced section with a key of that flavour - no framework change |
 | a new config backend | implement `KeyValueReader` / `KeyValueWriter` |
 
 ## Tests

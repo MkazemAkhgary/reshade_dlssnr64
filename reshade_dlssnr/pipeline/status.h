@@ -4,7 +4,7 @@
 // refreshes the snapshot at the end of every Present or Post-DLSS pass;
 // the UI reads it.
 //
-// The snapshot is copyable and self-contained — no pointers into live
+// The snapshot is copyable and self-contained - no pointers into live
 // state, no lifetimes to manage.
 #pragma once
 
@@ -47,7 +47,7 @@ struct PassResourceStats {
 //   - The rest are runtime-owned, populated by PassSession::GetStatus.
 //
 // The pass's injection stage (Pre-DLSS / Post-DLSS / Backbuffer) is deliberately not
-// duplicated here — it is a setting, and the UI reads it directly from
+// duplicated here - it is a setting, and the UI reads it directly from
 // Settings when formatting the row.
 struct PassStatus {
   bool enabled = false;                          // user toggle (setting)
