@@ -12,9 +12,9 @@ namespace reshade_dlssnr {
 // are active at a time; stacking two would make them fight.
 
 enum class GradeLumaMode : int {
-  Gain = 0,      // Bounded multiplicative curve on OKLab lightness
-  Gamma = 1,     // Power curve on OKLab lightness; endpoints stay anchored
-  Exposure = 2,  // x2^amount on linear RGB; preserves chromaticity until clipping
+  Exposure = 0,  // x2^amount on linear RGB; preserves chromaticity until clipping
+  Gain = 1,      // Bounded multiplicative curve on OKLab lightness
+  Gamma = 2,     // Power curve on OKLab lightness; endpoints stay anchored
   Soft = 3,      // parabolic lift; strongest at mid grey
 };
 
@@ -27,7 +27,7 @@ struct GradeSettings {
   bool enabled = false;
   float luma = 0.0f;
   float chroma = 0.0f;
-  GradeLumaMode luma_mode = GradeLumaMode::Gamma;
+  GradeLumaMode luma_mode = GradeLumaMode::Exposure;
   GradeChromaMode chroma_mode = GradeChromaMode::Saturation;
   float black_level = 0.0f;
   float white_level = 1.0f;

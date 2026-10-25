@@ -13,13 +13,13 @@ namespace grade_rows {
 
 namespace {
 
-const char* const kLumaModeNames[] = {"Gain", "Gamma", "Exposure", "Soft"};
+const char* const kLumaModeNames[] = {"Exposure", "Gain", "Gamma", "Soft"};
 const char* const kLumaModeTips[] = {
+    "Multiply linear-light RGB by 2^amount (stops); gamut mapping protects colors "
+    "when the result exceeds the output range.",
     "Scales OKLab lightness by a bounded multiplicative curve.",
     "Apply a signed power curve to OKLab lightness. Neutral black and white "
     "remain anchored, concentrating the effect in the midtones.",
-    "Multiply linear-light RGB by 2^amount (stops); gamut mapping protects colors "
-    "when the result exceeds the output range.",
     "A smooth lightness adjustment that fades to zero near black and white."};
 
 const char* const kChromaModeNames[] = {"Saturation", "Vibrance"};

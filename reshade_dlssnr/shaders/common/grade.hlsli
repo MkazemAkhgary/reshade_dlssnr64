@@ -83,9 +83,9 @@ float GradeBrightnessFwd(float lightness, float amount, int mode)
     float result = lightness;
     if (amount != 0.0)
     {
-        if (mode == 0)
+        if (mode == 1)
             result = lightness * exp2(amount * 0.75);
-        else if (mode == 1)
+        else if (mode == 2)
             result = GradeSignedPow(lightness, exp2(-amount * 0.7));
         else if (mode == 3)
         {
@@ -224,7 +224,7 @@ float3 GradeLinearCoreFwd(float3 linear_rgb)
         lab.x = GradeHighlightFwd(lab.x, kGradeHighlights);
 
         const int brightness_mode = (int)(kGradeLumaMode + 0.5);
-        if (brightness_mode == 2)
+        if (brightness_mode == 0)
         {
             lab *= exp2(kGradeLuma / 3.0);
         }
