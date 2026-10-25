@@ -233,7 +233,7 @@ void RegisterHdrSchema(ctl::Schema& schema) {
       .Tooltip("Apply a correction to the model output after evaluation. When "
                "disabled, the model's reconstructed local shading is left alone.")
       .EnableWhen(&LayerEnabled, kLocalEnabled);
-  local.Add<ctl::FloatSetting>(kLocalRestoreMode, "Restore Spatial Scale", 1.0f)
+  local.Add<ctl::FloatSetting>(kLocalRestoreMode, "Restore Spatial Scale", 0.5f)
       .ClampRange(0.0f, 1.0f)
       .Tooltip("Controls the spatial scale of exposure restoration: 0 = exact "
                "per-pixel cancellation of the local lift, 1 = uniform global "

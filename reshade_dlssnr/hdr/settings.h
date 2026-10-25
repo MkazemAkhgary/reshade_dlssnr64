@@ -61,7 +61,7 @@ struct LocalExposureLayerSettings {
   bool restore_exposure = false;
   // 0 = exact per-pixel restoration; 1 = uniform global restoration.
   // Intermediate values interpolate the correction in log exposure space.
-  float restore_mode = 1.0f;
+  float restore_mode = 0.5f;
   float restore_strength = 1.0f;
 };
 
