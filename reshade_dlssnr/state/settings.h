@@ -54,8 +54,6 @@ void LoadSettings();
 void SaveSettings();
 void SetPassOrder(Settings& settings, feature::pass::PassOrder order);
 
-ProfileId NewProfileId();
-
 // Erase the persisted keys for one pass. Called when a pass is removed so
 // that its retired id leaves no orphan keys in the config. Every pass-keyed
 // section is touched: the Pass section, its two hosted model grades, the

@@ -5,12 +5,22 @@
 #include <reshade.hpp>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <limits>
+#include <set>
+#include <sstream>
 #include <string>
+#include <type_traits>
+#include <unordered_map>
+#include <vector>
 
 #include "compose/settings.h"
-#include "ctl/usage/config.h"
+#include "ctl/usage/json.h"
+#include "ctl/usage/json_config.h"
 #include "feature/settings_store.h"
 #include "ctl/values.h"
 #include "feature/debug_log/settings.h"
@@ -27,123 +37,276 @@ namespace reshade_dlssnr {
 namespace {
 Settings g_settings;
 
-template <typename T>
-void ReadValue(const std::string& root, const char* key, T& value) {
-  const std::string full_key = root + CStrToString(key);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", full_key.c_str(), value);
-}
+// ---------------------------------------------------------------------------
+// JSON settings store.
+//
+// The JSON file lives beside Reshade.ini and holds the entire persisted
+// settings tree. Pass ids and profile positions are compacted on every save,
+// so the on-disk file has no index gaps and no leftover keys from removed
+// settings. The INI is consulted only for the store's filename
+// (JsonStoreFile).
+// ---------------------------------------------------------------------------
 
-// A string needs the char* overload: ReShade's scalar template goes through
-// std::from_chars, which has no std::string form (it fails to compile), and a
-// name is worth more than a 31-character buffer anyway.
-inline void ReadValue(const std::string& root, const char* key,
-                      std::string& value) {
-  const std::string full_key = root + CStrToString(key);
-  char buffer[256] = "";
-  size_t size = sizeof(buffer);
-  if (reshade::get_config_value(nullptr, "RESHADE_DLSSNR", full_key.c_str(),
-                                buffer, &size)) {
-    value.assign(buffer);
-  }
-}
-
-
-template <typename T>
-void WriteValue(const std::string& root, const char* key, const T& value) {
-  const std::string full_key = root + CStrToString(key);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", full_key.c_str(), value);
-}
-
-// A string needs the char* overload: ReShade's scalar template goes through
-// std::to_chars, which has no std::string form (it fails to compile).
-inline void WriteValue(const std::string& root, const char* key,
-                       const std::string& value) {
-  const std::string full_key = root + CStrToString(key);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", full_key.c_str(),
-                            value.c_str());
-}
-
+constexpr const char* kIniSection = "RESHADE_DLSSNR";
+constexpr const char* kJsonFileKey = "JsonStoreFile";
+constexpr const char* kDefaultJsonFile = "reshade_dlssnr64.json";
 constexpr ProfileId kFirstProfileId = 1;
-constexpr const char* kProfileOrderKey = "UserPresetOrder";
-constexpr const char* kNextProfileIdKey = "UserPresetNextId";
-constexpr const char* kNextPassIdKey = "PassNextId";
 
-std::string ProfilePrefix(ProfileId id) {
-  return "UserPreset." + std::to_string(id);
+bool IsValidStoreFileName(const std::string& name) {
+  if (name.empty() || name == "." || name == "..") return false;
+  for (char c : name) {
+    switch (c) {
+      case '\\': case '/': case ':': case '*': case '?':
+      case '"': case '<': case '>': case '|':
+        return false;
+      default:
+        break;
+    }
+  }
+  return true;
 }
 
-std::string ProfileValuePrefix(ProfileId id) {
-  return ProfilePrefix(id) + ".";
+std::filesystem::path ResolveJsonPath() {
+  std::string name = kDefaultJsonFile;
+  char buffer[260] = {};
+  size_t size = sizeof(buffer);
+  if (reshade::get_config_value(nullptr, kIniSection, kJsonFileKey,
+                                buffer, &size)) {
+    const std::string candidate(buffer);
+    if (IsValidStoreFileName(candidate)) name = candidate;
+  }
+
+  wchar_t exe_path[MAX_PATH] = {};
+  const DWORD len = GetModuleFileNameW(nullptr, exe_path, MAX_PATH);
+  if (len > 0 && len < MAX_PATH) {
+    std::filesystem::path dir(exe_path);
+    dir = dir.parent_path();
+    if (!dir.empty()) return dir / name;
+  }
+  std::error_code ec;
+  const std::filesystem::path cwd = std::filesystem::current_path(ec);
+  if (!ec) return cwd / name;
+  wchar_t temp[MAX_PATH] = {};
+  const DWORD temp_len = GetTempPathW(MAX_PATH, temp);
+  if (temp_len > 0 && temp_len < MAX_PATH) {
+    return std::filesystem::path(temp) / name;
+  }
+  return name;
 }
 
-std::string ProfileDataPrefix(ProfileId id) {
-  return ProfilePrefix(id) + ".Data";
+std::string ReadTextFile(const std::filesystem::path& path) {
+  std::ifstream in(path, std::ios::binary);
+  if (!in) return {};
+  std::ostringstream ss;
+  ss << in.rdbuf();
+  return ss.str();
 }
 
-std::string ProfileNameKey(ProfileId id) {
-  return ProfileValuePrefix(id) + "Name";
+bool WriteTextFile(const std::filesystem::path& path, const std::string& text) {
+  std::filesystem::path temp = path;
+  temp += ".tmp";
+  {
+    std::ofstream out(temp, std::ios::binary | std::ios::trunc);
+    if (!out) return false;
+    out.write(text.data(), static_cast<std::streamsize>(text.size()));
+    if (!out.good()) return false;
+  }
+  std::error_code ec;
+  std::filesystem::rename(temp, path, ec);
+  if (ec) {
+    std::filesystem::remove(path, ec);
+    std::filesystem::rename(temp, path, ec);
+  }
+  return !ec;
 }
 
-std::vector<ProfileId> ParseProfileOrder(const std::string& text) {
-  std::vector<ProfileId> order;
+// Every pass-keyed section. Enumerated here so migration and compaction
+// remain in sync when a new pass-keyed section is added.
+const char* const kPassSections[] = {
+    feature::pass::kSection,
+    feature::pass::kGradeInputSection,
+    feature::pass::kGradeOutputSection,
+    feature::hdr::kSection,
+    feature::hdr::kGameSection,
+    feature::hdr::kAdaptiveSection,
+    feature::hdr::kLocalSection,
+    feature::exposure_mask::kSection,
+};
+
+// Parse a comma-separated list of integers. Tolerates a JSON number that the
+// INI-to-JSON migration produced for Pass Order.ids (as_string() normalizes it
+// back to text).
+std::vector<int> ParseIntList(const std::string& text) {
+  std::vector<int> out;
   size_t begin = 0;
-  while (begin <= text.size() && order.size() < kMaxSavedProfiles) {
+  while (begin <= text.size()) {
     const size_t comma = text.find(',', begin);
-    const std::string token = text.substr(
+    const std::string part = text.substr(
         begin, comma == std::string::npos ? std::string::npos : comma - begin);
-    if (!token.empty()) {
-      char* end = nullptr;
-      const unsigned long long parsed = std::strtoull(token.c_str(), &end, 10);
-      if (end != token.c_str() && *end == '\0' &&
-          parsed >= kFirstProfileId &&
-          parsed <= std::numeric_limits<ProfileId>::max()) {
-        const ProfileId id = static_cast<ProfileId>(parsed);
-        if (std::find(order.begin(), order.end(), id) == order.end()) {
-          order.push_back(id);
-        }
-      }
+    if (!part.empty()) {
+      try { out.push_back(std::stoi(part)); } catch (...) {}
     }
     if (comma == std::string::npos) break;
     begin = comma + 1;
   }
-  return order;
+  return out;
 }
 
-std::vector<ProfileId> ReadProfileOrder() {
-  std::string text;
-  ReadValue("", kProfileOrderKey, text);
-  return ParseProfileOrder(text);
+std::vector<int> ReadPassIdsFromTree(json::Value& s_subtree) {
+  json::Value* order = s_subtree.find("Pass Order.ids");
+  if (order == nullptr) return {};
+  return ParseIntList(order->as_string());
 }
 
-void WriteProfileOrder(const std::vector<ProfileId>& order) {
+// Derive pass ids from the keys of the Pass section's K object. Used when
+// Pass Order.ids is absent so compaction cannot silently drop keys.
+std::vector<int> DeriveIdsFromK(json::Value& s_subtree) {
+  std::vector<int> ids;
+  json::Value* k = s_subtree.find("Pass.K");
+  if (k == nullptr || !k->is_object()) return ids;
+  for (const auto& entry : k->object()) {
+    if (entry.first.empty() || entry.first[0] != 'i') continue;
+    try { ids.push_back(std::stoi(entry.first.substr(1))); } catch (...) {}
+  }
+  std::sort(ids.begin(), ids.end());
+  return ids;
+}
+
+void WritePassIdsToTree(json::Value& s_subtree, const std::vector<int>& ids) {
   std::string text;
-  for (ProfileId id : order) {
+  for (int id : ids) {
     if (!text.empty()) text += ',';
     text += std::to_string(id);
   }
-  WriteValue("", kProfileOrderKey, text);
+  s_subtree.ensure("Pass Order")["ids"] = json::Value(text);
 }
 
-void ReadProfileName(ProfileId id, char* name, size_t capacity) {
-  if (name == nullptr || capacity == 0) return;
-  name[0] = '\0';
-  size_t size = capacity;
-  const std::string key = ProfileNameKey(id);
-  reshade::get_config_value(nullptr, "RESHADE_DLSSNR", key.c_str(), name,
-                            &size);
-  name[capacity - 1] = '\0';
+// Renumber every pass-keyed section under `s_subtree` (which is an "S"
+// subtree) to i1..iN, preserving each instance's values. Ids are derived from
+// Pass Order.ids, falling back to the Pass section's own keys so a hand-edited
+// file that omitted the order setting cannot lose data.
+void CompactPassKeysInTree(json::Value& s_subtree) {
+  std::vector<int> from_ids = ReadPassIdsFromTree(s_subtree);
+  if (from_ids.empty()) from_ids = DeriveIdsFromK(s_subtree);
+
+  std::unordered_map<std::string, std::string> remap;
+  for (size_t i = 0; i < from_ids.size(); ++i) {
+    remap["i" + std::to_string(from_ids[i])] = "i" + std::to_string(i + 1);
+  }
+
+  for (const char* section_name : kPassSections) {
+    json::Value* k = s_subtree.find(std::string(section_name) + ".K");
+    if (k == nullptr || !k->is_object()) continue;
+    json::Value new_k = json::Value::MakeObject();
+    for (const auto& entry : k->object()) {
+      auto it = remap.find(entry.first);
+      if (it != remap.end()) new_k[it->second] = entry.second;
+    }
+    *k = std::move(new_k);
+  }
+
+  std::vector<int> new_ids;
+  for (size_t i = 0; i < from_ids.size(); ++i) {
+    new_ids.push_back(static_cast<int>(i + 1));
+  }
+  WritePassIdsToTree(s_subtree, new_ids);
 }
 
-void WriteProfileName(ProfileId id, const char* name) {
-  const std::string key = ProfileNameKey(id);
-  const std::string safe_name = CStrToString(name);
-  reshade::set_config_value(nullptr, "RESHADE_DLSSNR", key.c_str(),
-                            safe_name.c_str());
+class JsonStore {
+ public:
+  static JsonStore& Get() {
+    static JsonStore instance;
+    return instance;
+  }
+
+  bool EnsureLoaded() {
+    if (loaded_) return true;
+    loaded_ = true;
+    path_ = ResolveJsonPath();
+
+    std::error_code ec;
+    if (std::filesystem::exists(path_, ec)) {
+      const std::string text = ReadTextFile(path_);
+      if (text.empty()) {
+        root_ = json::Value::MakeObject();
+        root_["Version"] = json::Value(1);
+        Save();
+        return true;
+      }
+      std::string error;
+      root_ = json::Value::parse(text, &error);
+      if (error.empty() && !root_.is_object()) {
+        error = "root is not an object";
+      }
+      if (!error.empty()) {
+        reshade::log::message(
+            reshade::log::level::error,
+            ("DLSSNR: JSON settings parse failed: " + error).c_str());
+        std::filesystem::path backup = path_;
+        backup += ".broken";
+        std::filesystem::rename(path_, backup, ec);
+        root_ = json::Value::MakeObject();
+        root_["Version"] = json::Value(1);
+        Save();
+        return true;
+      }
+    } else {
+      root_ = json::Value::MakeObject();
+      root_["Version"] = json::Value(1);
+      Save();
+      return true;
+    }
+
+    return true;
+  }
+
+  bool Save() {
+    if (!loaded_ || path_.empty()) return false;
+    return WriteTextFile(path_, root_.dump());
+  }
+
+  json::Value& root() { return root_; }
+  const json::Value& root() const { return root_; }
+
+ private:
+  JsonStore() = default;
+
+  json::Value root_;
+  std::filesystem::path path_;
+  bool loaded_ = false;
+};
+
+template <typename T>
+void ReadValue(const std::string& root, const char* key, T& value) {
+  JsonStore::Get().EnsureLoaded();
+  const std::string full_key = root + CStrToString(key);
+  const json::Value* v = JsonStore::Get().root().find(full_key);
+  if (v == nullptr) return;
+  if constexpr (std::is_same_v<T, bool>) {
+    value = v->as_bool(value);
+  } else if constexpr (std::is_same_v<T, int>) {
+    value = v->as_int(value);
+  } else if constexpr (std::is_same_v<T, float>) {
+    value = v->as_float(value);
+  } else if constexpr (std::is_same_v<T, std::string>) {
+    value = v->as_string();
+  }
 }
 
-bool ValidProfileId(ProfileId id) {
-  const std::vector<ProfileId> order = ReadProfileOrder();
-  return std::find(order.begin(), order.end(), id) != order.end();
+template <typename T>
+void WriteValue(const std::string& root, const char* key, const T& value) {
+  JsonStore::Get().EnsureLoaded();
+  const std::string full_key = root + CStrToString(key);
+  json::Value& target = JsonStore::Get().root().ensure(full_key);
+  if constexpr (std::is_same_v<T, bool>) {
+    target = json::Value(value);
+  } else if constexpr (std::is_same_v<T, int>) {
+    target = json::Value(value);
+  } else if constexpr (std::is_same_v<T, float>) {
+    target = json::Value(value);
+  } else if constexpr (std::is_same_v<T, std::string>) {
+    target = json::Value(value);
+  }
 }
 
 void LoadSettingsValues(Settings& settings, const std::string& key_prefix) {
@@ -198,21 +361,12 @@ void SyncPassOrder(Settings& settings, bool ensure_nonempty) {
   }
 }
 
-// The key source reads the pass-order setting directly from the store. The
-// Pass Order section is registered before every pass-keyed instanced section
-// (Pass, its two model grades, the four HDR sections, and Exposure Mask)
-// so ctl's schema-order load has already populated it when those sections
-// ask for their instance keys.
 std::vector<ctl::InstanceKey> InstanceKeysForSections(
     const void* context, const std::string& section) {
-  const bool pass_indexed = section == feature::pass::kSection ||
-                            section == feature::pass::kGradeInputSection ||
-                            section == feature::pass::kGradeOutputSection ||
-                            section == feature::hdr::kSection ||
-                            section == feature::hdr::kGameSection ||
-                            section == feature::hdr::kAdaptiveSection ||
-                            section == feature::hdr::kLocalSection ||
-                            section == feature::exposure_mask::kSection;
+  bool pass_indexed = false;
+  for (const char* s : kPassSections) {
+    if (section == s) { pass_indexed = true; break; }
+  }
   if (!pass_indexed) return {};
 
   const auto& store = *static_cast<const ctl::ValueStore*>(context);
@@ -225,30 +379,45 @@ std::vector<ctl::InstanceKey> InstanceKeysForSections(
   return keys;
 }
 
-// A fresh store is used when inspecting a profile's instance list. Loading
-// only its single-instance settings is enough to resolve Pass Order without
-// instantiating or merging the live pass sections.
-void LoadProfileOrderStore(ctl::ValueStore& store, ProfileId id) {
-  ctl::ReshadeConfigReader reader;
-  ctl::Load(store, reader, ProfileDataPrefix(id), nullptr, nullptr,
-            ctl::PersistenceTarget::Profile);
-}
-
 void LoadStore(Settings& settings, const std::string& prefix,
                ctl::PersistenceTarget target) {
+  JsonStore::Get().EnsureLoaded();
   ctl::ValueStore& store = feature::SettingsStore();
   store.ResetToDefaults(target);
-  ctl::ReshadeConfigReader reader;
+  ctl::JsonConfigReader reader(JsonStore::Get().root());
   ctl::Load(store, reader, prefix, &InstanceKeysForSections, &store, target);
   SyncPassOrder(settings, true);
 }
 
-void SaveStore(const Settings& settings, const std::string& prefix,
-               ctl::PersistenceTarget target) {
+// Serialize the current ctl store as a self-contained data subtree, with
+// pass ids compacted to i1..iN. The result is what gets written as a preset's
+// "Data" and can be pasted into the root as "S" without breaking.
+json::Value BuildPresetData() {
+  WritePassOrder(feature::SettingsStore(), g_settings.pass_order);
+  json::Value data = json::Value::MakeObject();
+  {
+    ctl::JsonConfigWriter writer(data);
+    ctl::Save(feature::SettingsStore(), writer, "",
+              &InstanceKeysForSections, &feature::SettingsStore(),
+              ctl::PersistenceTarget::Profile);
+  }
+  if (json::Value* s = data.find("S")) {
+    CompactPassKeysInTree(*s);
+  }
+  data["Version"] = json::Value(1);
+  return data;
+}
+
+// Replace the current store from a preset Data subtree. Uses the loaded
+// store's Pass Order to resolve instance keys, exactly as the normal load
+// path does.
+void ApplyPresetData(const json::Value& data) {
   ctl::ValueStore& store = feature::SettingsStore();
-  WritePassOrder(store, settings.pass_order);
-  ctl::ReshadeConfigWriter writer;
-  ctl::Save(store, writer, prefix, &InstanceKeysForSections, &store, target);
+  store.ResetToDefaults(ctl::PersistenceTarget::Profile);
+  ctl::JsonConfigReader reader(data);
+  ctl::Load(store, reader, "", &InstanceKeysForSections, &store,
+            ctl::PersistenceTarget::Profile);
+  SyncPassOrder(g_settings, true);
 }
 
 }  // namespace
@@ -269,63 +438,25 @@ void SetPassOrder(Settings& settings, feature::pass::PassOrder order) {
 }
 
 feature::pass::PassId NewPassId() {
-  uint64_t next = 1;
-  std::string next_text;
-  ReadValue("", kNextPassIdKey, next_text);
-  if (!next_text.empty()) {
-    char* end = nullptr;
-    const unsigned long long parsed =
-        std::strtoull(next_text.c_str(), &end, 10);
-    if (end != next_text.c_str() && *end == '\0' && parsed >= 1) {
-      next = parsed;
-    }
-  }
-  // The counter is the source of truth, but the current pass list is
-  // also consulted so a hand-edited or stale counter cannot hand out
-  // an id that is already in play.
+  // No persistent counter. Pass ids on disk are compacted to i1..iN on every
+  // save, so the next free id is one past the current maximum in memory.
+  feature::pass::PassId next = 1;
   for (feature::pass::PassId id : g_settings.pass_order) {
-    if (static_cast<uint64_t>(id) >= next) {
-      next = static_cast<uint64_t>(id) + 1;
-    }
+    if (id >= next) next = id + 1;
   }
-  const feature::pass::PassId id =
-      static_cast<feature::pass::PassId>(next);
-  WriteValue("", kNextPassIdKey, std::to_string(next + 1));
-  return id;
-}
-
-ProfileId NewProfileId() {
-  uint64_t next = kFirstProfileId;
-  std::string next_text;
-  ReadValue("", kNextProfileIdKey, next_text);
-  if (!next_text.empty()) {
-    char* end = nullptr;
-    const unsigned long long parsed = std::strtoull(next_text.c_str(), &end, 10);
-    if (end != next_text.c_str() && *end == '\0' && parsed >= kFirstProfileId) {
-      next = parsed;
-    }
-  }
-
-  // The persisted high-water mark includes deleted profiles. The order list
-  // also protects against a stale/missing counter when profiles still exist.
-  for (ProfileId id : ReadProfileOrder()) {
-    if (static_cast<uint64_t>(id) >= next) {
-      next = static_cast<uint64_t>(id) + 1;
-    }
-  }
-  if (next > std::numeric_limits<ProfileId>::max()) return 0;
-
-  const ProfileId id = static_cast<ProfileId>(next);
-  WriteValue("", kNextProfileIdKey, std::to_string(next + 1));
-  return id;
+  return next;
 }
 
 void LoadSettings() {
   DLSSNR_PROFILE_CTL_L1("LoadSettings");
-  // ctl loads the order setting before the instanced sections, then uses it
-  // to resolve the active pass keys for this profile.
+  // EnsureLoaded migrates the file to the current shape (array presets,
+  // compact pass keys, no legacy counters) before anything is read.
+  JsonStore::Get().EnsureLoaded();
   LoadSettingsValues(g_settings, "");
   LoadStore(g_settings, "", ctl::PersistenceTarget::Global);
+  // Persist the migration and any state created by the load so the on-disk
+  // form matches what the addon now saves.
+  SaveSettings();
   {
     const ctl::InstanceKey shared = ctl::InstanceKey::FromInt(0);
     const bool clone_resources = feature::SettingsStore().Read(
@@ -339,147 +470,199 @@ void LoadSettings() {
 void SaveSettings() {
   DLSSNR_PROFILE_CTL_L1("SaveSettings");
   TRACE_SETTINGS(g_settings);
+  JsonStore::Get().EnsureLoaded();
+  json::Value& root = JsonStore::Get().root();
+
+  WritePassOrder(feature::SettingsStore(), g_settings.pass_order);
+
+  // Serialize into a scratch value so the pass keys can be compacted before
+  // merging back. The live store keeps whatever ids the session is running
+  // with; only the on-disk copy is renumbered.
+  json::Value temp = json::Value::MakeObject();
+  {
+    ctl::JsonConfigWriter writer(temp);
+    ctl::Save(feature::SettingsStore(), writer, "",
+              &InstanceKeysForSections, &feature::SettingsStore(),
+              ctl::PersistenceTarget::Global);
+  }
+
+  if (json::Value* temp_s = temp.find("S")) {
+    CompactPassKeysInTree(*temp_s);
+    root["S"] = std::move(*temp_s);
+  } else {
+    root.erase("S");
+  }
+
+  root.erase("Version");
   SaveSettingsValues(g_settings, "");
-  SaveStore(g_settings, "", ctl::PersistenceTarget::Global);
+  root["Version"] = json::Value(1);
+
+  // Drop any top-level key the addon no longer writes, so legacy fields from
+  // older builds (PassNextId, UserPresetOrder, UserPresetNextId, ...) cannot
+  // survive forever.
+  static const char* kKnown[] = { "Version", "Enabled", "S", "UserPreset" };
+  std::set<std::string> known(std::begin(kKnown), std::end(kKnown));
+  std::vector<std::string> drop;
+  for (const auto& entry : root.object()) {
+    if (known.find(entry.first) == known.end()) drop.push_back(entry.first);
+  }
+  for (const std::string& key : drop) root.erase(key);
+
+  JsonStore::Get().Save();
 }
 
 void ErasePassKeys(feature::pass::PassId id) {
-  // Every pass-keyed section erases here: the Pass section itself, its two
-  // hosted model grades, the four HDR sections, and Exposure Mask. Their
-  // persisted layout is documented in ctl/serialize.h:
-  //   <prefix>.S.<Section>.K.<keytext>.<setting>
-  // With an empty prefix this becomes "S.<Section>.K.<keytext>.<setting>".
-  // Only settings marked persist are written by Save, so only those need
-  // erasing here.
   ctl::ValueStore& store = feature::SettingsStore();
   const ctl::Schema& schema = store.schema();
-  ctl::ReshadeConfigWriter writer;
   const ctl::InstanceKey key = feature::pass::PassKey(id);
   const std::string key_text = key.ToText();
 
-  const char* pass_sections[] = {
-      feature::pass::kSection,
-      feature::pass::kGradeInputSection,
-      feature::pass::kGradeOutputSection,
-      feature::hdr::kSection,
-      feature::hdr::kGameSection,
-      feature::hdr::kAdaptiveSection,
-      feature::hdr::kLocalSection,
-      feature::exposure_mask::kSection,
-  };
-  for (const char* section_name : pass_sections) {
+  JsonStore::Get().EnsureLoaded();
+  json::Value& root = JsonStore::Get().root();
+
+  for (const char* section_name : kPassSections) {
     const ctl::Section* section = schema.FindSection(section_name);
     if (section == nullptr) continue;
     const std::string base =
         std::string("S.") + section_name + ".K." + key_text;
     for (const auto& setting : section->settings()) {
       if (!setting->meta().persist) continue;
-      writer.Erase(base + "." + setting->meta().name);
+      root.erase_path(base + "." + setting->meta().name);
     }
     store.EraseInstance(section_name, key);
   }
+  JsonStore::Get().Save();
 }
 
+// ---------------------------------------------------------------------------
+// Profiles: an ordered array under UserPreset. Identity is position; there is
+// no external id or index counter. Each preset element is self-contained
+// (Name, Enabled, Data.S) and can be cut or pasted freely.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+json::Value* GetPresetArray() {
+  JsonStore::Get().EnsureLoaded();
+  json::Value& root = JsonStore::Get().root();
+  json::Value* presets = root.find("UserPreset");
+  if (presets == nullptr) {
+    root["UserPreset"] = json::Value::MakeArray();
+    presets = root.find("UserPreset");
+  }
+  if (!presets->is_array()) {
+    // Should have been handled by migration; guard against a hand-edited file.
+    *presets = json::Value::MakeArray();
+  }
+  return presets;
+}
+
+std::string NormalizeProfileName(const char* name) {
+  std::string clean = CStrToString(name);
+  const auto first = clean.find_first_not_of(" \t\r\n");
+  if (first == std::string::npos) return {};
+  const auto last = clean.find_last_not_of(" \t\r\n");
+  clean = clean.substr(first, last - first + 1);
+  if (clean.size() >= kSavedProfileNameCapacity) return {};
+  return clean;
+}
+
+bool ProfileNameExists(const json::Value& arr, const std::string& name,
+                       int skip_index) {
+  const auto& v = arr.array();
+  for (size_t i = 0; i < v.size(); ++i) {
+    if (static_cast<int>(i) == skip_index) continue;
+    if (const json::Value* n = v[i].find("Name")) {
+      if (n->as_string() == name) return true;
+    }
+  }
+  return false;
+}
+
+}  // namespace
+
 uint32_t GetSavedProfiles(SavedProfileInfo* profiles, uint32_t capacity) {
-  const std::vector<ProfileId> order = ReadProfileOrder();
-  const uint32_t count = static_cast<uint32_t>(order.size());
+  json::Value* arr = GetPresetArray();
+  const uint32_t count = static_cast<uint32_t>(arr->array().size());
   if (profiles != nullptr) {
     const uint32_t available = std::min(count, capacity);
     for (uint32_t i = 0; i < available; ++i) {
-      profiles[i].id = order[i];
-      ReadProfileName(profiles[i].id, profiles[i].name,
-                      sizeof(profiles[i].name));
+      profiles[i].id = i + 1;  // 1-based index into UserPreset
+      std::string name;
+      if (json::Value* n = arr->array()[i].find("Name")) {
+        name = n->as_string();
+      }
+      std::snprintf(profiles[i].name, sizeof(profiles[i].name), "%s",
+                    name.c_str());
     }
   }
   return count;
 }
 
 bool SaveCurrentAsProfile(const char* name) {
-  DLSSNR_PROFILE_CTL_L2("SaveCurrentAsProfile");
-  std::string clean_name = CStrToString(name);
-  const auto first = clean_name.find_first_not_of(" \t\r\n");
-  if (first == std::string::npos) return false;
-  const auto last = clean_name.find_last_not_of(" \t\r\n");
-  clean_name = clean_name.substr(first, last - first + 1);
-  if (clean_name.size() >= kSavedProfileNameCapacity) return false;
+  const std::string clean = NormalizeProfileName(name);
+  if (clean.empty()) return false;
+  json::Value* arr = GetPresetArray();
+  if (arr->array().size() >= kMaxSavedProfiles) return false;
+  if (ProfileNameExists(*arr, clean, -1)) return false;
 
-  std::vector<ProfileId> order = ReadProfileOrder();
-  if (order.size() >= kMaxSavedProfiles) return false;
-  for (ProfileId id : order) {
-    char existing[kSavedProfileNameCapacity] = {};
-    ReadProfileName(id, existing, sizeof(existing));
-    if (clean_name == existing) return false;
-  }
+  json::Value preset = json::Value::MakeObject();
+  preset["Name"] = json::Value(clean);
+  preset["Enabled"] = json::Value(g_settings.enabled);
+  preset["Data"] = BuildPresetData();
 
-  const ProfileId id = NewProfileId();
-  if (id == 0) return false;
-  const std::string value_prefix = ProfileValuePrefix(id);
-  WriteProfileName(id, clean_name.c_str());
-  SaveSettingsValues(g_settings, value_prefix);
-  SaveStore(g_settings, ProfileDataPrefix(id), ctl::PersistenceTarget::Profile);
-  order.push_back(id);
-  WriteProfileOrder(order);
+  arr->array().push_back(std::move(preset));
+  JsonStore::Get().Save();
   return true;
 }
 
 bool RenameSavedProfile(ProfileId id, const char* name) {
-  DLSSNR_PROFILE_CTL_L2("RenameSavedProfile");
-  if (!ValidProfileId(id)) return false;
+  json::Value* arr = GetPresetArray();
+  if (id < kFirstProfileId || id > arr->array().size()) return false;
+  const std::string clean = NormalizeProfileName(name);
+  if (clean.empty()) return false;
+  const size_t idx = static_cast<size_t>(id - 1);
+  if (ProfileNameExists(*arr, clean, static_cast<int>(idx))) return false;
 
-  std::string clean_name = CStrToString(name);
-  const auto first = clean_name.find_first_not_of(" \t\r\n");
-  if (first == std::string::npos) return false;
-  const auto last = clean_name.find_last_not_of(" \t\r\n");
-  clean_name = clean_name.substr(first, last - first + 1);
-  if (clean_name.size() >= kSavedProfileNameCapacity) return false;
-
-  for (ProfileId other_id : ReadProfileOrder()) {
-    if (other_id == id) continue;
-    char existing[kSavedProfileNameCapacity] = {};
-    ReadProfileName(other_id, existing, sizeof(existing));
-    if (clean_name == existing) return false;
-  }
-
-  WriteProfileName(id, clean_name.c_str());
+  arr->array()[idx]["Name"] = json::Value(clean);
+  JsonStore::Get().Save();
   return true;
 }
 
 bool SaveCurrentToProfile(ProfileId id) {
-  DLSSNR_PROFILE_CTL_L2("SaveCurrentToProfile");
-  if (!ValidProfileId(id)) return false;
+  json::Value* arr = GetPresetArray();
+  if (id < kFirstProfileId || id > arr->array().size()) return false;
+  const size_t idx = static_cast<size_t>(id - 1);
 
-  // Remove all schema-defined keys from the old pass set before overwriting
-  // the profile. This prevents removed pass ids from leaving stale overrides
-  // behind when the profile is saved with fewer or different passes.
-  ctl::ValueStore previous(feature::SettingsStore().schema());
-  LoadProfileOrderStore(previous, id);
-  ctl::ReshadeConfigWriter writer;
-  ctl::Delete(feature::SettingsStore(), writer, ProfileDataPrefix(id),
-              &InstanceKeysForSections, &previous,
-              ctl::PersistenceTarget::Profile);
+  json::Value& preset = arr->array()[idx];
+  std::string name;
+  if (json::Value* n = preset.find("Name")) name = n->as_string();
 
-  SaveSettingsValues(g_settings, ProfileValuePrefix(id));
-  SaveStore(g_settings, ProfileDataPrefix(id), ctl::PersistenceTarget::Profile);
+  preset = json::Value::MakeObject();
+  preset["Name"] = json::Value(name);
+  preset["Enabled"] = json::Value(g_settings.enabled);
+  preset["Data"] = BuildPresetData();
+  JsonStore::Get().Save();
   return true;
 }
 
 bool LoadSavedProfile(ProfileId id) {
   DLSSNR_PROFILE_CTL_L2("LoadSavedProfile");
-  if (!ValidProfileId(id)) return false;
-  Settings loaded = g_settings;
-  LoadSettingsValues(loaded, ProfileValuePrefix(id));
-  // The store is process-wide, so loading a profile has to replace it, not
-  // merge into it -- otherwise the previous profile's HDR/mask overrides
-  // would survive into the one being loaded.
-  // Profile blocks use the stable-id schema only. Do not import old positional
-  // profile fields into a newly created block that happens to reuse its number.
-  LoadStore(loaded, ProfileDataPrefix(id), ctl::PersistenceTarget::Profile);
-  g_settings = loaded;
-  if (std::find(g_settings.pass_order.begin(), g_settings.pass_order.end(),
-                g_settings.active_pass_id) == g_settings.pass_order.end()) {
-    g_settings.active_pass_id =
-        g_settings.pass_order.empty() ? 0 : g_settings.pass_order.front();
+  json::Value* arr = GetPresetArray();
+  if (id < kFirstProfileId || id > arr->array().size()) return false;
+  const size_t idx = static_cast<size_t>(id - 1);
+  json::Value& preset = arr->array()[idx];
+
+  if (json::Value* enabled_v = preset.find("Enabled")) {
+    g_settings.enabled = enabled_v->as_bool(true);
+  } else {
+    g_settings.enabled = true;
   }
+
+  json::Value* data = preset.find("Data");
+  if (data == nullptr || !data->is_object()) return false;
+  ApplyPresetData(*data);
+
   {
     const ctl::InstanceKey shared = ctl::InstanceKey::FromInt(0);
     const bool clone_resources = feature::SettingsStore().Read(
@@ -493,26 +676,12 @@ bool LoadSavedProfile(ProfileId id) {
 
 bool DeleteSavedProfile(ProfileId id) {
   DLSSNR_PROFILE_CTL_L2("DeleteSavedProfile");
-  std::vector<ProfileId> order = ReadProfileOrder();
-  const auto found = std::find(order.begin(), order.end(), id);
-  if (found == order.end()) return false;
-
-  order.erase(found);
-  WriteProfileOrder(order);
-
-  // Resolve the profile's own instance set, then let ctl erase every
-  // registered profile-persisted setting for exactly those instances.
-  ctl::ValueStore profile(feature::SettingsStore().schema());
-  LoadProfileOrderStore(profile, id);
-  ctl::ReshadeConfigWriter writer;
-  ctl::Delete(feature::SettingsStore(), writer, ProfileDataPrefix(id),
-              &InstanceKeysForSections, &profile,
-              ctl::PersistenceTarget::Profile);
-
-  const std::string value_prefix = ProfileValuePrefix(id);
-  writer.Erase(ProfileNameKey(id));
-  writer.Erase(value_prefix + "Enabled");
-
+  json::Value* arr = GetPresetArray();
+  if (id < kFirstProfileId || id > arr->array().size()) return false;
+  const size_t idx = static_cast<size_t>(id - 1);
+  auto& v = arr->array();
+  v.erase(v.begin() + static_cast<std::ptrdiff_t>(idx));
+  JsonStore::Get().Save();
   return true;
 }
 

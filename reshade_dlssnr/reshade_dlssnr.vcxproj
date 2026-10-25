@@ -326,6 +326,8 @@
     <ClInclude Include="ctl\trace.h" />
     <ClInclude Include="ctl\types.h" />
     <ClInclude Include="ctl\usage\config.h" />
+    <ClInclude Include="ctl\usage\json.h" />
+    <ClInclude Include="ctl\usage\json_config.h" />
     <ClInclude Include="ctl\values.h" />
     <ClInclude Include="fragments\grade_rows\rows.h" />
     <ClInclude Include="fragments\hdr_filter_rows\rows.h" />
@@ -408,6 +410,8 @@
     <ClCompile Include="ctl\trace.cpp" />
     <ClCompile Include="ctl\types.cpp" />
     <ClCompile Include="ctl\usage\config.cpp" />
+    <ClCompile Include="ctl\usage\json.cpp" />
+    <ClCompile Include="ctl\usage\json_config.cpp" />
     <ClCompile Include="ctl\values.cpp" />
     <ClCompile Include="fragments\grade_rows\rows.cpp" />
     <ClCompile Include="fragments\hdr_filter_rows\rows.cpp" />
