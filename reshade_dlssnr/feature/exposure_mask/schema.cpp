@@ -44,7 +44,7 @@ void RegisterExposureMaskSchema(ctl::Schema& schema) {
       .Tooltip("This pass builds its Exposure Mask after model evaluation. "
                "The mask affects only this pass's next-frame HDR metering.");
 
-  mask.Add<ctl::FloatSetting>(kEditStrength, "Edit Strength", 1.0f)
+  mask.Add<ctl::FloatSetting>(kEditStrength, "Edit Strength", 0.5f)
       .ClampRange(0.1f, 8.0f)
       .Tooltip("Scale the measured model-input/output difference before "
                "thresholding.")
