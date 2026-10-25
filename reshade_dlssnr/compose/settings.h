@@ -16,7 +16,7 @@ struct ResidualSettings {
   // low-resolution neighborhood. It does not scale the residual itself.
   float upsample_sharpness = 8.0f;
   float ratio_eps = 1e-3f;
-  float ratio_brighten = 64.0f;
+  float ratio_brighten = 4.0f;
   float ratio_darken = 1.0f / 16.0f;
   bool ratio_clamps_enabled = true;
 

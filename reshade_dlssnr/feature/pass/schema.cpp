@@ -475,8 +475,8 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .Tooltip("Denominator floor for the per-channel residual log ratio. "
                "Keeps the residual finite when a channel is near zero. "
                "Applies to both SDR and HDR composition.");
-  pass.Add<ctl::FloatSetting>(kRatioBrighten, "Ratio Brighten", 64.0f)
-      .ClampRange(1.0f, 256.0f)
+  pass.Add<ctl::FloatSetting>(kRatioBrighten, "Ratio Brighten", 4.0f)
+      .ClampRange(1.0f, 16.0f)
       .EnableWhen(&RatioClampsEnabled)
       .Category(kCatResidualEdits)
       .Tooltip("Upper bound on the per-channel residual ratio when Ratio "
