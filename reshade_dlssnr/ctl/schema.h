@@ -121,6 +121,11 @@ class Section {
   SectionKind kind() const { return kind_; }
   bool instanced() const { return kind_ == SectionKind::Instanced; }
 
+  Section& DefaultPersistenceBackend(PersistenceBackend backend) {
+    default_backend_ = backend;
+    return *this;
+  }
+
   // Render the named bool setting as a checkbox in this section's header.
   // The setting remains the source of truth; its normal row is omitted.
   Section& HeaderToggle(const char* setting) {
@@ -138,6 +143,7 @@ class Section {
   template <typename T, typename... Args>
   T& Add(Args&&... args) {
     auto setting = std::make_unique<T>(std::forward<Args>(args)...);
+    setting->meta_mutable().backend = default_backend_;
     T& ref = *setting;
     settings_.push_back(std::move(setting));
     return ref;
@@ -206,6 +212,7 @@ class Section {
 
   std::string name_;
   SectionKind kind_;
+  PersistenceBackend default_backend_ = PersistenceBackend::Json;
   uint32_t index_ = 0;
   std::vector<std::unique_ptr<Setting>> settings_;
   std::string header_toggle_setting_;
@@ -220,8 +227,14 @@ class Section {
 // The frozen, validated description of every section. Built once at startup.
 class Schema {
  public:
+  Schema& DefaultPersistenceBackend(PersistenceBackend backend) {
+    default_backend_ = backend;
+    return *this;
+  }
+
   Section& AddSection(std::string name, SectionKind kind) {
     sections_.push_back(std::make_unique<Section>(std::move(name), kind));
+    sections_.back()->DefaultPersistenceBackend(default_backend_);
     return *sections_.back();
   }
 
@@ -254,6 +267,7 @@ class Schema {
  private:
   std::vector<std::unique_ptr<Section>> sections_;
   std::vector<std::vector<Row>> rows_;
+  PersistenceBackend default_backend_ = PersistenceBackend::Json;
   bool built_ = false;
 };
 

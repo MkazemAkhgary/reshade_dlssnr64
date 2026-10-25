@@ -281,7 +281,8 @@ void ValueStore::ResetToDefaults(PersistenceTarget target) {
       for (size_t id = 0; id < count; ++id) {
         const Setting* setting = SettingAt(static_cast<uint32_t>(id));
         if (target == PersistenceTarget::Profile && setting != nullptr &&
-            !setting->meta().persist_in_profiles) {
+            (!setting->meta().persist_in_profiles ||
+             setting->meta().backend != PersistenceBackend::Json)) {
           continue;
         }
         SettingState& state = instance.states[id];

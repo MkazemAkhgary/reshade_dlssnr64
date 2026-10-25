@@ -85,8 +85,10 @@ bool ReadValue(KeyValueReader& reader, const std::string& key,
   return false;
 }
 
-bool ShouldPersist(const Setting& setting, PersistenceTarget target) {
+bool ShouldPersist(const Setting& setting, PersistenceTarget target,
+                   PersistenceBackend backend) {
   if (!setting.meta().persist) return false;
+  if (setting.meta().backend != backend) return false;
   return target == PersistenceTarget::Global ||
          setting.meta().persist_in_profiles;
 }
@@ -98,14 +100,15 @@ Value ValueToWrite(const Setting& setting, const SettingState& state) {
 void SaveInstance(ValueStore& store, KeyValueWriter& writer,
                   const std::string& prefix, const Section& section,
                   const Instance& instance, bool instanced,
-                  PersistenceTarget target) {
+                  PersistenceTarget target,
+                  PersistenceBackend backend) {
   const std::string base =
       InstancePrefix(prefix, section.name(), instanced, instance.key);
   const uint32_t offset = store.SettingOffsetOf(section);
   for (uint32_t i = 0; i < section.settings().size(); ++i) {
     const Setting& setting = *section.settings()[i];
     const SettingState& state = instance.states[offset + i];
-    if (!ShouldPersist(setting, target)) continue;
+    if (!ShouldPersist(setting, target, backend)) continue;
     WriteValue(writer, Join(base, setting.meta().name), setting,
                ValueToWrite(setting, state));
   }
@@ -115,7 +118,8 @@ void SaveInstance(ValueStore& store, KeyValueWriter& writer,
 
 void Save(ValueStore& store, KeyValueWriter& writer,
           const std::string& prefix, const InstanceKeySource& source,
-          const void* context, PersistenceTarget target) {
+          const void* context, PersistenceTarget target,
+          PersistenceBackend backend) {
   DLSSNR_PROFILE_CTL_L2("ctl::Save");
   writer.WriteInt(Join(prefix, "Version"), kSerializeVersion);
 
@@ -127,7 +131,8 @@ void Save(ValueStore& store, KeyValueWriter& writer,
       // Single-instance sections: one block, no key.
       InstanceSet& set = store.SectionSet(section);
       const Instance& instance = set.Get(set.single_key());
-      SaveInstance(store, writer, prefix, section, instance, false, target);
+      SaveInstance(store, writer, prefix, section, instance, false, target,
+                   backend);
       continue;
     }
 
@@ -135,7 +140,8 @@ void Save(ValueStore& store, KeyValueWriter& writer,
     InstanceSet& set = store.SectionSet(section);
     if (source == nullptr) {
       for (const Instance& instance : set.instances()) {
-        SaveInstance(store, writer, prefix, section, instance, true, target);
+        SaveInstance(store, writer, prefix, section, instance, true, target,
+                     backend);
       }
     } else {
       const std::vector<InstanceKey> keys = source(context, section.name());
@@ -143,7 +149,8 @@ void Save(ValueStore& store, KeyValueWriter& writer,
         // Declared keys are part of the save contract even if a collapsed UI
         // has not touched that section yet; Get creates the default instance.
         const Instance& instance = set.Get(key);
-        SaveInstance(store, writer, prefix, section, instance, true, target);
+        SaveInstance(store, writer, prefix, section, instance, true, target,
+                     backend);
       }
     }
   }
@@ -151,7 +158,8 @@ void Save(ValueStore& store, KeyValueWriter& writer,
 
 void Delete(ValueStore& store, KeyValueWriter& writer,
             const std::string& prefix, const InstanceKeySource& source,
-            const void* context, PersistenceTarget target) {
+            const void* context, PersistenceTarget target,
+            PersistenceBackend backend) {
   DLSSNR_PROFILE_CTL_L2("ctl::Delete");
   writer.Erase(Join(prefix, "Version"));
 
@@ -162,7 +170,7 @@ void Delete(ValueStore& store, KeyValueWriter& writer,
       const std::string base = InstancePrefix(prefix, section.name(), false, {});
       for (const auto& setting_ptr : section.settings()) {
         const Setting& setting = *setting_ptr;
-        if (!ShouldPersist(setting, target)) continue;
+        if (!ShouldPersist(setting, target, backend)) continue;
         writer.Erase(Join(base, setting.meta().name));
       }
       continue;
@@ -174,7 +182,7 @@ void Delete(ValueStore& store, KeyValueWriter& writer,
       const std::string base = InstancePrefix(prefix, section.name(), true, key);
       for (const auto& setting_ptr : section.settings()) {
         const Setting& setting = *setting_ptr;
-        if (!ShouldPersist(setting, target)) continue;
+        if (!ShouldPersist(setting, target, backend)) continue;
         writer.Erase(Join(base, setting.meta().name));
       }
     }
@@ -183,7 +191,8 @@ void Delete(ValueStore& store, KeyValueWriter& writer,
 
 void Load(ValueStore& store, KeyValueReader& reader,
           const std::string& prefix, const InstanceKeySource& source,
-          const void* context, PersistenceTarget target) {
+          const void* context, PersistenceTarget target,
+          PersistenceBackend backend) {
   DLSSNR_PROFILE_CTL_L2("ctl::Load");
   // A version we do not recognise is not an error: unknown keys are skipped,
   // and every setting keeps its declared default, so a newer or older file
@@ -202,7 +211,7 @@ void Load(ValueStore& store, KeyValueReader& reader,
       const uint32_t offset = store.SettingOffsetOf(section);
       for (uint32_t i = 0; i < section.settings().size(); ++i) {
         const Setting& setting = *section.settings()[i];
-        if (!ShouldPersist(setting, target)) continue;
+        if (!ShouldPersist(setting, target, backend)) continue;
         SettingState& state = instance.states[offset + i];
         Value candidate = setting.DefaultValue();
         if (!ReadValue(reader, Join(base, setting.meta().name), setting,
@@ -234,7 +243,7 @@ void Load(ValueStore& store, KeyValueReader& reader,
           InstancePrefix(prefix, section.name(), true, key);
       for (uint32_t i = 0; i < section.settings().size(); ++i) {
         const Setting& setting = *section.settings()[i];
-        if (!ShouldPersist(setting, target)) continue;
+        if (!ShouldPersist(setting, target, backend)) continue;
         SettingState& state = instance.states[offset + i];
         Value candidate = setting.DefaultValue();
         if (!ReadValue(reader, Join(base, setting.meta().name), setting,

@@ -89,7 +89,8 @@ void Save(ValueStore& store, KeyValueWriter& writer,
           const std::string& prefix = {},
           const InstanceKeySource& source = nullptr,
           const void* context = nullptr,
-          PersistenceTarget target = PersistenceTarget::Global);
+          PersistenceTarget target = PersistenceTarget::Global,
+          PersistenceBackend backend = PersistenceBackend::Json);
 
 // Erase every persistable key in a serialized block. The schema enumerates
 // the setting names; for instanced sections, `source` supplies the instance
@@ -100,7 +101,8 @@ void Delete(ValueStore& store, KeyValueWriter& writer,
             const std::string& prefix = {},
             const InstanceKeySource& source = nullptr,
             const void* context = nullptr,
-            PersistenceTarget target = PersistenceTarget::Global);
+            PersistenceTarget target = PersistenceTarget::Global,
+            PersistenceBackend backend = PersistenceBackend::Json);
 
 // Load into the store. Unknown keys and unknown settings are skipped. Falls
 // back to the declared default for every setting the config does not mention,
@@ -117,7 +119,8 @@ void Load(ValueStore& store, KeyValueReader& reader,
           const std::string& prefix = {},
           const InstanceKeySource& source = nullptr,
           const void* context = nullptr,
-          PersistenceTarget target = PersistenceTarget::Global);
+          PersistenceTarget target = PersistenceTarget::Global,
+          PersistenceBackend backend = PersistenceBackend::Json);
 
 }  // namespace ctl
 }  // namespace reshade_dlssnr

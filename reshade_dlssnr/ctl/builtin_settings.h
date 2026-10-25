@@ -55,6 +55,7 @@ class FloatSetting : public Setting {
     return *this;
   }
   FloatSetting& Format(const char* fmt) { format_ = CStrToString(fmt); return *this; }
+  FloatSetting& Backend(PersistenceBackend backend) { meta_.backend = backend; return *this; }
   FloatSetting& NoSave() { meta_.persist = false; return *this; }
 
   Value DefaultValue() const override;
@@ -117,6 +118,7 @@ class IntSetting : public Setting {
     has_clamp_range_ = true;
     return *this;
   }
+  IntSetting& Backend(PersistenceBackend backend) { meta_.backend = backend; return *this; }
   IntSetting& NoSave() { meta_.persist = false; return *this; }
 
   Value DefaultValue() const override;
@@ -160,6 +162,7 @@ class BoolSetting : public Setting {
     return *this;
   }
   BoolSetting& CategoryToggle(bool on = true) { meta_.category_toggle = on; return *this; }
+  BoolSetting& Backend(PersistenceBackend backend) { meta_.backend = backend; return *this; }
   BoolSetting& NoSave() { meta_.persist = false; return *this; }
 
   Value DefaultValue() const override;
@@ -201,6 +204,7 @@ class StringSetting : public Setting {
     SetVisible(visible, context);
     return *this;
   }
+  StringSetting& Backend(PersistenceBackend backend) { meta_.backend = backend; return *this; }
   StringSetting& NoSave() { meta_.persist = false; return *this; }
   StringSetting& MaxLength(size_t length) { max_length_ = length; return *this; }
 
@@ -232,6 +236,7 @@ class IntListSetting : public Setting {
   IntListSetting& MinItems(size_t count) { min_items_ = count; return *this; }
   IntListSetting& UniqueItems(bool enabled = true) { unique_items_ = enabled; return *this; }
   IntListSetting& RangeEach(int64_t lo, int64_t hi) { lo_ = lo; hi_ = hi; has_range_ = true; return *this; }
+  IntListSetting& Backend(PersistenceBackend backend) { meta_.backend = backend; return *this; }
   IntListSetting& VisibleWhen(VisibilityPredicate visible, const void* context = nullptr) {
     SetVisible(visible, context);
     return *this;
@@ -314,6 +319,7 @@ class EnumSetting : public Setting {
     SetVisible(visible, context);
     return *this;
   }
+  EnumSetting& Backend(PersistenceBackend backend) { meta_.backend = backend; return *this; }
   EnumSetting& NoSave() { meta_.persist = false; return *this; }
 
   Value DefaultValue() const override;
