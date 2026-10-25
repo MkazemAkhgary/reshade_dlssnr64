@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "compose/settings.h"
+#include "ctl/usage/config.h"
 #include "ctl/usage/json.h"
 #include "ctl/usage/json_config.h"
 #include "feature/settings_store.h"
@@ -380,12 +381,18 @@ std::vector<ctl::InstanceKey> InstanceKeysForSections(
 }
 
 void LoadStore(Settings& settings, const std::string& prefix,
-               ctl::PersistenceTarget target) {
+               ctl::PersistenceTarget target, bool include_ini) {
   JsonStore::Get().EnsureLoaded();
   ctl::ValueStore& store = feature::SettingsStore();
   store.ResetToDefaults(target);
   ctl::JsonConfigReader reader(JsonStore::Get().root());
-  ctl::Load(store, reader, prefix, &InstanceKeysForSections, &store, target);
+  ctl::Load(store, reader, prefix, &InstanceKeysForSections, &store, target,
+            ctl::PersistenceBackend::Json);
+  if (include_ini) {
+    ctl::ReshadeConfigReader ini_reader;
+    ctl::Load(store, ini_reader, prefix, &InstanceKeysForSections, &store,
+              target, ctl::PersistenceBackend::Ini);
+  }
   SyncPassOrder(settings, true);
 }
 
@@ -399,7 +406,8 @@ json::Value BuildPresetData() {
     ctl::JsonConfigWriter writer(data);
     ctl::Save(feature::SettingsStore(), writer, "",
               &InstanceKeysForSections, &feature::SettingsStore(),
-              ctl::PersistenceTarget::Profile);
+              ctl::PersistenceTarget::Profile,
+              ctl::PersistenceBackend::Json);
   }
   if (json::Value* s = data.find("S")) {
     CompactPassKeysInTree(*s);
@@ -416,7 +424,8 @@ void ApplyPresetData(const json::Value& data) {
   store.ResetToDefaults(ctl::PersistenceTarget::Profile);
   ctl::JsonConfigReader reader(data);
   ctl::Load(store, reader, "", &InstanceKeysForSections, &store,
-            ctl::PersistenceTarget::Profile);
+            ctl::PersistenceTarget::Profile,
+            ctl::PersistenceBackend::Json);
   SyncPassOrder(g_settings, true);
 }
 
@@ -453,7 +462,7 @@ void LoadSettings() {
   // compact pass keys, no legacy counters) before anything is read.
   JsonStore::Get().EnsureLoaded();
   LoadSettingsValues(g_settings, "");
-  LoadStore(g_settings, "", ctl::PersistenceTarget::Global);
+  LoadStore(g_settings, "", ctl::PersistenceTarget::Global, true);
   // Persist the migration and any state created by the load so the on-disk
   // form matches what the addon now saves.
   SaveSettings();
@@ -483,7 +492,8 @@ void SaveSettings() {
     ctl::JsonConfigWriter writer(temp);
     ctl::Save(feature::SettingsStore(), writer, "",
               &InstanceKeysForSections, &feature::SettingsStore(),
-              ctl::PersistenceTarget::Global);
+              ctl::PersistenceTarget::Global,
+              ctl::PersistenceBackend::Json);
   }
 
   if (json::Value* temp_s = temp.find("S")) {
@@ -507,6 +517,14 @@ void SaveSettings() {
     if (known.find(entry.first) == known.end()) drop.push_back(entry.first);
   }
   for (const std::string& key : drop) root.erase(key);
+
+  {
+    ctl::ReshadeConfigWriter ini_writer;
+    ctl::Save(feature::SettingsStore(), ini_writer, "",
+              &InstanceKeysForSections, &feature::SettingsStore(),
+              ctl::PersistenceTarget::Global,
+              ctl::PersistenceBackend::Ini);
+  }
 
   JsonStore::Get().Save();
 }

@@ -39,6 +39,7 @@ std::vector<ctl::EnumSetting::Item> DebugViewItems() {
 void RegisterDebugLogSchema(ctl::Schema& schema) {
   DLSSNR_PROFILE_CTL_L3("RegisterDebugLogSchema");
   ctl::Section& debug = schema.AddSection(debug_log::kSection, ctl::SectionKind::Single);
+  debug.DefaultPersistenceBackend(ctl::PersistenceBackend::Ini);
 
   debug
       .Add<ctl::EnumSetting>(debug_log::kDebugView, "Debug View", 0)

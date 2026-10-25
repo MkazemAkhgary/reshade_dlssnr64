@@ -16,6 +16,7 @@ namespace {
 void RegisterPreferencesSchema(ctl::Schema& schema) {
   DLSSNR_PROFILE_CTL_L3("RegisterPreferencesSchema");
   ctl::Section& prefs = schema.AddSection(preferences::kSection, ctl::SectionKind::Single);
+  prefs.DefaultPersistenceBackend(ctl::PersistenceBackend::Ini);
 
   prefs
       .Add<ctl::BoolSetting>(preferences::kShowTooltips, "Show Tooltips", true)
