@@ -112,13 +112,14 @@ void Declare(ctl::Section& section, const std::string& prefix,
 
   group(section.Add<ctl::BoolSetting>(named(names::kCasEnabled).c_str(),
                                       "CAS Sharpening", false))
-      .Tooltip("Apply AMD FidelityFX Contrast Adaptive Sharpening after the "
-               "grade. CAS operates in linear SDR only and is skipped for HDR formats.");
+      .Tooltip("Enable AMD FidelityFX Contrast Adaptive Sharpening on the graded "
+               "result. Runs as a separate dispatch in linear SDR only; skipped for HDR formats.");
 
   group(section.Add<ctl::FloatSetting>(named(names::kCasSharpness).c_str(),
                                        "CAS Strength", 0.5f))
       .ClampRange(0.0f, 1.0f)
-      .Tooltip("FidelityFX CAS sharpness (0 is least, 1 is most).");
+      .Tooltip("Sharpening amount for AMD FidelityFX CAS. 0 applies no sharpening, "
+               "1 applies maximum sharpening.");
 }
 
 }  // namespace grade_rows
