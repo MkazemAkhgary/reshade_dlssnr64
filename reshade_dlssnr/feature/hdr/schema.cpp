@@ -122,24 +122,23 @@ void RegisterHdrSchema(ctl::Schema& schema) {
       .ClampRange(0.0f, 0.33f)
       .Category(kCatAdvanced)
       .Tooltip("BT.2446C pre-desaturation amount.");
-  hdr.Add<ctl::FloatSetting>(kGainMinLog2, "Gain Min", -4.0f)
-      .ClampRange(-32.0f, 0.0f)
-      .Category(kCatAdvanced)
-      .Tooltip("Configured log2 gain metadata minimum.");
-  hdr.Add<ctl::FloatSetting>(kGainMaxLog2, "Gain Max", 6.0f)
-      .ClampRange(0.0f, 32.0f)
-      .Category(kCatAdvanced)
-      .Tooltip("Configured log2 gain metadata maximum.");
-
   // Layer collapsibles are rendered by the HdrLayers hook for this pass key.
   // Category(nullptr) closes Advanced so the layers remain top-level rows.
-  hdr.AddHookAfter(kGainMaxLog2, "HdrLayers", &DrawHdrLayers)
+  hdr.AddHookAfter(kBt2446Crosstalk, "HdrLayers", &DrawHdrLayers)
       .Category(nullptr);
 
   hdr.Add<ctl::BoolSetting>(kDetailedStatistics, "Detailed HDR Statistics", false)
       .Category(kCatDiagnostics)
       .Tooltip("Collect full-frame gain-map range and excursion statistics. Adds two GPU dispatches when enabled.");
-  hdr.AddHookAfter(kDetailedStatistics, "HdrDiagnostics", &DrawHdrDiagnostics)
+  hdr.Add<ctl::FloatSetting>(kGainMinLog2, "Gain Min", -4.0f)
+      .ClampRange(-32.0f, 0.0f)
+      .Category(kCatDiagnostics)
+      .Tooltip("Minimum expected carrier-to-HDR gain in log2 stops. Used only by the diagnostic gain-map statistics and debug views; does not affect composition.");
+  hdr.Add<ctl::FloatSetting>(kGainMaxLog2, "Gain Max", 6.0f)
+      .ClampRange(0.0f, 32.0f)
+      .Category(kCatDiagnostics)
+      .Tooltip("Maximum expected carrier-to-HDR gain in log2 stops. Used only by the diagnostic gain-map statistics and debug views; does not affect composition.");
+  hdr.AddHookAfter(kGainMaxLog2, "HdrDiagnostics", &DrawHdrDiagnostics)
       .Category(kCatDiagnostics);
 
   // --- HDR Game Exposure -------------------------------------------------
