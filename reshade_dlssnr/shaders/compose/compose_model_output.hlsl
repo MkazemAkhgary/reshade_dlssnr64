@@ -25,7 +25,7 @@ float3 ShapeResidualSdr(float3 delta, float3 original_srgb) {
         delta = sign(delta) * pow(abs(delta), kEditGamma);
     }
 
-    if (kResidualChroma < 1.0) {
+    if (kResidualChroma != 1.0) {
         const float3 kL = float3(0.2126, 0.7152, 0.0722);
         float d_luma = dot(delta, kL);
         delta = lerp(float3(d_luma, d_luma, d_luma), delta, kResidualChroma);

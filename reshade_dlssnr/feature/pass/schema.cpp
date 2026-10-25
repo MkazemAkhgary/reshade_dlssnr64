@@ -438,7 +438,7 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .Category(kCatResidualEdits)
       .Tooltip("Scales the model's edit before it is carried onto the source.");
   pass.Add<ctl::FloatSetting>(kResidualChroma, "Chroma Strength", 1.0f)
-      .ClampRange(0.0f, 1.0f)
+      .ClampRange(0.0f, 2.0f)
       .Category(kCatResidualEdits)
       .Tooltip("How much of the edit's chroma lands relative to its "
                "brightness.");
