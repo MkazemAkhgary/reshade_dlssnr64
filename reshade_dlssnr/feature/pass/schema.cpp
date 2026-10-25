@@ -469,7 +469,7 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .Tooltip("Bound the per-channel model residual log ratio to the "
                "[Ratio Darken, Ratio Brighten] range before shaping. "
                "Applies to both SDR and HDR composition.");
-  pass.Add<ctl::FloatSetting>(kRatioEps, "Ratio Eps", 1e-2f)
+  pass.Add<ctl::FloatSetting>(kRatioEps, "Ratio Eps", 1e-3f)
       .ClampRange(1e-6f, 0.5f)
       .Category(kCatResidualEdits)
       .Tooltip("Denominator floor for the per-channel residual log ratio. "
