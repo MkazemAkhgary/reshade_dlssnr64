@@ -164,14 +164,17 @@ using InstanceKeySource =
 
 void Save(ValueStore&, KeyValueWriter&, const std::string& prefix = {},
           const InstanceKeySource& source = nullptr, const void* context = nullptr,
-          PersistenceTarget target = PersistenceTarget::Global);
+          PersistenceTarget target = PersistenceTarget::Global,
+          PersistenceBackend backend = PersistenceBackend::Json);
 void Delete(ValueStore&, KeyValueWriter&,
             const InstanceKeySource& source = nullptr,
             const void* context = nullptr, const std::string& prefix = {},
-            PersistenceTarget target = PersistenceTarget::Global);
+            PersistenceTarget target = PersistenceTarget::Global,
+            PersistenceBackend backend = PersistenceBackend::Json);
 void Load(ValueStore&, KeyValueReader&, const InstanceKeySource& source = nullptr,
           const void* context = nullptr, const std::string& prefix = {},
-          PersistenceTarget target = PersistenceTarget::Global);
+          PersistenceTarget target = PersistenceTarget::Global,
+          PersistenceBackend backend = PersistenceBackend::Json);
 ```
 
 Both key-value interfaces are abstract, so the framework never depends on
@@ -180,7 +183,7 @@ ReShade's config API. Keys are laid out as:
 ```
 <prefix>.Version
 <prefix>.S.<Section>.<setting>              single-instance section
-<prefix>.S.<Section>.K.<keytext>.<setting>  instanced section
+<prefix>.S.<Section>.<keytext>.<setting>    instanced section
 ```
 
 When `prefix` is empty, the leading dot is omitted. `Delete` uses the same
@@ -188,9 +191,10 @@ schema traversal and supplied instance keys to erase every persistable setting
 key in the block, regardless of whether the setting is overridden in the live
 store. It also erases the version key. Missing keys are a silent no-op.
 
-Guarantees: only `persist` settings are written, and profile operations also
-require `persist_in_profiles`; unknown keys and settings are skipped rather
-than failing; an instanced setting left unset stays at its declared default.
+Guarantees: only `persist` settings whose backend matches are written,
+and profile operations also require `persist_in_profiles`; unknown keys
+and settings are skipped rather than failing; an instanced setting left
+unset stays at its declared default.
 `IntListSetting` stores an ordered typed integer list with optional item bounds,
 range clamping, and uniqueness enforcement, so a domain can persist ordering as
 ordinary schema data rather than hand-encoding a comma-separated config field.

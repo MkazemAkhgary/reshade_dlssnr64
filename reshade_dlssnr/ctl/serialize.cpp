@@ -25,7 +25,7 @@ std::string InstancePrefix(const std::string& prefix, const std::string& section
                            bool instanced, const InstanceKey& key) {
   const std::string base = SectionPrefix(prefix, section);
   if (!instanced) return base;
-  return Join(base, "K." + key.ToText());
+  return Join(base, key.ToText());
 }
 
 void WriteValue(KeyValueWriter& writer, const std::string& key,

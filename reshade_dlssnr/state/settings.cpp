@@ -159,11 +159,11 @@ std::vector<int> ReadPassIdsFromTree(json::Value& s_subtree) {
   return ParseIntList(order->as_string());
 }
 
-// Derive pass ids from the keys of the Pass section's K object. Used when
+// Derive pass ids from the Pass section's instance keys. Used when
 // Pass Order.ids is absent so compaction cannot silently drop keys.
 std::vector<int> DeriveIdsFromK(json::Value& s_subtree) {
   std::vector<int> ids;
-  json::Value* k = s_subtree.find("Pass.K");
+  json::Value* k = s_subtree.find("Pass");
   if (k == nullptr || !k->is_object()) return ids;
   for (const auto& entry : k->object()) {
     if (entry.first.empty() || entry.first[0] != 'i') continue;
@@ -196,7 +196,7 @@ void CompactPassKeysInTree(json::Value& s_subtree) {
   }
 
   for (const char* section_name : kPassSections) {
-    json::Value* k = s_subtree.find(std::string(section_name) + ".K");
+    json::Value* k = s_subtree.find(section_name);
     if (k == nullptr || !k->is_object()) continue;
     json::Value new_k = json::Value::MakeObject();
     for (const auto& entry : k->object()) {
@@ -542,7 +542,7 @@ void ErasePassKeys(feature::pass::PassId id) {
     const ctl::Section* section = schema.FindSection(section_name);
     if (section == nullptr) continue;
     const std::string base =
-        std::string("S.") + section_name + ".K." + key_text;
+        std::string("S.") + section_name + "." + key_text;
     for (const auto& setting : section->settings()) {
       if (!setting->meta().persist) continue;
       root.erase_path(base + "." + setting->meta().name);

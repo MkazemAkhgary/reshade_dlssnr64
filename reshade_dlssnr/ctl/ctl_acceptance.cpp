@@ -452,10 +452,8 @@ int main() {
 
     bool key0 = false, key1 = false;
     for (const auto& kv : mem.data) {
-      if (kv.first.find("K.i0") != std::string::npos &&
-          kv.first.find("upsample") != std::string::npos) key0 = true;
-      if (kv.first.find("K.i1") != std::string::npos &&
-          kv.first.find("upsample") != std::string::npos) key1 = true;
+      if (kv.first == "S.Model.i0.upsample") key0 = true;
+      if (kv.first == "S.Model.i1.upsample") key1 = true;
     }
     Check(key0 && key1, "each instance key gets its own serialized block");
   }
@@ -470,10 +468,13 @@ int main() {
 
     bool keyed = false;
     bool present = false;
+    const std::string single_prefix = "S.Preferences.";
     for (const auto& kv : mem.data) {
-      if (kv.first.find("S.Preferences") != std::string::npos) present = true;
-      if (kv.first.find("S.Preferences") != std::string::npos &&
-          kv.first.find("K.") != std::string::npos) keyed = true;
+      if (kv.first.compare(0, single_prefix.size(), single_prefix) != 0)
+        continue;
+      present = true;
+      if (kv.first.find('.', single_prefix.size()) != std::string::npos)
+        keyed = true;
     }
     Check(present, "single-instance section is written");
     Check(!keyed, "single-instance section is not nested under an instance key");
@@ -491,8 +492,7 @@ int main() {
 
     bool upsample_present = false;
     for (const auto& kv : mem.data) {
-      if (kv.first.find("K.i1") != std::string::npos &&
-          kv.first.find("upsample") != std::string::npos) {
+      if (kv.first == "S.Model.i1.upsample") {
         upsample_present = true;
       }
     }
@@ -548,7 +548,7 @@ int main() {
     Save(fx.store, mem);
 
     // Pollute the store with keys the schema knows nothing about.
-    mem.data["S.Model.K.i0.this_setting_does_not_exist"] = "5";
+    mem.data["S.Model.i0.this_setting_does_not_exist"] = "5";
     mem.data["TotallyUnknown.Key"] = "hello";
 
     ValueStore restored(fx.schema);
@@ -1038,14 +1038,14 @@ int main() {
     mem.WriteString("Profile.18.Name", "keep");
     // Simulate a stale child override left by an older save. It is not part of
     // the current live store's owned values, but deletion must still remove it.
-    mem.WriteFloat("Profile.16.Data.S.Model.K.i907.intensity", 1.4f);
+    mem.WriteFloat("Profile.16.Data.S.Model.i907.intensity", 1.4f);
     mem.WriteString("Profile.16.Data.Unrelated", "outside schema");
     mem.WriteString("OtherPrefix.Sentinel", "untouched");
 
     Check(HasPrefix(mem, "Profile.16.Data."),
           "saved schema block contains serialized keys before deletion");
     Check(mem.data.find(
-              "Profile.16.Data.S.Model.K.i612.upsample") == mem.data.end(),
+              "Profile.16.Data.S.Model.i612.upsample") == mem.data.end(),
           "scoped Save excludes live instances outside the supplied key set");
     Delete(fx.store, mem, "Profile.16.Data", &InstanceKeysFromList, &keys);
     bool schema_keys_remain = false;
@@ -1058,7 +1058,7 @@ int main() {
     }
     Check(!schema_keys_remain,
           "Delete erases every schema-defined key under the target prefix");
-    Check(mem.data.find("Profile.16.Data.S.Model.K.i907.intensity") ==
+    Check(mem.data.find("Profile.16.Data.S.Model.i907.intensity") ==
               mem.data.end(),
           "Delete erases stale persisted overrides even when not currently owned");
     Check(HasPrefix(mem, "Profile.18.Data.") &&
