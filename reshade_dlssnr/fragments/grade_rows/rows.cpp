@@ -22,10 +22,10 @@ const char* const kLumaModeTips[] = {
     "remain anchored, concentrating the effect in the midtones.",
     "A smooth lightness adjustment that fades to zero near black and white."};
 
-const char* const kChromaModeNames[] = {"Saturation", "Vibrance"};
+const char* const kChromaModeNames[] = {"Vibrance", "Saturation"};
 const char* const kChromaModeTips[] = {
-    "Scale OKLab chroma by the same factor while preserving perceptual hue.",
-    "Boost muted colors more strongly in OKLab, reducing the effect as chroma rises."};
+    "Boost muted colors more strongly in OKLab, reducing the effect as chroma rises.",
+    "Scale OKLab chroma by the same factor while preserving perceptual hue."};
 
 // Setting names are built from the caller's prefix, so two instances on one
 // section cannot collide.

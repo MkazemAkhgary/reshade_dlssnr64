@@ -19,8 +19,8 @@ enum class GradeLumaMode : int {
 };
 
 enum class GradeChromaMode : int {
-  Saturation = 0,  // uniform perceptual chroma scale
-  Vibrance = 1,    // muted colors receive more chroma
+  Vibrance = 0,    // muted colors receive more chroma
+  Saturation = 1,  // uniform perceptual chroma scale
 };
 
 struct GradeSettings {
@@ -28,7 +28,7 @@ struct GradeSettings {
   float luma = 0.0f;
   float chroma = 0.0f;
   GradeLumaMode luma_mode = GradeLumaMode::Exposure;
-  GradeChromaMode chroma_mode = GradeChromaMode::Saturation;
+  GradeChromaMode chroma_mode = GradeChromaMode::Vibrance;
   float black_level = 0.0f;
   float white_level = 1.0f;
   float contrast = 0.0f;

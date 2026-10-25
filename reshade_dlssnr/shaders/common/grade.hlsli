@@ -236,7 +236,7 @@ float3 GradeLinearCoreFwd(float3 linear_rgb)
         if (kGradeChroma != 0.0)
         {
             float gain = max(1.0 + kGradeChroma, 0.05);
-            if ((int)(kGradeChromaMode + 0.5) != 0)
+            if ((int)(kGradeChromaMode + 0.5) == 0)
             {
                 const float chroma = length(lab.yz);
                 const float normalized_chroma = chroma / max(abs(lab.x), 0.05);
