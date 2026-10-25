@@ -11,7 +11,7 @@ struct ExposureMaskSettings {
   float chroma_threshold = 0.02f;
   float edit_strength = 0.5f;
   float mask_smoothing = 0.5f;
-  float mask_response = 0.15f;
+  float mask_response = 0.5f;
 };
 
 }  // namespace reshade_dlssnr

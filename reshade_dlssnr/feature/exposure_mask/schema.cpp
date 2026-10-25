@@ -54,7 +54,7 @@ void RegisterExposureMaskSchema(ctl::Schema& schema) {
       .Tooltip("Majority-filter the binary exposure votes in a small "
                "neighborhood.")
       .EnableWhen(&MaskEditable);
-  mask.Add<ctl::FloatSetting>(kResponse, "Temporal Response", 0.15f)
+  mask.Add<ctl::FloatSetting>(kResponse, "Temporal Response", 0.5f)
       .ClampRange(0.0f, 1.0f)
       .Tooltip("Blend new mask votes with the previous frame's mask.")
       .EnableWhen(&MaskEditable);
