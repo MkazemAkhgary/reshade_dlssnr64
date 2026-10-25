@@ -10,7 +10,7 @@
 #define kLocalMaxDarken        hdr.LocalExposure.z
 #define kLocalExposureMidtone  hdr.LocalExposure.w
 
-#define kLocalRadiusPx max(hdr.LocalExposureParams.x, 4.0)
+#define kLocalRadiusPx max(hdr.LocalExposureParams.x, 1.0)
 #define kLocalSampleCount ((uint)clamp(round(hdr.LocalExposureParams.y / 4.0) * 4.0, 4.0, 48.0))
 
 float GlobalHdrLumaToSdr(float hdr_luma, float exposure)
@@ -36,6 +36,7 @@ float SampleGlobalSdrLuma(float2 uv)
 
 float LocalBaseLogLuma(float2 uv, float center_log2)
 {
+    if (kLocalRadiusPx <= 1.0) return center_log2;
     uint source_width, source_height;
     gSource.GetDimensions(source_width, source_height);
     const float2 source_size = float2(max(source_width, 1u), max(source_height, 1u));

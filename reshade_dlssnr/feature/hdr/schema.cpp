@@ -245,10 +245,12 @@ void RegisterHdrSchema(ctl::Schema& schema) {
       .Tooltip("Amount of exposure restoration: 0 = no correction, 1 = full correction. "
                "Intermediate values blend the selected restoration in log-exposure space.")
       .EnableWhen(&LayerEnabled, kLocalRestoreEnabled);
-  local.Add<ctl::FloatSetting>(kLocalRadius, "Local Radius", 32.0f)
-      .ClampRange(4.0f, 128.0f)
-      .Tooltip("Radius in source pixels. Larger radii respond to "
-               "broader dark/bright regions instead of individual pixel noise.")
+  local.Add<ctl::FloatSetting>(kLocalRadius, "Local Radius", 8.0f)
+      .ClampRange(1.0f, 32.0f)
+      .Tooltip("Radius in source pixels. A radius of 1 disables multi-tap "
+               "neighborhood sampling and uses only the center pixel. Larger "
+               "radii respond to broader dark/bright regions instead of "
+               "individual pixel noise.")
       .Category(kCatAdvanced)
       .EnableWhen(&LayerEnabled, kLocalEnabled);
   local.Add<ctl::IntSetting>(kLocalSamples, "Neighborhood Samples", 12)

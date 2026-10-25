@@ -56,7 +56,7 @@ struct LocalExposureLayerSettings {
   float shadow_protection = 1.0f;
   float detail_retention = 1.0f;
   float edge_protection = 0.5f;
-  float radius_px = 32.0f;
+  float radius_px = 8.0f;
   int samples = 12;
   bool restore_exposure = false;
   // 0 = exact per-pixel restoration; 1 = uniform global restoration.
