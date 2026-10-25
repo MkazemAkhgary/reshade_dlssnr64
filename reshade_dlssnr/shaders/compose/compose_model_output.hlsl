@@ -11,7 +11,6 @@ Texture2D<float4>   gOriginal    : register(t0);
 Texture2D<float4>   gLowInput    : register(t1);
 Texture2D<float4>   gLowEnhanced : register(t2);
 RWTexture2D<float4> gOutput      : register(u0);
-SamplerState        s0           : register(s0);
 
 #include "common/compose_upsample.hlsli"
 
@@ -53,9 +52,8 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     if (id.x >= Width || id.y >= Height)
         return;
 
-    float2 uv = (float2(id.xy) + 0.5) / float2(Width, Height);
-
-    float4 original = gOriginal.SampleLevel(s0, uv, 0);
+    // 1:1 with the dispatch, so a filtered fetch would only add sampler work.
+    const float4 original = gOriginal.Load(int3(id.xy, 0));
 
     // Reconstruct both model-domain images with the fixed joint-bilateral 3x3 filter.
     float3 in_rgb = float3(0.0, 0.0, 0.0);

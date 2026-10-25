@@ -83,15 +83,14 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         return;
     }
 
-    float3 roundtrip = ForwardHdrToModelSdr(
-        gComposed.SampleLevel(s0, uv, 0.0).rgb, id.xy);
-    // This diagnostic intentionally uses ordinary linear sampling. Its purpose is
-    // to compare the carrier/model domains, not to duplicate the compose filter.
-    float3 model_in = gSource.SampleLevel(s0, uv, 0.0).rgb;
-    float3 model_out = gModelOut.SampleLevel(s0, uv, 0.0).rgb;
-
     float3 display = 0.0;
     if (mode == 0) {
+        // Ordinary linear sampling on purpose: this diagnostic compares the
+        // carrier and model domains, it does not duplicate the compose filter.
+        const float3 roundtrip = ForwardHdrToModelSdr(
+            gComposed.SampleLevel(s0, uv, 0.0).rgb, id.xy);
+        const float3 model_in = gSource.SampleLevel(s0, uv, 0.0).rgb;
+        const float3 model_out = gModelOut.SampleLevel(s0, uv, 0.0).rgb;
         bool right = uv.x >= 0.5;
         bool bottom = uv.y >= 0.5;
         if (!bottom && !right)

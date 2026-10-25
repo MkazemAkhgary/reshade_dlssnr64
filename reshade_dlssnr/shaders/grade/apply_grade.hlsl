@@ -17,8 +17,7 @@ SamplerState s0 : register(s0);
 float3 DecodeSource(float3 c)
 {
     int fmt = (int)(kGradeFormat + 0.5);
-    float3 result = SrgbToLinearExt(c);
-
+    float3 result;
     if (fmt == 1)
         result = max(c, 0.0) *
                  (kScRgbReferenceWhiteNits / kSdrReferenceWhiteNits);
@@ -26,6 +25,8 @@ float3 DecodeSource(float3 c)
         result = PqToNits(c) / kSdrReferenceWhiteNits;
     else if (fmt == 3)
         result = c;
+    else
+        result = SrgbToLinearExt(c);
 
     return result;
 }
@@ -33,15 +34,7 @@ float3 DecodeSource(float3 c)
 float3 EncodeSource(float3 lin)
 {
     int fmt = (int)(kGradeFormat + 0.5);
-    float3 safe = max(lin, 0.0);
-    const float peak = max(safe.r, max(safe.g, safe.b));
-    // Model-input SDR is gamut limited, but clipping each channel independently
-    // changes hue/chroma. Scale the complete RGB vector when it exceeds the
-    // boundary so its chromaticity remains unchanged.
-    if (peak > 1.0)
-        safe *= 1.0 / peak;
-    float3 result = LinearToSrgbExt(safe);
-
+    float3 result;
     if (fmt == 1)
         result = max(lin, 0.0) *
                  (kSdrReferenceWhiteNits / kScRgbReferenceWhiteNits);
@@ -49,6 +42,17 @@ float3 EncodeSource(float3 lin)
         result = NitsToPq(max(lin, 0.0) * kSdrReferenceWhiteNits);
     else if (fmt == 3)
         result = lin;
+    else
+    {
+        float3 safe = max(lin, 0.0);
+        const float peak = max(safe.r, max(safe.g, safe.b));
+        // Model-input SDR is gamut limited, but clipping each channel
+        // independently changes hue/chroma. Scale the complete RGB vector when
+        // it exceeds the boundary so its chromaticity remains unchanged.
+        if (peak > 1.0)
+            safe *= 1.0 / peak;
+        result = LinearToSrgbExt(safe);
+    }
 
     return result;
 }
@@ -75,11 +79,9 @@ float3 RestoreExposureAt(uint2 pixel, float3 linear_rgb)
     return result;
 }
 
-float3 ReadLinearSource(uint2 pixel)
+float3 ReadLinearSource(uint2 pixel, float3 sampled)
 {
-    const float3 sampled = gSource.Load(int3(pixel, 0)).rgb;
-    const float3 result = RestoreExposureAt(pixel, DecodeSource(sampled));
-    return result;
+    return RestoreExposureAt(pixel, DecodeSource(sampled));
 }
 
 float3 EdgeAwareSoftened(uint2 pixel, float3 center)
@@ -97,7 +99,8 @@ float3 EdgeAwareSoftened(uint2 pixel, float3 center)
                     continue;
                 const int2 q = clamp(int2(pixel) + int2(ox, oy), int2(0, 0),
                                      int2(Width, Height) - 1);
-                const float3 neighbor = ReadLinearSource(uint2(q));
+                const float3 neighbor = ReadLinearSource(
+                    uint2(q), gSource.Load(int3(q, 0)).rgb);
                 const float neighbor_luma = dot(neighbor, float3(0.2126, 0.7152, 0.0722));
                 const float spatial = (ox == 0 || oy == 0) ? 2.0 : 1.0;
                 const float range_weight = rcp(1.0 + abs(neighbor_luma - center_luma) * 32.0);
@@ -120,7 +123,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     const uint2 pixel = id.xy;
     const float4 src = gSource.Load(int3(pixel, 0));
-    float3 linear_rgb = ReadLinearSource(pixel);
+    float3 linear_rgb = ReadLinearSource(pixel, src.rgb);
     linear_rgb = EdgeAwareSoftened(pixel, linear_rgb);
     const float3 graded = GradeLinearFwd(linear_rgb);
     gOutput[pixel] = float4(EncodeSource(graded), src.a);
