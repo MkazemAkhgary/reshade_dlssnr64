@@ -37,6 +37,11 @@ class CommandContext {
   uint64_t SignalGpu(ID3D12CommandQueue* command_queue);
   // Synchronous fence for callers that genuinely need completion now.
   void WaitGpu(ID3D12CommandQueue* command_queue);
+  // Blocks until the fence reaches `value`. `timeout_ms` bounds the wait for
+  // callers draining a device about to be replaced. Returns false on timeout,
+  // and when the wait is rejected - a removed device fails the wait instead of
+  // blocking.
+  bool WaitForFenceValue(uint64_t value, DWORD timeout_ms = INFINITE);
   uint64_t LastSignaledFenceValue() const { return last_signaled_fence_value_; }
   uint64_t CompletedFenceValue() const;
 
@@ -93,8 +98,6 @@ class CommandContext {
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> command_list;
     UINT64 fence_value = 0;
   };
-
-  bool WaitForFenceValue(UINT64 value);
 
   std::array<FrameCommands, kCommandRingSize> frames_;
   size_t current_frame_ = 0;

@@ -26,6 +26,7 @@
 #include "local_vtable.h"
 #include "proxy_unwrap.h"
 #include "state/settings.h"
+#include "streamline_compat.h"
 
 namespace reshade_dlssnr::ngx_hook_compat {
 
@@ -363,9 +364,9 @@ static PreDlssColorAdapterFailure CreatePreDlssColorAdapter(
   const bool multisampled = source_desc.SampleDesc.Count > 1;
   const DXGI_FORMAT adapter_format = TypedPreDlssColorFormat(source_desc.Format);
 
-  Microsoft::WRL::ComPtr<ID3D12Device> device;
-  if (FAILED(command_list->GetDevice(IID_PPV_ARGS(&device))) || device == nullptr)
-    return PreDlssColorAdapterFailure::DeviceUnavailable;
+  Microsoft::WRL::ComPtr<ID3D12Device> device =
+      sl_compat::NativeDeviceOf(command_list);
+  if (device == nullptr) return PreDlssColorAdapterFailure::DeviceUnavailable;
 
   Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList1> command_list1;
   if (multisampled) {
@@ -638,6 +639,11 @@ static NVSDK_NGX_Result NVSDK_CONV EvaluateFeatureImpl(
   LogCommandListProxyOnce(is_proxy);
   ID3D12GraphicsCommandList* work_list =
       native_list != nullptr ? native_list.Get() : command_list;
+
+  // Before anything records on this list: guides and pass sessions are bound to
+  // the device that created them, and this hook is the first place a frame on a
+  // new device can be observed.
+  AddonController::Get().EnsureDeviceForCommandList(work_list);
 
   NVSDK_NGX_Feature feature_id = NVSDK_NGX_Feature_Reserved0;
   if (feature_handle != nullptr) {

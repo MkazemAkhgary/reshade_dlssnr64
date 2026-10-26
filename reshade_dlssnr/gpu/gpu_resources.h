@@ -1,11 +1,14 @@
 // The one place addon GPU resources are created, replaced, and released.
 //
-// Two rules hold everywhere in the addon:
+// Three rules hold everywhere in the addon:
 //   1. Allocations go through CreateTexture2D()/CreateBuffer() (or the
 //      CreateUav* wrappers) - nothing else calls CreateCommittedResource.
 //   2. A resource that is replaced while the GPU may still be reading it is
 //      handed to the retire queue, never released inline. The queue binds
 //      each entry to a queue-ordered fence and frees the completed prefix.
+//   3. A slot is bound to the device that created it. Ensure() replaces a slot
+//      that belongs to another device instead of reusing it: a resource from
+//      one device cannot be recorded into a command list from another.
 #pragma once
 
 #include <d3d12.h>
@@ -84,10 +87,11 @@ class ResourceRetireQueue final {
   size_t ReleaseCompleted(uint64_t completed_fence_value);
 
   // Unconditional release, with no fence check. Only legal once the GPU is
-  // known to be idle and will never signal again - shutdown and restart, both
-  // of which wait for a final queue marker. The name states the precondition
-  // because it is the only thing standing between this call and a
-  // use-after-free.
+  // known to be idle and will never signal again - shutdown, restart and device
+  // swap, all of which prove it first. The name states the precondition because
+  // it is the only thing standing between this call and a use-after-free.
+  //
+  // Also starts a new fence epoch, because every caller replaces the fence.
   void ReleaseAllAfterGpuIdle();
 
   // True when an entry is waiting for a fence that has not been signaled yet.
@@ -129,9 +133,10 @@ class ResourceRetireQueue final {
 // There is deliberately no Attach()/Adopt(): an adoption path would be the one
 // way to smuggle a borrowed resource into the owned list.
 
-// One owned texture plus its shape. Replacing it retires the previous texture
-// instead of releasing it, which is the only safe order: the GPU may still be
-// reading it from a command list submitted in an earlier frame.
+// One owned texture plus its shape and the device that created it. Replacing
+// it retires the previous texture instead of releasing it, which is the only
+// safe order: the GPU may still be reading it from a command list submitted in
+// an earlier frame.
 class OwnedTexture final {
  public:
   OwnedTexture() = default;
@@ -147,8 +152,8 @@ class OwnedTexture final {
     return *this;
   }
 
-  // Creates the texture if the slot is empty or its shape differs. `desc` is
-  // used verbatim, including its flags.
+  // Creates the texture if the slot is empty, belongs to a different device, or
+  // has a different shape. `desc` is used verbatim, including its flags.
   bool Ensure(ID3D12Device* device,
               const D3D12_RESOURCE_DESC& desc,
               D3D12_RESOURCE_STATES initial_state,
@@ -167,9 +172,15 @@ class OwnedTexture final {
   bool operator==(std::nullptr_t) const { return resource_ == nullptr; }
   bool operator!=(std::nullptr_t) const { return resource_ != nullptr; }
 
-  bool Matches(uint64_t width, uint64_t height, DXGI_FORMAT format) const {
-    return resource_ != nullptr && width_ == width && height_ == height &&
-           format_ == format;
+  // True when the slot holds a texture of this shape, created on `device`. A
+  // resource from another device cannot be recorded into this device's command
+  // list, so it is never a reuse candidate.
+  bool Matches(ID3D12Device* device,
+               uint64_t width,
+               uint64_t height,
+               DXGI_FORMAT format) const {
+    return resource_ != nullptr && device_.Get() == device &&
+           width_ == width && height_ == height && format_ == format;
   }
 
   uint32_t Width() const { return width_; }
@@ -180,6 +191,7 @@ class OwnedTexture final {
  private:
   void MoveFrom(OwnedTexture& other) noexcept {
     resource_ = std::move(other.resource_);
+    device_ = std::move(other.device_);
     width_ = other.width_;
     height_ = other.height_;
     format_ = other.format_;
@@ -191,13 +203,17 @@ class OwnedTexture final {
   }
 
   Microsoft::WRL::ComPtr<ID3D12Resource> resource_;
+  // No extra lifetime: the resource already holds its device. This exists only
+  // to tell a same-device slot from a stale one.
+  Microsoft::WRL::ComPtr<ID3D12Device> device_;
   uint32_t width_ = 0;
   uint32_t height_ = 0;
   DXGI_FORMAT format_ = DXGI_FORMAT_UNKNOWN;
   const char* name_ = "";
 };
 
-// One owned buffer plus its byte size. Same replacement rule as OwnedTexture.
+// One owned buffer plus its byte size and the device that created it. Same
+// replacement rule as OwnedTexture.
 class OwnedBuffer final {
  public:
   OwnedBuffer() = default;
@@ -230,8 +246,9 @@ class OwnedBuffer final {
   bool operator==(std::nullptr_t) const { return resource_ == nullptr; }
   bool operator!=(std::nullptr_t) const { return resource_ != nullptr; }
 
-  bool Matches(uint64_t bytes) const {
-    return resource_ != nullptr && bytes_ == bytes;
+  // Same shape-and-device rule as OwnedTexture::Matches.
+  bool Matches(ID3D12Device* device, uint64_t bytes) const {
+    return resource_ != nullptr && device_.Get() == device && bytes_ == bytes;
   }
 
   uint64_t Bytes() const { return bytes_; }
@@ -240,6 +257,7 @@ class OwnedBuffer final {
  private:
   void MoveFrom(OwnedBuffer& other) noexcept {
     resource_ = std::move(other.resource_);
+    device_ = std::move(other.device_);
     bytes_ = other.bytes_;
     name_ = other.name_;
     other.bytes_ = 0;
@@ -247,6 +265,7 @@ class OwnedBuffer final {
   }
 
   Microsoft::WRL::ComPtr<ID3D12Resource> resource_;
+  Microsoft::WRL::ComPtr<ID3D12Device> device_;
   uint64_t bytes_ = 0;
   const char* name_ = "";
 };

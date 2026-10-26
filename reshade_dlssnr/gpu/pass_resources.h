@@ -156,14 +156,16 @@ class PassResources {
   unsigned int CheapTemporalHeight() const {
     return temporal_cheap_input_.Height();
   }
-  // True when slot `index` already holds a texture of the given shape. Lets a
-  // caller pick between two slots instead of letting EnsureScratch dispose a
-  // matching one in the other.
-  bool ScratchMatches(unsigned int width,
+  // True when slot `index` already holds a texture of the given shape on
+  // `device`. Lets a caller pick between two slots instead of letting
+  // EnsureScratch dispose a matching one in the other.
+  bool ScratchMatches(ID3D12Device* device,
+                      unsigned int width,
                       unsigned int height,
                       DXGI_FORMAT format,
                       uint32_t index) const {
-    return index < kScratchCount && scratch_[index].Matches(width, height, format);
+    return index < kScratchCount &&
+           scratch_[index].Matches(device, width, height, format);
   }
 
   ID3D12Resource* GetScratch(uint32_t index) const {

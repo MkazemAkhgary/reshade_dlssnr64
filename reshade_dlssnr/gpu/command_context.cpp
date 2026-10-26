@@ -32,6 +32,11 @@ void LogFailureOnce(const char* what, HRESULT result) {
   reshade::log::message(reshade::log::level::error, message);
 }
 
+// Shutdown's drain normally returns at once: every caller has already proven
+// the GPU idle, or is tearing down a device that will not progress again. The
+// bound exists so the second case cannot hang the teardown forever.
+constexpr DWORD kShutdownDrainTimeoutMs = 5000;
+
 }  // namespace
 
 bool CommandContext::Ensure(ID3D12Device* device) {
@@ -101,7 +106,7 @@ bool CommandContext::Abort() {
   return true;
 }
 
-bool CommandContext::WaitForFenceValue(UINT64 value) {
+bool CommandContext::WaitForFenceValue(UINT64 value, DWORD timeout_ms) {
   DLSSNR_PROFILE_ASYNC_L3("CommandContext::WaitForFenceValue");
   if (value == 0 || fence_ == nullptr || fence_->GetCompletedValue() >= value) {
     return true;
@@ -114,7 +119,7 @@ bool CommandContext::WaitForFenceValue(UINT64 value) {
     LogFailureOnce("fence SetEventOnCompletion", hr);
     return false;
   }
-  return WaitForSingleObject(fence_event_, INFINITE) == WAIT_OBJECT_0;
+  return WaitForSingleObject(fence_event_, timeout_ms) == WAIT_OBJECT_0;
 }
 
 void CommandContext::Reset() {
@@ -352,7 +357,7 @@ void CommandContext::Shutdown() {
   // Shutdown is rare; drain all submitted commands before releasing allocator
   // and list objects. The frame path uses rotating slots and never does this.
   if (fence_ != nullptr && last_signaled_fence_value_ != 0) {
-    WaitForFenceValue(last_signaled_fence_value_);
+    WaitForFenceValue(last_signaled_fence_value_, kShutdownDrainTimeoutMs);
   }
   for (FrameCommands& frame : frames_) {
     frame.command_list.Reset();

@@ -34,6 +34,12 @@ class AddonController {
       ID3D12CommandQueue* command_queue,
       IDXGISwapChain* swapchain);
 
+  // Adopts the native device behind `command_list`, under the controller lock.
+  // For hooks that record on the game's list before reaching an On*Evaluate
+  // entry point: guide capture creates clones, and those must belong to the
+  // device the list runs on.
+  void EnsureDeviceForCommandList(ID3D12GraphicsCommandList* command_list);
+
   // Runs enabled Pre-DLSS passes inline before the game's DLSS evaluation.
   // `input_resource` is NGX's Color parameter; each pass writes its result
   // back before control returns to the game's original EvaluateFeature call.
@@ -191,15 +197,29 @@ class AddonController {
   bool NeedsQueueMarker() const;
 
   // Releases every runtime object the addon owns: pass sessions, guide
-  // references, command contexts, the compute engine, the debug image, and the
-  // NGX runtime, then force-releases the retire queue.
+  // references, command contexts, the compute engine, the debug image, the
+  // NGX runtime, the tracked game state, and the profiling context, then
+  // force-releases the retire queue. The runtime is bound to no device
+  // afterwards; the next EnsureDevice binds it again.
   //
   // Both teardown paths call this and nothing else, so there is one sequence to
   // maintain. The caller must have already proven the GPU is idle - either by
-  // waiting for the queue (`Shutdown`) or by observing the restart marker
-  // complete (`FinishRestartAfterFence`). Must be called with g_direct_mutex
-  // held.
+  // waiting for the queue (`Shutdown`), by observing the restart marker
+  // complete (`FinishRestartAfterFence`), or by draining the old device
+  // (`EnsureDevice`). Must be called with g_direct_mutex held.
   void TeardownRuntime();
+
+  // Binds the runtime to `device`, which is always the native device behind any
+  // Streamline proxy. When it differs from the device the runtime was built
+  // for, the old generation is drained - or released outright if the device was
+  // removed - and torn down, so no device-bound object outlives its device.
+  // Every entry point calls this before touching addon state.
+  void EnsureDevice(ID3D12Device* device);
+
+  // Signals one marker on the bound device's last known queue and waits for it
+  // with a bound. Returns false when there is no queue to fence on, or when the
+  // marker could not be signaled or observed.
+  bool DrainDevice();
 
   // Runs a stage once, outside the per-pass loop. Used for the Release stage,
   // whose steps act on the swapchain rather than on a game resource. It is
@@ -223,6 +243,9 @@ class AddonController {
   void FinishRestartAfterFence();
 
   NgxRuntime runtime_;
+  // The device every device-bound object above belongs to. Empty means the
+  // runtime has been torn down and will reinitialize on the next frame.
+  Microsoft::WRL::ComPtr<ID3D12Device> device_;
   // One session per live pass, keyed by the pass's stable id. Sessions are
   // created on demand and retired when a pass leaves pass_order. Keying by
   // id means a reorder never migrates a feature handle, a failure flag, or

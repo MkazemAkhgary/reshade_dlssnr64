@@ -53,6 +53,11 @@ class D3D12StateTracker {
   void TrackCommandList(ID3D12GraphicsCommandList* command_list);
   void UntrackCommandList(ID3D12GraphicsCommandList* command_list);
 
+  // Drops every tracked list and releases the references it holds. A device
+  // swap leaves them naming objects from the old device, and holding those
+  // references keeps that device alive.
+  void Clear();
+
   void SetDescriptorHeaps(ID3D12GraphicsCommandList* command_list, UINT count, ID3D12DescriptorHeap* const* heaps);
   void SetPipelineState(ID3D12GraphicsCommandList* command_list, ID3D12PipelineState* pipeline_state);
   // Ray tracing pipeline state. Streamline's manual-hooking guide lists it

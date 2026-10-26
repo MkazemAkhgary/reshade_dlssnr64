@@ -88,6 +88,49 @@ void D3D12StateTracker::UntrackCommandList(ID3D12GraphicsCommandList* command_li
   }
 }
 
+void D3D12StateTracker::Clear() {
+  DLSSNR_PROFILE_RESOURCE_L3("D3D12StateTracker::Clear");
+
+  {
+    std::unique_lock<std::shared_mutex> lock(descriptor_heaps_mutex_);
+    for (auto& entry : descriptor_heaps_) ReleaseHeaps(entry.second);
+    descriptor_heaps_.clear();
+  }
+  {
+    std::unique_lock<std::shared_mutex> lock(pipeline_states_mutex_);
+    for (auto& entry : pipeline_states_) {
+      ReplaceCom(entry.second, static_cast<ID3D12PipelineState*>(nullptr));
+    }
+    pipeline_states_.clear();
+  }
+  {
+    std::unique_lock<std::shared_mutex> lock(state_objects_mutex_);
+    for (auto& entry : state_objects_) {
+      ReplaceCom(entry.second, static_cast<ID3D12StateObject*>(nullptr));
+    }
+    state_objects_.clear();
+  }
+  {
+    std::unique_lock<std::shared_mutex> lock(root_signature_mutex_);
+    for (auto& entry : signatures_) {
+      ReplaceCom(entry.second.compute,
+                 static_cast<ID3D12RootSignature*>(nullptr));
+      ReplaceCom(entry.second.graphics,
+                 static_cast<ID3D12RootSignature*>(nullptr));
+    }
+    signatures_.clear();
+  }
+  {
+    std::unique_lock<std::shared_mutex> lock(root_states_mutex_);
+    root_states_.clear();
+    root_state_owner_.clear();
+  }
+  {
+    std::unique_lock<std::shared_mutex> lock(root_parameter_count_mutex_);
+    root_parameter_count_.clear();
+  }
+}
+
 void D3D12StateTracker::SetDescriptorHeaps(ID3D12GraphicsCommandList* command_list, UINT count, ID3D12DescriptorHeap* const* heaps) {
   DLSSNR_PROFILE_RESOURCE_L3("D3D12StateTracker::SetDescriptorHeaps");
   if (command_list == nullptr || heaps == nullptr) return;

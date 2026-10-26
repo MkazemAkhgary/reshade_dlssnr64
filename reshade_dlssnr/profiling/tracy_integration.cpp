@@ -27,6 +27,15 @@ void InitializeGpu(ID3D12Device* device, ID3D12CommandQueue* queue) {
 #endif
 }
 
+void ShutdownGpu() {
+#if DLSSNR_PROFILE_TRACY_ENABLED && DLSSNR_PROFILE_VERBOSITY >= 2 && DLSSNR_PROFILE_DOMAIN_GPU
+  if (g_d3d12_ctx != nullptr) {
+    TracyD3D12Destroy(g_d3d12_ctx);
+    g_d3d12_ctx = nullptr;
+  }
+#endif
+}
+
 void MarkPresent(IDXGISwapChain* swapchain) {
 #if DLSSNR_PROFILE_TRACY_ENABLED && DLSSNR_PROFILE_VERBOSITY >= 2 && DLSSNR_PROFILE_DOMAIN_GPU
   if (g_d3d12_ctx != nullptr) {

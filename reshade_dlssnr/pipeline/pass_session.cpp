@@ -578,15 +578,15 @@ bool PassSession::MaybeRenderDebug(
   // (Re)create the shared debug output when its shape changes. The output
   // is owned by FrameDebugContext and lives across frames; a replaced one is
   // retired rather than released, because the previous frame's present copy
-  // may still be reading it.
-  if (!frame_debug.output.Matches(target_width, target_height, target_format)) {
-    Microsoft::WRL::ComPtr<ID3D12Device> device;
-    if (FAILED(command_list->GetDevice(IID_PPV_ARGS(&device))) ||
-        device == nullptr) {
-      return false;
-    }
-    if (!frame_debug.EnsureOutput(device.Get(), target_width, target_height,
-                                  target_format)) {
+  // may still be reading it. The device is fetched first because the slot check
+  // compares it.
+  Microsoft::WRL::ComPtr<ID3D12Device> debug_device =
+      sl_compat::NativeDeviceOf(command_list);
+  if (debug_device == nullptr) return false;
+  if (!frame_debug.output.Matches(debug_device.Get(), target_width,
+                                  target_height, target_format)) {
+    if (!frame_debug.EnsureOutput(debug_device.Get(), target_width,
+                                  target_height, target_format)) {
       return false;
     }
   }

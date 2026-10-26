@@ -156,7 +156,7 @@ bool ExposureMask::EnsureResources(ID3D12Device* device,
   // Before a valid snapshot exists, keep a matching resource for the unused
   // history binding. Once frame_valid_ is true, this slot is immutable until
   // Present, even if its dimensions differ from the next destination.
-  if (!frame_valid_ && !masks_[frame_index_].Matches(width, height,
+  if (!frame_valid_ && !masks_[frame_index_].Matches(device, width, height,
                                                      DXGI_FORMAT_R8_UNORM)) {
     if (!masks_[frame_index_].Ensure(
             device, MaskDesc(width, height),

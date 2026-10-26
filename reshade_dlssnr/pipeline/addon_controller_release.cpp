@@ -7,6 +7,7 @@
 #include "pipeline/pipeline_graph.h"
 #include "pipeline/pipeline_trace.h"
 #include "state/settings.h"
+#include "streamline_compat.h"
 
 namespace reshade_dlssnr {
 
@@ -29,10 +30,9 @@ PipelineStatus RunEnsureHdr(PassRun& run) {
   if (run.list == nullptr || run.codec == nullptr)
     return PipelineStatus::SkipFrame;
 
-  Microsoft::WRL::ComPtr<ID3D12Device> device;
-  if (FAILED(run.list->GetDevice(IID_PPV_ARGS(&device))) || device == nullptr) {
-    return PipelineStatus::SkipFrame;
-  }
+  Microsoft::WRL::ComPtr<ID3D12Device> device =
+      sl_compat::NativeDeviceOf(run.list);
+  if (device == nullptr) return PipelineStatus::SkipFrame;
 
   if (run.codec->Init(device.Get()) && run.hdr->Ensure(device.Get())) {
     TRACE_EVT(run.session, "hdr_initialized pass=%u", run.pass_id);

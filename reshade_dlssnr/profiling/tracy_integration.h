@@ -18,6 +18,10 @@ using TracyD3D12Ctx = void*;
 // repeatedly; only the first call has an effect.
 void InitializeGpu(ID3D12Device* device, ID3D12CommandQueue* queue);
 
+// Releases the D3D12 context. The context captures a device and a queue, so a
+// device swap has to drop it before the next InitializeGpu builds a new one.
+void ShutdownGpu();
+
 // Marks a frame boundary and collects any GPU timestamps recorded during
 // the frame. Call once per Present, after all GPU work has been submitted.
 void MarkPresent(IDXGISwapChain* swapchain);

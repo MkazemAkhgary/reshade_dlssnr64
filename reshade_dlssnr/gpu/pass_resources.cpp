@@ -73,9 +73,11 @@ bool PassResources::EnsureLocalExposureRestoreResources(ID3D12Device* device,
   const unsigned int partial_width = (width + 7u) / 8u;
   const unsigned int partial_height = (height + 7u) / 8u;
   const bool matches =
-      local_exposure_partial_sums_.Matches(partial_width, partial_height,
+      local_exposure_partial_sums_.Matches(device, partial_width,
+                                           partial_height,
                                            DXGI_FORMAT_R32_FLOAT) &&
-      local_exposure_global_scale_.Matches(1, 1, DXGI_FORMAT_R32_FLOAT);
+      local_exposure_global_scale_.Matches(device, 1, 1,
+                                           DXGI_FORMAT_R32_FLOAT);
   if (matches) return true;
 
   local_exposure_partial_sums_.Reset();
@@ -104,7 +106,7 @@ bool PassResources::EnsureWorkingResources(ID3D12Device* device,
                                            bool need_graded_input) {
   DLSSNR_PROFILE_RESOURCE_L2("PassResources::EnsureWorkingResources");
   const bool output_matches =
-      working_output_.Matches(work_width, work_height, desc.Format);
+      working_output_.Matches(device, work_width, work_height, desc.Format);
   const bool input_matches = !need_input || working_input_ != nullptr;
   const bool graded_matches =
       !need_graded_input || graded_working_input_ != nullptr;
@@ -152,7 +154,8 @@ bool PassResources::EnsureUnliftedWorkingInput(ID3D12Device* device,
   DLSSNR_PROFILE_RESOURCE_L2("PassResources::EnsureUnliftedWorkingInput");
   if (device == nullptr || work_width == 0 || work_height == 0) return false;
 
-  if (unlifted_working_input_.Matches(work_width, work_height, desc.Format)) {
+  if (unlifted_working_input_.Matches(device, work_width, work_height,
+                                      desc.Format)) {
     return true;
   }
 
@@ -179,17 +182,18 @@ bool PassResources::EnsureSyntheticMotionResources(
   if (out_reset_history != nullptr) *out_reset_history = false;
   if (device == nullptr || width == 0 || height == 0) return false;
 
-  const bool matches = synthetic_previous_input_.Matches(
-                           input_desc.Width, input_desc.Height,
-                           input_desc.Format) &&
-                       synthetic_previous_depth_.Matches(width, height,
-                                                         DXGI_FORMAT_R32_FLOAT) &&
-                       synthetic_current_depth_.Matches(width, height,
-                                                        DXGI_FORMAT_R32_FLOAT) &&
-                       synthetic_motion_.Matches(width, height,
-                                                 DXGI_FORMAT_R32G32_FLOAT) &&
-                       synthetic_width_ == width && synthetic_height_ == height &&
-                       synthetic_input_format_ == input_desc.Format;
+  const bool matches =
+      synthetic_previous_input_.Matches(device, input_desc.Width,
+                                        input_desc.Height,
+                                        input_desc.Format) &&
+      synthetic_previous_depth_.Matches(device, width, height,
+                                        DXGI_FORMAT_R32_FLOAT) &&
+      synthetic_current_depth_.Matches(device, width, height,
+                                       DXGI_FORMAT_R32_FLOAT) &&
+      synthetic_motion_.Matches(device, width, height,
+                                DXGI_FORMAT_R32G32_FLOAT) &&
+      synthetic_width_ == width && synthetic_height_ == height &&
+      synthetic_input_format_ == input_desc.Format;
   if (matches) return true;
 
   synthetic_previous_input_.Reset();
@@ -239,14 +243,18 @@ bool PassResources::EnsureTemporalResources(ID3D12Device* device,
       ? DXGI_FORMAT_R16G16B16A16_FLOAT
       : DXGI_FORMAT_R32G32B32A32_FLOAT;
   const bool matches =
-      temporal_previous_input_.Matches(input_desc.Width, input_desc.Height,
+      temporal_previous_input_.Matches(device, input_desc.Width,
+                                       input_desc.Height,
                                        input_desc.Format) &&
-      temporal_previous_edit_.Matches(width, height, requested_edit_format) &&
-      temporal_previous_depth_.Matches(width, height, DXGI_FORMAT_R32_FLOAT) &&
-      temporal_candidate_.Matches(width, height, requested_edit_format) &&
-      temporal_validated_candidate_.Matches(width, height,
+      temporal_previous_edit_.Matches(device, width, height,
+                                      requested_edit_format) &&
+      temporal_previous_depth_.Matches(device, width, height,
+                                       DXGI_FORMAT_R32_FLOAT) &&
+      temporal_candidate_.Matches(device, width, height,
+                                  requested_edit_format) &&
+      temporal_validated_candidate_.Matches(device, width, height,
                                             requested_edit_format) &&
-      temporal_stats_.Matches(temporal_stats::kBytes) &&
+      temporal_stats_.Matches(device, temporal_stats::kBytes) &&
       temporal_width_ == width && temporal_height_ == height &&
       temporal_input_format_ == input_desc.Format &&
       temporal_edit_format_ == requested_edit_format;
@@ -308,8 +316,10 @@ bool PassResources::EnsureCheapTemporalResources(
   DLSSNR_PROFILE_RESOURCE_L2("PassResources::EnsureCheapTemporalResources");
   if (device == nullptr || width == 0 || height == 0) return false;
 
-  if (temporal_cheap_input_.Matches(width, height, input_desc.Format) &&
-      temporal_cheap_output_.Matches(width, height, input_desc.Format)) {
+  if (temporal_cheap_input_.Matches(device, width, height,
+                                    input_desc.Format) &&
+      temporal_cheap_output_.Matches(device, width, height,
+                                     input_desc.Format)) {
     return true;
   }
 
@@ -339,7 +349,7 @@ bool PassResources::EnsureScratch(ID3D12Device* device,
                                   uint32_t index) {
   DLSSNR_PROFILE_RESOURCE_L3("PassResources::EnsureScratch");
   if (index >= kScratchCount) return false;
-  if (scratch_[index].Matches(width, height, desc.Format)) return true;
+  if (scratch_[index].Matches(device, width, height, desc.Format)) return true;
 
   D3D12_RESOURCE_DESC scratch_desc = desc;
   scratch_desc.Width = width;

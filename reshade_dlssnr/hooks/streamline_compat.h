@@ -39,6 +39,8 @@
 #include <windows.h>
 #include <wrl/client.h>
 
+#include "profiling/profile.h"
+
 namespace reshade_dlssnr::sl_compat {
 
 // {ADEC44E2-61F0-45C3-AD9F-1B37379284FF}
@@ -83,6 +85,23 @@ Microsoft::WRL::ComPtr<T> Native(T* iface, bool* is_proxy = nullptr) {
   iface->AddRef();
   result.Attach(iface);
   return result;
+}
+
+// The native device behind a command queue or a command list, or null. Both
+// expose GetDevice, and either may be a Streamline proxy whose device must not
+// own addon objects. This is the resolver every creation path uses.
+//
+// Two QueryInterface calls: one for the device, one proxy probe that fails on a
+// normal device.
+template <typename T>
+Microsoft::WRL::ComPtr<ID3D12Device> NativeDeviceOf(T* object) {
+  DLSSNR_PROFILE_RESOURCE_L3("NativeDeviceOf");
+  if (object == nullptr) return nullptr;
+  Microsoft::WRL::ComPtr<ID3D12Device> device;
+  if (FAILED(object->GetDevice(IID_PPV_ARGS(&device))) || device == nullptr) {
+    return nullptr;
+  }
+  return Native(device.Get());
 }
 
 }  // namespace reshade_dlssnr::sl_compat

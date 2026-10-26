@@ -10,6 +10,7 @@
 
 #include "feature/settings_store.h"
 #include "ctl/values.h"
+#include "d3d12_state.h"
 #include "dlss_guides.h"
 #include "feature/debug_log/view.h"
 #include "feature/grade/view.h"
@@ -20,6 +21,7 @@
 #include "pipeline_graph.h"
 #include "pipeline_trace.h"
 #include "gpu/gpu_resources.h"
+#include "profiling/tracy_integration.h"
 #include "state/settings.h"
 #include "streamline_compat.h"
 
@@ -31,6 +33,15 @@ namespace {
 // taken inside it, and neither takes it back. That one-way nesting is what makes
 // the order safe; it is not a constraint on the order itself.
 std::mutex g_direct_mutex;
+
+// The drain's cost is one queue drain: the marker completes when the work
+// already submitted finishes. This bound only fires on a device that has
+// stopped progressing without reporting itself removed.
+constexpr DWORD kDeviceSwapDrainTimeoutMs = 5000;
+
+// Log the drain above this, so the bound's distance stays observable.
+constexpr long long kDeviceSwapDrainLogMs = 50;
+
 }  // namespace
 
 AddonController& AddonController::Get() {
@@ -143,11 +154,9 @@ ID3D12GraphicsCommandList* AddonController::BeginReleaseCommands(
   if (release_list_begun_) return release_command_.GetCommandList();
   if (command_queue == nullptr) return nullptr;
 
-  Microsoft::WRL::ComPtr<ID3D12Device> device;
-  if (FAILED(command_queue->GetDevice(IID_PPV_ARGS(&device))) ||
-      device == nullptr) {
-    return nullptr;
-  }
+  Microsoft::WRL::ComPtr<ID3D12Device> device =
+      sl_compat::NativeDeviceOf(command_queue);
+  if (device == nullptr) return nullptr;
   if (!release_command_.Ensure(device.Get())) return nullptr;
 
   // Reset and clear once per frame, so the state a step seeds is the state
@@ -212,16 +221,17 @@ void AddonController::GradeBackbuffer(ComputeEngine& codec,
   const unsigned int width = static_cast<unsigned int>(desc.Width);
   const unsigned int height = desc.Height;
 
+  // Resolved before the slot check: "is this slot still usable" includes
+  // "is it on this device".
+  Microsoft::WRL::ComPtr<ID3D12Device> device =
+      sl_compat::NativeDeviceOf(command_queue);
+  if (device == nullptr) return;
+
   // The previous frame may still be reading these scratch textures: the
   // release list no longer waits every Present, so replacement retires them
   // through the shared queue.
-  if (!grade_scratch_.Matches(width, height, desc.Format) ||
-      !grade_scratch_out_.Matches(width, height, desc.Format)) {
-    Microsoft::WRL::ComPtr<ID3D12Device> device;
-    if (FAILED(command_queue->GetDevice(IID_PPV_ARGS(&device))) ||
-        device == nullptr) {
-      return;
-    }
+  if (!grade_scratch_.Matches(device.Get(), width, height, desc.Format) ||
+      !grade_scratch_out_.Matches(device.Get(), width, height, desc.Format)) {
     if (!grade_scratch_.EnsureUav(device.Get(), desc, "grade_scratch")) {
       return;
     }
@@ -305,6 +315,99 @@ void AddonController::ReleaseRetiredSessionsCompleted(
   }
 }
 
+bool AddonController::DrainDevice() {
+  DLSSNR_PROFILE_ASYNC_L2("AddonController::DrainDevice");
+  ID3D12CommandQueue* const queue = last_command_queue_.Get();
+  if (queue == nullptr) return false;
+
+  Microsoft::WRL::ComPtr<ID3D12Device> device =
+      sl_compat::NativeDeviceOf(queue);
+  if (device == nullptr) return false;
+
+  // A fence of its own, not the release context's. This marker is the last
+  // thing the old device does, and a wait that gives up must not leave the
+  // context a signal that its own shutdown would then block on.
+  Microsoft::WRL::ComPtr<ID3D12Fence> fence;
+  if (FAILED(device->CreateFence(0, D3D12_FENCE_FLAG_NONE,
+                                 IID_PPV_ARGS(&fence))) ||
+      fence == nullptr) {
+    return false;
+  }
+  HANDLE event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+  if (event == nullptr) return false;
+
+  // Nothing has to be recorded. The marker only has to land behind work that
+  // is already queued, and a queue signal does that on its own.
+  const auto start = std::chrono::steady_clock::now();
+  bool idle = false;
+  if (SUCCEEDED(queue->Signal(fence.Get(), 1)) &&
+      SUCCEEDED(fence->SetEventOnCompletion(1, event))) {
+    idle =
+        WaitForSingleObject(event, kDeviceSwapDrainTimeoutMs) == WAIT_OBJECT_0;
+  }
+  CloseHandle(event);
+
+  const long long elapsed_ms =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now() - start)
+          .count();
+
+  TRACE_EVT(this, "device_drain idle=%d elapsed_ms=%lld", idle ? 1 : 0,
+            elapsed_ms);
+  if (elapsed_ms >= kDeviceSwapDrainLogMs) {
+    char message[160];
+    std::snprintf(
+        message, sizeof(message),
+        "DLSSNR: waited %lld ms for the previous device to go idle before the "
+        "swap",
+        elapsed_ms);
+    reshade::log::message(reshade::log::level::info, message);
+  }
+  return idle;
+}
+
+void AddonController::EnsureDevice(ID3D12Device* device) {
+  DLSSNR_PROFILE_CORE_L3("AddonController::EnsureDevice");
+  if (device == nullptr || device == device_.Get()) return;
+
+  if (device_ != nullptr) {
+    // Everything the addon owns belongs to the old device. Prove that device
+    // idle before releasing anything a queued command may still read. A removed
+    // device has already abandoned its queue, so there is nothing to wait for.
+    const HRESULT removed = device_->GetDeviceRemovedReason();
+    if (removed != S_OK) {
+      reshade::log::message(
+          reshade::log::level::warning,
+          "DLSSNR: the D3D12 device was removed; releasing the runtime without "
+          "waiting for it");
+    } else if (!DrainDevice()) {
+      reshade::log::message(
+          reshade::log::level::warning,
+          "DLSSNR: the previous D3D12 device did not go idle before the swap; "
+          "releasing its resources anyway");
+    }
+
+    TeardownRuntime();
+    // A pending restart's fence belonged to the torn-down device, and the
+    // teardown above did the work it wanted.
+    restart_requested_ = false;
+    restart_waiting_for_fence_ = false;
+    restart_fence_value_ = 0;
+    reshade::log::message(
+        reshade::log::level::info,
+        "DLSSNR: D3D12 device changed; reinitializing on the new device");
+  }
+
+  device_ = device;
+}
+
+void AddonController::EnsureDeviceForCommandList(
+    ID3D12GraphicsCommandList* command_list) {
+  if (command_list == nullptr) return;
+  std::lock_guard<std::mutex> lock(g_direct_mutex);
+  EnsureDevice(sl_compat::NativeDeviceOf(command_list).Get());
+}
+
 void AddonController::OnPresent(
     ID3D12CommandQueue* command_queue,
     IDXGISwapChain* swapchain) {
@@ -312,6 +415,10 @@ void AddonController::OnPresent(
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
   if (++frame_id_ == 0) frame_id_ = 1;
+
+  // Before last_command_queue_ is overwritten: a swap drains through the queue
+  // that belongs to the device being replaced.
+  EnsureDevice(sl_compat::NativeDeviceOf(command_queue).Get());
 
   if (command_queue != nullptr && last_command_queue_.Get() != command_queue) {
     last_command_queue_ = command_queue;
@@ -508,6 +615,10 @@ void AddonController::OnPreDlssEvaluate(
   DLSSNR_PROFILE_CORE_L1("AddonController::OnPreDlssEvaluate");
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
+  // Ahead of the guards below: guide clones and tracked command-list state are
+  // device-bound too, and the guides are captured before this call.
+  EnsureDevice(sl_compat::NativeDeviceOf(command_list).Get());
+
   const Settings& settings = GetSettings();
   if (restart_requested_ || restart_waiting_for_fence_ || !settings.enabled ||
       command_list == nullptr || input_resource == nullptr)
@@ -566,6 +677,9 @@ void AddonController::OnPostDlssEvaluate(
     ID3D12Resource* exposure_texture) {
   DLSSNR_PROFILE_CORE_L1("AddonController::OnPostDlssEvaluate");
   std::lock_guard<std::mutex> lock(g_direct_mutex);
+
+  // A game that only runs Post-DLSS passes reaches a swapped device here first.
+  EnsureDevice(sl_compat::NativeDeviceOf(command_list).Get());
 
   const Settings& settings = GetSettings();
   if (restart_requested_ || restart_waiting_for_fence_ || !settings.enabled)
@@ -746,6 +860,11 @@ void AddonController::TeardownRuntime() {
   // so the force-release at the bottom of this function covers them too.
   DlssGuides::Get().Clear();
 
+  // Tracked game objects name the device that is going away, and the references
+  // would keep it alive.
+  D3D12StateTracker::Get().Clear();
+  profiling::ShutdownGpu();
+
   release_command_.Shutdown();
   last_command_queue_.Reset();
   release_list_begun_ = false;
@@ -762,6 +881,7 @@ void AddonController::TeardownRuntime() {
   // down - including the debug image released just above. The GPU is idle here
   // by the caller's contract.
   ResourceRetireQueue::Get().ReleaseAllAfterGpuIdle();
+  device_.Reset();
 }
 
 void AddonController::FinishRestartAfterFence() {
@@ -919,10 +1039,18 @@ void AddonController::Shutdown() {
   grade_backbuffer_failure_logged_ = false;
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
+  // A swap that arrived after the last Present still has to be resolved here:
+  // the release context would otherwise belong to the old device, and the final
+  // marker below would be signaled on a fence from a different device.
+  EnsureDevice(sl_compat::NativeDeviceOf(last_command_queue_.Get()).Get());
+
+  // Re-read: a swap tore the old queue down, so the earlier value would be
+  // dangling.
+  ID3D12CommandQueue* const queue = last_command_queue_.Get();
+
   // Shutdown is allowed to wait. Enqueue a final marker behind submitted game
   // and addon work, then block on it: that wait is what makes the unconditional
   // release at the end of TeardownRuntime legal.
-  ID3D12CommandQueue* const queue = last_command_queue_.Get();
   if (queue != nullptr && BeginReleaseCommands(queue) != nullptr) {
     EndReleaseCommands(queue);
     release_command_.WaitGpu(queue);

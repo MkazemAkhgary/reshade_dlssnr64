@@ -166,6 +166,8 @@ void ResourceRetireQueue::ReleaseAllAfterGpuIdle() {
   for (const Entry& entry : entries_) entry.resource->Release();
   entries_.clear();
   depth_warned_ = false;
+  // The fence is replaced by the caller, so the next epoch starts at zero.
+  last_completed_fence_ = 0;
 }
 
 bool ResourceRetireQueue::HasUntagged() const {
@@ -191,13 +193,14 @@ bool OwnedTexture::Ensure(ID3D12Device* device,
                           const char* name) {
   DLSSNR_PROFILE_RESOURCE_L2("OwnedTexture::Ensure");
   if (device == nullptr) return false;
-  if (Matches(desc.Width, desc.Height, desc.Format)) return true;
+  if (Matches(device, desc.Width, desc.Height, desc.Format)) return true;
 
   Reset();
 
   ID3D12Resource* raw = nullptr;
   if (!CreateTexture2D(device, desc, initial_state, &raw)) return false;
   resource_.Attach(raw);
+  device_ = device;
   width_ = static_cast<uint32_t>(desc.Width);
   height_ = static_cast<uint32_t>(desc.Height);
   format_ = desc.Format;
@@ -221,6 +224,7 @@ void OwnedTexture::Reset() {
   if (resource_ == nullptr) return;
   // Never release inline: an earlier frame's command list may still read it.
   ResourceRetireQueue::Get().Retire(resource_.Detach());
+  device_.Reset();
   width_ = 0;
   height_ = 0;
   format_ = DXGI_FORMAT_UNKNOWN;
@@ -239,7 +243,7 @@ bool OwnedBuffer::Ensure(ID3D12Device* device,
                          const char* name) {
   DLSSNR_PROFILE_RESOURCE_L2("OwnedBuffer::Ensure");
   if (device == nullptr) return false;
-  if (Matches(bytes)) return true;
+  if (Matches(device, bytes)) return true;
 
   Reset();
 
@@ -248,6 +252,7 @@ bool OwnedBuffer::Ensure(ID3D12Device* device,
     return false;
   }
   resource_.Attach(raw);
+  device_ = device;
   bytes_ = bytes;
   name_ = name != nullptr ? name : "";
   TRACE_NAME(resource_.Get(), name_);
@@ -268,6 +273,7 @@ bool OwnedBuffer::EnsureUav(ID3D12Device* device,
 void OwnedBuffer::Reset() {
   if (resource_ == nullptr) return;
   ResourceRetireQueue::Get().Retire(resource_.Detach());
+  device_.Reset();
   bytes_ = 0;
   name_ = "";
 }
