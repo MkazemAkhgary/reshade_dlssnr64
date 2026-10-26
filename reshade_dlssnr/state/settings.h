@@ -15,6 +15,12 @@
 
 namespace reshade_dlssnr {
 
+// On-disk format version for the addon's settings store. Bumped when the
+// persisted tree shape changes in a way older builds would misread. This is
+// independent of kAddonVersion: settings survive addon updates, so a build
+// identifier is not a suitable format version.
+constexpr int kSettingsVersion = 1;
+
 enum class InjectionStage : int {
   PreDLSS = 0,
   PostDLSS = 1,

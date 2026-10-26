@@ -230,7 +230,7 @@ class JsonStore {
       const std::string text = ReadTextFile(path_);
       if (text.empty()) {
         root_ = json::Value::MakeObject();
-        root_["Version"] = json::Value(1);
+        root_["Version"] = json::Value(kSettingsVersion);
         Save();
         return true;
       }
@@ -247,13 +247,13 @@ class JsonStore {
         backup += ".broken";
         std::filesystem::rename(path_, backup, ec);
         root_ = json::Value::MakeObject();
-        root_["Version"] = json::Value(1);
+        root_["Version"] = json::Value(kSettingsVersion);
         Save();
         return true;
       }
     } else {
       root_ = json::Value::MakeObject();
-      root_["Version"] = json::Value(1);
+      root_["Version"] = json::Value(kSettingsVersion);
       Save();
       return true;
     }
@@ -412,7 +412,6 @@ json::Value BuildPresetData() {
   if (json::Value* s = data.find("S")) {
     CompactPassKeysInTree(*s);
   }
-  data["Version"] = json::Value(1);
   return data;
 }
 
@@ -503,9 +502,8 @@ void SaveSettings() {
     root.erase("S");
   }
 
-  root.erase("Version");
   SaveSettingsValues(g_settings, "");
-  root["Version"] = json::Value(1);
+  root["Version"] = json::Value(kSettingsVersion);
 
   // Drop any top-level key the addon no longer writes, so legacy fields from
   // older builds (PassNextId, UserPresetOrder, UserPresetNextId, ...) cannot
