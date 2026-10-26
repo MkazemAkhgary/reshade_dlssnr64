@@ -305,7 +305,7 @@ void DrawStatusSection(Settings& settings, bool& changed) {
     // yet, since their resources are genuinely empty rather than zero-sized.
     const ImGuiTableFlags table_flags =
         ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg |
-        ImGuiTableFlags_BordersInnerH;
+        ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_Resizable;
     const ImGuiTreeNodeFlags pass_flags =
         ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
 
@@ -330,8 +330,17 @@ void DrawStatusSection(Settings& settings, bool& changed) {
       std::snprintf(pass_label, sizeof(pass_label), "Pass %u (%s) - %s",
                     position, stage_name, pass_bytes);
 
+      // The tree node keeps its own per-pass ID; the table is drawn after the
+      // node is popped, because an open node pushes its ID and ImGui saves
+      // column widths per table ID. Outside that scope every pass resolves to
+      // one table, so resizing one column resizes it in all of them.
       ImGui::PushID(static_cast<int>(entry.id));
-      if (ImGui::TreeNodeEx("##pass_resources", pass_flags, "%s", pass_label)) {
+      const bool resource_tree_open = ImGui::TreeNodeEx(
+          "##pass_resources", pass_flags, "%s", pass_label);
+      ImGui::PopID();
+      if (resource_tree_open) {
+        ImGui::TreePop();
+        ImGui::Indent();
         if (ImGui::BeginTable("pass_resource_table", 4, table_flags)) {
           ImGui::TableSetupColumn("Resource",
               ImGuiTableColumnFlags_WidthStretch);
@@ -373,9 +382,8 @@ void DrawStatusSection(Settings& settings, bool& changed) {
 
           ImGui::EndTable();
         }
-        ImGui::TreePop();
+        ImGui::Unindent();
       }
-      ImGui::PopID();
     }
   }
 }
