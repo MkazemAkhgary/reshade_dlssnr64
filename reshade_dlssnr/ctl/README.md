@@ -181,7 +181,6 @@ Both key-value interfaces are abstract, so the framework never depends on
 ReShade's config API. Keys are laid out as:
 
 ```
-<prefix>.Version
 <prefix>.S.<Section>.<setting>              single-instance section
 <prefix>.S.<Section>.<keytext>.<setting>    instanced section
 ```
@@ -189,7 +188,7 @@ ReShade's config API. Keys are laid out as:
 When `prefix` is empty, the leading dot is omitted. `Delete` uses the same
 schema traversal and supplied instance keys to erase every persistable setting
 key in the block, regardless of whether the setting is overridden in the live
-store. It also erases the version key. Missing keys are a silent no-op.
+store. Missing keys are a silent no-op.
 
 Guarantees: only `persist` settings whose backend matches are written,
 and profile operations also require `persist_in_profiles`; unknown keys

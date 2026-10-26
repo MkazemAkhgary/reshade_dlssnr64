@@ -1,4 +1,4 @@
-// ctl persistence: versioned serialization of a ValueStore.
+// ctl persistence: serialization of a ValueStore.
 //
 // Rules the format guarantees:
 //   - only persist-flagged settings are written; profile targets additionally
@@ -6,9 +6,7 @@
 //   - a single-instance section is written once, outside any instance block;
 //   - an instanced section is written under its instance key;
 //   - every persistable setting is written once per instance;
-//   - an unknown key or an unknown setting is skipped, not an error;
-//   - the format carries a version, and an older reader ignores keys it does
-//     not know rather than failing.
+//   - an unknown key or an unknown setting is skipped, not an error.
 //
 // Who knows what:
 //   - Save can walk all live instances, or use an optional consumer key source
@@ -25,10 +23,6 @@
 
 namespace reshade_dlssnr {
 namespace ctl {
-
-// Current on-disk format version. Bump when the layout changes in a way an
-// older reader would misread; adding keys does not require a bump.
-constexpr int kSerializeVersion = 1;
 
 // Abstract sink so the framework does not depend on ReShade's config API.
 // A caller supplies an implementation backed by whatever store it uses.

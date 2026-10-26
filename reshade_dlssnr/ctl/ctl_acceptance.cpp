@@ -568,17 +568,14 @@ int main() {
   }
 
   // ------------------------------------------------------------------------
-  std::printf("\n[21] Persistence: the format carries a version\n");
+  std::printf("\n[21] Persistence: ctl writes no version key\n");
   {
     Fixture fx;
     MemStore mem;
     Save(fx.store, mem);
-    auto it = mem.data.find("Version");
-    Check(it != mem.data.end(), "a version key is written");
-    if (it != mem.data.end()) {
-      Check(std::atoi(it->second.c_str()) == kSerializeVersion,
-            "the written version matches kSerializeVersion");
-    }
+    Check(mem.data.find("Version") == mem.data.end(),
+          "ctl::Save writes no version; versioning the target is the "
+          "caller's concern");
   }
 
   // ------------------------------------------------------------------------
