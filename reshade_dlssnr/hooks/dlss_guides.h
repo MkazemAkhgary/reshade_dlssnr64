@@ -102,6 +102,12 @@ class DlssGuides {
   DlssGuides(const DlssGuides&) = delete;
   DlssGuides& operator=(const DlssGuides&) = delete;
 
+  // Guards every member below. Retirement happens while this is held, so today
+  // the order is g_direct_mutex -> lock_ -> ResourceRetireQueue. That works
+  // because the queue takes only its own mutex and calls nothing out; taking
+  // this lock from inside a queue lock would deadlock. Reorder or merge these
+  // locks freely - just keep the queue non-reentrant, and re-check this if you
+  // change which lock is taken first.
   mutable std::mutex lock_;
 
   // Clone allocations are reused while cloning stays enabled. The direct

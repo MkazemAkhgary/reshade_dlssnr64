@@ -67,6 +67,11 @@ bool CreateUavBuffer(ID3D12Device* device,
 // friends. There is therefore no way to retire a bare ID3D12Resource* from
 // outside this module: the argument type has to be one that owns a reference.
 // Retiring something you hold no reference to is not expressible.
+//
+// Today's lock order is g_direct_mutex -> DlssGuides::lock_ -> this queue, and
+// retiring while holding another lock is safe because Retire() takes only its
+// own mutex and never calls out. That non-reentrancy is the property to keep;
+// the ordering around it is free to change.
 class ResourceRetireQueue final {
  public:
   static ResourceRetireQueue& Get();

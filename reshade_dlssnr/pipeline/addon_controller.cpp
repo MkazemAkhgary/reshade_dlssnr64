@@ -26,6 +26,10 @@
 namespace reshade_dlssnr {
 
 namespace {
+// Serializes every controller entry point and every hook that touches addon
+// state. Currently the outermost lock: the guides lock and the retire queue are
+// taken inside it, and neither takes it back. That one-way nesting is what makes
+// the order safe; it is not a constraint on the order itself.
 std::mutex g_direct_mutex;
 }  // namespace
 
