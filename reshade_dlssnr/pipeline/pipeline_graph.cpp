@@ -186,7 +186,7 @@ constexpr PipelineNodeId kPresentSteps[] = {
     PipelineNodeId::AcquireBackbuffer,
     PipelineNodeId::ResolveDevice,        // runtime.Initialize + command_.Ensure
     PipelineNodeId::ResolveWorkingScale,
-    PipelineNodeId::EnsureFrameResources, // includes SetRetireCallback
+    PipelineNodeId::EnsureFrameResources, // recreates pass resources
     PipelineNodeId::SeedResourceStates,   // Reset + ClearState + SeedFrameState
     PipelineNodeId::EnsureFeature,
     PipelineNodeId::SnapshotGuides,       // Seed the stage-entry guide snapshot
@@ -267,7 +267,7 @@ constexpr PipelineNodeId kPostDlssSteps[] = {
     PipelineNodeId::EnsureComputeEngine,  // codec.Init + IsReady
     PipelineNodeId::HdrBeginFrame,
     PipelineNodeId::ResolveWorkingScale,
-    PipelineNodeId::EnsureFrameResources, // includes SetRetireCallback
+    PipelineNodeId::EnsureFrameResources, // recreates pass resources
     PipelineNodeId::SeedResourceStates,   // ClearState + SeedFrameState + output
     PipelineNodeId::SeedGuideStates,
     PipelineNodeId::ResolveModelInput,    // guide color or scratch snapshot

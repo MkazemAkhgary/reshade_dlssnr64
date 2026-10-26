@@ -114,9 +114,9 @@ struct StatusSnapshot {
 
   // Resources waiting for a queue-ordered fence before release. Nonzero means
   // a recent allocation change retired something this frame; zero is the
-  // steady state.
-  uint32_t retired_game_resources = 0;
-  uint32_t retired_addon_resources = 0;
+  // steady state. Game-owned and addon-owned references share the queue, so
+  // they are reported together.
+  uint32_t retired_resources = 0;
 
   // Clears all fields without releasing vector capacity. Once steady state is
   // reached, RefreshStatus can rebuild the snapshot without allocating.
@@ -142,8 +142,7 @@ struct StatusSnapshot {
 
     passes.clear();
     total_vram_bytes = 0;
-    retired_game_resources = 0;
-    retired_addon_resources = 0;
+    retired_resources = 0;
   }
 };
 

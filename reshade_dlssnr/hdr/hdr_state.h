@@ -9,6 +9,7 @@
 
 #include "command_context.h"
 #include "compute_engine.h"
+#include "gpu/gpu_resources.h"
 #include "gpu_readback.h"
 #include "hdr/settings.h"
 
@@ -119,12 +120,12 @@ class HdrState {
   Microsoft::WRL::ComPtr<ID3D12Device> device_;
   // Ping-pong histogram buffers. One is built this measurement, the
   // other is cleared in the same dispatch for the next measurement.
-  Microsoft::WRL::ComPtr<ID3D12Resource> histogram_[2];
+  OwnedBuffer histogram_[2];
   uint32_t current_histogram_index_ = 0;
   bool histograms_initialized_ = false;
   Microsoft::WRL::ComPtr<ID3D12Fence> fence_;
 
-  Microsoft::WRL::ComPtr<ID3D12Resource> game_exposure_value_buffer_;
+  OwnedBuffer game_exposure_value_buffer_;
   GpuReadback game_exposure_readback_;
   uint64_t pending_game_exposure_fence_value_ = 0;
   bool pending_game_exposure_ = false;

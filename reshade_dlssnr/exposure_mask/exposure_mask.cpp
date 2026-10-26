@@ -6,7 +6,7 @@
 
 #include <reshade.hpp>
 
-#include "dlss_guides.h"
+#include "gpu/gpu_resources.h"
 #include "pipeline/pass_session.h"
 #include "pipeline/pipeline_graph.h"
 #include "pipeline/pipeline_trace.h"
@@ -14,39 +14,10 @@
 namespace reshade_dlssnr {
 namespace {
 
-void RetireToGuides(ID3D12Resource* resource) {
-  if (resource == nullptr) return;
-  resource->AddRef();
-  DlssGuides::Get().RetireGameResource(resource);
-  resource->Release();
-}
-
-void RetireSlot(Microsoft::WRL::ComPtr<ID3D12Resource>& slot) {
-  if (slot != nullptr) RetireToGuides(slot.Detach());
-}
-
-bool CreateMaskResource(ID3D12Device* device,
-                        unsigned int width,
-                        unsigned int height,
-                        Microsoft::WRL::ComPtr<ID3D12Resource>& output) {
-  D3D12_HEAP_PROPERTIES heap = {};
-  heap.Type = D3D12_HEAP_TYPE_DEFAULT;
-
-  D3D12_RESOURCE_DESC desc = {};
-  desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-  desc.Width = width;
-  desc.Height = height;
-  desc.DepthOrArraySize = 1;
-  desc.MipLevels = 1;
-  desc.Format = DXGI_FORMAT_R8_UNORM;
-  desc.SampleDesc.Count = 1;
-  desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-  desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-
-  return SUCCEEDED(device->CreateCommittedResource(
-             &heap, D3D12_HEAP_FLAG_NONE, &desc,
-             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, nullptr,
-             IID_PPV_ARGS(&output))) && output != nullptr;
+// Mask textures are plain R8 UAVs that start out as SRVs.
+D3D12_RESOURCE_DESC MaskDesc(unsigned int width, unsigned int height) {
+  return Texture2DDesc(width, height, DXGI_FORMAT_R8_UNORM,
+                       D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 }
 
 PipelineStatus RunBuildExposureMask(PassRun& run) {
@@ -115,15 +86,11 @@ static_assert(
 
 void ExposureMask::Shutdown() {
   DLSSNR_PROFILE_RESOURCE_L2("ExposureMask::Shutdown");
-  RetireSlot(masks_[0]);
-  RetireSlot(masks_[1]);
-  RetireSlot(classifier_);
-  classifier_width_ = 0;
-  classifier_height_ = 0;
+  masks_[0].Reset();
+  masks_[1].Reset();
+  classifier_.Reset();
   frame_index_ = 0;
   latest_index_ = 0;
-  mask_width_[0] = mask_width_[1] = 0;
-  mask_height_[0] = mask_height_[1] = 0;
   frame_valid_ = false;
   latest_valid_ = false;
   built_this_frame_ = false;
@@ -150,8 +117,8 @@ void ExposureMask::AdvanceFrame(bool enabled) {
 
 ExposureMask::Output ExposureMask::GetFrameOutput() const {
   if (!frame_valid_ || masks_[frame_index_] == nullptr) return {};
-  return {masks_[frame_index_].Get(), mask_width_[frame_index_],
-          mask_height_[frame_index_], true};
+  return {masks_[frame_index_].Get(), masks_[frame_index_].Width(),
+          masks_[frame_index_].Height(), true};
 }
 
 ExposureMask::Output ExposureMask::GetGeneratedOutput() const {
@@ -159,8 +126,8 @@ ExposureMask::Output ExposureMask::GetGeneratedOutput() const {
       masks_[latest_index_] == nullptr) {
     return {};
   }
-  return {masks_[latest_index_].Get(), mask_width_[latest_index_],
-          mask_height_[latest_index_], true};
+  return {masks_[latest_index_].Get(), masks_[latest_index_].Width(),
+          masks_[latest_index_].Height(), true};
 }
 
 bool ExposureMask::EnsureResources(ID3D12Device* device,
@@ -172,43 +139,30 @@ bool ExposureMask::EnsureResources(ID3D12Device* device,
     return false;
   }
 
-  const auto ensure_slot = [&](uint32_t index) {
-    if (masks_[index] != nullptr && mask_width_[index] == width &&
-        mask_height_[index] == height) {
-      return true;
-    }
-
-    Microsoft::WRL::ComPtr<ID3D12Resource> next;
-    if (!CreateMaskResource(device, width, height, next)) return false;
-
-    RetireSlot(masks_[index]);
-    masks_[index] = std::move(next);
-    mask_width_[index] = width;
-    mask_height_[index] = height;
-    return true;
-  };
-
   // Never resize the published snapshot while a frame is in progress. Only
   // the destination is replaced on a working-resolution change; the shader
   // maps the previous mask by normalized coordinates for temporal filtering.
-  if (!ensure_slot(destination_index)) return false;
-  if (classifier_ == nullptr || classifier_width_ != width ||
-      classifier_height_ != height) {
-    Microsoft::WRL::ComPtr<ID3D12Resource> next_classifier;
-    if (!CreateMaskResource(device, width, height, next_classifier)) return false;
-    RetireSlot(classifier_);
-    classifier_ = std::move(next_classifier);
-    classifier_width_ = width;
-    classifier_height_ = height;
+  if (!masks_[destination_index].Ensure(
+          device, MaskDesc(width, height),
+          D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, "exposure_mask")) {
+    return false;
+  }
+  if (!classifier_.Ensure(device, MaskDesc(width, height),
+                                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                                 "exposure_mask_classifier")) {
+    return false;
   }
 
   // Before a valid snapshot exists, keep a matching resource for the unused
   // history binding. Once frame_valid_ is true, this slot is immutable until
   // Present, even if its dimensions differ from the next destination.
-  if (!frame_valid_ &&
-      (masks_[frame_index_] == nullptr || mask_width_[frame_index_] != width ||
-       mask_height_[frame_index_] != height)) {
-    if (!ensure_slot(frame_index_)) return false;
+  if (!frame_valid_ && !masks_[frame_index_].Matches(width, height,
+                                                     DXGI_FORMAT_R8_UNORM)) {
+    if (!masks_[frame_index_].Ensure(
+            device, MaskDesc(width, height),
+            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, "exposure_mask")) {
+      return false;
+    }
   }
   return masks_[frame_index_] != nullptr;
 }

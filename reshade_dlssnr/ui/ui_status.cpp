@@ -288,13 +288,11 @@ void DrawStatusSection(Settings& settings, bool& changed) {
           "waiting on the GPU fence are shown separately below.");
     }
 
-    // Retired queues sit directly under the total: they are memory the addon
-    // still holds but which is not part of any pass's total_bytes, and it is
-    // what makes the total appear to lag after a scale change.
-    if (snap.retired_game_resources != 0 || snap.retired_addon_resources != 0) {
-      ImGui::TextDisabled("Pending release: %u game - %u addon",
-                          snap.retired_game_resources,
-                          snap.retired_addon_resources);
+    // Retired resources sit directly under the total: they are memory the
+    // addon still holds but which is not part of any pass's total_bytes, and
+    // it is what makes the total appear to lag after a scale change.
+    if (snap.retired_resources != 0) {
+      ImGui::TextDisabled("Pending release: %u", snap.retired_resources);
       if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         Tip("Resources retired on a reallocation that are still alive until "
             "the GPU queue fence for their last reader completes.");

@@ -9,7 +9,7 @@
 
 #include <reshade.hpp>
 
-#include "gpu/d3d12_utils.h"
+#include "gpu/gpu_resources.h"
 #include "pipeline/pipeline_graph.h"
 #include "state/settings.h"
 #include "exposure_mask/exposure_mask.h"
@@ -172,8 +172,7 @@ bool HdrState::Ensure(ID3D12Device* device) {
   Shutdown();
 
   for (auto& hist : histogram_) {
-    if (!CreateUavBuffer(device, kCombinedHistogramBytes,
-                         hist.GetAddressOf())) {
+    if (!hist.EnsureUav(device, kCombinedHistogramBytes, "hdr_histogram")) {
       Shutdown();
       return false;
     }
@@ -185,8 +184,8 @@ bool HdrState::Ensure(ID3D12Device* device) {
     return false;
   }
 
-  if (!CreateUavBuffer(device, sizeof(uint32_t),
-                       game_exposure_value_buffer_.GetAddressOf())) {
+  if (!game_exposure_value_buffer_.EnsureUav(
+          device, sizeof(uint32_t), "game_exposure_value")) {
     Shutdown();
     return false;
   }

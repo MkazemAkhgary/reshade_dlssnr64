@@ -19,7 +19,7 @@
 #include "feature/pass/view.h"
 #include "pipeline_graph.h"
 #include "pipeline_trace.h"
-#include "gpu/d3d12_utils.h"
+#include "gpu/gpu_resources.h"
 #include "state/settings.h"
 #include "streamline_compat.h"
 
@@ -208,40 +208,23 @@ void AddonController::GradeBackbuffer(ComputeEngine& codec,
   const unsigned int width = static_cast<unsigned int>(desc.Width);
   const unsigned int height = desc.Height;
 
-  if (grade_scratch_ == nullptr || grade_scratch_width_ != width ||
-      grade_scratch_height_ != height || grade_scratch_format_ != desc.Format) {
+  // The previous frame may still be reading these scratch textures: the
+  // release list no longer waits every Present, so replacement retires them
+  // through the shared queue.
+  if (!grade_scratch_.Matches(width, height, desc.Format) ||
+      !grade_scratch_out_.Matches(width, height, desc.Format)) {
     Microsoft::WRL::ComPtr<ID3D12Device> device;
     if (FAILED(command_queue->GetDevice(IID_PPV_ARGS(&device))) ||
         device == nullptr) {
       return;
     }
-    // The previous frame may still be reading these scratch textures: the
-    // release list no longer waits every Present. Transfer references to the
-    // same fence-delayed retire queue used for replaced pass resources.
-    if (grade_scratch_ != nullptr) {
-      grade_scratch_->AddRef();
-      DlssGuides::Get().RetireGameResource(grade_scratch_.Get());
-      grade_scratch_.Reset();
-    }
-    if (grade_scratch_out_ != nullptr) {
-      grade_scratch_out_->AddRef();
-      DlssGuides::Get().RetireGameResource(grade_scratch_out_.Get());
-      grade_scratch_out_.Reset();
-    }
-    ID3D12Resource* raw = nullptr;
-    if (!CreateUavTexture(device.Get(), desc, &raw)) return;
-    grade_scratch_.Attach(raw);
-    raw = nullptr;
-    if (!CreateUavTexture(device.Get(), desc, &raw)) {
-      grade_scratch_.Reset();
+    if (!grade_scratch_.EnsureUav(device.Get(), desc, "grade_scratch")) {
       return;
     }
-    grade_scratch_out_.Attach(raw);
-    grade_scratch_width_ = width;
-    grade_scratch_height_ = height;
-    grade_scratch_format_ = desc.Format;
-    TRACE_CMD(this, "create grade_scratch res=%d %ux%u",
-              trace::ResourceId(grade_scratch_.Get()), width, height);
+    if (!grade_scratch_out_.EnsureUav(device.Get(), desc,
+                                             "grade_scratch_out")) {
+      return;
+    }
   }
 
   // The backbuffer goes in as a copy source and comes back as a copy
@@ -330,83 +313,71 @@ void AddonController::OnPresent(
     last_command_queue_ = command_queue;
   }
 
-  DlssGuides& guides = DlssGuides::Get();
-  const uint64_t completed_fence = release_command_.CompletedFenceValue();
-  guides.ReleaseRetiredResourcesCompleted(completed_fence);
-  ReleaseRetiredSessionsCompleted(completed_fence);
+  // Every path below ends in the same place: SyncRetiredResources tags whatever
+  // was retired this frame against a queue marker and frees the completed
+  // prefix. Paths only decide whether they produced a marker.
+  uint64_t marker = 0;
+  bool sync = true;
 
   if (restart_waiting_for_fence_) {
+    // Every entry retired before the restart already carries the restart
+    // marker, so NeedsQueueMarker() is false and no further marker is
+    // submitted while we wait.
+    const uint64_t completed_fence = release_command_.CompletedFenceValue();
     if (restart_fence_value_ == 0 || completed_fence < restart_fence_value_) {
       frame_debug_.Reset();
       pre_stage_seen_ = false;
-      return;
+    } else {
+      FinishRestartAfterFence();
+      // Everything was released unconditionally; there is nothing left to sync.
+      sync = false;
     }
-    FinishRestartAfterFence();
-    return;
-  }
-
-  if (restart_requested_) {
-    if (command_queue == nullptr || BeginReleaseCommands(command_queue) == nullptr) {
-      frame_debug_.Reset();
-      pre_stage_seen_ = false;
-      return;
+  } else if (restart_requested_) {
+    marker = SignalReleaseMarker(command_queue);
+    if (marker == 0) {
+      // No queue at all is not an error: the restart simply waits for one.
+      if (command_queue != nullptr) {
+        reshade::log::message(
+            reshade::log::level::error,
+            "DLSSNR: restart deferred because queue fence could not be signaled");
+      }
+    } else {
+      restart_requested_ = false;
+      restart_waiting_for_fence_ = true;
+      restart_fence_value_ = marker;
+      TRACE_EVT(this, "restart_deferred fence=%llu",
+                static_cast<unsigned long long>(marker));
     }
-    const uint64_t before_marker = release_command_.LastSignaledFenceValue();
-    EndReleaseCommands(command_queue);
-    const uint64_t marker = release_command_.LastSignaledFenceValue();
-    if (marker <= before_marker) {
-      reshade::log::message(reshade::log::level::error,
-                            "DLSSNR: restart deferred because queue fence could not be signaled");
-      frame_debug_.Reset();
-      pre_stage_seen_ = false;
-      return;
-    }
-    guides.TagRetiredResources(marker);
-    TagRetiredSessions(marker);
-    restart_requested_ = false;
-    restart_waiting_for_fence_ = true;
-    restart_fence_value_ = marker;
-    TRACE_EVT(this, "restart_deferred fence=%llu",
-              static_cast<unsigned long long>(marker));
     frame_debug_.Reset();
     pre_stage_seen_ = false;
-    return;
+  } else {
+    marker = RunPresentFrame(command_queue, swapchain);
   }
 
+  if (sync) SyncRetiredResources(command_queue, marker);
+}
+
+uint64_t AddonController::RunPresentFrame(
+    ID3D12CommandQueue* command_queue,
+    IDXGISwapChain* swapchain) {
   const Settings& settings = GetSettings();
+
   if (!settings.enabled) {
     if (command_queue != nullptr) SignalHdrAtPresent(command_queue);
     AdvanceMaskFrames(false);
     // The effect can be disabled after a mode/resource change retired objects.
-    // Submit an empty marker only; do not run grading/debug steps while the
-    // master switch is off.
-    const bool have_retired_resources =
-        guides.RetiredGameResourceCount() != 0 ||
-        guides.RetiredResourceCount() != 0 || HasUnfencedRetiredSessions();
-    if (command_queue != nullptr &&
-        (have_retired_resources || temporal_feedback_pending_) &&
-        BeginReleaseCommands(command_queue) != nullptr) {
-      const uint64_t before_marker = release_command_.LastSignaledFenceValue();
-      EndReleaseCommands(command_queue);
-      const uint64_t marker = release_command_.LastSignaledFenceValue();
-      if (marker > before_marker) {
-        if (have_retired_resources) {
-          guides.TagRetiredResources(marker);
-          TagRetiredSessions(marker);
-        }
-        temporal_feedback_pending_ = false;
-      }
-    }
+    // Only a marker is owed; do not run grading/debug steps while the master
+    // switch is off. Returning 0 lets the caller submit that marker.
     frame_debug_.Reset();
     pre_stage_seen_ = false;
-    return;
+    return 0;
   }
   if (command_queue == nullptr || swapchain == nullptr) {
     if (command_queue != nullptr) SignalHdrAtPresent(command_queue);
     AdvanceMaskFrames(true);
     frame_debug_.Reset();
     pre_stage_seen_ = false;
-    return;
+    return 0;
   }
 
   // Start a new frame for the runner's skip diagnostics, so a skip that has
@@ -435,43 +406,41 @@ void AddonController::OnPresent(
     }
   }
 
-  // Queue-retired game resources and replaced addon textures need a fence
-  // behind the game's/effect's work, but must not stall every Present. Ensure
-  // the Release list gets submitted even when no grade/debug dispatch is active.
-  const bool have_retired_resources =
-      guides.RetiredGameResourceCount() != 0 ||
-      guides.RetiredResourceCount() != 0 || HasUnfencedRetiredSessions();
-  const bool need_queue_marker = have_retired_resources || temporal_feedback_pending_;
-  const bool retirement_sync_ready =
-      !need_queue_marker || BeginReleaseCommands(command_queue) != nullptr;
+  // The Release stage submits the queue marker whenever any of its steps record
+  // (grade, debug present). When none do, it submits nothing and the caller's
+  // tail supplies an empty marker instead - so an idle frame still does not pay
+  // for a submit.
   const uint64_t fence_before_release = release_command_.LastSignaledFenceValue();
-
   RunSingleStage(PipelineReleaseStage(), command_queue, swapchain);
+  const uint64_t release_fence = release_command_.LastSignaledFenceValue();
 
-  if (need_queue_marker && retirement_sync_ready) {
-    const uint64_t retirement_fence = release_command_.LastSignaledFenceValue();
-    if (retirement_fence > fence_before_release) {
-      if (have_retired_resources) {
-        guides.TagRetiredResources(retirement_fence);
-        TagRetiredSessions(retirement_fence);
-      }
-      temporal_feedback_pending_ = false;
-      const uint64_t completed = release_command_.CompletedFenceValue();
-      guides.ReleaseRetiredResourcesCompleted(completed);
-      ReleaseRetiredSessionsCompleted(completed);
-    } else {
-      reshade::log::message(
-          reshade::log::level::warning,
-          "DLSSNR: deferred resource release / temporal feedback; GPU queue marker failed");
-    }
-  } else if (need_queue_marker) {
-    // The release list could not be opened (for example because the
-    // command context failed to initialize). The temporal feedback copy
-    // was still recorded on the game's list with a predicted fence value.
-    // Signal that value directly on the queue so the readback can complete;
-    // otherwise can_skip is permanently false and the model runs every
-    // frame while the temporal passes are pure overhead.
-    if (temporal_feedback_pending_ && command_queue != nullptr) {
+  RefreshStatus(settings);
+  AdvanceMaskFrames(true);
+  // The debug image is not cleared here. A frame can be presented more than
+  // once per evaluation (frame generation does exactly that), and clearing at
+  // Present left every presentation after the first with no overlay. Each
+  // evaluate entry point resets it instead, so it stays valid for every
+  // presentation of the same evaluation and is replaced by the next one.
+  pre_stage_seen_ = false;
+  TRACE_EVT(this, "controller_exit stage=Present");
+  TRACE_END_FRAME(FrameStream::Present);
+
+  return release_fence > fence_before_release ? release_fence : 0;
+}
+
+uint64_t AddonController::SignalReleaseMarker(
+    ID3D12CommandQueue* command_queue) {
+  if (command_queue == nullptr) return 0;
+
+  const uint64_t before_marker = release_command_.LastSignaledFenceValue();
+  if (BeginReleaseCommands(command_queue) == nullptr) {
+    // The release list could not be opened (for example because the command
+    // context failed to initialize). The temporal feedback copy was still
+    // recorded on the game's list with a predicted fence value. Signal that
+    // value directly on the queue so the readback can complete; otherwise
+    // can_skip is permanently false and the model runs every frame while the
+    // temporal passes are pure overhead.
+    if (temporal_feedback_pending_) {
       ID3D12Fence* feedback_fence = release_command_.GetFence();
       const uint64_t predicted = release_command_.GetNextFenceValue() - 1;
       if (feedback_fence != nullptr && predicted != 0) {
@@ -484,19 +453,49 @@ void AddonController::OnPresent(
     reshade::log::message(
         reshade::log::level::warning,
         "DLSSNR: deferred resource release; GPU queue marker unavailable");
+    return 0;
   }
 
-  RefreshStatus(settings);
-  AdvanceMaskFrames(true);
-  // The debug image is not cleared here. A frame can be presented more than
-  // once per evaluation (frame generation does exactly that), and clearing at
-  // Present left every presentation after the first with no overlay. Each
-  // evaluate entry point resets it instead, so it stays valid for every
-  // presentation of the same evaluation and is replaced by the next one.
-  pre_stage_seen_ = false;
-  TRACE_EVT(this, "controller_exit stage=Present");
-  TRACE_END_FRAME(FrameStream::Present);
+  EndReleaseCommands(command_queue);
+  const uint64_t marker = release_command_.LastSignaledFenceValue();
+  if (marker <= before_marker) {
+    reshade::log::message(
+        reshade::log::level::warning,
+        "DLSSNR: deferred resource release / temporal feedback; GPU queue marker failed");
+    return 0;
+  }
+  return marker;
 }
+
+bool AddonController::NeedsQueueMarker() const {
+  return ResourceRetireQueue::Get().HasUntagged() ||
+         HasUnfencedRetiredSessions() || temporal_feedback_pending_;
+}
+
+void AddonController::SyncRetiredResources(
+    ID3D12CommandQueue* command_queue,
+    uint64_t marker) {
+  ResourceRetireQueue& retired = ResourceRetireQueue::Get();
+
+  // Asked once, so the decision to signal and the decision to tag cannot
+  // disagree.
+  const bool needs_marker = NeedsQueueMarker();
+
+  // Nothing signaled a marker this frame but work is waiting on one. Submit an
+  // empty one rather than letting the queue grow until the next busy frame.
+  if (marker == 0 && needs_marker) marker = SignalReleaseMarker(command_queue);
+
+  if (marker != 0 && needs_marker) {
+    retired.TagAll(marker);
+    TagRetiredSessions(marker);
+    temporal_feedback_pending_ = false;
+  }
+
+  const uint64_t completed = release_command_.CompletedFenceValue();
+  retired.ReleaseCompleted(completed);
+  ReleaseRetiredSessionsCompleted(completed);
+}
+
 
 void AddonController::OnPreDlssEvaluate(
     ID3D12GraphicsCommandList* command_list,
@@ -633,16 +632,17 @@ void AddonController::PresentDebugOutput(
   // the source pipeline stage ran at a different resolution. In that case
   // skip the override so we don't break the present.
   const D3D12_RESOURCE_DESC bb_desc = backbuffer->GetDesc();
-  if (bb_desc.Format != debug.format) {
+  if (bb_desc.Format != debug.format()) {
     TRACE_EVT(this, "skip_present_debug reason=format_mismatch bb=%d dbg=%d",
-              static_cast<int>(bb_desc.Format), static_cast<int>(debug.format));
+              static_cast<int>(bb_desc.Format),
+              static_cast<int>(debug.format()));
     return;
   }
-  if (bb_desc.Width != debug.width || bb_desc.Height != debug.height) {
+  if (bb_desc.Width != debug.width() || bb_desc.Height != debug.height()) {
     TRACE_EVT(this, "skip_present_debug reason=size_mismatch bb=%llux%llu dbg=%ux%u",
               static_cast<unsigned long long>(bb_desc.Width),
-              static_cast<unsigned long long>(bb_desc.Height), debug.width,
-              debug.height);
+              static_cast<unsigned long long>(bb_desc.Height), debug.width(),
+              debug.height());
     return;
   }
 
@@ -723,15 +723,12 @@ bool AddonController::RestartPending() const {
   return restart_requested_ || restart_waiting_for_fence_;
 }
 
-void AddonController::FinishRestartAfterFence() {
-  DLSSNR_PROFILE_ASYNC_L2("AddonController::FinishRestartAfterFence");
-  const uint64_t completed_fence = release_command_.CompletedFenceValue();
-  DlssGuides& guides = DlssGuides::Get();
-  guides.ReleaseRetiredResourcesCompleted(completed_fence);
-  ReleaseRetiredSessionsCompleted(completed_fence);
+void AddonController::TeardownRuntime() {
+  DLSSNR_PROFILE_ASYNC_L2("AddonController::TeardownRuntime");
 
-  // The restart marker is complete, so active and retired NGX features may now
-  // be released without racing the game's submitted command lists.
+  // Sessions hold NGX features and GPU resources that command lists submitted
+  // earlier may still reference. This only runs once the queue is provably
+  // idle, so they can be released here without a further fence.
   for (auto& entry : sessions_) {
     if (entry.second) entry.second->Shutdown(runtime_);
   }
@@ -740,21 +737,35 @@ void AddonController::FinishRestartAfterFence() {
     if (retired.session) retired.session->Shutdown(runtime_);
   }
   retired_sessions_.clear();
-  guides.Clear();
+
+  // Guides retire their own references into the queue rather than freeing them,
+  // so the force-release at the bottom of this function covers them too.
+  DlssGuides::Get().Clear();
+
   release_command_.Shutdown();
   last_command_queue_.Reset();
   release_list_begun_ = false;
   temporal_feedback_pending_ = false;
   grade_scratch_.Reset();
   grade_scratch_out_.Reset();
-  grade_scratch_width_ = 0;
-  grade_scratch_height_ = 0;
-  grade_scratch_format_ = DXGI_FORMAT_UNKNOWN;
   pass1_command_.Shutdown();
   codec_.Destroy();
   frame_debug_.Release();
   pre_stage_seen_ = false;
   runtime_.Shutdown();
+
+  // Nothing will signal another fence, so drop everything retired on the way
+  // down - including the debug image released just above. The GPU is idle here
+  // by the caller's contract.
+  ResourceRetireQueue::Get().ReleaseAllAfterGpuIdle();
+}
+
+void AddonController::FinishRestartAfterFence() {
+  DLSSNR_PROFILE_ASYNC_L2("AddonController::FinishRestartAfterFence");
+  // The restart marker has completed, so every NGX feature and addon resource
+  // can be released without racing the game's submitted command lists.
+  TeardownRuntime();
+
   post_dlss_blocked_ = false;
   post_dlss_block_reason_[0] = '\0';
   pre_dlss_blocked_ = false;
@@ -867,13 +878,9 @@ void AddonController::RefreshStatus(const Settings& settings) {
     status_.passes.push_back(entry);
   }
 
-  // `guides` above is the DlssGuideState snapshot; the retired queues are
-  // owned by the DlssGuides singleton, not by that snapshot.
-  DlssGuides& guide_owner = DlssGuides::Get();
-  status_.retired_game_resources =
-      static_cast<uint32_t>(guide_owner.RetiredGameResourceCount());
-  status_.retired_addon_resources =
-      static_cast<uint32_t>(guide_owner.RetiredResourceCount());
+  // Retired count comes from the shared queue, not from DlssGuides.
+  status_.retired_resources =
+      static_cast<uint32_t>(ResourceRetireQueue::Get().Count());
 }
 
 void AddonController::EnsureSessions(
@@ -909,42 +916,16 @@ void AddonController::Shutdown() {
   std::lock_guard<std::mutex> lock(g_direct_mutex);
 
   // Shutdown is allowed to wait. Enqueue a final marker behind submitted game
-  // and addon work so feature handles/resources can be released deterministically
-  // instead of relying on the non-blocking per-frame retirement path.
+  // and addon work, then block on it: that wait is what makes the unconditional
+  // release at the end of TeardownRuntime legal.
   ID3D12CommandQueue* const queue = last_command_queue_.Get();
   if (queue != nullptr && BeginReleaseCommands(queue) != nullptr) {
     EndReleaseCommands(queue);
     release_command_.WaitGpu(queue);
-    const uint64_t fence = release_command_.LastSignaledFenceValue();
-    const uint64_t completed = release_command_.CompletedFenceValue();
-    if (fence != 0) {
-      DlssGuides::Get().TagRetiredResources(fence);
-      TagRetiredSessions(fence);
-    }
-    DlssGuides::Get().ReleaseRetiredResourcesCompleted(completed);
-    ReleaseRetiredSessionsCompleted(completed);
   }
 
-  for (auto& entry : sessions_) {
-    if (entry.second) entry.second->Shutdown(runtime_);
-  }
-  sessions_.clear();
-  for (auto& retired : retired_sessions_) {
-    if (retired.session) retired.session->Shutdown(runtime_);
-  }
-  retired_sessions_.clear();
-  release_command_.Shutdown();
-  last_command_queue_.Reset();
-  release_list_begun_ = false;
-  grade_scratch_.Reset();
-  grade_scratch_out_.Reset();
-  grade_scratch_width_ = 0;
-  grade_scratch_height_ = 0;
-  grade_scratch_format_ = DXGI_FORMAT_UNKNOWN;
-  pass1_command_.Shutdown();
-  codec_.Destroy();
-  frame_debug_.Release();
-  runtime_.Shutdown();
+  TeardownRuntime();
+
   restart_requested_ = false;
   restart_waiting_for_fence_ = false;
   restart_fence_value_ = 0;

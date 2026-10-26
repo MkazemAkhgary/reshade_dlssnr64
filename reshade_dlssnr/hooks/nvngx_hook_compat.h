@@ -22,6 +22,7 @@
 #include "d3d12_hooks.h"
 #include "dlss_guides.h"
 #include "d3d12_utils.h"
+#include "gpu/gpu_resources.h"
 #include "local_vtable.h"
 #include "proxy_unwrap.h"
 #include "state/settings.h"
@@ -354,7 +355,7 @@ static PreDlssColorAdapterFailure CreatePreDlssColorAdapter(
     ID3D12GraphicsCommandList* command_list,
     ID3D12Resource* source,
     const PreDlssColorGeometry& geometry,
-    Microsoft::WRL::ComPtr<ID3D12Resource>* adapter) {
+    OwnedTexture* adapter) {
   if (command_list == nullptr || source == nullptr || adapter == nullptr)
     return PreDlssColorAdapterFailure::DeviceUnavailable;
 
@@ -395,16 +396,14 @@ static PreDlssColorAdapterFailure CreatePreDlssColorAdapter(
   adapter_desc.Alignment = 0;
   adapter_desc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
-  D3D12_HEAP_PROPERTIES heap = {};
-  heap.Type = D3D12_HEAP_TYPE_DEFAULT;
-  ID3D12Resource* raw_adapter = nullptr;
-  if (FAILED(device->CreateCommittedResource(
-          &heap, D3D12_HEAP_FLAG_NONE, &adapter_desc,
-          D3D12_RESOURCE_STATE_COMMON, nullptr,
-          IID_PPV_ARGS(&raw_adapter))) || raw_adapter == nullptr) {
+  // Replace unconditionally: the adapter is retired after every evaluation,
+  // and reusing a matching one would let a second evaluation overwrite a
+  // texture NGX may still be reading.
+  adapter->Reset();
+  if (!adapter->Ensure(device.Get(), adapter_desc,
+                       D3D12_RESOURCE_STATE_COMMON, "pre_dlss_adapter")) {
     return PreDlssColorAdapterFailure::ResourceCreationFailed;
   }
-  adapter->Attach(raw_adapter);
 
   const UINT source_subresource = D3D12CalcSubresource(
       0, 0, 0, source_desc.MipLevels, source_desc.DepthOrArraySize);
@@ -483,7 +482,7 @@ static void LogPreDlssColorAdapterFailure(
 struct PreDlssColorOverride {
   NVSDK_NGX_Parameter* parameters = nullptr;
   ID3D12Resource* original_resource = nullptr;
-  Microsoft::WRL::ComPtr<ID3D12Resource> adapter;
+  OwnedTexture adapter;
   unsigned int original_width = 0;
   unsigned int original_height = 0;
   unsigned int original_base_x = 0;
@@ -503,7 +502,7 @@ struct PreDlssColorOverride {
 
   void Apply(NVSDK_NGX_Parameter* params,
              ID3D12Resource* original,
-             Microsoft::WRL::ComPtr<ID3D12Resource>&& compact,
+             OwnedTexture&& compact,
              const PreDlssColorGeometry& geometry,
              DXGI_FORMAT original_format_value) {
     parameters = params;
@@ -539,9 +538,10 @@ struct PreDlssColorOverride {
       parameters->Set(NVSDK_NGX_Parameter_DLSS_Input_Color_Subrect_Base_Y, 0u);
       changed_base_y = true;
     }
-    const unsigned int compact_format = static_cast<unsigned int>(adapter->GetDesc().Format);
+    const DXGI_FORMAT compact_dxgi_format = adapter.Format();
+    const unsigned int compact_format = static_cast<unsigned int>(compact_dxgi_format);
     if (had_format && original_format != compact_format &&
-        original_format_value != adapter->GetDesc().Format) {
+        original_format_value != compact_dxgi_format) {
       parameters->Set(NVSDK_NGX_Parameter_Color_Format, compact_format);
       changed_format = true;
     }
@@ -569,10 +569,7 @@ struct PreDlssColorOverride {
     active = false;
   }
 
-  void RetireAdapter() {
-    if (adapter != nullptr)
-      DlssGuides::Get().RetireGameResource(adapter.Detach());
-  }
+  void RetireAdapter() { adapter.Reset(); }
 };
 
 
@@ -738,7 +735,7 @@ static NVSDK_NGX_Result NVSDK_CONV EvaluateFeatureImpl(
                 "Post-DLSS.");
             pre_input = nullptr;
           } else {
-            Microsoft::WRL::ComPtr<ID3D12Resource> compact_color;
+            OwnedTexture compact_color;
             const PreDlssColorAdapterFailure adapter_failure =
                 CreatePreDlssColorAdapter(work_list, color, geometry,
                                           &compact_color);

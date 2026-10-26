@@ -6,19 +6,17 @@
 #pragma once
 
 #include <d3d12.h>
-#include <wrl/client.h>
 
 #include <cstdint>
+
+#include "gpu/gpu_resources.h"
 
 namespace reshade_dlssnr {
 
 struct FrameDebugContext {
   // The debug image. Reused across frames; only recreated on size/format
   // change. This is the only resource the debug path owns.
-  Microsoft::WRL::ComPtr<ID3D12Resource> output;
-  unsigned int width = 0;
-  unsigned int height = 0;
-  DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
+  OwnedTexture output;
 
   // Format the debug output should be created in. The debug image is always
   // displayed on the swapchain backbuffer, so its format should match the
@@ -32,19 +30,31 @@ struct FrameDebugContext {
   // True when `output` holds a debug render produced this frame.
   bool valid = false;
 
+  // Ensures `output` matches the requested shape. A replaced image goes
+  // through the shared retire queue, because the previous frame's present
+  // copy may still be reading it.
+  bool EnsureOutput(ID3D12Device* device,
+                    unsigned int width,
+                    unsigned int height,
+                    DXGI_FORMAT format) {
+    return output.EnsureUav(device, Texture2DDesc(width, height, format),
+                                   "frame_debug");
+  }
+
+  unsigned int width() const { return output.Width(); }
+  unsigned int height() const { return output.Height(); }
+  DXGI_FORMAT format() const { return output.Format(); }
+
   void Reset() {
     valid = false;
-    // Note: `output`, target dimensions, `format`, and preferred backbuffer extent are intentionally kept -
-    // the resource is reused across frames to avoid churn.
+    // Note: `output`, its shape, and the preferred backbuffer extent are
+    // intentionally kept - the resource is reused across frames to avoid churn.
   }
 
   // Discards the cached output buffer. Call when the swapchain or device is
   // torn down.
   void Release() {
     output.Reset();
-    width = 0;
-    height = 0;
-    format = DXGI_FORMAT_UNKNOWN;
     preferred_format = DXGI_FORMAT_UNKNOWN;
     preferred_width = 0;
     preferred_height = 0;

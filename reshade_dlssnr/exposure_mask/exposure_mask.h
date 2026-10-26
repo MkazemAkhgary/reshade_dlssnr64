@@ -3,11 +3,11 @@
 #include <cstdint>
 
 #include <d3d12.h>
-#include <wrl/client.h>
 
 #include "command_context.h"
 #include "compute_engine.h"
 #include "exposure_mask/settings.h"
+#include "gpu/gpu_resources.h"
 
 namespace reshade_dlssnr {
 
@@ -49,14 +49,10 @@ class ExposureMask {
                        unsigned int height,
                        uint32_t destination_index);
 
-  Microsoft::WRL::ComPtr<ID3D12Resource> masks_[2];
-  Microsoft::WRL::ComPtr<ID3D12Resource> classifier_;
-  unsigned int classifier_width_ = 0;
-  unsigned int classifier_height_ = 0;
+  OwnedTexture masks_[2];
+  OwnedTexture classifier_;
   uint32_t frame_index_ = 0;
   uint32_t latest_index_ = 0;
-  unsigned int mask_width_[2] = {};
-  unsigned int mask_height_[2] = {};
   bool frame_valid_ = false;
   bool latest_valid_ = false;
   bool built_this_frame_ = false;

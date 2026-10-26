@@ -313,21 +313,6 @@ bool PassSession::AcquireBackbuffer(
   return true;
 }
 
-void PassSession::RetireResourceCallback(ID3D12Resource* resource,
-                                         void* user_data) {
-  if (resource == nullptr) return;
-  auto* guides = static_cast<DlssGuides*>(user_data);
-  if (guides != nullptr) {
-    // Transfer one reference into the deferred-release queue. The controller
-    // tags it with a queue-ordered fence and releases it only after completion.
-    resource->AddRef();
-    guides->RetireGameResource(resource);
-    resource->Release();
-  } else {
-    resource->Release();
-  }
-}
-
 bool PassSession::EnsureFrameResources(
     ID3D12Device* device,
     const D3D12_RESOURCE_DESC& desc,
@@ -591,43 +576,19 @@ bool PassSession::MaybeRenderDebug(
   const unsigned int target_height = frame_debug.preferred_height;
 
   // (Re)create the shared debug output when its shape changes. The output
-  // is owned by FrameDebugContext and lives across frames.
-  if (frame_debug.output == nullptr ||
-      frame_debug.width != target_width ||
-      frame_debug.height != target_height ||
-      frame_debug.format != target_format) {
+  // is owned by FrameDebugContext and lives across frames; a replaced one is
+  // retired rather than released, because the previous frame's present copy
+  // may still be reading it.
+  if (!frame_debug.output.Matches(target_width, target_height, target_format)) {
     Microsoft::WRL::ComPtr<ID3D12Device> device;
     if (FAILED(command_list->GetDevice(IID_PPV_ARGS(&device))) ||
         device == nullptr) {
       return false;
     }
-
-    D3D12_HEAP_PROPERTIES heap = {};
-    heap.Type = D3D12_HEAP_TYPE_DEFAULT;
-
-    D3D12_RESOURCE_DESC desc = {};
-    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-    desc.Width = target_width;
-    desc.Height = target_height;
-    desc.DepthOrArraySize = 1;
-    desc.MipLevels = 1;
-    desc.Format = target_format;
-    desc.SampleDesc.Count = 1;
-    desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-
-    Microsoft::WRL::ComPtr<ID3D12Resource> new_output;
-    if (FAILED(device->CreateCommittedResource(
-            &heap, D3D12_HEAP_FLAG_NONE, &desc,
-            D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr,
-            IID_PPV_ARGS(&new_output)))) {
+    if (!frame_debug.EnsureOutput(device.Get(), target_width, target_height,
+                                  target_format)) {
       return false;
     }
-
-    frame_debug.output = std::move(new_output);
-    frame_debug.width = target_width;
-    frame_debug.height = target_height;
-    frame_debug.format = target_format;
   }
 
   // Seed the pass tracker: at this point the debug output is always UAV
@@ -1093,8 +1054,6 @@ PipelineStatus PassSession::StepEnsureFrameResources(PassRun& run) {
   DLSSNR_PROFILE_RESOURCE_L2("StepEnsureFrameResources");
   PassSession* self = run.session;
   if (run.device == nullptr) return PipelineStatus::SkipFrame;
-
-  self->resources_.SetRetireCallback(&PassSession::RetireResourceCallback, self->guides_);
 
   const bool allow_identity_input = run.pass_bound &&
       !run.grade_input.enabled && run.hdr_state.format != HdrFormat::ScRgb &&

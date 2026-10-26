@@ -11,6 +11,8 @@
 #include <mutex>
 #include <vector>
 
+#include "gpu/gpu_resources.h"
+
 namespace reshade_dlssnr {
 
 // Both upscalers produce the image the addon grades and both consume depth
@@ -91,27 +93,7 @@ class DlssGuides {
 
   DlssGuideState GetState(bool invert_fallback_depth = false) const;
   void SetFallbackDepth(ID3D12Resource* resource);
-  void RetireGameResource(ID3D12Resource* resource);
-  // Bind all resources retired before this present to a queue-ordered fence.
-  // ReleaseRetiredResourcesCompleted() later frees only the completed prefix.
-  void TagRetiredResources(uint64_t fence_value);
-  size_t ReleaseRetiredResourcesCompleted(uint64_t completed_fence_value);
   void Clear();
-
-  // Queue depths, for the frame-boundary diagnostic in AddonController.
-  size_t RetiredResourceCount() const;
-  size_t RetiredGameResourceCount() const;
-
- private:
-  struct RetiredResource {
-    ID3D12Resource* resource = nullptr;
-    uint64_t fence_value = 0;
-  };
-
-  void ReleaseRetiredResourcesLocked();
-  void ReleaseRetiredGameResourcesLocked();
-  size_t ReleaseCompletedLocked(std::vector<RetiredResource>& resources,
-                               uint64_t completed_fence_value);
 
  private:
   DlssGuides() = default;
@@ -122,46 +104,23 @@ class DlssGuides {
 
   mutable std::mutex lock_;
 
-  // Clone allocations are reused while cloning stays enabled. Direct-resource
-  // ComPtrs keep game objects alive until the queue-ordered retirement fence.
-  Microsoft::WRL::ComPtr<ID3D12Resource> depth_clone_;
-  Microsoft::WRL::ComPtr<ID3D12Resource> motion_clone_;
-  Microsoft::WRL::ComPtr<ID3D12Resource> dlss_output_clone_;
-  Microsoft::WRL::ComPtr<ID3D12Resource> depth_direct_;
-  Microsoft::WRL::ComPtr<ID3D12Resource> motion_direct_;
-  Microsoft::WRL::ComPtr<ID3D12Resource> dlss_output_direct_;
-  Microsoft::WRL::ComPtr<ID3D12Resource> fallback_depth_;
+  // Clone allocations are reused while cloning stays enabled. The direct
+  // references keep game objects alive until the queue-ordered retirement
+  // fence; BorrowedRef owns exactly one counted reference on each.
+  OwnedTexture depth_clone_;
+  OwnedTexture motion_clone_;
+  OwnedTexture dlss_output_clone_;
+  BorrowedRef depth_direct_;
+  BorrowedRef motion_direct_;
+  BorrowedRef dlss_output_direct_;
+  BorrowedRef fallback_depth_;
   unsigned int fallback_depth_width_ = 0;
   unsigned int fallback_depth_height_ = 0;
   std::atomic_bool requested_clone_resources_{false};
   bool clone_resources_ = false;
   uint64_t capture_serial_ = 0;
 
-  unsigned int depth_width_ = 0;
-  unsigned int depth_height_ = 0;
-  DXGI_FORMAT depth_format_ = DXGI_FORMAT_UNKNOWN;
-
-  unsigned int motion_width_ = 0;
-  unsigned int motion_height_ = 0;
-  DXGI_FORMAT motion_format_ = DXGI_FORMAT_UNKNOWN;
-
-  unsigned int dlss_output_width_ = 0;
-  unsigned int dlss_output_height_ = 0;
-  DXGI_FORMAT dlss_output_format_ = DXGI_FORMAT_UNKNOWN;
-
-  std::vector<RetiredResource> retired_resources_;
-  std::vector<RetiredResource> retired_game_resources_;
-
   DlssGuideState state_;
-
-  void RetireResource(Microsoft::WRL::ComPtr<ID3D12Resource>& resource);
-
-  ID3D12Resource* CreateGuideClone(
-      ID3D12Device* device,
-      ID3D12Resource* source,
-      unsigned int* out_width,
-      unsigned int* out_height,
-      DXGI_FORMAT* out_format);
 
   DXGI_FORMAT TypedGuideFormat(DXGI_FORMAT format) const;
   bool IsTypelessFormat(DXGI_FORMAT format) const;

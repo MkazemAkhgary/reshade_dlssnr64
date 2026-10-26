@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "command_context.h"
+#include "gpu_resources.h"
 #include "dlss_guides.h"
 #include "debug/frame_debug_context.h"
 #include "hdr_state.h"
@@ -100,9 +101,9 @@ class AddonController {
   // release steps record into a single submit. EndReleaseCommands closes,
   // submits, and signals the list without blocking the CPU.
   //
-  // Normally an idle frame does not pay for a submit. When retired
-  // resources are waiting for GPU completion, OnPresent explicitly opens this
-  // list so the Release stage provides a queue-ordered lifetime fence.
+  // Normally an idle frame does not pay for a submit. When retired resources
+  // are waiting for GPU completion, SyncRetiredResources opens this list via
+  // SignalReleaseMarker so the frame still provides a queue-ordered fence.
   ID3D12GraphicsCommandList* BeginReleaseCommands(
       ID3D12CommandQueue* command_queue);
   void EndReleaseCommands(ID3D12CommandQueue* command_queue);
@@ -165,6 +166,40 @@ class AddonController {
       IDXGISwapChain* swapchain,
       ID3D12Resource* exposure_texture = nullptr,
       HdrState* previous_hdr = nullptr);
+
+  // Runs this frame's work and returns the fence value of a queue marker that
+  // was already signaled this frame, or 0 when nothing was signaled. A non-zero
+  // return covers every command recorded before it, so the caller can tag and
+  // free retired resources against it without submitting again.
+  uint64_t RunPresentFrame(ID3D12CommandQueue* command_queue,
+                           IDXGISwapChain* swapchain);
+
+  // Opens and submits the release list purely to produce a queue marker, and
+  // handles the temporal-feedback fallback when the list cannot be opened.
+  // Returns 0 when no marker could be produced.
+  uint64_t SignalReleaseMarker(ID3D12CommandQueue* command_queue);
+
+  // The single place retired resources are tagged and freed. Every Present path
+  // ends here.
+  void SyncRetiredResources(ID3D12CommandQueue* command_queue, uint64_t marker);
+
+  // True when something is waiting for a queue marker: an untagged retired
+  // resource, a retired session with no fence, or a temporal feedback copy
+  // whose predicted fence value has not been signaled yet. Entries that
+  // already carry a fence are excluded - a new marker would not free them
+  // any sooner, so signaling one would be a wasted submit.
+  bool NeedsQueueMarker() const;
+
+  // Releases every runtime object the addon owns: pass sessions, guide
+  // references, command contexts, the compute engine, the debug image, and the
+  // NGX runtime, then force-releases the retire queue.
+  //
+  // Both teardown paths call this and nothing else, so there is one sequence to
+  // maintain. The caller must have already proven the GPU is idle - either by
+  // waiting for the queue (`Shutdown`) or by observing the restart marker
+  // complete (`FinishRestartAfterFence`). Must be called with g_direct_mutex
+  // held.
+  void TeardownRuntime();
 
   // Runs a stage once, outside the per-pass loop. Used for the Release stage,
   // whose steps act on the swapchain rather than on a game resource. It is
@@ -230,16 +265,12 @@ class AddonController {
 
   // Ping-pong target for the backbuffer grade, sized from the backbuffer it
   // was last used with. Recreated on a size or format change; replaced
-  // textures are sent through the deferred-retire queue and released after a
-  // queue-ordered fence completes.
-  Microsoft::WRL::ComPtr<ID3D12Resource> grade_scratch_;
+  // textures go through the shared retire queue.
+  OwnedTexture grade_scratch_;
 
   // The grade writes here, not to the backbuffer: a swapchain image has no
   // ALLOW_UNORDERED_ACCESS, and naming it as a UAV is an invalid command.
-  Microsoft::WRL::ComPtr<ID3D12Resource> grade_scratch_out_;
-  unsigned int grade_scratch_width_ = 0;
-  unsigned int grade_scratch_height_ = 0;
-  DXGI_FORMAT grade_scratch_format_ = DXGI_FORMAT_UNKNOWN;
+  OwnedTexture grade_scratch_out_;
 
   // Command context used only for the HDR histogram dispatch (which does
   // not submit - it just records state on the game's list).

@@ -281,6 +281,7 @@
     <ClInclude Include="gpu\compute_passes.h" />
     <ClInclude Include="gpu\d3d12_utils.h" />
     <ClInclude Include="gpu\gpu_readback.h" />
+    <ClInclude Include="gpu\gpu_resources.h" />
     <ClInclude Include="gpu\pass_resources.h" />
     <ClInclude Include="hooks\d3d12_hooks.h" />
     <ClInclude Include="hooks\d3d12_state.h" />
@@ -370,6 +371,7 @@
     <ClCompile Include="gpu\compute_engine.cpp" />
     <ClCompile Include="gpu\compute_passes.cpp" />
     <ClCompile Include="gpu\gpu_readback.cpp" />
+    <ClCompile Include="gpu\gpu_resources.cpp" />
     <ClCompile Include="gpu\pass_resources.cpp" />
     <ClCompile Include="hooks\d3d12_hooks.cpp" />
     <ClCompile Include="hooks\d3d12_state.cpp" />

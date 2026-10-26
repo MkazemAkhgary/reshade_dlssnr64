@@ -10,28 +10,11 @@ bool GpuReadback::Ensure(ID3D12Device* device, size_t bytes_per_slot) {
 
   Shutdown();
 
-  D3D12_HEAP_PROPERTIES heap = {};
-  heap.Type = D3D12_HEAP_TYPE_READBACK;
-  heap.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-  heap.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-
-  D3D12_RESOURCE_DESC desc = {};
-  desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-  desc.Alignment = 0;
-  desc.Width = bytes_per_slot;
-  desc.Height = 1;
-  desc.DepthOrArraySize = 1;
-  desc.MipLevels = 1;
-  desc.Format = DXGI_FORMAT_UNKNOWN;
-  desc.SampleDesc.Count = 1;
-  desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-  desc.Flags = D3D12_RESOURCE_FLAG_NONE;
-
   for (uint32_t i = 0; i < kRingSize; ++i) {
-    if (FAILED(device->CreateCommittedResource(
-            &heap, D3D12_HEAP_FLAG_NONE, &desc,
-            D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
-            IID_PPV_ARGS(slots_[i].buffer.GetAddressOf())))) {
+    if (!slots_[i].buffer.Ensure(device, bytes_per_slot,
+                                 D3D12_HEAP_TYPE_READBACK,
+                                 D3D12_RESOURCE_STATE_COPY_DEST,
+                                 D3D12_RESOURCE_FLAG_NONE, "readback")) {
       Shutdown();
       return false;
     }
@@ -40,7 +23,7 @@ bool GpuReadback::Ensure(ID3D12Device* device, size_t bytes_per_slot) {
     // READBACK heaps can be persistently mapped. We never write from the CPU,
     // so the map range is a read-only hint.
     D3D12_RANGE read_range = {0, bytes_per_slot};
-    if (FAILED(slots_[i].buffer->Map(0, &read_range, &mapped))) {
+    if (FAILED(slots_[i].buffer.Get()->Map(0, &read_range, &mapped))) {
       Shutdown();
       return false;
     }
@@ -61,9 +44,10 @@ void GpuReadback::Shutdown() {
   DLSSNR_PROFILE_RESOURCE_L2("GpuReadback::Shutdown");
   for (auto& slot : slots_) {
     if (slot.buffer != nullptr && slot.mapped != nullptr) {
-      slot.buffer->Unmap(0, nullptr);
+      slot.buffer.Get()->Unmap(0, nullptr);
     }
     slot.mapped = nullptr;
+    // The GPU may still be copying into this slot; Reset() retires it.
     slot.buffer.Reset();
     slot.fence_value = 0;
     slot.bytes = 0;

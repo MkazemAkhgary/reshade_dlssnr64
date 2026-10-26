@@ -238,12 +238,6 @@ class PassSession {
       unsigned int height,
       DXGI_FORMAT format);
 
-  // Retires pass-owned resources whose size/format is about to change.
-  // Wired to DlssGuides' retired-game-resource queue so the GPU is done
-  // with them before they are released.
-  static void RetireResourceCallback(ID3D12Resource* resource,
-                                     void* user_data);
-
   // The descriptor diagnostic is emitted on first use and when stable NGX
   // descriptor-contract values change (stage, dimensions, formats). Resource
   // identities, guide-valid state, feature handles, and the shared parameter

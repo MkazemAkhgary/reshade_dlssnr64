@@ -7,6 +7,7 @@
 #include <reshade.hpp>
 
 #include "d3d12_utils.h"
+#include "gpu/gpu_resources.h"
 #include "streamline_compat.h"
 
 namespace reshade_dlssnr {
@@ -161,41 +162,15 @@ void DlssGuides::Barrier(
   command_list->ResourceBarrier(1, &barrier);
 }
 
-ID3D12Resource* DlssGuides::CreateGuideClone(
-    ID3D12Device* device,
-    ID3D12Resource* source,
-    unsigned int* out_width,
-    unsigned int* out_height,
-    DXGI_FORMAT* out_format) {
+// Descriptor for a reusable copy of `source`, matching its size so
+// CopyResource is valid. Typeless formats become their typed counterpart so
+// the clone can be sampled.
+D3D12_RESOURCE_DESC GuideCloneDesc(ID3D12Resource* source,
+                                   DXGI_FORMAT typed_format) {
   D3D12_RESOURCE_DESC desc = source->GetDesc();
-
-  // Preserve the original format so CopyResource is valid. Typeless formats
-  // are converted to their typed counterpart so they can be used as SRVs.
-  if (IsTypelessFormat(desc.Format)) {
-    desc.Format = TypedGuideFormat(desc.Format);
-  }
-
+  desc.Format = typed_format;
   desc.Flags = D3D12_RESOURCE_FLAG_NONE;
-
-  D3D12_HEAP_PROPERTIES heap = {};
-  heap.Type = D3D12_HEAP_TYPE_DEFAULT;
-
-  ID3D12Resource* resource = nullptr;
-  if (FAILED(device->CreateCommittedResource(
-          &heap,
-          D3D12_HEAP_FLAG_NONE,
-          &desc,
-          D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-          nullptr,
-          IID_PPV_ARGS(&resource)))) {
-    return nullptr;
-  }
-
-  if (out_width != nullptr) *out_width = static_cast<unsigned int>(desc.Width);
-  if (out_height != nullptr) *out_height = static_cast<unsigned int>(desc.Height);
-  if (out_format != nullptr) *out_format = desc.Format;
-
-  return resource;
+  return desc;
 }
 
 void DlssGuides::CaptureGuides(
@@ -206,13 +181,9 @@ void DlssGuides::CaptureGuides(
   DLSSNR_PROFILE_RESOURCE_L2("DlssGuides::CaptureGuides");
   // Anything pushed during this call is tagged with the queue's most
   // recently signaled fence value. If no queue has signaled yet the hint
-  // is zero and TagRetiredResources at Present still fills it in; that
+  // is zero and the Present-time tag still fills it in; that
   // matches the previous behaviour for the very first frames, when nothing
   // can be retired in flight anyway.
-  auto retire_with_hint = [this, retirement_fence_hint](ID3D12Resource* r) {
-    if (r == nullptr) return;
-    retired_game_resources_.push_back({r, retirement_fence_hint});
-  };
   std::lock_guard<std::mutex> lock(lock_);
   const uint64_t capture_serial = ++capture_serial_;
 
@@ -222,18 +193,12 @@ void DlssGuides::CaptureGuides(
   const bool requested_clone_resources =
       requested_clone_resources_.load(std::memory_order_acquire);
   if (requested_clone_resources != clone_resources_) {
-    RetireResource(depth_clone_);
-    RetireResource(motion_clone_);
-    RetireResource(dlss_output_clone_);
-    retire_with_hint(depth_direct_.Detach());
-    retire_with_hint(motion_direct_.Detach());
-    retire_with_hint(dlss_output_direct_.Detach());
-    depth_width_ = depth_height_ = 0;
-    depth_format_ = DXGI_FORMAT_UNKNOWN;
-    motion_width_ = motion_height_ = 0;
-    motion_format_ = DXGI_FORMAT_UNKNOWN;
-    dlss_output_width_ = dlss_output_height_ = 0;
-    dlss_output_format_ = DXGI_FORMAT_UNKNOWN;
+    depth_clone_.Reset();
+    motion_clone_.Reset();
+    dlss_output_clone_.Reset();
+    depth_direct_.Reset(retirement_fence_hint);
+    motion_direct_.Reset(retirement_fence_hint);
+    dlss_output_direct_.Reset(retirement_fence_hint);
     clone_resources_ = requested_clone_resources;
   }
 
@@ -242,9 +207,7 @@ void DlssGuides::CaptureGuides(
   state_.dlss_output_color = nullptr;
   state_.output_width = 0;
   state_.output_height = 0;
-  if (ID3D12Resource* retired = dlss_output_direct_.Detach()) {
-    retired_game_resources_.push_back({retired, 0});
-  }
+  dlss_output_direct_.Reset();
   state_.clone_resources = clone_resources_;
 
   if (!IsUpscalerFeature(feature_id) ||
@@ -273,9 +236,9 @@ void DlssGuides::CaptureGuides(
     // In direct mode the retained game resources must not keep an obsolete
     // frame's guides alive indefinitely if the game temporarily stops
     // supplying guides. In clone mode, allocations can be reused later.
-    retire_with_hint(depth_direct_.Detach());
-    retire_with_hint(motion_direct_.Detach());
-    retire_with_hint(dlss_output_direct_.Detach());
+    depth_direct_.Reset(retirement_fence_hint);
+    motion_direct_.Reset(retirement_fence_hint);
+    dlss_output_direct_.Reset(retirement_fence_hint);
     state_ = {};
     state_.clone_resources = clone_resources_;
     state_.capture_serial = capture_serial;
@@ -359,22 +322,20 @@ void DlssGuides::CaptureGuides(
     const DXGI_FORMAT desired_depth_format =
         IsTypelessFormat(depth_desc.Format) ? TypedGuideFormat(depth_desc.Format)
                                             : depth_desc.Format;
-    if (depth_clone_ == nullptr || depth_width_ != guide_width ||
-        depth_height_ != guide_height || depth_format_ != desired_depth_format) {
-      RetireResource(depth_clone_);
-      depth_clone_.Attach(CreateGuideClone(
-          device.Get(), depth, &depth_width_, &depth_height_, &depth_format_));
-    }
+    const D3D12_RESOURCE_DESC depth_clone_desc =
+        GuideCloneDesc(depth, desired_depth_format);
+    depth_clone_.Ensure(device.Get(), depth_clone_desc,
+                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                        "depth_clone");
 
     const DXGI_FORMAT desired_motion_format =
         IsTypelessFormat(motion_desc.Format) ? TypedGuideFormat(motion_desc.Format)
                                              : motion_desc.Format;
-    if (motion_clone_ == nullptr || motion_width_ != motion_width ||
-        motion_height_ != motion_height || motion_format_ != desired_motion_format) {
-      RetireResource(motion_clone_);
-      motion_clone_.Attach(CreateGuideClone(
-          device.Get(), motion, &motion_width_, &motion_height_, &motion_format_));
-    }
+    const D3D12_RESOURCE_DESC motion_clone_desc =
+        GuideCloneDesc(motion, desired_motion_format);
+    motion_clone_.Ensure(device.Get(), motion_clone_desc,
+                         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                         "motion_clone");
 
     if (depth_clone_ == nullptr || motion_clone_ == nullptr) {
       state_ = {};
@@ -409,12 +370,12 @@ void DlssGuides::CaptureGuides(
     published_motion = motion_clone_.Get();
   } else {
     if (depth_direct_.Get() != depth) {
-      retire_with_hint(depth_direct_.Detach());
-      depth_direct_ = depth;
+      depth_direct_.Reset(retirement_fence_hint);
+      depth_direct_ = BorrowedRef::AddRef(depth);
     }
     if (motion_direct_.Get() != motion) {
-      retire_with_hint(motion_direct_.Detach());
-      motion_direct_ = motion;
+      motion_direct_.Reset(retirement_fence_hint);
+      motion_direct_ = BorrowedRef::AddRef(motion);
     }
     published_depth = depth_direct_.Get();
     published_motion = motion_direct_.Get();
@@ -451,10 +412,6 @@ void DlssGuides::CaptureOutput(
     NVSDK_NGX_Feature feature_id,
     uint64_t retirement_fence_hint) {
   DLSSNR_PROFILE_RESOURCE_L2("DlssGuides::CaptureOutput");
-  auto retire_with_hint = [this, retirement_fence_hint](ID3D12Resource* r) {
-    if (r == nullptr) return;
-    retired_game_resources_.push_back({r, retirement_fence_hint});
-  };
   std::lock_guard<std::mutex> lock(lock_);
 
   state_.dlss_output_color = nullptr;
@@ -487,15 +444,11 @@ void DlssGuides::CaptureOutput(
     const DXGI_FORMAT desired_format =
         IsTypelessFormat(output_desc.Format) ? TypedGuideFormat(output_desc.Format)
                                              : output_desc.Format;
-    if (dlss_output_clone_ == nullptr ||
-        dlss_output_width_ != output_width ||
-        dlss_output_height_ != output_height ||
-        dlss_output_format_ != desired_format) {
-      RetireResource(dlss_output_clone_);
-      dlss_output_clone_.Attach(CreateGuideClone(
-          device.Get(), output, &dlss_output_width_, &dlss_output_height_,
-          &dlss_output_format_));
-    }
+    const D3D12_RESOURCE_DESC output_clone_desc =
+        GuideCloneDesc(output, desired_format);
+    dlss_output_clone_.Ensure(device.Get(), output_clone_desc,
+                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                              "dlss_output_clone");
     if (dlss_output_clone_ == nullptr) return;
 
     // The game-resource state tracker is approximate, so use the same
@@ -512,8 +465,8 @@ void DlssGuides::CaptureOutput(
     published_output = dlss_output_clone_.Get();
   } else {
     if (dlss_output_direct_.Get() != output) {
-      retire_with_hint(dlss_output_direct_.Detach());
-      dlss_output_direct_ = output;
+      dlss_output_direct_.Reset(retirement_fence_hint);
+      dlss_output_direct_ = BorrowedRef::AddRef(output);
     }
     // Direct mode needs the game's just-produced output in an SRV state before
     // shared frame preparation and Post-DLSS passes read it. The Post-DLSS
@@ -534,12 +487,6 @@ void DlssGuides::CaptureOutput(
   state_.clone_resources = clone_resources_;
 }
 
-
-void DlssGuides::RetireResource(Microsoft::WRL::ComPtr<ID3D12Resource>& resource) {
-  DLSSNR_PROFILE_RESOURCE_L3("DlssGuides::RetireResource");
-  if (resource == nullptr) return;
-  retired_resources_.push_back({resource.Detach(), 0});
-}
 
 DlssGuideState DlssGuides::GetState(bool invert_fallback_depth) const {
   std::lock_guard<std::mutex> lock(lock_);
@@ -564,85 +511,15 @@ void DlssGuides::SetFallbackDepth(ID3D12Resource* resource) {
   std::lock_guard<std::mutex> lock(lock_);
   if (fallback_depth_.Get() == resource) return;
 
-  if (fallback_depth_ != nullptr) {
-    retired_game_resources_.push_back({fallback_depth_.Detach(), 0});
-  }
+  fallback_depth_.Reset();
   fallback_depth_width_ = 0;
   fallback_depth_height_ = 0;
   if (resource != nullptr) {
-    resource->AddRef();
-    fallback_depth_.Attach(resource);
+    fallback_depth_ = BorrowedRef::AddRef(resource);
     const D3D12_RESOURCE_DESC desc = resource->GetDesc();
     fallback_depth_width_ = static_cast<unsigned int>(desc.Width);
     fallback_depth_height_ = desc.Height;
   }
-}
-
-void DlssGuides::ReleaseRetiredResourcesLocked() {
-  for (const RetiredResource& retired : retired_resources_) {
-    if (retired.resource != nullptr) retired.resource->Release();
-  }
-  retired_resources_.clear();
-}
-
-void DlssGuides::ReleaseRetiredGameResourcesLocked() {
-  for (const RetiredResource& retired : retired_game_resources_) {
-    if (retired.resource != nullptr) retired.resource->Release();
-  }
-  retired_game_resources_.clear();
-}
-
-size_t DlssGuides::ReleaseCompletedLocked(
-    std::vector<RetiredResource>& resources,
-    uint64_t completed_fence_value) {
-  size_t released = 0;
-  auto it = resources.begin();
-  while (it != resources.end()) {
-    if (it->resource != nullptr && it->fence_value != 0 &&
-        it->fence_value <= completed_fence_value) {
-      it->resource->Release();
-      it = resources.erase(it);
-      ++released;
-    } else {
-      ++it;
-    }
-  }
-  return released;
-}
-
-void DlssGuides::RetireGameResource(ID3D12Resource* resource) {
-  if (resource == nullptr) return;
-  std::lock_guard<std::mutex> lock(lock_);
-  retired_game_resources_.push_back({resource, 0});
-}
-
-void DlssGuides::TagRetiredResources(uint64_t fence_value) {
-  DLSSNR_PROFILE_ASYNC_L2("DlssGuides::TagRetiredResources");
-  if (fence_value == 0) return;
-  std::lock_guard<std::mutex> lock(lock_);
-  for (RetiredResource& retired : retired_resources_) {
-    if (retired.fence_value == 0) retired.fence_value = fence_value;
-  }
-  for (RetiredResource& retired : retired_game_resources_) {
-    if (retired.fence_value == 0) retired.fence_value = fence_value;
-  }
-}
-
-size_t DlssGuides::ReleaseRetiredResourcesCompleted(
-    uint64_t completed_fence_value) {
-  std::lock_guard<std::mutex> lock(lock_);
-  return ReleaseCompletedLocked(retired_resources_, completed_fence_value) +
-         ReleaseCompletedLocked(retired_game_resources_, completed_fence_value);
-}
-
-size_t DlssGuides::RetiredResourceCount() const {
-  std::lock_guard<std::mutex> lock(lock_);
-  return retired_resources_.size();
-}
-
-size_t DlssGuides::RetiredGameResourceCount() const {
-  std::lock_guard<std::mutex> lock(lock_);
-  return retired_game_resources_.size();
 }
 
 void DlssGuides::Clear() {
@@ -655,27 +532,16 @@ void DlssGuides::Clear() {
   depth_direct_.Reset();
   motion_direct_.Reset();
   dlss_output_direct_.Reset();
-  if (fallback_depth_ != nullptr) {
-    retired_game_resources_.push_back({fallback_depth_.Detach(), 0});
-  }
+  fallback_depth_.Reset();
   fallback_depth_width_ = 0;
   fallback_depth_height_ = 0;
   clone_resources_ = false;
   requested_clone_resources_.store(false, std::memory_order_release);
 
-  ReleaseRetiredResourcesLocked();
-  ReleaseRetiredGameResourcesLocked();
-
+  // Deliberately no drain here. Force-releasing the queue is the teardown
+  // boundary's call, not this object's: the queue is shared, and only the
+  // caller that waited for the final fence knows the GPU is done with it.
   state_ = {};
-  depth_width_ = 0;
-  depth_height_ = 0;
-  depth_format_ = DXGI_FORMAT_UNKNOWN;
-  motion_width_ = 0;
-  motion_height_ = 0;
-  motion_format_ = DXGI_FORMAT_UNKNOWN;
-  dlss_output_width_ = 0;
-  dlss_output_height_ = 0;
-  dlss_output_format_ = DXGI_FORMAT_UNKNOWN;
 }
 
 }  // namespace reshade_dlssnr

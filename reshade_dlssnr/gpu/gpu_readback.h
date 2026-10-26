@@ -11,6 +11,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "gpu/gpu_resources.h"
+
 namespace reshade_dlssnr {
 
 class GpuReadback {
@@ -51,7 +53,7 @@ class GpuReadback {
 
  private:
   struct Slot {
-    Microsoft::WRL::ComPtr<ID3D12Resource> buffer;
+    OwnedBuffer buffer;
     void* mapped = nullptr;
     uint64_t fence_value = 0;
     uint32_t bytes = 0;  // size of the last copy recorded into this slot

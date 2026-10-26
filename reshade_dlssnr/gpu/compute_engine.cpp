@@ -11,6 +11,7 @@
 
 #include "compute_passes.h"
 #include "ctl/types.h"
+#include "gpu_resources.h"
 #include "generated/shader_sources.h"
 #include "generated/shader_bytecode.h"
 #include "pipeline_trace.h"
@@ -613,27 +614,9 @@ bool ComputeEngine::Init(ID3D12Device* device) {
       device->GetDescriptorHandleIncrementSize(
           D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-  D3D12_HEAP_PROPERTIES heap_props = {};
-  heap_props.Type = D3D12_HEAP_TYPE_UPLOAD;
-  heap_props.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-  heap_props.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-
-  D3D12_RESOURCE_DESC buffer_desc = {};
-  buffer_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-  buffer_desc.Alignment = 0;
-  buffer_desc.Width = kDescriptorRingSize * kConstantStride;
-  buffer_desc.Height = 1;
-  buffer_desc.DepthOrArraySize = 1;
-  buffer_desc.MipLevels = 1;
-  buffer_desc.Format = DXGI_FORMAT_UNKNOWN;
-  buffer_desc.SampleDesc.Count = 1;
-  buffer_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-  buffer_desc.Flags = D3D12_RESOURCE_FLAG_NONE;
-
-  if (FAILED(device->CreateCommittedResource(
-          &heap_props, D3D12_HEAP_FLAG_NONE, &buffer_desc,
-          D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
-          IID_PPV_ARGS(constants_.GetAddressOf())))) {
+  if (!CreateBuffer(device, kDescriptorRingSize * kConstantStride,
+                    D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ,
+                    D3D12_RESOURCE_FLAG_NONE, constants_.GetAddressOf())) {
     return false;
   }
 

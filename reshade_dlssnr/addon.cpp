@@ -191,8 +191,9 @@ void Detach() {
   reshade_dlssnr::ngx_hook_compat::UnhookNgx();
   g_ngx_hooked = false;
 
+  // Shutdown waits for the GPU, tears the runtime down, and force-releases the
+  // retire queue - including the guide references Clear() retires.
   reshade_dlssnr::AddonController::Get().Shutdown();
-  reshade_dlssnr::DlssGuides::Get().Clear();
   reshade_dlssnr::SaveSettings();
   g_initialized = false;
 }
