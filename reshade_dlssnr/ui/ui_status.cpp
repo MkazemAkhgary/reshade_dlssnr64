@@ -83,14 +83,11 @@ void FormatPassStatus(const PassStatus& pass,
 
 void DrawStatusSection(Settings& settings, bool& changed) {
   DLSSNR_PROFILE_UI_L2("DrawStatusSection");
-  if (!PersistentSettingHeader(
-          "Status", feature::ui_state::kStatusOpen, changed,
-          "Live addon, NGX, guide, HDR, and per-pass health. Pass rows use the same target-stage grouping as execution.")) {
-    return;
-  }
-
-  IndentScope indent;
-  const StatusSnapshot snap = AddonController::Get().GetStatus();
+  DrawCollapsible(
+      "Status", feature::ui_state::kStatusOpen, changed,
+      "Live addon, NGX, guide, HDR, and per-pass health. Pass rows use the same target-stage grouping as execution.",
+      [&] {
+    const StatusSnapshot snap = AddonController::Get().GetStatus();
 
   auto bullet = [](bool good) {
     const ImVec4 color = good ? ImVec4(0.4f, 0.9f, 0.4f, 1.0f)
@@ -384,6 +381,7 @@ void DrawStatusSection(Settings& settings, bool& changed) {
       }
     }
   }
+  });
 }
 
 namespace feature {

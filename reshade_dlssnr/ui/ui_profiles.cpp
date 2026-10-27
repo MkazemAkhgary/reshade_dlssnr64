@@ -15,14 +15,11 @@ namespace reshade_dlssnr {
 
 void DrawSavedProfilesSection(Settings& settings, bool& changed) {
   DLSSNR_PROFILE_UI_L2("DrawSavedProfilesSection");
-  if (!PersistentSettingHeader(
-          "Presets", feature::ui_state::kPresetsOpen, changed,
-          "Save and restore named profiles of the current DLSSNR settings in ReShade.ini.")) {
-    return;
-  }
-
-  IndentScope content_indent;
-  SavedProfileInfo profiles[kMaxSavedProfiles] = {};
+  DrawCollapsible(
+      "Presets", feature::ui_state::kPresetsOpen, changed,
+      "Save and restore named profiles of the current DLSSNR settings in ReShade.ini.",
+      [&] {
+    SavedProfileInfo profiles[kMaxSavedProfiles] = {};
   const uint32_t profile_count = GetSavedProfiles(profiles, kMaxSavedProfiles);
   enum class PendingProfileAction { None, Delete, Save, Load };
   static PendingProfileAction pending_action = PendingProfileAction::None;
@@ -286,6 +283,7 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
     ImGui::TextDisabled("Preset name is blank, too long, or already in use.");
   }
   if (profile_count >= kMaxSavedProfiles) ImGui::EndDisabled();
+  });
 }
 
 }  // namespace reshade_dlssnr

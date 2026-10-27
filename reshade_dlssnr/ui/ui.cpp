@@ -250,14 +250,11 @@ void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
                         bool& changed) {
   DLSSNR_PROFILE_UI_L2("DrawTabsRowAndBody");
   // The section header keeps the legacy label.
-  if (!PersistentSettingHeader(
-          "Passes", feature::ui_state::kPassesOpen, changed,
-          "Configure each pass profile. Execution order is grouped by target stage, then follows this tab order within each stage.")) {
-    return;
-  }
-
-  IndentScope indent;
-  ImGui::TextDisabled("Execution: Pre-DLSS -> Post-DLSS -> Backbuffer; pass order is preserved within each stage.");
+  DrawCollapsible(
+      "Passes", feature::ui_state::kPassesOpen, changed,
+      "Configure each pass profile. Execution order is grouped by target stage, then follows this tab order within each stage.",
+      [&] {
+    ImGui::TextDisabled("Execution: Pre-DLSS -> Post-DLSS -> Backbuffer; pass order is preserved within each stage.");
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("Changing a pass target changes its execution group, not its position in the pass list. Status uses the same execution grouping.");
   }
@@ -410,6 +407,7 @@ void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
   ctl::DrawSection(store, feature::exposure_mask::kSection, key,
                    local_changed, mask_options);
   changed |= local_changed;
+  });
 }
 
 void DrawSectionHeaderAction(void*, const std::string& section,

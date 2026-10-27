@@ -55,6 +55,14 @@ class IndentScope {
   float amount_;
 };
 
+template <typename Body>
+void DrawCollapsible(const char* label, const char* setting_key,
+                     bool& changed, const char* tooltip, Body&& body) {
+  if (!PersistentSettingHeader(label, setting_key, changed, tooltip)) return;
+  IndentScope indent;
+  body();
+}
+
 bool PersistentSubHeader(const char* label, bool& open_setting, bool& changed,
                          const char* tooltip = nullptr,
                          HeaderControls controls = {});
