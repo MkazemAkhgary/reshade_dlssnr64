@@ -185,9 +185,8 @@ void DlssGuides::CaptureGuides(
   ID3D12Resource* motion = GetNgxResource(params, NVSDK_NGX_Parameter_MotionVectors, "DLSSD.MotionVectors");
 
   if (depth == nullptr || motion == nullptr) {
-    static bool logged_missing_guides = false;
-    if (!logged_missing_guides) {
-      logged_missing_guides = true;
+    static LogOnceState logged_missing_guides;
+    if (ShouldLogOnce(logged_missing_guides)) {
       reshade::log::message(
           reshade::log::level::warning,
           depth == nullptr

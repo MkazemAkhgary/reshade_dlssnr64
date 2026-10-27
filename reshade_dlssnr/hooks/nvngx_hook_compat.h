@@ -55,21 +55,11 @@ static inline std::mutex g_handle_to_feature_mutex;
 // otherwise, the resolution stopped working and every restore is a no-op
 // again, silently.
 static void LogCommandListProxyOnce(bool was_proxy) {
-  static bool logged = false;
-  if (logged) return;
-  logged = true;
-
-  reshade::log::message(
+  DLSSNR_LOG_ONCE(
       reshade::log::level::info,
       was_proxy
           ? "Command list resolved to the interface our D3D12 hooks recorded"
           : "Command list is already the interface our D3D12 hooks recorded");
-}
-
-static void LogOnce(bool& flag, reshade::log::level level, const char* message) {
-  if (flag) return;
-  flag = true;
-  reshade::log::message(level, message);
 }
 
 // The vtable hooks are installed at device init, but they are what lets us
@@ -269,7 +259,7 @@ static PreDlssColorRejection GetPreDlssColorGeometry(
 }
 
 static void LogPreDlssColorRejection(PreDlssColorRejection rejection) {
-  static bool logged[static_cast<size_t>(PreDlssColorRejection::Count)] = {};
+  static std::atomic_bool logged[static_cast<size_t>(PreDlssColorRejection::Count)] = {};
   static const char* const messages[] = {
       "",
       "Pre-DLSS skipped: NGX Color resource is null",
@@ -282,13 +272,7 @@ static void LogPreDlssColorRejection(PreDlssColorRejection rejection) {
   };
 
   const size_t index = static_cast<size_t>(rejection);
-  if (rejection == PreDlssColorRejection::None ||
-      index >= static_cast<size_t>(PreDlssColorRejection::Count) ||
-      logged[index]) {
-    return;
-  }
-
-  logged[index] = true;
+  if (!ShouldLogEnumOnce(logged, index)) return;
   reshade::log::message(reshade::log::level::warning, messages[index]);
 }
 
@@ -418,7 +402,7 @@ static PreDlssColorAdapterFailure CreatePreDlssColorAdapter(
 
 static void LogPreDlssColorAdapterFailure(
     PreDlssColorAdapterFailure failure) {
-  static bool logged[static_cast<size_t>(PreDlssColorAdapterFailure::Count)] = {};
+  static std::atomic_bool logged[static_cast<size_t>(PreDlssColorAdapterFailure::Count)] = {};
   static const char* const messages[] = {
       "",
       "Pre-DLSS skipped: could not resolve the NGX Color resource's D3D12 device",
@@ -428,12 +412,7 @@ static void LogPreDlssColorAdapterFailure(
   };
 
   const size_t index = static_cast<size_t>(failure);
-  if (failure == PreDlssColorAdapterFailure::None ||
-      index >= static_cast<size_t>(PreDlssColorAdapterFailure::Count) ||
-      logged[index]) {
-    return;
-  }
-  logged[index] = true;
+  if (!ShouldLogEnumOnce(logged, index)) return;
   reshade::log::message(reshade::log::level::warning, messages[index]);
 }
 
@@ -616,9 +595,8 @@ static NVSDK_NGX_Result NVSDK_CONV EvaluateFeatureImpl(
       if (guess != NVSDK_NGX_Feature_Reserved0) {
         g_handle_to_feature[feature_handle] = guess;
         feature_id = guess;
-        static bool logged_fallback = false;
-        if (!logged_fallback) {
-          logged_fallback = true;
+        static LogOnceState logged_fallback;
+        if (ShouldLogOnce(logged_fallback)) {
           char message[192];
           std::snprintf(message, sizeof(message),
                         "DLSSNR: an NGX feature was created before the addon "
@@ -668,9 +646,9 @@ static NVSDK_NGX_Result NVSDK_CONV EvaluateFeatureImpl(
   if (IsUpscalerFeature(feature_id) && settings.enabled &&
       any_pre_dlss && !restart_pending) {
     if (!hooks_available) {
-      static bool logged_pre_hook_failure = false;
-      LogOnce(logged_pre_hook_failure, reshade::log::level::warning,
-              "Pre-DLSS skipped: D3D12 command-list state hooks are unavailable");
+      DLSSNR_LOG_ONCE(
+          reshade::log::level::warning,
+          "Pre-DLSS skipped: D3D12 command-list state hooks are unavailable");
     } else {
       ID3D12Resource* color =
           GetNgxResource(parameters, NVSDK_NGX_Parameter_Color);
@@ -689,9 +667,9 @@ static NVSDK_NGX_Result NVSDK_CONV EvaluateFeatureImpl(
           // mismatched geometry hangs the GPU instead of failing.
           if (feature_id == NVSDK_NGX_Feature_RayReconstruction ||
               HasGBufferParameters(parameters)) {
-            static bool logged_rr_subrect = false;
-            LogOnce(logged_rr_subrect, reshade::log::level::warning,
-                    "Pre-DLSS skipped: Ray Reconstruction reads Color through a subrect of a larger allocation, and compacting Color alone would desynchronise its other guide inputs. Set the pass target to Post-DLSS; RR's Color is the demodulated noisy image and is the wrong side to grade anyway");
+            DLSSNR_LOG_ONCE(
+                reshade::log::level::warning,
+                "Pre-DLSS skipped: Ray Reconstruction reads Color through a subrect of a larger allocation, and compacting Color alone would desynchronise its other guide inputs. Set the pass target to Post-DLSS; RR's Color is the demodulated noisy image and is the wrong side to grade anyway");
             AddonController::Get().SetPreDlssBlocked(
                 "Ray Reconstruction: the game feeds DLSS a subrect of a larger "
                 "allocation, so Pre-DLSS cannot rewrite its Color safely. Use "
@@ -711,13 +689,13 @@ static NVSDK_NGX_Result NVSDK_CONV EvaluateFeatureImpl(
                                              std::move(compact_color), geometry,
                                              original_format);
               pre_input = pre_dlss_color_override.adapter.Get();
-              static bool logged_compact_color = false;
-              LogOnce(logged_compact_color, reshade::log::level::info,
-                      "Pre-DLSS: using a compact single-sample Color texture for the active NGX region; the original allocation is preserved");
+              DLSSNR_LOG_ONCE(
+                  reshade::log::level::info,
+                  "Pre-DLSS: using a compact single-sample Color texture for the active NGX region; the original allocation is preserved");
               if (color->GetDesc().SampleDesc.Count > 1) {
-                static bool logged_msaa_resolve = false;
-                LogOnce(logged_msaa_resolve, reshade::log::level::info,
-                        "Pre-DLSS: multisampled Color is resolved to a single-sample image for NGX; the original MSAA allocation is not modified");
+                DLSSNR_LOG_ONCE(
+                    reshade::log::level::info,
+                    "Pre-DLSS: multisampled Color is resolved to a single-sample image for NGX; the original MSAA allocation is not modified");
               }
             }
           }
@@ -746,9 +724,8 @@ static NVSDK_NGX_Result NVSDK_CONV EvaluateFeatureImpl(
   pre_dlss_color_override.Restore();
   pre_dlss_color_override.RetireAdapter();
 
-  static bool logged_first = false;
-  if (!logged_first) {
-    logged_first = true;
+  static LogOnceState logged_first;
+  if (ShouldLogOnce(logged_first)) {
     char message[128];
     std::snprintf(message, sizeof(message),
                   "NGX evaluate hook fired (result=%d)",

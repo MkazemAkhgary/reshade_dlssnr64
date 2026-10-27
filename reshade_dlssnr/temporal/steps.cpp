@@ -579,14 +579,10 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
       self->temporal_feedback_valid_ = true;
       TRACE_EVT(self, "temporal feedback fallback activated pass=%u",
                 self->pass_id_);
-      static bool logged = false;
-      if (!logged) {
-        logged = true;
-        reshade::log::message(
-            reshade::log::level::warning,
-            "DLSSNR: temporal feedback readback did not complete; reuse "
-            "allowed with a conservative invalid-fraction estimate");
-      }
+      DLSSNR_LOG_ONCE(
+          reshade::log::level::warning,
+          "DLSSNR: temporal feedback readback did not complete; reuse "
+          "allowed with a conservative invalid-fraction estimate");
     }
   }
 

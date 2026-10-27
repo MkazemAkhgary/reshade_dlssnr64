@@ -16,15 +16,15 @@ namespace reshade_dlssnr {
 
 namespace {
 
-bool g_logged_interposer_state = false;
+LogOnceState g_logged_interposer_state;
 
 // Names the module owning a hooked slot, once. A crash inside a hook that
 // called into this module is otherwise attributed to "the game" or "the
 // model", and the module is the whole explanation.
 void LogHookedModuleOnce(const void* address) {
-  static bool logged = false;
-  if (logged || address == nullptr) return;
-  logged = true;
+  static LogOnceState state;
+  if (address == nullptr) return;
+  if (!ShouldLogOnce(state)) return;
 
   HMODULE module = nullptr;
   if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
@@ -58,8 +58,7 @@ void LogHookedModuleOnce(const void* address) {
 // One line at install time, so a Streamline build gone wrong is visible in
 // the log without adding anything to the per-frame path.
 void LogInterposerStateOnce(bool device_is_proxy) {
-  if (g_logged_interposer_state) return;
-  g_logged_interposer_state = true;
+  if (!ShouldLogOnce(g_logged_interposer_state)) return;
 
   if (!sl_compat::InterposerPresent()) {
     reshade::log::message(

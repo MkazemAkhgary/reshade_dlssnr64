@@ -270,6 +270,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="project_constants.h" />
+    <ClInclude Include="util\log_once.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="profiling\tracy_integration.h" />
     <ClInclude Include="profiling\profile.h" />

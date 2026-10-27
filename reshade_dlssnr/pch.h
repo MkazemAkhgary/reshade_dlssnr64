@@ -42,6 +42,7 @@
 #include <reshade.hpp>
 
 // Stable addon headers.
+#include "util/log_once.h"
 #include "profiling/profile.h"
 
 // ctl core.
