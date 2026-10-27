@@ -10,7 +10,7 @@ namespace feature {
 namespace ui_state {
 namespace {
 
-const ctl::InstanceKey kSharedKey = ctl::InstanceKey::FromInt(0);
+const ctl::InstanceKey kSharedKey = ctl::InstanceKey::Shared();
 
 }  // namespace
 

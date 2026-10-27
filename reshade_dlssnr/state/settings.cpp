@@ -321,7 +321,7 @@ void SaveSettingsValues(const Settings& settings,
 
 feature::pass::PassOrder ReadPassOrder(const ctl::ValueStore& store) {
   const ctl::Value value = store.Read(
-      feature::pass::kOrderSection, ctl::InstanceKey::FromInt(0),
+      feature::pass::kOrderSection, ctl::InstanceKey::Shared(),
       feature::pass::kOrderSetting);
   feature::pass::PassOrder order;
   order.reserve(value.as_int_list.size());
@@ -343,7 +343,7 @@ void WritePassOrder(ctl::ValueStore& store,
   std::vector<int64_t> values;
   values.reserve(order.size());
   for (feature::pass::PassId id : order) values.push_back(id);
-  store.Write(feature::pass::kOrderSection, ctl::InstanceKey::FromInt(0),
+  store.Write(feature::pass::kOrderSection, ctl::InstanceKey::Shared(),
               feature::pass::kOrderSetting,
               ctl::Value::IntList(std::move(values)));
 }
@@ -466,7 +466,7 @@ void LoadSettings() {
   // form matches what the addon now saves.
   SaveSettings();
   {
-    const ctl::InstanceKey shared = ctl::InstanceKey::FromInt(0);
+    const ctl::InstanceKey shared = ctl::InstanceKey::Shared();
     const bool clone_resources = feature::SettingsStore().Read(
         feature::preferences::kSection, shared,
         feature::preferences::kCloneResources).as_bool;
@@ -680,7 +680,7 @@ bool LoadSavedProfile(ProfileId id) {
   ApplyPresetData(*data);
 
   {
-    const ctl::InstanceKey shared = ctl::InstanceKey::FromInt(0);
+    const ctl::InstanceKey shared = ctl::InstanceKey::Shared();
     const bool clone_resources = feature::SettingsStore().Read(
         feature::preferences::kSection, shared,
         feature::preferences::kCloneResources).as_bool;

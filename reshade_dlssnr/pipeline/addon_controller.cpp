@@ -135,7 +135,7 @@ PipelineStatus AddonController::RunSingleStage(
   // or Exposure Mask settings.
   {
     const ctl::ValueStore& store = feature::SettingsStore();
-    const ctl::InstanceKey shared = ctl::InstanceKey::FromInt(0);
+    const ctl::InstanceKey shared = ctl::InstanceKey::Shared();
     run.debug_view = feature::debug_log::Read(store, shared);
   }
 

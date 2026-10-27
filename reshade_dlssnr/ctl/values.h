@@ -36,6 +36,12 @@ class InstanceKey {
     return k;
   }
 
+  // The conventional key of a single-instance section.
+  static const InstanceKey& Shared() {
+    static const InstanceKey k = FromInt(0);
+    return k;
+  }
+
   bool numeric() const { return numeric_; }
   int64_t int_value() const { return int_value_; }
   const std::string& string_value() const { return string_value_; }

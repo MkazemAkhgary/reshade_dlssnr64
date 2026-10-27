@@ -134,7 +134,7 @@ ctl::DrawOptions MakeOptions(bool headers, bool indent) {
 // store rather than into a mirror struct: the store is the only owner of the
 // value, and the header's local copy is refreshed from it on the next frame.
 void ResetBackbufferGrade(void* /*context*/) {
-  const ctl::InstanceKey key = ctl::InstanceKey::FromInt(0);
+  const ctl::InstanceKey key = ctl::InstanceKey::Shared();
   feature::SettingsStore().ResetSectionToDefault(feature::grade::kSection, key);
 }
 
@@ -438,7 +438,7 @@ void DrawOne(ctl::ValueStore& store, const char* name, bool& changed,
   if (std::string(name) == feature::exposure_mask::kSection) {
     options.row_gate = &FeatureRowGate;
   }
-  ctl::DrawSection(store, name, ctl::InstanceKey::FromInt(0), local_changed,
+  ctl::DrawSection(store, name, ctl::InstanceKey::Shared(), local_changed,
                    options);
   changed |= local_changed;
 }
@@ -452,7 +452,7 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   bool changed = false;
 
   ctl::ValueStore& store = feature::SettingsStore();
-  const ctl::InstanceKey shared_key = ctl::InstanceKey::FromInt(0);
+  const ctl::InstanceKey shared_key = ctl::InstanceKey::Shared();
   g_show_tooltips = store.Read(feature::preferences::kSection, shared_key,
                                feature::preferences::kShowTooltips).as_bool;
 

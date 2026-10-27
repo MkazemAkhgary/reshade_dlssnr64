@@ -648,7 +648,7 @@ void PassSession::PrepareRun(PassRun& run,
 
     // HDR metering and Exposure Mask settings are pass-keyed just like the
     // model and its two grade boundaries. Each pass has its own state/history.
-    const ctl::InstanceKey shared = ctl::InstanceKey::FromInt(0);
+    const ctl::InstanceKey shared = ctl::InstanceKey::Shared();
     run.debug_view = feature::debug_log::Read(store, shared);
     run.hdr_state = feature::hdr::Read(store, key);
     run.mask_state = feature::exposure_mask::Read(store, key);
@@ -671,7 +671,7 @@ void PassSession::PrepareRun(PassRun& run,
   run.swapchain = swapchain;
 
   const ctl::ValueStore& store = feature::SettingsStore();
-  const ctl::InstanceKey shared = ctl::InstanceKey::FromInt(0);
+  const ctl::InstanceKey shared = ctl::InstanceKey::Shared();
   const bool invert_fallback_depth = store.Read(
       feature::preferences::kSection, shared,
       feature::preferences::kInvertFallbackDepth).as_bool;

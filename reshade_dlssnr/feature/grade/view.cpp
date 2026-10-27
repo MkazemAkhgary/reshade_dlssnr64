@@ -70,7 +70,7 @@ GradeSettings Read(const ctl::ValueStore& store, const ctl::InstanceKey& key,
 
 GradeSnapshot ReadBackbuffer(const ctl::ValueStore& store) {
   DLSSNR_PROFILE_CTL_L3("ReadBackbuffer");
-  return Read(store, ctl::InstanceKey::FromInt(0), kSection);
+  return Read(store, ctl::InstanceKey::Shared(), kSection);
 }
 
 }  // namespace grade
