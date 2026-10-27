@@ -102,7 +102,6 @@ struct DlssGuideState {
   float mv_scale_y = 1.0f;
   bool depth_inverted = false;
   bool fallback_depth = false;
-  bool synthetic_motion = false;
   bool clone_resources = false;
   bool valid = false;
   uint64_t capture_serial = 0;

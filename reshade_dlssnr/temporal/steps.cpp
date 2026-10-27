@@ -273,7 +273,6 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
         run.guides.reference_height = run.work_height;
         run.guides.mv_scale_x = 1.0f;
         run.guides.mv_scale_y = 1.0f;
-        run.guides.synthetic_motion = true;
         run.synthetic_motion_ready = true;
         TRACE_EVT(self, "synthetic motion generated pass=%u history=%d %ux%u",
                   self->pass_id_, self->synthetic_motion_history_valid_ ? 1 : 0,
@@ -382,7 +381,7 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
       run.guides.motion_height != 0 &&
       std::isfinite(run.guides.mv_scale_x) && std::isfinite(run.guides.mv_scale_y);
   if (run.stage != nullptr && run.stage->owns_submit &&
-      !run.guides.synthetic_motion) {
+      !run.synthetic_motion_ready) {
     guides_fresh = guides_fresh && run.guides.capture_serial != 0 &&
         run.guides.capture_serial != self->temporal_last_guide_serial_;
   }
