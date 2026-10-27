@@ -11,6 +11,7 @@
 
 #include "compute_passes.h"
 #include "ctl/types.h"
+#include "d3d12_utils.h"
 #include "gpu_resources.h"
 #include "generated/shader_sources.h"
 #include "generated/shader_bytecode.h"
@@ -47,34 +48,7 @@ std::string TrimShaderDiagnostic(const void* data, size_t size) {
 }  // namespace
 
 DXGI_FORMAT ComputeEngine::TypedFormat(DXGI_FORMAT format) const {
-  switch (format) {
-    case DXGI_FORMAT_R16G16B16A16_TYPELESS:
-      return DXGI_FORMAT_R16G16B16A16_FLOAT;
-    case DXGI_FORMAT_R32G32B32A32_TYPELESS:
-      return DXGI_FORMAT_R32G32B32A32_FLOAT;
-    case DXGI_FORMAT_R10G10B10A2_TYPELESS:
-      return DXGI_FORMAT_R10G10B10A2_UNORM;
-    case DXGI_FORMAT_R8G8B8A8_TYPELESS:
-    case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
-      return DXGI_FORMAT_R8G8B8A8_UNORM;
-    case DXGI_FORMAT_B8G8R8A8_TYPELESS:
-    case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
-      return DXGI_FORMAT_B8G8R8A8_UNORM;
-    case DXGI_FORMAT_R32_TYPELESS:
-    case DXGI_FORMAT_D32_FLOAT:
-      return DXGI_FORMAT_R32_FLOAT;
-    case DXGI_FORMAT_R16_TYPELESS:
-    case DXGI_FORMAT_D16_UNORM:
-      return DXGI_FORMAT_R16_UNORM;
-    case DXGI_FORMAT_R24G8_TYPELESS:
-    case DXGI_FORMAT_D24_UNORM_S8_UINT:
-      return DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
-    case DXGI_FORMAT_R32G8X24_TYPELESS:
-    case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
-      return DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS;
-    default:
-      return format;
-  }
+  return TypedViewFormat(format);
 }
 
 void ComputeEngine::CreateShaderResourceView(ID3D12Resource* resource, D3D12_CPU_DESCRIPTOR_HANDLE handle) {

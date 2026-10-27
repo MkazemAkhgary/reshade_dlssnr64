@@ -27,6 +27,41 @@ inline D3D12_RESOURCE_STATES InferResourceState(ID3D12Resource* resource) {
   }
 }
 
+inline DXGI_FORMAT TypedViewFormat(DXGI_FORMAT format) {
+  switch (format) {
+    case DXGI_FORMAT_R16G16B16A16_TYPELESS:
+      return DXGI_FORMAT_R16G16B16A16_FLOAT;
+    case DXGI_FORMAT_R32G32B32A32_TYPELESS:
+      return DXGI_FORMAT_R32G32B32A32_FLOAT;
+    case DXGI_FORMAT_R10G10B10A2_TYPELESS:
+      return DXGI_FORMAT_R10G10B10A2_UNORM;
+    case DXGI_FORMAT_R8G8B8A8_TYPELESS:
+    case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+      return DXGI_FORMAT_R8G8B8A8_UNORM;
+    case DXGI_FORMAT_B8G8R8A8_TYPELESS:
+    case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
+      return DXGI_FORMAT_B8G8R8A8_UNORM;
+    case DXGI_FORMAT_R32_TYPELESS:
+    case DXGI_FORMAT_D32_FLOAT:
+      return DXGI_FORMAT_R32_FLOAT;
+    case DXGI_FORMAT_R16_TYPELESS:
+    case DXGI_FORMAT_D16_UNORM:
+      return DXGI_FORMAT_R16_UNORM;
+    case DXGI_FORMAT_R24G8_TYPELESS:
+    case DXGI_FORMAT_D24_UNORM_S8_UINT:
+      return DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+    case DXGI_FORMAT_R32G8X24_TYPELESS:
+    case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
+      return DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS;
+    case DXGI_FORMAT_R32G32_TYPELESS:
+      return DXGI_FORMAT_R32G32_FLOAT;
+    case DXGI_FORMAT_R16G16_TYPELESS:
+      return DXGI_FORMAT_R16G16_FLOAT;
+    default:
+      return format;
+  }
+}
+
 // Short stable name for a DXGI format, for log lines. Only the formats this
 // addon can plausibly meet are named; anything else prints as a number so an
 // unexpected format is still identifiable rather than silently blank.
