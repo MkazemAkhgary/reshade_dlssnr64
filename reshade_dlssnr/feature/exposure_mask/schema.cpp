@@ -19,17 +19,6 @@ namespace reshade_dlssnr {
 namespace feature {
 namespace exposure_mask {
 
-namespace {
-
-// Interactive only while the mask is on.
-bool MaskEditable(const void*, const ctl::ValueStore& store,
-                  const ctl::InstanceKey& key, const std::string& section) {
-  DLSSNR_PROFILE_CTL_L3("MaskEditable");
-  return store.Read(section, key, kEnable).as_bool;
-}
-
-}  // namespace
-
 }  // namespace exposure_mask
 
 void RegisterExposureMaskSchema(ctl::Schema& schema) {
@@ -48,29 +37,29 @@ void RegisterExposureMaskSchema(ctl::Schema& schema) {
       .ClampRange(0.1f, 8.0f)
       .Tooltip("Scale the measured model-input/output difference before "
                "thresholding.")
-      .EnableWhen(&MaskEditable);
+      .EnableWhen(kEnable);
   mask.Add<ctl::FloatSetting>(kSmoothing, "Spatial Smoothing", 0.5f)
       .ClampRange(0.0f, 1.0f)
       .Tooltip("Majority-filter the binary exposure votes in a small "
                "neighborhood.")
-      .EnableWhen(&MaskEditable);
+      .EnableWhen(kEnable);
   mask.Add<ctl::FloatSetting>(kResponse, "Temporal Response", 0.5f)
       .ClampRange(0.0f, 1.0f)
       .Tooltip("Blend new mask votes with the previous frame's mask.")
-      .EnableWhen(&MaskEditable);
+      .EnableWhen(kEnable);
   mask.Add<ctl::FloatSetting>(kLumaThreshold, "Luma Threshold", 0.02f)
       .ClampRange(0.0f, 0.5f)
       .Tooltip("Minimum absolute luma difference to mark a model edit.")
-      .EnableWhen(&MaskEditable);
+      .EnableWhen(kEnable);
   mask.Add<ctl::FloatSetting>(kLumaRelative, "Relative Luma", 0.05f)
       .ClampRange(0.0f, 1.0f)
       .Tooltip("Minimum luma difference relative to the brighter input/output "
                "luma.")
-      .EnableWhen(&MaskEditable);
+      .EnableWhen(kEnable);
   mask.Add<ctl::FloatSetting>(kChromaThreshold, "Chroma Threshold", 0.02f)
       .ClampRange(0.0f, 0.5f)
       .Tooltip("Minimum chroma-only difference to mark a model edit.")
-      .EnableWhen(&MaskEditable);
+      .EnableWhen(kEnable);
 }
 
 }  // namespace feature

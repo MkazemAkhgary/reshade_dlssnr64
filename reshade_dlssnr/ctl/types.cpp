@@ -6,8 +6,26 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "ctl/values.h"
+
 namespace reshade_dlssnr {
 namespace ctl {
+
+bool BoolFromSetting(const void* context, const ValueStore& store,
+                   const InstanceKey& key, const std::string& section) {
+  const char* name = static_cast<const char*>(context);
+  if (name == nullptr) return true;
+  const Value value = store.Read(section, key, name);
+  switch (value.kind) {
+    case Value::Kind::Bool: return value.as_bool;
+    case Value::Kind::Int:
+    case Value::Kind::Enum: return value.as_int != 0;
+    case Value::Kind::Float: return value.as_float != 0.0f;
+    case Value::Kind::String: return !value.as_string.empty();
+    case Value::Kind::IntList: return !value.as_int_list.empty();
+  }
+  return false;
+}
 
 bool Value::operator==(const Value& o) const {
   DLSSNR_PROFILE_CTL_L3("Value::operator==");

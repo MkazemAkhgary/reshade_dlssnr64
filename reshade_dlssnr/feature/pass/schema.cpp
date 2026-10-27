@@ -53,29 +53,6 @@ bool GradeEnabled(const void*, const ctl::ValueStore& store,
   return store.Read(section, key, kGradeEnabled).as_bool;
 }
 
-// The model's skin-strength row is interactive only when automatic masking is
-// on -- the same rule the hand-written UI applied with WithDisabled.
-bool AutoMaskOn(const void*, const ctl::ValueStore& store,
-                const ctl::InstanceKey& key, const std::string& section) {
-  DLSSNR_PROFILE_CTL_L3("AutoMaskOn");
-  return store.Read(section, key, kAutoMask).as_bool;
-}
-
-// Ratio Clamps gates the three ratio settings below.
-bool RatioClampsEnabled(const void*, const ctl::ValueStore& store,
-                        const ctl::InstanceKey& key,
-                        const std::string& section) {
-  DLSSNR_PROFILE_CTL_L3("RatioClampsEnabled");
-  return store.Read(section, key, kRatioClampsEnabled).as_bool;
-}
-
-bool TemporalEnabled(const void*, const ctl::ValueStore& store,
-                     const ctl::InstanceKey& key,
-                     const std::string& section) {
-  DLSSNR_PROFILE_CTL_L3("TemporalEnabled");
-  return store.Read(section, key, kTemporalMode).as_int != 0;
-}
-
 // Availability of each target stage in this game, shown dimmed in the button
 // row when the stage cannot run right now. The choice stays selectable: the
 // reason is in the tooltip, and the stage can become available again (a
@@ -332,7 +309,7 @@ void RegisterPassSchema(ctl::Schema& schema) {
                "separately.");
   pass.Add<ctl::FloatSetting>(kSkinStructure, "Skin Structure", 1.0f)
       .ClampRange(0.0f, 1.0f)
-      .EnableWhen(&AutoMaskOn)
+      .EnableWhen(kAutoMask)
       .InlineToggle(kAutoMask)
       .Category(kCatModel)
       .Tooltip("Controls how strongly the model applies its skin-specific "
@@ -367,7 +344,7 @@ void RegisterPassSchema(ctl::Schema& schema) {
                "forces a fresh evaluation.");
   pass.Add<ctl::IntSetting>(kTemporalCadence, "Cadence", 2)
       .ClampRange(2, 8)
-      .EnableWhen(&TemporalEnabled)
+      .EnableWhen(kTemporalMode)
       .Category(kCatTemporal)
       .Tooltip("Number of frames between model evaluations. In Adaptive mode, "
                "this is the maximum; the effective cadence halves when the "
@@ -375,7 +352,7 @@ void RegisterPassSchema(ctl::Schema& schema) {
                "exact cadence.");
   pass.Add<ctl::FloatSetting>(kTemporalCheapScale, "Cheap Model Scale", 0.5f)
       .ClampRange(0.1f, 1.0f)
-      .EnableWhen(&TemporalEnabled)
+      .EnableWhen(kTemporalMode)
       .Category(kCatTemporal)
       .Tooltip("Resolution of the cheaper model used on frames between model "
                "evaluations, as a fraction of the working scale. 0.5 means "
@@ -384,46 +361,46 @@ void RegisterPassSchema(ctl::Schema& schema) {
   pass.Add<ctl::FloatSetting>(kTemporalPhotometricAbsThreshold,
                               "Photo Abs.", 0.06f)
       .ClampRange(0.001f, 0.25f)
-      .EnableWhen(&TemporalEnabled)
+      .EnableWhen(kTemporalMode)
       .Category(kCatTemporal)
       .Tooltip("Absolute model-input luma difference allowed between the "
                "current pixel and its motion-reprojected previous-frame match.");
   pass.Add<ctl::FloatSetting>(kTemporalPhotometricRelThreshold,
                               "Photo Rel.", 0.10f)
       .ClampRange(0.0f, 0.50f)
-      .EnableWhen(&TemporalEnabled)
+      .EnableWhen(kTemporalMode)
       .Category(kCatTemporal)
       .Tooltip("Relative luma-difference allowance, scaled by the larger "
                "absolute current or previous luma. Added to Photo Abs.");
   pass.Add<ctl::FloatSetting>(kTemporalDepthAbsThreshold,
                               "Depth Abs.", 0.005f)
       .ClampRange(0.0001f, 0.05f)
-      .EnableWhen(&TemporalEnabled)
+      .EnableWhen(kTemporalMode)
       .Category(kCatTemporal)
       .Tooltip("Absolute depth difference allowed after motion reprojection.");
   pass.Add<ctl::FloatSetting>(kTemporalDepthRelThreshold,
                               "Depth Rel.", 0.03f)
       .ClampRange(0.0f, 0.20f)
-      .EnableWhen(&TemporalEnabled)
+      .EnableWhen(kTemporalMode)
       .Category(kCatTemporal)
       .Tooltip("Relative depth-difference allowance. Threshold is the larger "
                "of this allowance and Depth Abs.");
   pass.Add<ctl::FloatSetting>(kTemporalMaxDisplacement,
                               "Max Motion", 40.0f)
       .ClampRange(1.0f, 128.0f)
-      .EnableWhen(&TemporalEnabled)
+      .EnableWhen(kTemporalMode)
       .Category(kCatTemporal)
       .Tooltip("Reject reprojection when motion exceeds this many working-" 
                "resolution pixels.");
   pass.Add<ctl::FloatSetting>(kTemporalMaxInvalidPercent,
                               "Max Invalid %", 15.0f)
       .ClampRange(1.0f, 50.0f)
-      .EnableWhen(&TemporalEnabled)
+      .EnableWhen(kTemporalMode)
       .Category(kCatTemporal)
       .Tooltip("Maximum invalid or photometrically mismatched pixel fraction "
                "allowed before refreshing the model.");
   pass.Add<ctl::BoolSetting>(kTemporalFp16History, "FP16 Edit History", false)
-      .EnableWhen(&TemporalEnabled)
+      .EnableWhen(kTemporalMode)
       .Category(kCatTemporal)
       .Tooltip("Store temporal edit/candidate textures in FP16. Reduces history "
                "bandwidth and memory with small quantization differences on reused edits.");
@@ -477,13 +454,13 @@ void RegisterPassSchema(ctl::Schema& schema) {
                "Applies to both SDR and HDR composition.");
   pass.Add<ctl::FloatSetting>(kRatioBrighten, "Ratio Brighten", 4.0f)
       .ClampRange(1.0f, 16.0f)
-      .EnableWhen(&RatioClampsEnabled)
+      .EnableWhen(kRatioClampsEnabled)
       .Category(kCatResidualEdits)
       .Tooltip("Upper bound on the per-channel residual ratio when Ratio "
                "Clamps is enabled. Applies to both SDR and HDR composition.");
   pass.Add<ctl::FloatSetting>(kRatioDarken, "Ratio Darken", 1.0f / 16.0f)
       .ClampRange(1.0f / 256.0f, 1.0f)
-      .EnableWhen(&RatioClampsEnabled)
+      .EnableWhen(kRatioClampsEnabled)
       .Category(kCatResidualEdits)
       .Tooltip("Lower bound on the per-channel residual ratio when Ratio "
                "Clamps is enabled. Applies to both SDR and HDR composition.");

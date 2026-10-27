@@ -31,6 +31,10 @@ class FloatSetting : public Setting {
     SetEnabled(enabled, context);
     return *this;
   }
+  FloatSetting& EnableWhen(const char* setting_name) {
+    SetEnabled(&BoolFromSetting, setting_name);
+    return *this;
+  }
   FloatSetting& VisibleWhen(VisibilityPredicate visible, const void* context = nullptr) {
     SetVisible(visible, context);
     return *this;
@@ -95,6 +99,10 @@ class IntSetting : public Setting {
     SetEnabled(enabled, context);
     return *this;
   }
+  IntSetting& EnableWhen(const char* setting_name) {
+    SetEnabled(&BoolFromSetting, setting_name);
+    return *this;
+  }
   IntSetting& VisibleWhen(VisibilityPredicate visible, const void* context = nullptr) {
     SetVisible(visible, context);
     return *this;
@@ -157,6 +165,10 @@ class BoolSetting : public Setting {
     SetEnabled(enabled, context);
     return *this;
   }
+  BoolSetting& EnableWhen(const char* setting_name) {
+    SetEnabled(&BoolFromSetting, setting_name);
+    return *this;
+  }
   BoolSetting& VisibleWhen(VisibilityPredicate visible, const void* context = nullptr) {
     SetVisible(visible, context);
     return *this;
@@ -198,6 +210,10 @@ class StringSetting : public Setting {
   StringSetting& Category(const char* text) { meta_.category = CStrToString(text); return *this; }
   StringSetting& EnableWhen(EnablePredicate enabled, const void* context = nullptr) {
     SetEnabled(enabled, context);
+    return *this;
+  }
+  StringSetting& EnableWhen(const char* setting_name) {
+    SetEnabled(&BoolFromSetting, setting_name);
     return *this;
   }
   StringSetting& VisibleWhen(VisibilityPredicate visible, const void* context = nullptr) {
@@ -313,6 +329,10 @@ class EnumSetting : public Setting {
   EnumSetting& Category(const char* text) { meta_.category = CStrToString(text); return *this; }
   EnumSetting& EnableWhen(EnablePredicate enabled, const void* context = nullptr) {
     SetEnabled(enabled, context);
+    return *this;
+  }
+  EnumSetting& EnableWhen(const char* setting_name) {
+    SetEnabled(&BoolFromSetting, setting_name);
     return *this;
   }
   EnumSetting& VisibleWhen(VisibilityPredicate visible, const void* context = nullptr) {
