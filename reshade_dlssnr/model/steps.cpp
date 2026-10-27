@@ -418,7 +418,7 @@ PipelineStatus PassSession::StepModelOutputBarrier(PassRun& run) {
   }
   if (run.guides.depth == nullptr || run.guides.motion == nullptr ||
       (!run.temporal_reuse && run.eval_result != NVSDK_NGX_Result_Success)) {
-    self->temporal_history_valid_ = false;
+    self->temporal_.history_valid = false;
     return PipelineStatus::Ok;
   }
 
@@ -429,7 +429,7 @@ PipelineStatus PassSession::StepModelOutputBarrier(PassRun& run) {
   if (previous_input == nullptr || previous_edit == nullptr ||
       previous_depth == nullptr || validated == nullptr || run.model_color == nullptr ||
       run.codec == nullptr) {
-    self->temporal_history_valid_ = false;
+    self->temporal_.history_valid = false;
     return PipelineStatus::Ok;
   }
 
@@ -466,7 +466,7 @@ PipelineStatus PassSession::StepModelOutputBarrier(PassRun& run) {
   ID3D12Resource* history_uavs[kUavCount] = {previous_edit, previous_depth};
   if (!run.codec->Dispatch("TemporalCommitHistory", list, constants,
                            history_srvs, history_uavs)) {
-    self->temporal_history_valid_ = false;
+    self->temporal_.history_valid = false;
     return PipelineStatus::Ok;
   }
   self->command_.UavBarrier(list, previous_edit);
@@ -509,9 +509,9 @@ PipelineStatus PassSession::StepModelOutputBarrier(PassRun& run) {
   self->command_.Transition(list, previous_input,
                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-  self->temporal_history_valid_ = true;
+  self->temporal_.history_valid = true;
   if (!run.temporal_reuse) {
-    self->temporal_last_refresh_frame_ = run.frame_id;
+    self->temporal_.last_refresh_frame = run.frame_id;
   }
   TRACE_EVT(self, "temporal history committed pass=%u reuse=%d frame=%llu",
             self->pass_id_, run.temporal_reuse ? 1 : 0,

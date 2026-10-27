@@ -148,11 +148,11 @@ PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
                                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
       self->command_.Transition(list, previous_depth,
                                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-      self->synthetic_motion_history_valid_ = true;
-      self->synthetic_motion_history_frame_ = run.frame_id;
+      self->temporal_.synthetic_history_valid = true;
+      self->temporal_.synthetic_history_frame = run.frame_id;
     } else {
-      self->synthetic_motion_history_valid_ = false;
-      self->synthetic_motion_history_frame_ = 0;
+      self->temporal_.synthetic_history_valid = false;
+      self->temporal_.synthetic_history_frame = 0;
     }
   }
 

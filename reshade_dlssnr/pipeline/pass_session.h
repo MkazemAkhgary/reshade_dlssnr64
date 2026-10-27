@@ -31,6 +31,52 @@ namespace reshade_dlssnr {
 
 class ExposureMask;
 
+// All CPU-side state owned by one pass's temporal reprojection path.
+//
+// GPU history lives in PassResources; this struct holds only the policy
+// bookkeeping, geometry cache, and feedback sample. Bundling it here means a
+// full reset is `temporal_ = PassTemporalState{}` rather than a thirty-line
+// block that has to stay in sync with the field list.
+struct PassTemporalState {
+  GpuReadback readback;
+
+  bool history_valid = false;
+  bool feedback_valid = false;
+  bool cadence_short = false;
+  uint32_t feedback_wait_frames = 0;
+  float invalid_fraction = 1.0f;
+
+  bool synthetic_history_valid = false;
+  uint64_t synthetic_history_frame = 0;
+
+  bool last_tick_valid = false;
+  std::chrono::steady_clock::time_point last_tick{};
+
+  uint64_t last_refresh_frame = 0;
+  uint64_t last_frame_id = 0;
+  uint64_t last_guide_serial = 0;
+  uint64_t settings_signature = 0;
+  int last_mode = 0;
+
+  struct Rect {
+    unsigned int width = 0;
+    unsigned int height = 0;
+    unsigned int base_x = 0;
+    unsigned int base_y = 0;
+    unsigned int subrect_width = 0;
+    unsigned int subrect_height = 0;
+  };
+
+  Rect guide;
+  Rect motion;
+  unsigned int reference_width = 0;
+  unsigned int reference_height = 0;
+  DXGI_FORMAT depth_format = DXGI_FORMAT_UNKNOWN;
+  DXGI_FORMAT motion_format = DXGI_FORMAT_UNKNOWN;
+  float mv_scale_x = 1.0f;
+  float mv_scale_y = 1.0f;
+};
+
 class PassSession {
  public:
   explicit PassSession(DlssGuides* guides) : guides_(guides) {}
@@ -287,49 +333,7 @@ class PassSession {
   HdrState hdr_state_;
   ExposureMask exposure_mask_;
 
-  // Per-pass temporal amortization state. GPU history lives in PassResources;
-  // only feedback samples and policy bookkeeping are CPU-side.
-  GpuReadback temporal_readback_;
-  bool temporal_history_valid_ = false;
-  bool synthetic_motion_history_valid_ = false;
-  uint64_t synthetic_motion_history_frame_ = 0;
-  bool temporal_feedback_valid_ = false;
-  // Frames spent waiting for the first usable temporal feedback
-  // sample. If this exceeds a small bound the readback is treated as
-  // unavailable and reuse is allowed with a conservative estimate, so
-  // a broken feedback path cannot disable reuse permanently.
-  uint32_t temporal_feedback_wait_frames_ = 0;
-  float temporal_invalid_fraction_ = 1.0f;
-  // Latched "short cadence" state. Without hysteresis the effective cadence
-  // flips 4<->2 whenever the invalid fraction wobbles across the threshold,
-  // which turns a steady refresh rhythm into a beat.
-  bool temporal_cadence_short_ = false;
-  // Frame-interval sampling for the live readout.
-  std::chrono::steady_clock::time_point temporal_last_tick_{};
-  bool temporal_last_tick_valid_ = false;
-  uint64_t temporal_last_refresh_frame_ = 0;
-  uint64_t temporal_last_frame_id_ = 0;
-  uint64_t temporal_last_guide_serial_ = 0;
-  uint64_t temporal_settings_signature_ = 0;
-  int temporal_last_mode_ = 0;
-  unsigned int temporal_guide_width_ = 0;
-  unsigned int temporal_guide_height_ = 0;
-  unsigned int temporal_motion_width_ = 0;
-  unsigned int temporal_motion_height_ = 0;
-  unsigned int temporal_guide_base_x_ = 0;
-  unsigned int temporal_guide_base_y_ = 0;
-  unsigned int temporal_guide_subrect_width_ = 0;
-  unsigned int temporal_guide_subrect_height_ = 0;
-  unsigned int temporal_motion_base_x_ = 0;
-  unsigned int temporal_motion_base_y_ = 0;
-  unsigned int temporal_motion_subrect_width_ = 0;
-  unsigned int temporal_motion_subrect_height_ = 0;
-  unsigned int temporal_reference_width_ = 0;
-  unsigned int temporal_reference_height_ = 0;
-  DXGI_FORMAT temporal_depth_format_ = DXGI_FORMAT_UNKNOWN;
-  DXGI_FORMAT temporal_motion_format_ = DXGI_FORMAT_UNKNOWN;
-  float temporal_mv_scale_x_ = 1.0f;
-  float temporal_mv_scale_y_ = 1.0f;
+  PassTemporalState temporal_;
 
   DlssGuides* guides_ = nullptr;
   // The pass's stable id, set per RunStage call. Sessions are keyed by id,

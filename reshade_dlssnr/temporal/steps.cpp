@@ -168,23 +168,23 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
   // reuse window only pays off if the two stay close.
   const auto now = std::chrono::steady_clock::now();
   float dt_ms = 0.0f;
-  if (self->temporal_last_tick_valid_) {
+  if (self->temporal_.last_tick_valid) {
     dt_ms = std::chrono::duration<float, std::milli>(
-                now - self->temporal_last_tick_).count();
+                now - self->temporal_.last_tick).count();
   }
-  self->temporal_last_tick_ = now;
-  self->temporal_last_tick_valid_ = true;
+  self->temporal_.last_tick = now;
+  self->temporal_.last_tick_valid = true;
 
   // A newly available native guide or a disabled option invalidates any old
   // synthetic-frame correspondence, preventing vectors from spanning a gap.
   if (!run.pass_state.synthetic_motion_guides || !run.guides.valid ||
       run.guides.depth == nullptr || run.guides.motion != nullptr) {
-    self->synthetic_motion_history_valid_ = false;
-    self->synthetic_motion_history_frame_ = 0;
-  } else if (self->synthetic_motion_history_valid_ && run.frame_id != 0 &&
-             (self->synthetic_motion_history_frame_ == run.frame_id ||
-              self->synthetic_motion_history_frame_ + 1 != run.frame_id)) {
-    self->synthetic_motion_history_valid_ = false;
+    self->temporal_.synthetic_history_valid = false;
+    self->temporal_.synthetic_history_frame = 0;
+  } else if (self->temporal_.synthetic_history_valid && run.frame_id != 0 &&
+             (self->temporal_.synthetic_history_frame == run.frame_id ||
+              self->temporal_.synthetic_history_frame + 1 != run.frame_id)) {
+    self->temporal_.synthetic_history_valid = false;
   }
 
   // Build an optional depth-aware motion guide before NGX parameter filling.
@@ -206,7 +206,7 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
       ID3D12Resource* motion = run.resources->GetSyntheticMotion();
       ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
       if (reset_synthetic_history) {
-        self->synthetic_motion_history_valid_ = false;
+        self->temporal_.synthetic_history_valid = false;
         self->command_.SetResourceState(
             previous_input, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         self->command_.SetResourceState(
@@ -234,7 +234,7 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
       motion_constants.Width = run.work_width;
       motion_constants.Height = run.work_height;
       motion_constants.temporal.HistoryControl.x =
-          self->synthetic_motion_history_valid_ ? 1.0f : 0.0f;
+          self->temporal_.synthetic_history_valid ? 1.0f : 0.0f;
       motion_constants.temporal.Thresholds.z =
           run.pass_state.temporal_depth_abs_threshold;
       motion_constants.temporal.Thresholds.w =
@@ -275,15 +275,15 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
         run.guides.mv_scale_y = 1.0f;
         run.synthetic_motion_ready = true;
         TRACE_EVT(self, "synthetic motion generated pass=%u history=%d %ux%u",
-                  self->pass_id_, self->synthetic_motion_history_valid_ ? 1 : 0,
+                  self->pass_id_, self->temporal_.synthetic_history_valid ? 1 : 0,
                   run.work_width, run.work_height);
       } else {
-        self->synthetic_motion_history_valid_ = false;
+        self->temporal_.synthetic_history_valid = false;
         TRACE_EVT(self, "synthetic motion skipped pass=%u reason=dispatch",
                   self->pass_id_);
       }
     } else {
-      self->synthetic_motion_history_valid_ = false;
+      self->temporal_.synthetic_history_valid = false;
       TRACE_EVT(self, "synthetic motion skipped pass=%u reason=resources",
                 self->pass_id_);
     }
@@ -291,11 +291,11 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
 
   const int mode = std::clamp(run.pass_state.temporal_mode, 0, 3);
   if (mode == 0) {
-    self->temporal_history_valid_ = false;
-    self->temporal_feedback_valid_ = false;
-    self->temporal_invalid_fraction_ = 1.0f;
-    self->temporal_last_mode_ = 0;
-    self->temporal_settings_signature_ = 0;
+    self->temporal_.history_valid = false;
+    self->temporal_.feedback_valid = false;
+    self->temporal_.invalid_fraction = 1.0f;
+    self->temporal_.last_mode = 0;
+    self->temporal_.settings_signature = 0;
     return PipelineStatus::Ok;
   }
 
@@ -306,8 +306,8 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
           run.pass_state.temporal_fp16_history, &resources_reset)) {
     // The feature is optional; do not turn a failed temporal allocation into
     // a pass failure. Fresh NGX evaluation remains the rendering fallback.
-    self->temporal_history_valid_ = false;
-    self->temporal_feedback_valid_ = false;
+    self->temporal_.history_valid = false;
+    self->temporal_.feedback_valid = false;
     run.temporal_active = false;
     TRACE_EVT(self, "temporal disabled pass=%u reason=resource_create", self->pass_id_);
     return PipelineStatus::Ok;
@@ -318,59 +318,59 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
       ? run.guides.depth->GetDesc().Format : DXGI_FORMAT_UNKNOWN;
   const DXGI_FORMAT motion_format = run.guides.motion != nullptr
       ? run.guides.motion->GetDesc().Format : DXGI_FORMAT_UNKNOWN;
-  const bool contract_changed = resources_reset || self->temporal_last_mode_ != mode ||
-      self->temporal_settings_signature_ != signature ||
-      self->temporal_guide_width_ != run.guides.guide_width ||
-      self->temporal_guide_height_ != run.guides.guide_height ||
-      self->temporal_motion_width_ != run.guides.motion_width ||
-      self->temporal_motion_height_ != run.guides.motion_height ||
-      self->temporal_guide_base_x_ != run.guides.guide_base_x ||
-      self->temporal_guide_base_y_ != run.guides.guide_base_y ||
-      self->temporal_guide_subrect_width_ != run.guides.guide_subrect_width ||
-      self->temporal_guide_subrect_height_ != run.guides.guide_subrect_height ||
-      self->temporal_motion_base_x_ != run.guides.motion_base_x ||
-      self->temporal_motion_base_y_ != run.guides.motion_base_y ||
-      self->temporal_motion_subrect_width_ != run.guides.motion_subrect_width ||
-      self->temporal_motion_subrect_height_ != run.guides.motion_subrect_height ||
-      self->temporal_reference_width_ != run.guides.reference_width ||
-      self->temporal_reference_height_ != run.guides.reference_height ||
-      self->temporal_depth_format_ != depth_format ||
-      self->temporal_motion_format_ != motion_format ||
-      self->temporal_mv_scale_x_ != run.guides.mv_scale_x ||
-      self->temporal_mv_scale_y_ != run.guides.mv_scale_y;
+  const bool contract_changed = resources_reset || self->temporal_.last_mode != mode ||
+      self->temporal_.settings_signature != signature ||
+      self->temporal_.guide.width != run.guides.guide_width ||
+      self->temporal_.guide.height != run.guides.guide_height ||
+      self->temporal_.motion.width != run.guides.motion_width ||
+      self->temporal_.motion.height != run.guides.motion_height ||
+      self->temporal_.guide.base_x != run.guides.guide_base_x ||
+      self->temporal_.guide.base_y != run.guides.guide_base_y ||
+      self->temporal_.guide.subrect_width != run.guides.guide_subrect_width ||
+      self->temporal_.guide.subrect_height != run.guides.guide_subrect_height ||
+      self->temporal_.motion.base_x != run.guides.motion_base_x ||
+      self->temporal_.motion.base_y != run.guides.motion_base_y ||
+      self->temporal_.motion.subrect_width != run.guides.motion_subrect_width ||
+      self->temporal_.motion.subrect_height != run.guides.motion_subrect_height ||
+      self->temporal_.reference_width != run.guides.reference_width ||
+      self->temporal_.reference_height != run.guides.reference_height ||
+      self->temporal_.depth_format != depth_format ||
+      self->temporal_.motion_format != motion_format ||
+      self->temporal_.mv_scale_x != run.guides.mv_scale_x ||
+      self->temporal_.mv_scale_y != run.guides.mv_scale_y;
   if (contract_changed) {
-    self->temporal_history_valid_ = false;
-    self->temporal_feedback_valid_ = false;
-    self->temporal_invalid_fraction_ = 1.0f;
-    self->temporal_last_refresh_frame_ = 0;
+    self->temporal_.history_valid = false;
+    self->temporal_.feedback_valid = false;
+    self->temporal_.invalid_fraction = 1.0f;
+    self->temporal_.last_refresh_frame = 0;
     // A settings change must not be masked by the fallback that forces reuse
     // when stats never arrive. Without this reset, a slider edit changes the
     // constants but the fallback immediately re-arms reuse on the next frame,
     // so the new values are never given a frame in which to drain and take
     // visible effect.
-    self->temporal_feedback_wait_frames_ = 0;
-    self->temporal_cadence_short_ = false;
+    self->temporal_.feedback_wait_frames = 0;
+    self->temporal_.cadence_short = false;
   }
-  self->temporal_last_mode_ = mode;
-  self->temporal_settings_signature_ = signature;
-  self->temporal_guide_width_ = run.guides.guide_width;
-  self->temporal_guide_height_ = run.guides.guide_height;
-  self->temporal_motion_width_ = run.guides.motion_width;
-  self->temporal_motion_height_ = run.guides.motion_height;
-  self->temporal_guide_base_x_ = run.guides.guide_base_x;
-  self->temporal_guide_base_y_ = run.guides.guide_base_y;
-  self->temporal_guide_subrect_width_ = run.guides.guide_subrect_width;
-  self->temporal_guide_subrect_height_ = run.guides.guide_subrect_height;
-  self->temporal_motion_base_x_ = run.guides.motion_base_x;
-  self->temporal_motion_base_y_ = run.guides.motion_base_y;
-  self->temporal_motion_subrect_width_ = run.guides.motion_subrect_width;
-  self->temporal_motion_subrect_height_ = run.guides.motion_subrect_height;
-  self->temporal_reference_width_ = run.guides.reference_width;
-  self->temporal_reference_height_ = run.guides.reference_height;
-  self->temporal_depth_format_ = depth_format;
-  self->temporal_motion_format_ = motion_format;
-  self->temporal_mv_scale_x_ = run.guides.mv_scale_x;
-  self->temporal_mv_scale_y_ = run.guides.mv_scale_y;
+  self->temporal_.last_mode = mode;
+  self->temporal_.settings_signature = signature;
+  self->temporal_.guide.width = run.guides.guide_width;
+  self->temporal_.guide.height = run.guides.guide_height;
+  self->temporal_.motion.width = run.guides.motion_width;
+  self->temporal_.motion.height = run.guides.motion_height;
+  self->temporal_.guide.base_x = run.guides.guide_base_x;
+  self->temporal_.guide.base_y = run.guides.guide_base_y;
+  self->temporal_.guide.subrect_width = run.guides.guide_subrect_width;
+  self->temporal_.guide.subrect_height = run.guides.guide_subrect_height;
+  self->temporal_.motion.base_x = run.guides.motion_base_x;
+  self->temporal_.motion.base_y = run.guides.motion_base_y;
+  self->temporal_.motion.subrect_width = run.guides.motion_subrect_width;
+  self->temporal_.motion.subrect_height = run.guides.motion_subrect_height;
+  self->temporal_.reference_width = run.guides.reference_width;
+  self->temporal_.reference_height = run.guides.reference_height;
+  self->temporal_.depth_format = depth_format;
+  self->temporal_.motion_format = motion_format;
+  self->temporal_.mv_scale_x = run.guides.mv_scale_x;
+  self->temporal_.mv_scale_y = run.guides.mv_scale_y;
 
   // Backbuffer reuse is allowed only if an NGX guide capture happened since
   // the previous Present-stage use. Pre/Post stages own the just-captured
@@ -383,14 +383,14 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
   if (run.stage != nullptr && run.stage->owns_submit &&
       !run.synthetic_motion_ready) {
     guides_fresh = guides_fresh && run.guides.capture_serial != 0 &&
-        run.guides.capture_serial != self->temporal_last_guide_serial_;
+        run.guides.capture_serial != self->temporal_.last_guide_serial;
   }
   if (run.guides.capture_serial != 0) {
-    self->temporal_last_guide_serial_ = run.guides.capture_serial;
+    self->temporal_.last_guide_serial = run.guides.capture_serial;
   }
   if (!guides_fresh) {
-    self->temporal_history_valid_ = false;
-    self->temporal_feedback_valid_ = false;
+    self->temporal_.history_valid = false;
+    self->temporal_.feedback_valid = false;
     run.temporal_active = false;
     TRACE_EVT(self, "temporal fallback pass=%u reason=guides_not_fresh", self->pass_id_);
     return PipelineStatus::Ok;
@@ -406,8 +406,8 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
   if (list == nullptr || previous_input == nullptr || previous_edit == nullptr ||
       previous_depth == nullptr || candidate == nullptr || validated == nullptr ||
       stats == nullptr) {
-    self->temporal_history_valid_ = false;
-    self->temporal_feedback_valid_ = false;
+    self->temporal_.history_valid = false;
+    self->temporal_.feedback_valid = false;
     return PipelineStatus::Ok;
   }
 
@@ -417,33 +417,33 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
   ID3D12Fence* feedback_fence = run.stage != nullptr && run.stage->owns_submit
       ? self->command_.GetFence() : run.temporal_feedback_fence;
   if (feedback_fence != nullptr) {
-    if (self->temporal_readback_.Ensure(run.device, temporal_stats::kBytes)) {
+    if (self->temporal_.readback.Ensure(run.device, temporal_stats::kBytes)) {
       const TemporalSample sample = TemporalReadSample(
-          self->temporal_readback_, feedback_fence, run.work_width,
+          self->temporal_.readback, feedback_fence, run.work_width,
           run.work_height);
       // Feedback validity is carried separately from the invalid fraction.
       if (sample.valid) {
-        self->temporal_invalid_fraction_ = sample.invalid_fraction;
-        self->temporal_feedback_valid_ = true;
-        self->temporal_feedback_wait_frames_ = 0;
+        self->temporal_.invalid_fraction = sample.invalid_fraction;
+        self->temporal_.feedback_valid = true;
+        self->temporal_.feedback_wait_frames = 0;
         live.gpu_valid = true;
         live.mean_conf = sample.mean_conf;
         live.mean_edit = sample.mean_edit;
       } else if (sample.invalid_fraction >= 1.0f &&
-                 !self->temporal_history_valid_) {
-        self->temporal_feedback_valid_ = false;
+                 !self->temporal_.history_valid) {
+        self->temporal_.feedback_valid = false;
       }
     }
   }
 
 
   const bool duplicate_frame = run.frame_id != 0 &&
-      run.frame_id == self->temporal_last_frame_id_;
+      run.frame_id == self->temporal_.last_frame_id;
   run.temporal_duplicate_frame = duplicate_frame;
   run.temporal_active = true;
   run.temporal_reuse = false;
   run.temporal_store_history = !duplicate_frame && run.frame_id != 0;
-  self->temporal_last_frame_id_ = run.frame_id;
+  self->temporal_.last_frame_id = run.frame_id;
 
   self->command_.Transition(list, run.model_color,
                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -481,7 +481,7 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
   // The stats buffer is cleared at the start of the reproject dispatch
   // (see reproject_edit.hlsl) rather than by a separate TemporalClearStats
   // dispatch. This removes one full-resolution pass per frame.
-  bool have_candidate = self->temporal_history_valid_ && !contract_changed &&
+  bool have_candidate = self->temporal_.history_valid && !contract_changed &&
       previous_input != nullptr && previous_edit != nullptr &&
       previous_depth != nullptr;
   if (have_candidate) {
@@ -512,8 +512,8 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
         static_cast<float>(run.guides.guide_subrect_height);
     if (!run.codec->Dispatch("TemporalReprojectEdit", list, constants,
                              reproject_srvs, candidate_uavs)) {
-      self->temporal_history_valid_ = false;
-      self->temporal_feedback_valid_ = false;
+      self->temporal_.history_valid = false;
+      self->temporal_.feedback_valid = false;
       run.temporal_active = false;
       TRACE_EVT(self, "temporal fallback pass=%u reason=reproject", self->pass_id_);
       return PipelineStatus::Ok;
@@ -530,8 +530,8 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
     ID3D12Resource* validated_uavs[kUavCount] = {validated, stats};
     if (!run.codec->Dispatch("TemporalValidateDepth", list, constants,
                              validate_srvs, validated_uavs)) {
-      self->temporal_history_valid_ = false;
-      self->temporal_feedback_valid_ = false;
+      self->temporal_.history_valid = false;
+      self->temporal_.feedback_valid = false;
       run.temporal_active = false;
       TRACE_EVT(self, "temporal fallback pass=%u reason=depth_validate", self->pass_id_);
       return PipelineStatus::Ok;
@@ -556,9 +556,9 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
     copy_fence_value = run.temporal_feedback_fence_value;
   }
   if (copy_fence != nullptr && copy_fence_value != 0 &&
-      self->temporal_readback_.Ensure(run.device, temporal_stats::kBytes)) {
+      self->temporal_.readback.Ensure(run.device, temporal_stats::kBytes)) {
     self->command_.Transition(list, stats, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    if (!self->temporal_readback_.EnqueueCopy(
+    if (!self->temporal_.readback.EnqueueCopy(
             list, stats, temporal_stats::kBytes, copy_fence,
             copy_fence_value)) {
       TRACE_EVT(self, "temporal feedback copy deferred pass=%u", self->pass_id_);
@@ -571,11 +571,11 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
   // must not disable reuse forever; the per-pixel confidence blend still
   // limits ghosting, and the fallback fraction is deliberately low enough
   // that the reuse gate can open.
-  if (!self->temporal_feedback_valid_ && have_candidate) {
-    ++self->temporal_feedback_wait_frames_;
-    if (self->temporal_feedback_wait_frames_ > 4) {
-      self->temporal_invalid_fraction_ = 0.0f;
-      self->temporal_feedback_valid_ = true;
+  if (!self->temporal_.feedback_valid && have_candidate) {
+    ++self->temporal_.feedback_wait_frames;
+    if (self->temporal_.feedback_wait_frames > 4) {
+      self->temporal_.invalid_fraction = 0.0f;
+      self->temporal_.feedback_valid = true;
       TRACE_EVT(self, "temporal feedback fallback activated pass=%u",
                 self->pass_id_);
       DLSSNR_LOG_ONCE(
@@ -585,8 +585,8 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
     }
   }
 
-  const uint64_t age = run.frame_id >= self->temporal_last_refresh_frame_
-      ? run.frame_id - self->temporal_last_refresh_frame_ : UINT64_MAX;
+  const uint64_t age = run.frame_id >= self->temporal_.last_refresh_frame
+      ? run.frame_id - self->temporal_.last_refresh_frame : UINT64_MAX;
   // The Cadence slider is the model-evaluation period: N means evaluate every
   // N frames. Fixed uses it as-is; Adaptive uses it as a ceiling and shortens
   // it when the invalid pixel fraction is high.
@@ -605,23 +605,23 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
     // Adaptive: shorten the ceiling when the invalid fraction is high.
     // Hysteresis: enter at the threshold, leave only below half of it, so a
     // wobbling invalid fraction cannot flip the cadence every frame.
-    if (self->temporal_invalid_fraction_ >= max_invalid_fraction) {
-      self->temporal_cadence_short_ = true;
-    } else if (self->temporal_invalid_fraction_ < max_invalid_fraction * 0.5f) {
-      self->temporal_cadence_short_ = false;
+    if (self->temporal_.invalid_fraction >= max_invalid_fraction) {
+      self->temporal_.cadence_short = true;
+    } else if (self->temporal_.invalid_fraction < max_invalid_fraction * 0.5f) {
+      self->temporal_.cadence_short = false;
     }
-    invalid_high = self->temporal_cadence_short_;
+    invalid_high = self->temporal_.cadence_short;
     if (invalid_high) {
       // Halve the ceiling, floor at 2 so a cadence of 2 cannot bypass reuse.
       effective_cadence = std::max<uint64_t>(2u, cadence_ceiling / 2);
     }
   } else {
     // Fixed: no shortening.
-    self->temporal_cadence_short_ = false;
+    self->temporal_.cadence_short = false;
   }
   const bool can_skip = have_candidate && !duplicate_frame && run.frame_id != 0 &&
-      self->temporal_feedback_valid_ &&
-      self->temporal_last_refresh_frame_ != 0 && age > 0 &&
+      self->temporal_.feedback_valid &&
+      self->temporal_.last_refresh_frame != 0 && age > 0 &&
       age < effective_cadence;
   if (can_skip) {
     bool reuse_ok = false;
@@ -721,7 +721,7 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
                             "invalid=%.4f mode=%d cheap=%ux%u",
                             self->pass_id_,
                             static_cast<unsigned long long>(age),
-                            self->temporal_invalid_fraction_, mode,
+                            self->temporal_.invalid_fraction, mode,
                             cheap_w, cheap_h);
                 }
               }
@@ -746,7 +746,7 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
         reuse_ok = true;
         TRACE_EVT(self, "temporal reuse pass=%u age=%llu invalid=%.4f mode=%d",
                   self->pass_id_, static_cast<unsigned long long>(age),
-                  self->temporal_invalid_fraction_, mode);
+                  self->temporal_.invalid_fraction, mode);
       }
     }
 
@@ -754,8 +754,8 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
       run.temporal_reuse = true;
       run.eval_result = NVSDK_NGX_Result_Success;
     } else {
-      self->temporal_history_valid_ = false;
-      self->temporal_feedback_valid_ = false;
+      self->temporal_.history_valid = false;
+      self->temporal_.feedback_valid = false;
       run.temporal_reuse = false;
       TRACE_EVT(self, "temporal refresh pass=%u reason=apply_dispatch",
                 self->pass_id_);
@@ -763,14 +763,14 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
   }
 
   if (!run.temporal_reuse && run.frame_id != 0 && !duplicate_frame) {
-    self->temporal_last_refresh_frame_ = run.frame_id;
+    self->temporal_.last_refresh_frame = run.frame_id;
 
     // Trace the reason a frame that had a candidate and valid feedback did
     // not reuse. Without this, "reuse is not firing" is only visible as an
     // absence of trace events, which is the wrong shape for diagnosis.
-    if (have_candidate && self->temporal_feedback_valid_) {
+    if (have_candidate && self->temporal_.feedback_valid) {
       const char* reason =
-          (self->temporal_last_refresh_frame_ == 0) ? "no_history" :
+          (self->temporal_.last_refresh_frame == 0) ? "no_history" :
           (age == 0) ? "age_zero" :
           (age >= effective_cadence) ? "cadence_elapsed" :
           "unknown";
@@ -780,18 +780,18 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
                 self->pass_id_, reason,
                 static_cast<unsigned long long>(age),
                 static_cast<unsigned long long>(effective_cadence),
-                self->temporal_invalid_fraction_,
+                self->temporal_.invalid_fraction,
                 invalid_high ? 1 : 0, mode);
     }
   }
 
   live.active = true;
   live.reuse = run.temporal_reuse;
-  live.feedback_valid = self->temporal_feedback_valid_;
+  live.feedback_valid = self->temporal_.feedback_valid;
   live.cadence_short = invalid_high;
   live.age = age;
   live.cadence = effective_cadence;
-  live.invalid_fraction = self->temporal_invalid_fraction_;
+  live.invalid_fraction = self->temporal_.invalid_fraction;
   if (run.temporal_reuse) {
     ++live.reuse_frames;
   } else if (run.frame_id != 0 && !duplicate_frame) {

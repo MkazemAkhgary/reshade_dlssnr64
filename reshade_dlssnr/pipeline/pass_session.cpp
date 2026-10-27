@@ -565,26 +565,8 @@ void PassSession::Shutdown(NgxRuntime& runtime) {
   DLSSNR_PROFILE_RESOURCE_L2("PassSession::Shutdown");
   std::lock_guard<std::mutex> lock(g_session_mutex);
 
-  temporal_readback_.Shutdown();
-  temporal_history_valid_ = false;
-  synthetic_motion_history_valid_ = false;
-  synthetic_motion_history_frame_ = 0;
-  temporal_feedback_valid_ = false;
-  temporal_invalid_fraction_ = 1.0f;
-  temporal_last_refresh_frame_ = 0;
-  temporal_last_frame_id_ = 0;
-  temporal_last_guide_serial_ = 0;
-  temporal_settings_signature_ = 0;
-  temporal_last_mode_ = 0;
-  temporal_guide_width_ = temporal_guide_height_ = 0;
-  temporal_motion_width_ = temporal_motion_height_ = 0;
-  temporal_guide_base_x_ = temporal_guide_base_y_ = 0;
-  temporal_guide_subrect_width_ = temporal_guide_subrect_height_ = 0;
-  temporal_motion_base_x_ = temporal_motion_base_y_ = 0;
-  temporal_motion_subrect_width_ = temporal_motion_subrect_height_ = 0;
-  temporal_reference_width_ = temporal_reference_height_ = 0;
-  temporal_depth_format_ = temporal_motion_format_ = DXGI_FORMAT_UNKNOWN;
-  temporal_mv_scale_x_ = temporal_mv_scale_y_ = 1.0f;
+  temporal_.readback.Shutdown();
+  temporal_ = PassTemporalState{};
   feature_.Shutdown(runtime);
   resources_.Shutdown();
   exposure_mask_.Shutdown();
