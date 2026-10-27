@@ -81,6 +81,31 @@ void LogPresentInterfacesOnce(bool device_is_proxy, ID3D12CommandQueue* queue) {
   reshade::log::message(reshade::log::level::info, message);
 }
 
+using PassResourceGetter = ID3D12Resource* (PassResources::*)() const;
+
+struct PassResourceState {
+  PassResourceGetter get;
+  D3D12_RESOURCE_STATES state;
+};
+
+constexpr PassResourceState kPassResourceStates[] = {
+    {&PassResources::GetOutput, D3D12_RESOURCE_STATE_UNORDERED_ACCESS},
+    {&PassResources::GetCompositeOutput, D3D12_RESOURCE_STATE_UNORDERED_ACCESS},
+    {&PassResources::GetWorkingInput, D3D12_RESOURCE_STATE_UNORDERED_ACCESS},
+    {&PassResources::GetWorkingOutput, D3D12_RESOURCE_STATE_UNORDERED_ACCESS},
+    {&PassResources::GetGradedWorkingInput, D3D12_RESOURCE_STATE_UNORDERED_ACCESS},
+    {&PassResources::GetUnliftedWorkingInput, D3D12_RESOURCE_STATE_UNORDERED_ACCESS},
+    {&PassResources::GetPackedOutput, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE},
+    {&PassResources::GetEffectiveExposureMap, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE},
+    {&PassResources::GetGainStats, D3D12_RESOURCE_STATE_UNORDERED_ACCESS},
+    {&PassResources::GetTemporalPreviousInput, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE},
+    {&PassResources::GetTemporalPreviousEdit, D3D12_RESOURCE_STATE_UNORDERED_ACCESS},
+    {&PassResources::GetTemporalPreviousDepth, D3D12_RESOURCE_STATE_UNORDERED_ACCESS},
+    {&PassResources::GetTemporalCandidate, D3D12_RESOURCE_STATE_UNORDERED_ACCESS},
+    {&PassResources::GetTemporalValidatedCandidate, D3D12_RESOURCE_STATE_UNORDERED_ACCESS},
+    {&PassResources::GetTemporalStats, D3D12_RESOURCE_STATE_UNORDERED_ACCESS},
+};
+
 }  // namespace
 
 void PassSession::Fail(const char* reason) {
@@ -442,91 +467,20 @@ void PassSession::SeedFrameState(ID3D12Resource* backbuffer) {
   if (backbuffer != nullptr) {
     command_.SetResourceState(backbuffer, D3D12_RESOURCE_STATE_PRESENT);
   }
-  command_.SetResourceState(resources_.GetOutput(),
-                            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  command_.SetResourceState(resources_.GetCompositeOutput(),
-                            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  command_.SetResourceState(resources_.GetWorkingInput(),
-                            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  command_.SetResourceState(resources_.GetWorkingOutput(),
-                            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  if (resources_.GetGradedWorkingInput() != nullptr) {
-    command_.SetResourceState(resources_.GetGradedWorkingInput(),
-                              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  for (const PassResourceState& entry : kPassResourceStates) {
+    ID3D12Resource* resource = (resources_.*entry.get)();
+    if (resource != nullptr) {
+      command_.SetResourceState(resource, entry.state);
+    }
   }
-  if (resources_.GetUnliftedWorkingInput() != nullptr) {
-    command_.SetResourceState(resources_.GetUnliftedWorkingInput(),
-                              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  }
-  if (resources_.GetPackedOutput() != nullptr) {
-    command_.SetResourceState(resources_.GetPackedOutput(),
-                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  }
-  if (resources_.GetEffectiveExposureMap() != nullptr) {
-    command_.SetResourceState(resources_.GetEffectiveExposureMap(),
-                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  }
-  if (resources_.GetGainStats() != nullptr) {
-    command_.SetResourceState(resources_.GetGainStats(),
-                              D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  }
-  if (resources_.GetTemporalPreviousInput() != nullptr)
-    command_.SetResourceState(resources_.GetTemporalPreviousInput(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  if (resources_.GetTemporalPreviousEdit() != nullptr)
-    command_.SetResourceState(resources_.GetTemporalPreviousEdit(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  if (resources_.GetTemporalPreviousDepth() != nullptr)
-    command_.SetResourceState(resources_.GetTemporalPreviousDepth(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  if (resources_.GetTemporalCandidate() != nullptr)
-    command_.SetResourceState(resources_.GetTemporalCandidate(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  if (resources_.GetTemporalValidatedCandidate() != nullptr)
-    command_.SetResourceState(resources_.GetTemporalValidatedCandidate(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  if (resources_.GetTemporalStats() != nullptr)
-    command_.SetResourceState(resources_.GetTemporalStats(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
 
 void PassSession::CleanupFrameState(ID3D12GraphicsCommandList* command_list) {
   DLSSNR_PROFILE_RESOURCE_L2("PassSession::CleanupFrameState");
   if (command_list == nullptr) return;
-  command_.Transition(command_list, resources_.GetOutput(),
-                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  command_.Transition(command_list, resources_.GetCompositeOutput(),
-                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  command_.Transition(command_list, resources_.GetWorkingInput(),
-                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  command_.Transition(command_list, resources_.GetWorkingOutput(),
-                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  if (resources_.GetGradedWorkingInput() != nullptr) {
-    command_.Transition(command_list, resources_.GetGradedWorkingInput(),
-                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  for (const PassResourceState& entry : kPassResourceStates) {
+    command_.Transition(command_list, (resources_.*entry.get)(), entry.state);
   }
-  if (resources_.GetUnliftedWorkingInput() != nullptr) {
-    command_.Transition(command_list, resources_.GetUnliftedWorkingInput(),
-                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  }
-  if (resources_.GetPackedOutput() != nullptr) {
-    command_.Transition(command_list, resources_.GetPackedOutput(),
-                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  }
-  if (resources_.GetEffectiveExposureMap() != nullptr) {
-    command_.Transition(command_list, resources_.GetEffectiveExposureMap(),
-                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  }
-  if (resources_.GetGainStats() != nullptr) {
-    command_.Transition(command_list, resources_.GetGainStats(),
-                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  }
-  if (resources_.GetTemporalPreviousInput() != nullptr)
-    command_.Transition(command_list, resources_.GetTemporalPreviousInput(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-  if (resources_.GetTemporalPreviousEdit() != nullptr)
-    command_.Transition(command_list, resources_.GetTemporalPreviousEdit(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  if (resources_.GetTemporalPreviousDepth() != nullptr)
-    command_.Transition(command_list, resources_.GetTemporalPreviousDepth(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  if (resources_.GetTemporalCandidate() != nullptr)
-    command_.Transition(command_list, resources_.GetTemporalCandidate(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  if (resources_.GetTemporalValidatedCandidate() != nullptr)
-    command_.Transition(command_list, resources_.GetTemporalValidatedCandidate(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-  if (resources_.GetTemporalStats() != nullptr)
-    command_.Transition(command_list, resources_.GetTemporalStats(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
 
 void PassSession::SubmitBackbuffer() {
