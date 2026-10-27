@@ -33,9 +33,9 @@
     <DlssnrBytecodeSource Condition="'$(PrecompileShaders)' != 'true'">generated\shader_bytecode.cpp</DlssnrBytecodeSource>
     <DlssnrMutexCompatibility Condition="'$(DlssnrMutexCompatibility)' == ''">true</DlssnrMutexCompatibility>
     <DlssnrMutexDefine Condition="'$(DlssnrMutexCompatibility)' == 'true'">_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;</DlssnrMutexDefine>
-    <DlssnrTraceEnabled Condition="'$(DlssnrTraceEnabled)' == ''">true</DlssnrTraceEnabled>
+    <DlssnrTraceEnabled Condition="'$(DlssnrTraceEnabled)' == ''">false</DlssnrTraceEnabled>
     <DlssnrTraceDefine Condition="'$(DlssnrTraceEnabled)' == 'true'">DLSSNR_TRACE_ENABLED=1;</DlssnrTraceDefine>
-    <DlssnrTracyEnabled Condition="'$(DlssnrTracyEnabled)' == ''">true</DlssnrTracyEnabled>
+    <DlssnrTracyEnabled Condition="'$(DlssnrTracyEnabled)' == ''">false</DlssnrTracyEnabled>
     <DlssnrTracyDefine Condition="'$(DlssnrTracyEnabled)' == 'true'">TRACY_ENABLE;TRACY_ON_DEMAND;TRACY_NO_BROADCAST;</DlssnrTracyDefine>
     <DlssnrProfileVerbosity Condition="'$(DlssnrProfileVerbosity)' == ''">1</DlssnrProfileVerbosity>
     <DlssnrProfileDomainCore Condition="'$(DlssnrProfileDomainCore)' == ''">1</DlssnrProfileDomainCore>

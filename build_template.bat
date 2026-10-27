@@ -156,7 +156,7 @@ if defined LAST_TARGET (
     echo Launch target: not chosen yet
 )
 echo.
-echo   1. Default          Release, Tracy, trace, verify shaders  [default]
+echo   1. Default          Release, no Tracy/trace, verify shaders  [default]
 echo   2. Last used        !LAST_SUMMARY!
 echo   3. Fast iteration   Release, no Tracy/trace/verify, no domains
 echo   4. Profile deep     Release, Tracy verbosity 3, GPU zones on
@@ -309,8 +309,8 @@ goto :ASK_CONFIG
 :ASK_TRACY
 echo.
 set "TRACY_CHOICE="
-set /p "TRACY_CHOICE=Enable Tracy profiling (links TracyClient)? [Y/n]: "
-if not defined TRACY_CHOICE set "TRACY_CHOICE=Y"
+set /p "TRACY_CHOICE=Enable Tracy profiling (links TracyClient)? [y/N]: "
+if not defined TRACY_CHOICE set "TRACY_CHOICE=N"
 if /i "%TRACY_CHOICE:~0,1%"=="n" (
     set "TRACY_ENABLED=false"
 ) else (
@@ -367,8 +367,8 @@ echo.
 echo The pipeline trace (TRACE_CMD/TRACE_EVT/TRACE_CFG) is still gated at
 echo runtime by the DLSSNR_TRACE environment variable.
 set "TRACE_CHOICE="
-set /p "TRACE_CHOICE=Compile the pipeline trace in? [Y/n]: "
-if not defined TRACE_CHOICE set "TRACE_CHOICE=Y"
+set /p "TRACE_CHOICE=Compile the pipeline trace in? [y/N]: "
+if not defined TRACE_CHOICE set "TRACE_CHOICE=N"
 if /i "%TRACE_CHOICE:~0,1%"=="n" (
     set "TRACE_ENABLED=false"
 ) else (
