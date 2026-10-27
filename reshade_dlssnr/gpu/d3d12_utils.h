@@ -27,6 +27,24 @@ inline D3D12_RESOURCE_STATES InferResourceState(ID3D12Resource* resource) {
   }
 }
 
+// Raw, untracked transition barrier. Used on game resources whose exact
+// current state is not known to the addon's tracker; CommandContext::Transition
+// tracks its own resources and should be preferred when it applies.
+inline void RawTransitionBarrier(
+    ID3D12GraphicsCommandList* command_list, ID3D12Resource* resource,
+    D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after,
+    UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES) {
+  if (command_list == nullptr || resource == nullptr || before == after) return;
+
+  D3D12_RESOURCE_BARRIER barrier = {};
+  barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+  barrier.Transition.pResource = resource;
+  barrier.Transition.Subresource = subresource;
+  barrier.Transition.StateBefore = before;
+  barrier.Transition.StateAfter = after;
+  command_list->ResourceBarrier(1, &barrier);
+}
+
 inline DXGI_FORMAT TypedViewFormat(DXGI_FORMAT format) {
   switch (format) {
     case DXGI_FORMAT_R16G16B16A16_TYPELESS:

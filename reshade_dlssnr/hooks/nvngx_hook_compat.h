@@ -282,15 +282,7 @@ static void TransitionColorSubresource(
     UINT subresource,
     D3D12_RESOURCE_STATES before,
     D3D12_RESOURCE_STATES after) {
-  if (command_list == nullptr || resource == nullptr || before == after) return;
-
-  D3D12_RESOURCE_BARRIER barrier = {};
-  barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-  barrier.Transition.pResource = resource;
-  barrier.Transition.Subresource = subresource;
-  barrier.Transition.StateBefore = before;
-  barrier.Transition.StateAfter = after;
-  command_list->ResourceBarrier(1, &barrier);
+  RawTransitionBarrier(command_list, resource, before, after, subresource);
 }
 
 static PreDlssColorAdapterFailure CreatePreDlssColorAdapter(

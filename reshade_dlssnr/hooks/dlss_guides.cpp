@@ -15,22 +15,6 @@ namespace reshade_dlssnr {
 
 namespace {
 
-void TransitionBarrier(
-    ID3D12GraphicsCommandList* command_list,
-    ID3D12Resource* resource,
-    D3D12_RESOURCE_STATES before,
-    D3D12_RESOURCE_STATES after) {
-  if (before == after || resource == nullptr) return;
-
-  D3D12_RESOURCE_BARRIER barrier = {};
-  barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-  barrier.Transition.pResource = resource;
-  barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-  barrier.Transition.StateBefore = before;
-  barrier.Transition.StateAfter = after;
-  command_list->ResourceBarrier(1, &barrier);
-}
-
 D3D12_RESOURCE_DESC GuideCloneDesc(ID3D12Resource* source,
                                    DXGI_FORMAT typed_format) {
   D3D12_RESOURCE_DESC desc = source->GetDesc();
@@ -131,16 +115,16 @@ ID3D12Resource* GuideSlot::PublishClone(ID3D12Device* device,
   }
 
   const D3D12_RESOURCE_STATES source_state = InferResourceState(source);
-  TransitionBarrier(list, source, source_state, D3D12_RESOURCE_STATE_COPY_SOURCE);
-  TransitionBarrier(list, clone_.Get(),
+  RawTransitionBarrier(list, source, source_state, D3D12_RESOURCE_STATE_COPY_SOURCE);
+  RawTransitionBarrier(list, clone_.Get(),
                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
                     D3D12_RESOURCE_STATE_COPY_DEST);
   const CD3DX12_TEXTURE_COPY_LOCATION src_loc(source, 0);
   const CD3DX12_TEXTURE_COPY_LOCATION dst_loc(clone_.Get(), 0);
   list->CopyTextureRegion(&dst_loc, 0, 0, 0, &src_loc, nullptr);
 
-  TransitionBarrier(list, source, D3D12_RESOURCE_STATE_COPY_SOURCE, source_state);
-  TransitionBarrier(list, clone_.Get(), D3D12_RESOURCE_STATE_COPY_DEST,
+  RawTransitionBarrier(list, source, D3D12_RESOURCE_STATE_COPY_SOURCE, source_state);
+  RawTransitionBarrier(list, clone_.Get(), D3D12_RESOURCE_STATE_COPY_DEST,
                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   return clone_.Get();
 }
@@ -157,7 +141,7 @@ ID3D12Resource* GuideSlot::PublishDirect(
   }
   if (transition_list != nullptr) {
     const D3D12_RESOURCE_STATES source_state = InferResourceState(source);
-    TransitionBarrier(transition_list, source, source_state,
+    RawTransitionBarrier(transition_list, source, source_state,
                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   }
   return direct_.Get();
