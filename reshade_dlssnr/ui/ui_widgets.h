@@ -35,12 +35,15 @@ struct HeaderControls {
   float* enabled_float = nullptr;
 };
 
-bool PersistentHeader(const char* label, bool& open_setting, bool& changed,
-                      const char* tooltip = nullptr,
-                      HeaderControls controls = {});
-bool PersistentSettingHeader(const char* label, const char* setting_key,
-                             bool& changed, const char* tooltip = nullptr,
-                             HeaderControls controls = {});
+// Collapsible section header whose open/closed state is a ui_state setting.
+bool DrawSectionHeader(const char* label, const char* setting_key,
+                       bool& changed, const char* tooltip = nullptr,
+                       HeaderControls controls = {});
+
+// Tinted sub-section header; caller owns the open/closed state.
+bool DrawSubSectionHeader(const char* label, bool& open_setting, bool& changed,
+                          const char* tooltip = nullptr,
+                          HeaderControls controls = {});
 
 class IndentScope {
  public:
@@ -55,17 +58,14 @@ class IndentScope {
   float amount_;
 };
 
+// DrawSectionHeader plus an indented body when open.
 template <typename Body>
 void DrawCollapsible(const char* label, const char* setting_key,
                      bool& changed, const char* tooltip, Body&& body) {
-  if (!PersistentSettingHeader(label, setting_key, changed, tooltip)) return;
+  if (!DrawSectionHeader(label, setting_key, changed, tooltip)) return;
   IndentScope indent;
   body();
 }
-
-bool PersistentSubHeader(const char* label, bool& open_setting, bool& changed,
-                         const char* tooltip = nullptr,
-                         HeaderControls controls = {});
 
 bool DrawFloatRow(const char* id,
                   const char* label,

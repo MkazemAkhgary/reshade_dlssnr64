@@ -266,7 +266,7 @@ void DrawStatusSection(Settings& settings, bool& changed) {
   // and per-pass status stay at the top of the panel; the numbers here matter
   // when tuning Working Scale / x2 or diagnosing VRAM pressure.
   ImGui::Separator();
-  if (PersistentSettingHeader(
+  if (DrawSectionHeader(
           "GPU Resources", feature::ui_state::kResourcesOpen, changed,
           "Currently allocated per-pass GPU resources. Totals do not include "
           "the shared compute engine's descriptor heap, its constant buffer, "

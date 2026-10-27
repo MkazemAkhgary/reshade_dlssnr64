@@ -180,7 +180,7 @@ bool DrawCategoryHeader(const DrawOptions& options, ValueStore& store,
       controls.enabled = &toggle_value;
       controls.enabled_tooltip = toggle_setting->meta().tooltip.c_str();
     }
-    PersistentSubHeader(label.c_str(), open, changed, nullptr, controls);
+    DrawSubSectionHeader(label.c_str(), open, changed, nullptr, controls);
     ImGui::PopID();
     toggle_changed = toggle_setting != nullptr &&
                      toggle_value != store.Read(section.name(), key,

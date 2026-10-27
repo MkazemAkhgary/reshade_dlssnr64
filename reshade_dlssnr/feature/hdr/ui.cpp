@@ -114,7 +114,7 @@ bool DrawHdrLayers(const void* context, ctl::ValueStore& store,
     controls.enabled_tooltip = enabled_tooltip;
 
     bool layer_changed = false;
-    const bool open = PersistentSettingHeader(
+    const bool open = DrawSectionHeader(
         layers[i].label, layers[i].open_key, layer_changed,
         layers[i].tooltip, controls);
     if (enabled != before) {

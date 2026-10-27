@@ -131,28 +131,28 @@ bool DrawCollapsingHeader(const char* label, bool& open_setting,
   return open;
 }
 
-}  // namespace
-
-bool PersistentSettingHeader(const char* label, const char* setting_key,
-                             bool& changed, const char* tooltip,
-                             HeaderControls controls) {
-  DLSSNR_PROFILE_UI_L3("UI Persistent Setting Header");
-  bool open = feature::ui_state::Read(setting_key);
-  const bool previous = open;
-  const bool expanded = PersistentHeader(label, open, changed, tooltip, controls);
-  if (open != previous) feature::ui_state::Write(setting_key, open);
-  return expanded;
-}
-
-bool PersistentHeader(const char* label, bool& open_setting, bool& changed,
-                      const char* tooltip, HeaderControls controls) {
+bool DrawHeader(const char* label, bool& open_setting, bool& changed,
+                const char* tooltip, HeaderControls controls) {
   return DrawCollapsingHeader(label, open_setting, changed, tooltip, controls,
                               /*tinted=*/false);
 }
 
-bool PersistentSubHeader(const char* label, bool& open_setting,
-                         bool& changed, const char* tooltip,
-                         HeaderControls controls) {
+}  // namespace
+
+bool DrawSectionHeader(const char* label, const char* setting_key,
+                       bool& changed, const char* tooltip,
+                       HeaderControls controls) {
+  DLSSNR_PROFILE_UI_L3("UI Draw Section Header");
+  bool open = feature::ui_state::Read(setting_key);
+  const bool previous = open;
+  const bool expanded = DrawHeader(label, open, changed, tooltip, controls);
+  if (open != previous) feature::ui_state::Write(setting_key, open);
+  return expanded;
+}
+
+bool DrawSubSectionHeader(const char* label, bool& open_setting,
+                          bool& changed, const char* tooltip,
+                          HeaderControls controls) {
   return DrawCollapsingHeader(label, open_setting, changed, tooltip, controls,
                               /*tinted=*/true);
 }

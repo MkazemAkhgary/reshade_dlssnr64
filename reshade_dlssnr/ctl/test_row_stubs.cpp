@@ -21,12 +21,8 @@ void Tip(const char*, ...) {}
 
 void SectionDivider() {}
 
-bool PersistentHeader(const char*, bool&, bool&, const char*, HeaderControls) {
-  return false;
-}
-
-bool PersistentSubHeader(const char*, bool&, bool&, const char*,
-                         HeaderControls) {
+bool DrawSubSectionHeader(const char*, bool&, bool&, const char*,
+                          HeaderControls) {
   return false;
 }
 
