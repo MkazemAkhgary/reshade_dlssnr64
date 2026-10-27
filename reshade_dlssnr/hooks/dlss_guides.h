@@ -22,6 +22,38 @@ inline bool IsUpscalerFeature(NVSDK_NGX_Feature feature_id) {
          feature_id == NVSDK_NGX_Feature_RayReconstruction;
 }
 
+inline ID3D12Resource* GetNgxResource(
+    const NVSDK_NGX_Parameter* params,
+    const char* primary_name,
+    const char* alternate_name = nullptr) {
+  if (params == nullptr || primary_name == nullptr) return nullptr;
+  ID3D12Resource* resource = nullptr;
+  if (params->Get(primary_name, &resource) == NVSDK_NGX_Result_Success &&
+      resource != nullptr) {
+    return resource;
+  }
+  if (alternate_name != nullptr) {
+    resource = nullptr;
+    if (params->Get(alternate_name, &resource) == NVSDK_NGX_Result_Success &&
+        resource != nullptr) {
+      return resource;
+    }
+  }
+  void* untyped = nullptr;
+  if (params->Get(primary_name, &untyped) == NVSDK_NGX_Result_Success &&
+      untyped != nullptr) {
+    return static_cast<ID3D12Resource*>(untyped);
+  }
+  if (alternate_name != nullptr) {
+    untyped = nullptr;
+    if (params->Get(alternate_name, &untyped) == NVSDK_NGX_Result_Success &&
+        untyped != nullptr) {
+      return static_cast<ID3D12Resource*>(untyped);
+    }
+  }
+  return nullptr;
+}
+
 struct DlssGuideState {
   ID3D12Resource* depth = nullptr;
   ID3D12Resource* motion = nullptr;

@@ -14,34 +14,6 @@ namespace reshade_dlssnr {
 
 namespace {
 
-ID3D12Resource* GetResource(const NVSDK_NGX_Parameter* params, const char* a, const char* b) {
-  ID3D12Resource* resource = nullptr;
-  if (params->Get(a, &resource) == NVSDK_NGX_Result_Success && resource != nullptr) {
-    return resource;
-  }
-
-  resource = nullptr;
-  if (params->Get(b, &resource) == NVSDK_NGX_Result_Success && resource != nullptr) {
-    return resource;
-  }
-
-  void* untyped = nullptr;
-  if (params->Get(a, &untyped) == NVSDK_NGX_Result_Success && untyped != nullptr) {
-    return static_cast<ID3D12Resource*>(untyped);
-  }
-
-  untyped = nullptr;
-  if (params->Get(b, &untyped) == NVSDK_NGX_Result_Success && untyped != nullptr) {
-    return static_cast<ID3D12Resource*>(untyped);
-  }
-
-  return nullptr;
-}
-
-}  // namespace
-
-namespace {
-
 // One line per distinct set. The render size, each resource's size and the
 // subrect bases decide whether a guide lines up with the game's view.
 void LogGuideGeometryOnce(const NVSDK_NGX_Parameter* params,
@@ -219,9 +191,8 @@ void DlssGuides::CaptureGuides(
   }
 
   ID3D12Resource* depth =
-      GetResource(params, NVSDK_NGX_Parameter_Depth, "DLSSD.Depth");
-  ID3D12Resource* motion = GetResource(
-      params, NVSDK_NGX_Parameter_MotionVectors, "DLSSD.MotionVectors");
+      GetNgxResource(params, NVSDK_NGX_Parameter_Depth, "DLSSD.Depth");
+  ID3D12Resource* motion = GetNgxResource(params, NVSDK_NGX_Parameter_MotionVectors, "DLSSD.MotionVectors");
 
   if (depth == nullptr || motion == nullptr) {
     static bool logged_missing_guides = false;
@@ -423,7 +394,7 @@ void DlssGuides::CaptureOutput(
   }
 
   ID3D12Resource* output =
-      GetResource(params, NVSDK_NGX_Parameter_Output, "DLSSD.Output");
+      GetNgxResource(params, NVSDK_NGX_Parameter_Output, "DLSSD.Output");
   if (output == nullptr) return;
 
   const D3D12_RESOURCE_DESC output_desc = output->GetDesc();

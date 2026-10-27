@@ -157,22 +157,6 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_ReleaseFeatureD(
 }
 
 
-static ID3D12Resource* GetResourceParameter(NVSDK_NGX_Parameter* parameters,
-                                                const char* name) {
-  if (parameters == nullptr || name == nullptr) return nullptr;
-  ID3D12Resource* resource = nullptr;
-  if (parameters->Get(name, &resource) == NVSDK_NGX_Result_Success &&
-      resource != nullptr) {
-    return resource;
-  }
-  void* untyped = nullptr;
-  if (parameters->Get(name, &untyped) == NVSDK_NGX_Result_Success &&
-      untyped != nullptr) {
-    return static_cast<ID3D12Resource*>(untyped);
-  }
-  return nullptr;
-}
-
 enum class PreDlssColorRejection : size_t {
   None,
   MissingColor,
@@ -631,7 +615,7 @@ static NVSDK_NGX_Result NVSDK_CONV EvaluateFeatureImpl(
   // Exposure and Color are captured before NGX evaluates, since the parameter
   // block may be reused or mutated by the driver's implementation.
   ID3D12Resource* exposure_texture =
-      GetResourceParameter(parameters, NVSDK_NGX_Parameter_ExposureTexture);
+      GetNgxResource(parameters, NVSDK_NGX_Parameter_ExposureTexture);
 
   bool is_proxy = false;
   Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> native_list =
@@ -716,7 +700,7 @@ static NVSDK_NGX_Result NVSDK_CONV EvaluateFeatureImpl(
               "Pre-DLSS skipped: D3D12 command-list state hooks are unavailable");
     } else {
       ID3D12Resource* color =
-          GetResourceParameter(parameters, NVSDK_NGX_Parameter_Color);
+          GetNgxResource(parameters, NVSDK_NGX_Parameter_Color);
       PreDlssColorGeometry geometry = {};
       const PreDlssColorRejection rejection =
           GetPreDlssColorGeometry(color, parameters, &geometry);
@@ -829,7 +813,7 @@ static NVSDK_NGX_Result NVSDK_CONV EvaluateFeatureImpl(
         // never enter that path.
         ID3D12Resource* output = nullptr;
         if (any_post_dlss) {
-          output = GetResourceParameter(parameters, NVSDK_NGX_Parameter_Output);
+          output = GetNgxResource(parameters, NVSDK_NGX_Parameter_Output);
           if (output != nullptr && !AddonController::Get().RestartPending()) {
             const uint64_t retirement_hint =
                 AddonController::Get().ReleaseFenceHint();
@@ -841,7 +825,7 @@ static NVSDK_NGX_Result NVSDK_CONV EvaluateFeatureImpl(
         if (any_post_dlss) {
           AddonController::Get().SetPostDlssBlocked(nullptr);
           if (output == nullptr) {
-            output = GetResourceParameter(parameters, NVSDK_NGX_Parameter_Output);
+            output = GetNgxResource(parameters, NVSDK_NGX_Parameter_Output);
           }
           if (output != nullptr) {
             AddonController::Get().OnPostDlssEvaluate(
