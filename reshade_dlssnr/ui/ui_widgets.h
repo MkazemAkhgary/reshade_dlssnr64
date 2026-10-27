@@ -24,6 +24,21 @@ void WithDisabled(bool disabled, Fn&& fn) {
   if (disabled) ImGui::EndDisabled();
 }
 
+class IndentScope
+{
+public:
+    explicit IndentScope(float amount = 16.0f) : amount_(amount)
+    {
+        ImGui::Indent(amount_);
+    }
+    ~IndentScope() { ImGui::Unindent(amount_); }
+    IndentScope(const IndentScope&) = delete;
+    IndentScope& operator=(const IndentScope&) = delete;
+
+private:
+    float amount_;
+};
+
 using HeaderResetCallback = void (*)(void* context);
 
 struct HeaderControls {
@@ -44,19 +59,6 @@ bool DrawSectionHeader(const char* label, const char* setting_key,
 bool DrawSubSectionHeader(const char* label, bool& open_setting, bool& changed,
                           const char* tooltip = nullptr,
                           HeaderControls controls = {});
-
-class IndentScope {
- public:
-  explicit IndentScope(float amount = 16.0f) : amount_(amount) {
-    ImGui::Indent(amount_);
-  }
-  ~IndentScope() { ImGui::Unindent(amount_); }
-  IndentScope(const IndentScope&) = delete;
-  IndentScope& operator=(const IndentScope&) = delete;
-
- private:
-  float amount_;
-};
 
 // DrawSectionHeader plus an indented body when open.
 template <typename Body>
