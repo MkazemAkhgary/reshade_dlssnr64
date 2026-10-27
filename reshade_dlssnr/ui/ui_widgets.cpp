@@ -82,6 +82,55 @@ void DrawHeaderReset(const char* label, bool& changed,
   }
 }
 
+bool DrawCollapsingHeader(const char* label, bool& open_setting,
+                          bool& changed, const char* tooltip,
+                          HeaderControls controls, bool tinted) {
+  DLSSNR_PROFILE_UI_L3("UI Collapsing Header");
+  const std::string label_storage = CStrToString(label);
+  const std::string tooltip_storage = CStrToString(tooltip);
+  label = label_storage.c_str();
+
+  if (tinted) {
+    const ImVec4 base = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+    const ImVec4 tint(base.x * 0.82f, base.y * 0.82f, base.z * 0.92f, base.w);
+    const ImVec4 hdr_hover = ImGui::GetStyleColorVec4(ImGuiCol_HeaderHovered);
+    const ImVec4 hdr_active = ImGui::GetStyleColorVec4(ImGuiCol_HeaderActive);
+    ImGui::PushStyleColor(ImGuiCol_Text, tint);
+    ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImGui::PushStyleColor(
+        ImGuiCol_HeaderHovered,
+        ImVec4(hdr_hover.x, hdr_hover.y, hdr_hover.z, hdr_hover.w * 0.30f));
+    ImGui::PushStyleColor(
+        ImGuiCol_HeaderActive,
+        ImVec4(hdr_active.x, hdr_active.y, hdr_active.z, hdr_active.w * 0.50f));
+  }
+
+  ImGui::PushID(label);
+  DrawHeaderToggle(label, changed, controls);
+  ImGui::SetNextItemOpen(open_setting, ImGuiCond_Always);
+  const bool open =
+      ImGui::TreeNodeEx(label, ImGuiTreeNodeFlags_CollapsingHeader |
+                                      ImGuiTreeNodeFlags_AllowOverlap);
+  const bool header_hovered =
+      ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
+  if (tinted) ImGui::PopStyleColor(4);
+  if (header_hovered) {
+    if (!tooltip_storage.empty()) {
+      Tip("%s", tooltip_storage.c_str());
+    } else {
+      Tip("Expand or collapse the %s %s.", label,
+          tinted ? "subsection" : "section");
+    }
+  }
+  DrawHeaderReset(label, changed, controls);
+  if (open != open_setting) {
+    open_setting = open;
+    changed = true;
+  }
+  ImGui::PopID();
+  return open;
+}
+
 }  // namespace
 
 bool PersistentSettingHeader(const char* label, const char* setting_key,
@@ -97,81 +146,15 @@ bool PersistentSettingHeader(const char* label, const char* setting_key,
 
 bool PersistentHeader(const char* label, bool& open_setting, bool& changed,
                       const char* tooltip, HeaderControls controls) {
-  DLSSNR_PROFILE_UI_L3("UI Persistent Header");
-  const std::string label_storage = CStrToString(label);
-  const std::string tooltip_storage = CStrToString(tooltip);
-  label = label_storage.c_str();
-  ImGui::PushID(label);
-  DrawHeaderToggle(label, changed, controls);
-  ImGui::SetNextItemOpen(open_setting, ImGuiCond_Always);
-  const bool open =
-      ImGui::TreeNodeEx(label, ImGuiTreeNodeFlags_CollapsingHeader |
-                                      ImGuiTreeNodeFlags_AllowOverlap);
-  const bool header_hovered =
-      ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
-  if (header_hovered) {
-    if (!tooltip_storage.empty()) {
-      Tip("%s", tooltip_storage.c_str());
-    } else {
-      Tip("Expand or collapse the %s section.", label);
-    }
-  }
-  DrawHeaderReset(label, changed, controls);
-  if (open != open_setting) {
-    open_setting = open;
-    changed = true;
-  }
-  ImGui::PopID();
-  return open;
+  return DrawCollapsingHeader(label, open_setting, changed, tooltip, controls,
+                              /*tinted=*/false);
 }
 
 bool PersistentSubHeader(const char* label, bool& open_setting,
                          bool& changed, const char* tooltip,
                          HeaderControls controls) {
-  DLSSNR_PROFILE_UI_L3("UI Persistent Subheader");
-  const std::string label_storage = CStrToString(label);
-  const std::string tooltip_storage = CStrToString(tooltip);
-  label = label_storage.c_str();
-  const ImVec4 base = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-  const ImVec4 tint(base.x * 0.82f, base.y * 0.82f, base.z * 0.92f, base.w);
-
-  const ImVec4 hdr_hover = ImGui::GetStyleColorVec4(ImGuiCol_HeaderHovered);
-  const ImVec4 hdr_active = ImGui::GetStyleColorVec4(ImGuiCol_HeaderActive);
-
-  ImGui::PushID(label);
-  DrawHeaderToggle(label, changed, controls);
-  ImGui::PushStyleColor(ImGuiCol_Text, tint);
-  ImGui::PushStyleColor(ImGuiCol_Header,
-                        ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-  ImGui::PushStyleColor(
-      ImGuiCol_HeaderHovered,
-      ImVec4(hdr_hover.x, hdr_hover.y, hdr_hover.z, hdr_hover.w * 0.30f));
-  ImGui::PushStyleColor(
-      ImGuiCol_HeaderActive,
-      ImVec4(hdr_active.x, hdr_active.y, hdr_active.z, hdr_active.w * 0.50f));
-
-  ImGui::SetNextItemOpen(open_setting, ImGuiCond_Always);
-  const bool open =
-      ImGui::TreeNodeEx(label, ImGuiTreeNodeFlags_CollapsingHeader |
-                                      ImGuiTreeNodeFlags_AllowOverlap);
-  const bool header_hovered =
-      ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
-  ImGui::PopStyleColor(4);
-  if (header_hovered) {
-    if (!tooltip_storage.empty()) {
-      Tip("%s", tooltip_storage.c_str());
-    } else {
-      Tip("Expand or collapse the %s subsection.", label);
-    }
-  }
-
-  DrawHeaderReset(label, changed, controls);
-  if (open != open_setting) {
-    open_setting = open;
-    changed = true;
-  }
-  ImGui::PopID();
-  return open;
+  return DrawCollapsingHeader(label, open_setting, changed, tooltip, controls,
+                              /*tinted=*/true);
 }
 
 bool DrawFloatRow(const char* id,
