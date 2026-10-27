@@ -773,6 +773,15 @@ const PipelineStepDef* ExposureMaskStepFor(PipelineNodeId id);
 const PipelineStepDef* DebugStepFor(PipelineNodeId id);
 const PipelineStepDef* ControllerStepFor(PipelineNodeId id);
 
+template <size_t N>
+const PipelineStepDef* FindStepDef(const PipelineStepDef (&defs)[N],
+                                   PipelineNodeId id) {
+  for (const PipelineStepDef& def : defs) {
+    if (def.id == id) return &def;
+  }
+  return nullptr;
+}
+
 // The stage table. This is the single place the frame's shape is declared.
 // Adding a stage, or reordering stages within the frame, is one line here.
 extern const PipelineStageDef kPipelineStages[];

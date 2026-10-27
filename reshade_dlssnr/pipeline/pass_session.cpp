@@ -1440,10 +1440,7 @@ static_assert(kMaxDispatchesPerFrame >= kMaxPasses * 9 + 4 + 3,
               "with the extra Exposure Mask build dispatch - raise it, and kDescriptorRingSize with it");
 
 const PipelineStepDef* SessionStepFor(PipelineNodeId id) {
-  for (const PipelineStepDef& def : kSessionSteps) {
-    if (def.id == id) return &def;
-  }
-  return nullptr;
+  return FindStepDef(kSessionSteps, id);
 }
 
 }  // namespace reshade_dlssnr

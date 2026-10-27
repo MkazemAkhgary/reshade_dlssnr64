@@ -743,10 +743,7 @@ static_assert(
 }  // namespace
 
 const PipelineStepDef* HdrStepFor(PipelineNodeId id) {
-  for (const PipelineStepDef& def : kHdrSteps) {
-    if (def.id == id) return &def;
-  }
-  return nullptr;
+  return FindStepDef(kHdrSteps, id);
 }
 
 }  // namespace reshade_dlssnr

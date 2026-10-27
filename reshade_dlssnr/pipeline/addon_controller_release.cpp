@@ -127,10 +127,7 @@ constexpr StageInput kReleaseStageInputs =
 }  // namespace
 
 const PipelineStepDef* ControllerStepFor(PipelineNodeId id) {
-  for (const PipelineStepDef& def : kControllerSteps) {
-    if (def.id == id) return &def;
-  }
-  return nullptr;
+  return FindStepDef(kControllerSteps, id);
 }
 
 // The controller's steps run in the Release stage, against the stage node list

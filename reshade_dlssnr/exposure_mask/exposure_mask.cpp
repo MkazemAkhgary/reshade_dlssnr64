@@ -269,10 +269,7 @@ bool ExposureMask::Build(CommandContext& command,
 }
 
 const PipelineStepDef* ExposureMaskStepFor(PipelineNodeId id) {
-  for (const PipelineStepDef& def : kExposureMaskSteps) {
-    if (def.id == id) return &def;
-  }
-  return nullptr;
+  return FindStepDef(kExposureMaskSteps, id);
 }
 
 }  // namespace reshade_dlssnr
