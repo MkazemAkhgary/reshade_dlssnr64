@@ -54,6 +54,27 @@ inline ID3D12Resource* GetNgxResource(
   return nullptr;
 }
 
+// One guide resource: either an addon-owned clone or a direct reference to
+// the game's resource, never both.
+class GuideSlot {
+ public:
+  void Reset(uint64_t fence_hint = 0);
+  void ReleaseDirect(uint64_t fence_hint = 0);
+
+  [[nodiscard]] ID3D12Resource* PublishClone(ID3D12Device* device,
+                                              ID3D12GraphicsCommandList* list,
+                                              ID3D12Resource* source,
+                                              const char* debug_name);
+
+  [[nodiscard]] ID3D12Resource* PublishDirect(
+      ID3D12Resource* source, uint64_t fence_hint,
+      ID3D12GraphicsCommandList* transition_list = nullptr);
+
+ private:
+  OwnedTexture clone_;
+  BorrowedRef direct_;
+};
+
 struct DlssGuideState {
   ID3D12Resource* depth = nullptr;
   ID3D12Resource* motion = nullptr;
@@ -142,15 +163,9 @@ class DlssGuides {
   // change which lock is taken first.
   mutable std::mutex lock_;
 
-  // Clone allocations are reused while cloning stays enabled. The direct
-  // references keep game objects alive until the queue-ordered retirement
-  // fence; BorrowedRef owns exactly one counted reference on each.
-  OwnedTexture depth_clone_;
-  OwnedTexture motion_clone_;
-  OwnedTexture dlss_output_clone_;
-  BorrowedRef depth_direct_;
-  BorrowedRef motion_direct_;
-  BorrowedRef dlss_output_direct_;
+  GuideSlot depth_;
+  GuideSlot motion_;
+  GuideSlot output_;
   BorrowedRef fallback_depth_;
   unsigned int fallback_depth_width_ = 0;
   unsigned int fallback_depth_height_ = 0;
@@ -160,13 +175,6 @@ class DlssGuides {
 
   DlssGuideState state_;
 
-  DXGI_FORMAT TypedGuideFormat(DXGI_FORMAT format) const;
-  bool IsTypelessFormat(DXGI_FORMAT format) const;
-  void Barrier(
-      ID3D12GraphicsCommandList* command_list,
-      ID3D12Resource* resource,
-      D3D12_RESOURCE_STATES before,
-      D3D12_RESOURCE_STATES after);
 };
 
 }  // namespace reshade_dlssnr

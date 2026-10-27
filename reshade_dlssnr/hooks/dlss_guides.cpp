@@ -2,6 +2,7 @@
 #include "profiling/profile.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cstdio>
 
 #include <reshade.hpp>
@@ -13,6 +14,30 @@
 namespace reshade_dlssnr {
 
 namespace {
+
+void TransitionBarrier(
+    ID3D12GraphicsCommandList* command_list,
+    ID3D12Resource* resource,
+    D3D12_RESOURCE_STATES before,
+    D3D12_RESOURCE_STATES after) {
+  if (before == after || resource == nullptr) return;
+
+  D3D12_RESOURCE_BARRIER barrier = {};
+  barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+  barrier.Transition.pResource = resource;
+  barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+  barrier.Transition.StateBefore = before;
+  barrier.Transition.StateAfter = after;
+  command_list->ResourceBarrier(1, &barrier);
+}
+
+D3D12_RESOURCE_DESC GuideCloneDesc(ID3D12Resource* source,
+                                   DXGI_FORMAT typed_format) {
+  D3D12_RESOURCE_DESC desc = source->GetDesc();
+  desc.Format = typed_format;
+  desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+  return desc;
+}
 
 // One line per distinct set. The render size, each resource's size and the
 // subrect bases decide whether a guide lines up with the game's view.
@@ -88,51 +113,60 @@ DlssGuides& DlssGuides::Get() {
   return guides;
 }
 
-bool DlssGuides::IsTypelessFormat(DXGI_FORMAT format) const {
-  switch (format) {
-    case DXGI_FORMAT_R32_TYPELESS:
-    case DXGI_FORMAT_R16_TYPELESS:
-    case DXGI_FORMAT_R24G8_TYPELESS:
-    case DXGI_FORMAT_R32G8X24_TYPELESS:
-    case DXGI_FORMAT_R32G32_TYPELESS:
-    case DXGI_FORMAT_R16G16_TYPELESS:
-    case DXGI_FORMAT_R8G8B8A8_TYPELESS:
-    case DXGI_FORMAT_R16G16B16A16_TYPELESS:
-      return true;
-    default:
-      return false;
+ID3D12Resource* GuideSlot::PublishClone(ID3D12Device* device,
+                                        ID3D12GraphicsCommandList* list,
+                                        ID3D12Resource* source,
+                                        const char* debug_name) {
+  assert(direct_.Get() == nullptr &&
+         "PublishClone: a direct reference is still live; call Reset first");
+  if (device == nullptr || list == nullptr || source == nullptr) return nullptr;
+
+  const D3D12_RESOURCE_DESC source_desc = source->GetDesc();
+  const D3D12_RESOURCE_DESC clone_desc =
+      GuideCloneDesc(source, TypedViewFormat(source_desc.Format));
+  if (!clone_.Ensure(device, clone_desc,
+                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                     debug_name)) {
+    return nullptr;
   }
+
+  const D3D12_RESOURCE_STATES source_state = InferResourceState(source);
+  TransitionBarrier(list, source, source_state, D3D12_RESOURCE_STATE_COPY_SOURCE);
+  TransitionBarrier(list, clone_.Get(),
+                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                    D3D12_RESOURCE_STATE_COPY_DEST);
+  list->CopyResource(clone_.Get(), source);
+  TransitionBarrier(list, source, D3D12_RESOURCE_STATE_COPY_SOURCE, source_state);
+  TransitionBarrier(list, clone_.Get(), D3D12_RESOURCE_STATE_COPY_DEST,
+                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  return clone_.Get();
 }
 
-DXGI_FORMAT DlssGuides::TypedGuideFormat(DXGI_FORMAT format) const {
-  return TypedViewFormat(format);
+ID3D12Resource* GuideSlot::PublishDirect(
+    ID3D12Resource* source, uint64_t fence_hint,
+    ID3D12GraphicsCommandList* transition_list) {
+  assert(clone_ == nullptr &&
+         "PublishDirect: a clone is still live; call Reset first");
+  if (source == nullptr) return nullptr;
+  if (direct_.Get() != source) {
+    direct_.Reset(fence_hint);
+    direct_ = BorrowedRef::AddRef(source);
+  }
+  if (transition_list != nullptr) {
+    const D3D12_RESOURCE_STATES source_state = InferResourceState(source);
+    TransitionBarrier(transition_list, source, source_state,
+                      D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
+  return direct_.Get();
 }
 
-void DlssGuides::Barrier(
-    ID3D12GraphicsCommandList* command_list,
-    ID3D12Resource* resource,
-    D3D12_RESOURCE_STATES before,
-    D3D12_RESOURCE_STATES after) {
-  if (before == after || resource == nullptr) return;
-
-  D3D12_RESOURCE_BARRIER barrier = {};
-  barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-  barrier.Transition.pResource = resource;
-  barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-  barrier.Transition.StateBefore = before;
-  barrier.Transition.StateAfter = after;
-  command_list->ResourceBarrier(1, &barrier);
+void GuideSlot::Reset(uint64_t fence_hint) {
+  clone_.Reset();
+  direct_.Reset(fence_hint);
 }
 
-// Descriptor for a reusable copy of `source`, matching its size so
-// CopyResource is valid. Typeless formats become their typed counterpart so
-// the clone can be sampled.
-D3D12_RESOURCE_DESC GuideCloneDesc(ID3D12Resource* source,
-                                   DXGI_FORMAT typed_format) {
-  D3D12_RESOURCE_DESC desc = source->GetDesc();
-  desc.Format = typed_format;
-  desc.Flags = D3D12_RESOURCE_FLAG_NONE;
-  return desc;
+void GuideSlot::ReleaseDirect(uint64_t fence_hint) {
+  direct_.Reset(fence_hint);
 }
 
 void DlssGuides::CaptureGuides(
@@ -155,12 +189,9 @@ void DlssGuides::CaptureGuides(
   const bool requested_clone_resources =
       requested_clone_resources_.load(std::memory_order_acquire);
   if (requested_clone_resources != clone_resources_) {
-    depth_clone_.Reset();
-    motion_clone_.Reset();
-    dlss_output_clone_.Reset();
-    depth_direct_.Reset(retirement_fence_hint);
-    motion_direct_.Reset(retirement_fence_hint);
-    dlss_output_direct_.Reset(retirement_fence_hint);
+    depth_.Reset(retirement_fence_hint);
+    motion_.Reset(retirement_fence_hint);
+    output_.Reset(retirement_fence_hint);
     clone_resources_ = requested_clone_resources;
   }
 
@@ -169,7 +200,7 @@ void DlssGuides::CaptureGuides(
   state_.dlss_output_color = nullptr;
   state_.output_width = 0;
   state_.output_height = 0;
-  dlss_output_direct_.Reset();
+  output_.ReleaseDirect();
   state_.clone_resources = clone_resources_;
 
   if (!IsUpscalerFeature(feature_id) ||
@@ -196,9 +227,9 @@ void DlssGuides::CaptureGuides(
     // In direct mode the retained game resources must not keep an obsolete
     // frame's guides alive indefinitely if the game temporarily stops
     // supplying guides. In clone mode, allocations can be reused later.
-    depth_direct_.Reset(retirement_fence_hint);
-    motion_direct_.Reset(retirement_fence_hint);
-    dlss_output_direct_.Reset(retirement_fence_hint);
+    depth_.ReleaseDirect(retirement_fence_hint);
+    motion_.ReleaseDirect(retirement_fence_hint);
+    output_.ReleaseDirect(retirement_fence_hint);
     state_ = {};
     state_.clone_resources = clone_resources_;
     state_.capture_serial = capture_serial;
@@ -279,66 +310,19 @@ void DlssGuides::CaptureGuides(
   ID3D12Resource* published_depth = depth;
   ID3D12Resource* published_motion = motion;
   if (clone_resources_) {
-    const DXGI_FORMAT desired_depth_format =
-        IsTypelessFormat(depth_desc.Format) ? TypedGuideFormat(depth_desc.Format)
-                                            : depth_desc.Format;
-    const D3D12_RESOURCE_DESC depth_clone_desc =
-        GuideCloneDesc(depth, desired_depth_format);
-    depth_clone_.Ensure(device.Get(), depth_clone_desc,
-                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-                        "depth_clone");
-
-    const DXGI_FORMAT desired_motion_format =
-        IsTypelessFormat(motion_desc.Format) ? TypedGuideFormat(motion_desc.Format)
-                                             : motion_desc.Format;
-    const D3D12_RESOURCE_DESC motion_clone_desc =
-        GuideCloneDesc(motion, desired_motion_format);
-    motion_clone_.Ensure(device.Get(), motion_clone_desc,
-                         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-                         "motion_clone");
-
-    if (depth_clone_ == nullptr || motion_clone_ == nullptr) {
+    published_depth = depth_.PublishClone(device.Get(), command_list,
+                                          depth, "depth_clone");
+    published_motion = motion_.PublishClone(device.Get(), command_list,
+                                            motion, "motion_clone");
+    if (published_depth == nullptr || published_motion == nullptr) {
       state_ = {};
       state_.clone_resources = clone_resources_;
       state_.capture_serial = capture_serial;
       return;
     }
-
-    // Match the existing external-resource state inference used by the rest
-    // of the addon. The hook has no authoritative state map for game resources.
-    const D3D12_RESOURCE_STATES depth_state = InferResourceState(depth);
-    Barrier(command_list, depth, depth_state, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    Barrier(command_list, depth_clone_.Get(),
-            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-            D3D12_RESOURCE_STATE_COPY_DEST);
-    command_list->CopyResource(depth_clone_.Get(), depth);
-    Barrier(command_list, depth, D3D12_RESOURCE_STATE_COPY_SOURCE, depth_state);
-    Barrier(command_list, depth_clone_.Get(), D3D12_RESOURCE_STATE_COPY_DEST,
-            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-    const D3D12_RESOURCE_STATES motion_state = InferResourceState(motion);
-    Barrier(command_list, motion, motion_state, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    Barrier(command_list, motion_clone_.Get(),
-            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-            D3D12_RESOURCE_STATE_COPY_DEST);
-    command_list->CopyResource(motion_clone_.Get(), motion);
-    Barrier(command_list, motion, D3D12_RESOURCE_STATE_COPY_SOURCE, motion_state);
-    Barrier(command_list, motion_clone_.Get(), D3D12_RESOURCE_STATE_COPY_DEST,
-            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-    published_depth = depth_clone_.Get();
-    published_motion = motion_clone_.Get();
   } else {
-    if (depth_direct_.Get() != depth) {
-      depth_direct_.Reset(retirement_fence_hint);
-      depth_direct_ = BorrowedRef::AddRef(depth);
-    }
-    if (motion_direct_.Get() != motion) {
-      motion_direct_.Reset(retirement_fence_hint);
-      motion_direct_ = BorrowedRef::AddRef(motion);
-    }
-    published_depth = depth_direct_.Get();
-    published_motion = motion_direct_.Get();
+    published_depth = depth_.PublishDirect(depth, retirement_fence_hint);
+    published_motion = motion_.PublishDirect(motion, retirement_fence_hint);
   }
 
   state_.depth = published_depth;
@@ -401,40 +385,12 @@ void DlssGuides::CaptureOutput(
     queried_device->Release();
     if (device == nullptr) return;
 
-    const DXGI_FORMAT desired_format =
-        IsTypelessFormat(output_desc.Format) ? TypedGuideFormat(output_desc.Format)
-                                             : output_desc.Format;
-    const D3D12_RESOURCE_DESC output_clone_desc =
-        GuideCloneDesc(output, desired_format);
-    dlss_output_clone_.Ensure(device.Get(), output_clone_desc,
-                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-                              "dlss_output_clone");
-    if (dlss_output_clone_ == nullptr) return;
-
-    // The game-resource state tracker is approximate, so use the same
-    // descriptor-based inference as the previous clone path when restoring it.
-    const D3D12_RESOURCE_STATES output_state = InferResourceState(output);
-    Barrier(command_list, output, output_state, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    Barrier(command_list, dlss_output_clone_.Get(),
-            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-            D3D12_RESOURCE_STATE_COPY_DEST);
-    command_list->CopyResource(dlss_output_clone_.Get(), output);
-    Barrier(command_list, output, D3D12_RESOURCE_STATE_COPY_SOURCE, output_state);
-    Barrier(command_list, dlss_output_clone_.Get(), D3D12_RESOURCE_STATE_COPY_DEST,
-            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    published_output = dlss_output_clone_.Get();
+    published_output = output_.PublishClone(device.Get(), command_list, output,
+                                            "dlss_output_clone");
+    if (published_output == nullptr) return;
   } else {
-    if (dlss_output_direct_.Get() != output) {
-      dlss_output_direct_.Reset(retirement_fence_hint);
-      dlss_output_direct_ = BorrowedRef::AddRef(output);
-    }
-    // Direct mode needs the game's just-produced output in an SRV state before
-    // shared frame preparation and Post-DLSS passes read it. The Post-DLSS
-    // pass restores the game's expected state when it publishes its composite.
-    const D3D12_RESOURCE_STATES output_state = InferResourceState(output);
-    Barrier(command_list, output, output_state,
-            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    published_output = dlss_output_direct_.Get();
+    published_output = output_.PublishDirect(output, retirement_fence_hint,
+                                             command_list);
   }
 
   if (state_.depth != nullptr && state_.motion != nullptr) {
@@ -486,12 +442,9 @@ void DlssGuides::Clear() {
   DLSSNR_PROFILE_RESOURCE_L1("DlssGuides::Clear");
   std::lock_guard<std::mutex> lock(lock_);
 
-  depth_clone_.Reset();
-  motion_clone_.Reset();
-  dlss_output_clone_.Reset();
-  depth_direct_.Reset();
-  motion_direct_.Reset();
-  dlss_output_direct_.Reset();
+  depth_.Reset();
+  motion_.Reset();
+  output_.Reset();
   fallback_depth_.Reset();
   fallback_depth_width_ = 0;
   fallback_depth_height_ = 0;
