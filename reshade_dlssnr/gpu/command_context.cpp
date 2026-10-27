@@ -351,6 +351,20 @@ void CommandContext::CopyResourceToBackbuffer(
   Transition(command_list, source, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
 
+void CommandContext::CopyWithTransitions(
+    ID3D12GraphicsCommandList* command_list,
+    ID3D12Resource* source, D3D12_RESOURCE_STATES source_restore,
+    ID3D12Resource* destination, D3D12_RESOURCE_STATES destination_restore) {
+  if (command_list == nullptr || source == nullptr || destination == nullptr) {
+    return;
+  }
+  Transition(command_list, source, D3D12_RESOURCE_STATE_COPY_SOURCE);
+  Transition(command_list, destination, D3D12_RESOURCE_STATE_COPY_DEST);
+  command_list->CopyResource(destination, source);
+  Transition(command_list, source, source_restore);
+  Transition(command_list, destination, destination_restore);
+}
+
 void CommandContext::Shutdown() {
   DLSSNR_PROFILE_RESOURCE_L2("CommandContext::Shutdown");
   Abort();

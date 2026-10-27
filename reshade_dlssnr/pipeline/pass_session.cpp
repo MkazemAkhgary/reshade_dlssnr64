@@ -1135,18 +1135,13 @@ PipelineStatus PassSession::StepWriteToGameResource(PassRun& run) {
   TRACE_CMD(self, "write_to_game_resource src=%d dst=%d",
             trace::ResourceId(self->resources_.GetCompositeOutput()),
             trace::ResourceId(run.output_resource));
-  self->command_.Transition(run.list, self->resources_.GetCompositeOutput(),
-                      D3D12_RESOURCE_STATE_COPY_SOURCE);
   const D3D12_RESOURCE_STATES out_state =
       (run.stage != nullptr && run.stage->is_pre_dlss)
           ? D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE
           : InferResourceState(run.output_resource);
-  self->command_.Transition(run.list, run.output_resource,
-                      D3D12_RESOURCE_STATE_COPY_DEST);
-  run.list->CopyResource(run.output_resource, self->resources_.GetCompositeOutput());
-  self->command_.Transition(run.list, run.output_resource, out_state);
-  self->command_.Transition(run.list, self->resources_.GetCompositeOutput(),
-                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  self->command_.CopyWithTransitions(
+      run.list, self->resources_.GetCompositeOutput(),
+      D3D12_RESOURCE_STATE_UNORDERED_ACCESS, run.output_resource, out_state);
 
   // Leave pass-owned resources in the state SeedFrameState() expects.
   self->CleanupFrameState(run.list);

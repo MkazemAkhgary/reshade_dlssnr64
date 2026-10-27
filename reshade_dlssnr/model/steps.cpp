@@ -492,17 +492,12 @@ PipelineStatus PassSession::StepModelOutputBarrier(PassRun& run) {
   // exactly the input seen by NGX (after preparation and input grade).
   const D3D12_RESOURCE_STATES input_state =
       self->command_.GetResourceState(run.model_color);
-  self->command_.Transition(list, run.model_color,
-                            D3D12_RESOURCE_STATE_COPY_SOURCE);
-  self->command_.Transition(list, previous_input,
-                            D3D12_RESOURCE_STATE_COPY_DEST);
-  list->CopyResource(previous_input, run.model_color);
-  self->command_.Transition(list, run.model_color,
-                            input_state == D3D12_RESOURCE_STATE_COMMON
-                                ? D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE
-                                : input_state);
-  self->command_.Transition(list, previous_input,
-                            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  self->command_.CopyWithTransitions(
+      list, run.model_color,
+      input_state == D3D12_RESOURCE_STATE_COMMON
+          ? D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE
+          : input_state,
+      previous_input, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
   self->temporal_.history_valid = true;
   if (!run.temporal_reuse) {

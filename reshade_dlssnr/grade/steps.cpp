@@ -124,27 +124,16 @@ PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
         current_depth != nullptr) {
       const D3D12_RESOURCE_STATES input_state =
           self->command_.GetResourceState(run.model_color);
-      self->command_.Transition(list, run.model_color,
-                                D3D12_RESOURCE_STATE_COPY_SOURCE);
-      self->command_.Transition(list, previous_input,
-                                D3D12_RESOURCE_STATE_COPY_DEST);
-      list->CopyResource(previous_input, run.model_color);
-      self->command_.Transition(list, run.model_color,
-                                input_state == D3D12_RESOURCE_STATE_COMMON
-                                    ? D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE
-                                    : input_state);
-      self->command_.Transition(list, previous_input,
-                                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+      self->command_.CopyWithTransitions(
+          list, run.model_color,
+          input_state == D3D12_RESOURCE_STATE_COMMON
+              ? D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE
+              : input_state,
+          previous_input, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-      self->command_.Transition(list, current_depth,
-                                D3D12_RESOURCE_STATE_COPY_SOURCE);
-      self->command_.Transition(list, previous_depth,
-                                D3D12_RESOURCE_STATE_COPY_DEST);
-      list->CopyResource(previous_depth, current_depth);
-      self->command_.Transition(list, current_depth,
-                                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-      self->command_.Transition(list, previous_depth,
-                                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+      self->command_.CopyWithTransitions(
+          list, current_depth, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+          previous_depth, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
       self->temporal_.synthetic_history_valid = true;
       self->temporal_.synthetic_history_frame = run.frame_id;
     } else {
@@ -167,14 +156,9 @@ PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
       ID3D12Resource* snapshot =
           self->resources_.GetScratch(kDebugPreGradeOutputSlot);
       ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
-      self->command_.Transition(list, run.model_output,
-                                D3D12_RESOURCE_STATE_COPY_SOURCE);
-      self->command_.Transition(list, snapshot, D3D12_RESOURCE_STATE_COPY_DEST);
-      list->CopyResource(snapshot, run.model_output);
-      self->command_.Transition(list, run.model_output,
-                                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-      self->command_.Transition(list, snapshot,
-                                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+      self->command_.CopyWithTransitions(
+          list, run.model_output, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+          snapshot, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     }
   }
 

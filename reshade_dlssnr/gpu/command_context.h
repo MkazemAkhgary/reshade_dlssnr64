@@ -63,6 +63,13 @@ class CommandContext {
       ID3D12Resource* source,
       ID3D12Resource* backbuffer);
 
+  // Copies `source` into `destination`, transitioning both through
+  // COPY_SOURCE/COPY_DEST and back to the caller-supplied restore states.
+  void CopyWithTransitions(
+      ID3D12GraphicsCommandList* command_list,
+      ID3D12Resource* source, D3D12_RESOURCE_STATES source_restore,
+      ID3D12Resource* destination, D3D12_RESOURCE_STATES destination_restore);
+
   ID3D12GraphicsCommandList* GetCommandList() const { return frames_[current_frame_].command_list.Get(); }
 
   void SetResourceState(ID3D12Resource* resource, D3D12_RESOURCE_STATES state);
