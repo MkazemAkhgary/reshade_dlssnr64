@@ -809,6 +809,11 @@ void PassSession::FailForStep(const char* reason) {
   Fail(reason != nullptr ? reason : "DLSSNR pass failed");
 }
 
+PipelineStatus PassSession::FailStep(const char* reason) {
+  FailForStep(reason);
+  return PipelineStatus::Fail;
+}
+
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
@@ -908,12 +913,10 @@ PipelineStatus PassSession::StepResolveDevice(PassRun& run) {
       return PipelineStatus::SkipFrame;
     }
     if (!run.runtime->Initialize(run.device)) {
-      self->FailForStep(run.runtime->GetLastError());
-      return PipelineStatus::Fail;
+      return self->FailStep(run.runtime->GetLastError());
     }
     if (!self->command_.Ensure(run.device)) {
-      self->FailForStep("failed to create DLSSNR command list");
-      return PipelineStatus::Fail;
+      return self->FailStep("failed to create DLSSNR command list");
     }
     self->command_queue_ = run.command_queue;
     run.list = self->command_.GetCommandList();
@@ -935,8 +938,7 @@ PipelineStatus PassSession::StepEnsureComputeEngine(PassRun& run) {
   }
 
   if (!run.codec->IsInit() && !run.codec->Init(run.device)) {
-    self->FailForStep("failed to initialize compute engine");
-    return PipelineStatus::Fail;
+    return self->FailStep("failed to initialize compute engine");
   }
   if (!run.codec->IsReady()) {
     TRACE_EVT(self, "SKIP stage=%s pass=%u reason=codec_not_ready",
@@ -998,8 +1000,7 @@ PipelineStatus PassSession::StepEnsureFrameResources(PassRun& run) {
                                   run.work_height, allow_identity_input,
                                   run.grade_input.enabled,
                                   run.fp16_storage)) {
-    self->FailForStep(self->reason_);
-    return PipelineStatus::Fail;
+    return self->FailStep(self->reason_);
   }
   return PipelineStatus::Ok;
 }
@@ -1185,8 +1186,7 @@ PipelineStatus PassSession::StepSubmitBackbuffer(PassRun& run) {
     snprintf(reason, sizeof(reason), "DLSSNR EvaluateFeature failed: %s (0x%08X)",
              NgxResultName(static_cast<NVSDK_NGX_Result>(run.eval_result)),
              static_cast<unsigned int>(run.eval_result));
-    self->FailForStep(reason);
-    return PipelineStatus::Fail;
+    return self->FailStep(reason);
   }
   return PipelineStatus::Ok;
 }

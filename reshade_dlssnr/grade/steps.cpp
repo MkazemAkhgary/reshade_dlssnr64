@@ -55,8 +55,7 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* source,
 
   if (!self->resources_.EnsureScratch(run.device, desc, width, height,
                                       scratch_slot)) {
-    self->FailForStep("failed to create the grade scratch texture");
-    return PipelineStatus::Fail;
+    return self->FailStep("failed to create the grade scratch texture");
   }
 
   ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
@@ -65,8 +64,7 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* source,
           self->resources_.GetScratch(scratch_slot), width, height,
           GradeFormatCode(run, target, model_sdr_domain), grade,
           local_carrier, global_carrier, global_scale, restore_mode, restore_strength)) {
-    self->FailForStep("failed to apply the grade");
-    return PipelineStatus::Fail;
+    return self->FailStep("failed to apply the grade");
   }
 
   if (source != target) {
@@ -91,8 +89,7 @@ PipelineStatus PassSession::StepGradeModelInput(PassRun& run) {
 
   ID3D12Resource* graded = self->resources_.GetGradedWorkingInput();
   if (graded == nullptr) {
-    self->FailForStep("graded model input buffer is unavailable");
-    return PipelineStatus::Fail;
+    return self->FailStep("graded model input buffer is unavailable");
   }
 
   PipelineStatus status = GradeInPlace(
@@ -205,8 +202,7 @@ PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
     if (restore_mode > 0.0f) {
       if (!self->resources_.EnsureLocalExposureRestoreResources(
               run.device, run.width, run.height)) {
-        self->FailForStep("failed to create local exposure restore resources");
-        return PipelineStatus::Fail;
+        return self->FailStep("failed to create local exposure restore resources");
       }
 
       ID3D12Resource* tile_log_scales =
@@ -228,8 +224,7 @@ PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
       if (run.codec == nullptr || !run.codec->Dispatch(
               "ReduceLocalExposureTiles", list, reduce_constants,
               reduce_srvs, reduce_uavs)) {
-        self->FailForStep("failed to reduce local exposure multipliers");
-        return PipelineStatus::Fail;
+        return self->FailStep("failed to reduce local exposure multipliers");
       }
       self->command_.UavBarrier(list, tile_log_scales);
       self->command_.Transition(list, tile_log_scales,
@@ -248,8 +243,7 @@ PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
       if (!run.codec->Dispatch("ReduceLocalExposureGlobal", list,
                                global_constants, global_srvs, global_uavs,
                                1, 1, 1)) {
-        self->FailForStep("failed to compute global local-exposure scale");
-        return PipelineStatus::Fail;
+        return self->FailStep("failed to compute global local-exposure scale");
       }
       self->command_.UavBarrier(list, global_scale);
       self->command_.Transition(list, global_scale,

@@ -161,8 +161,7 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
           run.hdr_uniforms_ready && run.hdr != nullptr &&
               run.hdr->ResolvedFormat() != HdrFormat::Sdr,
           run.pass_bound && !run.grade_input.enabled)) {
-    self->FailForStep("failed to prepare model input");
-    return PipelineStatus::Fail;
+    return self->FailStep("failed to prepare model input");
   }
   run.compose_reference = model_color;
 
@@ -173,8 +172,7 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
     if (global_carrier == nullptr ||
         !self->resources_.EnsureUnliftedWorkingInput(
             run.device, reference_desc, run.work_width, run.work_height)) {
-      self->FailForStep("failed to create unlifted HDR composition reference");
-      return PipelineStatus::Fail;
+      return self->FailStep("failed to create unlifted HDR composition reference");
     }
 
     ID3D12Resource* unlifted_input =
@@ -196,8 +194,7 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
     ID3D12Resource* reference_uavs[kUavCount] = {unlifted_input};
     if (!run.codec->Dispatch("PrepareModelInput", list, reference_constants,
                              reference_srvs, reference_uavs)) {
-      self->FailForStep("failed to prepare unlifted HDR composition reference");
-      return PipelineStatus::Fail;
+      return self->FailStep("failed to prepare unlifted HDR composition reference");
     }
     self->command_.UavBarrier(list, unlifted_input);
 
@@ -220,8 +217,7 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
       ID3D12Resource* gain_uavs[kUavCount] = {unlifted_input};
       if (!run.codec->Dispatch("PrepareModelInput", list, gain_constants,
                                gain_srvs, gain_uavs)) {
-        self->FailForStep("failed to build the local-exposure gain");
-        return PipelineStatus::Fail;
+        return self->FailStep("failed to build the local-exposure gain");
       }
       self->command_.UavBarrier(list, unlifted_input);
     }
@@ -249,8 +245,7 @@ PipelineStatus PassSession::StepFillEvaluateParams(PassRun& run) {
                                 run.model_color, run.model_output,
                                 run.eval_width, run.eval_height, run.width,
                                 run.height)) {
-    self->FailForStep(self->reason_);
-    return PipelineStatus::Fail;
+    return self->FailStep(self->reason_);
   }
   return PipelineStatus::Ok;
 }

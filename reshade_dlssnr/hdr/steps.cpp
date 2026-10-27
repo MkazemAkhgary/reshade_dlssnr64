@@ -85,8 +85,7 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
   ID3D12Resource* packed = self->resources_.GetPackedOutput();
   ID3D12Resource* stats = self->resources_.GetGainStats();
   if (source == nullptr || packed == nullptr) {
-    self->FailForStep("HDR gain-map resources are unavailable");
-    return PipelineStatus::Fail;
+    return self->FailStep("HDR gain-map resources are unavailable");
   }
 
   ComputeConstants constants = {};
@@ -109,8 +108,7 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
   if (run.hdr_uniforms.local_exposure_strength > 0.0f) {
     global_carrier = self->resources_.GetGlobalHdrCarrier();
     if (global_carrier == nullptr) {
-      self->FailForStep("unlifted HDR carrier resource is unavailable");
-      return PipelineStatus::Fail;
+      return self->FailStep("unlifted HDR carrier resource is unavailable");
     }
     constants.shader.Params1.x = 1.0f;
   }
@@ -126,8 +124,7 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
   self->command_.TransitionBatch(run.list, split_transitions,
                                  3);
   if (!run.codec->Dispatch("GainMapSplit", run.list, constants, srvs, uavs)) {
-    self->FailForStep("failed to split HDR into SDR + gain map");
-    return PipelineStatus::Fail;
+    return self->FailStep("failed to split HDR into SDR + gain map");
   }
   self->command_.UavBarrier(run.list, packed);
   self->command_.Transition(run.list, packed,
@@ -144,8 +141,7 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
     return PipelineStatus::Ok;
   }
   if (stats == nullptr) {
-    self->FailForStep("HDR gain-map statistics resource is unavailable");
-    return PipelineStatus::Fail;
+    return self->FailStep("HDR gain-map statistics resource is unavailable");
   }
   ID3D12Resource* stats_srvs[kSrvCount] = {packed, packed, packed, packed};
   ID3D12Resource* stats_uavs[kUavCount] = {stats};
@@ -154,14 +150,12 @@ PipelineStatus PassSession::StepGainMapSplit(PassRun& run) {
   ComputeConstants stat_constants = constants;
   if (!run.codec->Dispatch("ZeroGainMapStats", run.list, stat_constants,
                            stats_srvs, stats_uavs, 1, 1, 1)) {
-    self->FailForStep("failed to initialize HDR gain-map statistics");
-    return PipelineStatus::Fail;
+    return self->FailStep("failed to initialize HDR gain-map statistics");
   }
   self->command_.UavBarrier(run.list, stats);
   if (!run.codec->Dispatch("BuildGainMapStats", run.list, stat_constants,
                            stats_srvs, stats_uavs)) {
-    self->FailForStep("failed to build HDR gain-map statistics");
-    return PipelineStatus::Fail;
+    return self->FailStep("failed to build HDR gain-map statistics");
   }
   self->command_.UavBarrier(run.list, stats);
   self->command_.Transition(run.list, stats, D3D12_RESOURCE_STATE_COPY_SOURCE);
@@ -199,8 +193,7 @@ PipelineStatus PassSession::StepBuildEffectiveLocalExposure(PassRun& run) {
 
   if (!self->resources_.EnsureEffectiveExposureMap(
           run.device, run.width, run.height)) {
-    self->FailForStep("failed to create HDR effective exposure map");
-    return PipelineStatus::Fail;
+    return self->FailStep("failed to create HDR effective exposure map");
   }
 
   ComputeConstants constants = {};
@@ -232,8 +225,7 @@ PipelineStatus PassSession::StepBuildEffectiveLocalExposure(PassRun& run) {
 
   if (!run.codec->Dispatch("BuildEffectiveLocalExposure", list, constants,
                            srvs, uavs)) {
-    self->FailForStep("failed to build HDR effective local exposure map");
-    return PipelineStatus::Fail;
+    return self->FailStep("failed to build HDR effective local exposure map");
   }
   self->command_.UavBarrier(list, exposure_map);
   self->command_.Transition(list, exposure_map,

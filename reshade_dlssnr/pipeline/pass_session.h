@@ -178,6 +178,9 @@ class PassSession {
   // keeps an existing reason_ rather than blanking it.
   void FailForStep(const char* reason);
 
+  // Combines FailForStep() with returning PipelineStatus::Fail.
+  PipelineStatus FailStep(const char* reason);
+
   // Grades `target` in place, through the pass's grade scratch slot. A
   // disabled grade, a missing target or a missing device is a clean no-op, so
   // the two grade steps do not have to guard those themselves.
