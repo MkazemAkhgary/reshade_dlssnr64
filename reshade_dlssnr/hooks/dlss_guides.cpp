@@ -135,7 +135,10 @@ ID3D12Resource* GuideSlot::PublishClone(ID3D12Device* device,
   TransitionBarrier(list, clone_.Get(),
                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
                     D3D12_RESOURCE_STATE_COPY_DEST);
-  list->CopyResource(clone_.Get(), source);
+  const CD3DX12_TEXTURE_COPY_LOCATION src_loc(source, 0);
+  const CD3DX12_TEXTURE_COPY_LOCATION dst_loc(clone_.Get(), 0);
+  list->CopyTextureRegion(&dst_loc, 0, 0, 0, &src_loc, nullptr);
+
   TransitionBarrier(list, source, D3D12_RESOURCE_STATE_COPY_SOURCE, source_state);
   TransitionBarrier(list, clone_.Get(), D3D12_RESOURCE_STATE_COPY_DEST,
                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
