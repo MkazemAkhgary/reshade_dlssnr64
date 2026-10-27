@@ -37,6 +37,12 @@ std::string Named(const std::string& prefix, const char* name) {
 }  // namespace
 
 void Declare(ctl::Section& section, const std::string& prefix,
+             const char* enabled_setting_name, const char* category) {
+  Declare(section, prefix, &ctl::BoolFromSetting, enabled_setting_name,
+          category);
+}
+
+void Declare(ctl::Section& section, const std::string& prefix,
              ctl::EnablePredicate enabled, const void* context,
              const char* category) {
   DLSSNR_PROFILE_CTL_L3("Declare");

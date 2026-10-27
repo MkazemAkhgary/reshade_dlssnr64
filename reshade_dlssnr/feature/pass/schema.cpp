@@ -44,15 +44,6 @@ constexpr const char* kCatStrength = "Strength";
 constexpr const char* kCatResidualEdits = "Residual Edits";
 constexpr const char* kCatTemporal = "Temporal Reprojection";
 
-// Grade is the only part of the pass that the pass does not gate itself: the
-// grade rows follow the grade's own enable checkbox, and the two grade
-// sections are independent.
-bool GradeEnabled(const void*, const ctl::ValueStore& store,
-                  const ctl::InstanceKey& key, const std::string& section) {
-  DLSSNR_PROFILE_CTL_L3("GradeEnabled");
-  return store.Read(section, key, kGradeEnabled).as_bool;
-}
-
 // Availability of each target stage in this game, shown dimmed in the button
 // row when the stage cannot run right now. The choice stays selectable: the
 // reason is in the tooltip, and the stage can become available again (a
@@ -477,15 +468,15 @@ void RegisterPassSchema(ctl::Schema& schema) {
                "then apply that edit to the image before this grade section. "
                "Earlier processing, including HDR/local exposure and prior "
                "passes, remains part of the model's input context.")
-      .EnableWhen(&GradeEnabled);
-  grade_rows::Declare(grade_input, kGradeInputPrefix, &GradeEnabled);
+      .EnableWhen(kGradeEnabled);
+  grade_rows::Declare(grade_input, kGradeInputPrefix, kGradeEnabled);
 
   ctl::Section& grade_output =
       schema.AddSection(kGradeOutputSection, ctl::SectionKind::Instanced);
   grade_output.HeaderToggle(kGradeEnabled);
   grade_output.Add<ctl::BoolSetting>(kGradeEnabled, "Grade Model Output", false)
       .Tooltip("Grade the model produced, before it is published.");
-  grade_rows::Declare(grade_output, kGradeOutputPrefix, &GradeEnabled);
+  grade_rows::Declare(grade_output, kGradeOutputPrefix, kGradeEnabled);
 
   pass.AddHookAfter(kRatioDarken, "GradeBoundarySections",
                     &DrawGradeSections).Category(nullptr);

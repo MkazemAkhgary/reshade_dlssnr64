@@ -102,11 +102,12 @@ using EnablePredicate = bool (*)(const void* context, const ValueStore& store,
                                  const std::string& section);
 using VisibilityPredicate = EnablePredicate;
 
-// Predicate behind the EnableWhen(const char* setting_name) overload. The
-// setting name is carried as `context`; the value is treated as a boolean:
-// bool true, or non-zero int/enum/float.
+// Predicate behind the EnableWhen(const char* setting_name) and
+// Declare(..., const char* enabled_setting_name) overloads. The setting name
+// is carried as `context`; the value is treated as a boolean: bool true, or
+// non-zero int/enum/float.
 bool BoolFromSetting(const void* context, const ValueStore& store,
-                   const InstanceKey& key, const std::string& section);
+                     const InstanceKey& key, const std::string& section);
 
 // ---------------------------------------------------------------------------
 // Setting

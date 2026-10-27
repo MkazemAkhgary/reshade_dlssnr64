@@ -20,14 +20,6 @@ namespace {
 // prefix.
 constexpr const char* kPrefix = "";
 
-// The rows are interactive only while the grade is on. The enable checkbox
-// itself is the gate's input, so it is not gated.
-bool GradeEnabled(const void*, const ctl::ValueStore& store,
-                  const ctl::InstanceKey& key, const std::string& section) {
-  DLSSNR_PROFILE_CTL_L3("GradeEnabled");
-  return store.Read(section, key, kEnabled).as_bool;
-}
-
 }  // namespace
 
 }  // namespace grade
@@ -45,7 +37,7 @@ void RegisterGradeSchema(ctl::Schema& schema) {
                "immediately before presentation. This is independent of each "
                "pass's model-input and model-output grades.");
 
-  grade_rows::Declare(section, kPrefix, &GradeEnabled);
+  grade_rows::Declare(section, kPrefix, kEnabled);
 }
 
 }  // namespace feature

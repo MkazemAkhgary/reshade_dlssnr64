@@ -59,5 +59,12 @@ void Declare(ctl::Section& section, const std::string& name_prefix,
              ctl::EnablePredicate enabled = nullptr,
              const void* context = nullptr, const char* category = nullptr);
 
+// Convenience overload: the rows are enabled while the named bool setting in
+// the same section is true. Equivalent to passing &ctl::BoolFromSetting with
+// that name as the predicate's context.
+void Declare(ctl::Section& section, const std::string& name_prefix,
+             const char* enabled_setting_name,
+             const char* category = nullptr);
+
 }  // namespace grade_rows
 }  // namespace reshade_dlssnr
