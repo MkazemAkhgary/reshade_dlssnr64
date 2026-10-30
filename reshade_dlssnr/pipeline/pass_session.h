@@ -110,11 +110,16 @@ class PassSession {
 
   void Shutdown(NgxRuntime& runtime);
 
+  bool HasUnfencedRetiredFeatures();
+  void TagRetiredFeatures(uint64_t fence_value);
+  void ReleaseRetiredFeaturesCompleted(NgxRuntime& runtime,
+                                       uint64_t completed_fence_value);
+
   // Clears a previous failure and re-arms the pass for the next frame.
-  // Releases the NGX feature so the retry starts from a clean handle,
-  // regardless of what specifically went wrong. No-op if the pass has not
-  // failed, so it is safe to call defensively.
-  void Retry(NgxRuntime& runtime);
+  // Retires the NGX feature so the retry starts from a clean handle,
+  // regardless of what specifically went wrong. Actual NGX release is
+  // deferred until the controller's queue fence completes.
+  void Retry();
 
   // Snapshot of this pass's current state, for the controller's status UI.
   PassStatus GetStatus() const;

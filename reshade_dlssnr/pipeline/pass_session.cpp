@@ -120,7 +120,7 @@ void PassSession::Fail(const char* reason) {
                         reason != nullptr ? reason : "DLSSNR pass failed");
 }
 
-void PassSession::Retry(NgxRuntime& runtime) {
+void PassSession::Retry() {
   std::lock_guard<std::mutex> lock(g_session_mutex);
 
   // Only meaningful on a failed pass. Calling this on a working pass would
@@ -131,7 +131,7 @@ void PassSession::Retry(NgxRuntime& runtime) {
   // makes the retry robust against a feature handle that got into a bad
   // state (e.g. after an EvaluateFeature failure) without us needing to
   // know what specifically went wrong.
-  feature_.ReleaseFeature(runtime);
+  feature_.RetireFeature();
 
   failed_ = false;
   reason_ = "";
@@ -558,6 +558,22 @@ bool PassSession::MaybeRenderDebug(
 
   frame_debug.valid = true;
   return true;
+}
+
+bool PassSession::HasUnfencedRetiredFeatures() {
+  std::lock_guard<std::mutex> lock(g_session_mutex);
+  return feature_.HasUnfencedRetiredFeatures();
+}
+
+void PassSession::TagRetiredFeatures(uint64_t fence_value) {
+  std::lock_guard<std::mutex> lock(g_session_mutex);
+  feature_.TagRetiredFeatures(fence_value);
+}
+
+void PassSession::ReleaseRetiredFeaturesCompleted(
+    NgxRuntime& runtime, uint64_t completed_fence_value) {
+  std::lock_guard<std::mutex> lock(g_session_mutex);
+  feature_.ReleaseRetiredFeaturesCompleted(runtime, completed_fence_value);
 }
 
 void PassSession::Shutdown(NgxRuntime& runtime) {

@@ -315,6 +315,35 @@ void AddonController::ReleaseRetiredSessionsCompleted(
   }
 }
 
+bool AddonController::HasUnfencedRetiredFeatures() const {
+  for (const auto& entry : sessions_) {
+    if (entry.second != nullptr &&
+        entry.second->HasUnfencedRetiredFeatures()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void AddonController::TagRetiredFeatures(uint64_t fence_value) {
+  if (fence_value == 0) return;
+  for (auto& entry : sessions_) {
+    if (entry.second != nullptr) {
+      entry.second->TagRetiredFeatures(fence_value);
+    }
+  }
+}
+
+void AddonController::ReleaseRetiredFeaturesCompleted(
+    uint64_t completed_fence_value) {
+  for (auto& entry : sessions_) {
+    if (entry.second != nullptr) {
+      entry.second->ReleaseRetiredFeaturesCompleted(
+          runtime_, completed_fence_value);
+    }
+  }
+}
+
 bool AddonController::DrainDevice() {
   DLSSNR_PROFILE_ASYNC_L2("AddonController::DrainDevice");
   ID3D12CommandQueue* const queue = last_command_queue_.Get();
@@ -580,7 +609,8 @@ uint64_t AddonController::SignalReleaseMarker(
 
 bool AddonController::NeedsQueueMarker() const {
   return ResourceRetireQueue::Get().HasUntagged() ||
-         HasUnfencedRetiredSessions() || temporal_feedback_pending_;
+         HasUnfencedRetiredSessions() || HasUnfencedRetiredFeatures() ||
+         temporal_feedback_pending_;
 }
 
 void AddonController::SyncRetiredResources(
@@ -599,12 +629,14 @@ void AddonController::SyncRetiredResources(
   if (marker != 0 && needs_marker) {
     retired.TagAll(marker);
     TagRetiredSessions(marker);
+    TagRetiredFeatures(marker);
     temporal_feedback_pending_ = false;
   }
 
   const uint64_t completed = release_command_.CompletedFenceValue();
   retired.ReleaseCompleted(completed);
   ReleaseRetiredSessionsCompleted(completed);
+  ReleaseRetiredFeaturesCompleted(completed);
 }
 
 

@@ -1,6 +1,9 @@
 // Feature handle creation, tuning-change detection, and rebuild state.
 #pragma once
 
+#include <cstdint>
+#include <vector>
+
 #include <d3d12.h>
 #include <nvsdk_ngx.h>
 
@@ -18,7 +21,14 @@ class FeatureLifecycle {
       unsigned int width,
       unsigned int height);
 
-  void ReleaseFeature(NgxRuntime& runtime);
+  // Moves the active handle to the deferred-retirement list. The controller
+  // releases it only after a queue fence proves earlier evaluations completed.
+  void RetireFeature(bool request_reset = true);
+
+  bool HasUnfencedRetiredFeatures() const;
+  void TagRetiredFeatures(uint64_t fence_value);
+  void ReleaseRetiredFeaturesCompleted(NgxRuntime& runtime,
+                                       uint64_t completed_fence_value);
 
   bool HasFeature() const { return feature_handle_ != nullptr; }
   NVSDK_NGX_Handle* FeatureHandle() const { return feature_handle_; }
@@ -65,6 +75,12 @@ class FeatureLifecycle {
   bool just_rebuilt_ = false;
   const char* reason_ = "";
 
+  struct RetiredFeature {
+    NVSDK_NGX_Handle* handle = nullptr;
+    uint64_t fence_value = 0;
+  };
+
+  std::vector<RetiredFeature> retired_features_;
   ModelSettingsState model_settings_ = {};
   bool model_settings_valid_ = false;
 

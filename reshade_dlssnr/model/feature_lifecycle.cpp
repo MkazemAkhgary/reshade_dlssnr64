@@ -136,9 +136,9 @@ bool FeatureLifecycle::EnsureFeature(
   }
 
   if (feature_handle_ != nullptr) {
-    runtime.ReleaseFeature(feature_handle_);
-    feature_handle_ = nullptr;
-    if (!render_preset_changed) reset_pending_ = true;
+    // An earlier EvaluateFeature may still have GPU work in flight. Keep the
+    // old handle alive until the controller's queue marker completes.
+    RetireFeature(!render_preset_changed);
     if (render_preset_changed) {
       reshade::log::message(
           reshade::log::level::info,
@@ -201,18 +201,64 @@ bool FeatureLifecycle::EnsureFeature(
   return true;
 }
 
-void FeatureLifecycle::ReleaseFeature(NgxRuntime& runtime) {
-  DLSSNR_PROFILE_RESOURCE_L2("FeatureLifecycle::ReleaseFeature");
-  reset_pending_ = true;
+void FeatureLifecycle::RetireFeature(bool request_reset) {
+  DLSSNR_PROFILE_RESOURCE_L2("FeatureLifecycle::RetireFeature");
+  if (request_reset) reset_pending_ = true;
   if (feature_handle_ == nullptr) return;
 
-  runtime.ReleaseFeature(feature_handle_);
+  retired_features_.push_back({feature_handle_, 0});
   feature_handle_ = nullptr;
+  reshade::log::message(
+      reshade::log::level::info,
+      "DLSSNR: queued previous NGX feature for fence-delayed release");
+}
+
+bool FeatureLifecycle::HasUnfencedRetiredFeatures() const {
+  for (const RetiredFeature& retired : retired_features_) {
+    if (retired.handle != nullptr && retired.fence_value == 0) return true;
+  }
+  return false;
+}
+
+void FeatureLifecycle::TagRetiredFeatures(uint64_t fence_value) {
+  if (fence_value == 0) return;
+  for (RetiredFeature& retired : retired_features_) {
+    if (retired.handle != nullptr && retired.fence_value == 0) {
+      retired.fence_value = fence_value;
+    }
+  }
+}
+
+void FeatureLifecycle::ReleaseRetiredFeaturesCompleted(
+    NgxRuntime& runtime, uint64_t completed_fence_value) {
+  for (auto it = retired_features_.begin(); it != retired_features_.end();) {
+    if (it->handle != nullptr && it->fence_value != 0 &&
+        it->fence_value <= completed_fence_value) {
+      const NVSDK_NGX_Result result = runtime.ReleaseFeature(it->handle);
+      if (result != NVSDK_NGX_Result_Success) {
+        std::string message = "DLSSNR: deferred ReleaseFeature failed: ";
+        message += NgxResultName(result);
+        reshade::log::message(reshade::log::level::warning, message.c_str());
+      }
+      it = retired_features_.erase(it);
+    } else {
+      ++it;
+    }
+  }
 }
 
 void FeatureLifecycle::Shutdown(NgxRuntime& runtime) {
   DLSSNR_PROFILE_RESOURCE_L2("FeatureLifecycle::Shutdown");
-  ReleaseFeature(runtime);
+  // Shutdown is only called after the controller has drained the device or
+  // observed the retirement fence, so all remaining handles are now safe.
+  if (feature_handle_ != nullptr) {
+    runtime.ReleaseFeature(feature_handle_);
+    feature_handle_ = nullptr;
+  }
+  for (const RetiredFeature& retired : retired_features_) {
+    if (retired.handle != nullptr) runtime.ReleaseFeature(retired.handle);
+  }
+  retired_features_.clear();
 
   built_width_ = 0;
   built_height_ = 0;

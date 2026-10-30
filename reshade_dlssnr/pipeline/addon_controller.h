@@ -240,6 +240,9 @@ class AddonController {
   bool HasUnfencedRetiredSessions() const;
   void TagRetiredSessions(uint64_t fence_value);
   void ReleaseRetiredSessionsCompleted(uint64_t completed_fence_value);
+  bool HasUnfencedRetiredFeatures() const;
+  void TagRetiredFeatures(uint64_t fence_value);
+  void ReleaseRetiredFeaturesCompleted(uint64_t completed_fence_value);
   void FinishRestartAfterFence();
 
   NgxRuntime runtime_;
