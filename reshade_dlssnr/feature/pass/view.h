@@ -42,6 +42,7 @@ struct PassSnapshot {
 
   // Model group.
   int preset = 0;
+  int render_preset = 1;
   float working_scale = 1.0f;
   bool working_scale_x2 = false;
   float intensity = 1.0f;

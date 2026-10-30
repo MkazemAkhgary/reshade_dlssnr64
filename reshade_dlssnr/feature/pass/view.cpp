@@ -20,6 +20,7 @@ PassSnapshot Read(const ctl::ValueStore& store, const ctl::InstanceKey& key) {
   p.custom_name = store.Read(section, key, kCustomName).as_string;
 
   p.preset = store.Read(section, key, kPreset).as_int;
+  p.render_preset = store.Read(section, key, kRenderPreset).as_int;
   p.working_scale = store.Read(section, key, kWorkingScale).as_float;
   p.working_scale_x2 = store.Read(section, key, kWorkingScaleX2).as_bool;
   p.intensity = store.Read(section, key, kIntensity).as_float;

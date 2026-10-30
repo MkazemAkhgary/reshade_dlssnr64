@@ -281,6 +281,11 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .AsGroup()
       .Category(kCatModel)
       .Tooltip("Select the model quality/behavior preset for this pass.");
+  pass.Add<ctl::IntSetting>(kRenderPreset, "Render Preset", 1)
+      .ClampRange(1, 3)
+      .Category(kCatModel)
+      .Tooltip("DLSSNR.Hint.Render.Preset value for this pass (1, 2, or 3). "
+               "Applied per evaluation; changes do not rebuild the feature.");
   pass.Add<ctl::FloatSetting>(kIntensity, "Intensity", 1.0f)
       .ClampRange(0.0f, 2.0f)
       .Category(kCatModel)

@@ -31,6 +31,7 @@ inline constexpr const char* kCustomName = "custom_name";
 inline constexpr const char* kWorkingScale = "working_scale";
 inline constexpr const char* kWorkingScaleX2 = "working_scale_x2";
 inline constexpr const char* kPreset = "preset";
+inline constexpr const char* kRenderPreset = "render_preset";
 inline constexpr const char* kIntensity = "intensity";
 inline constexpr const char* kLocalTone = "local_tone";
 inline constexpr const char* kLocalStructure = "local_structure";
