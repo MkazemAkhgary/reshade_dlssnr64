@@ -23,9 +23,9 @@ class FeatureLifecycle {
   bool HasFeature() const { return feature_handle_ != nullptr; }
   NVSDK_NGX_Handle* FeatureHandle() const { return feature_handle_; }
 
-  bool ShouldReset() const { return first_evaluate_; }
-  void MarkEvaluated() { first_evaluate_ = false; }
-  void SetShouldReset(bool value) { first_evaluate_ = value; }
+  bool ShouldReset() const { return reset_pending_; }
+  void MarkEvaluated() { reset_pending_ = false; }
+  void SetShouldReset(bool value) { reset_pending_ = value; }
 
   // True once after EnsureFeature actually (re)created the handle. Callers
   // use this to skip the evaluation frame so the model has one frame to
@@ -41,10 +41,29 @@ class FeatureLifecycle {
   const char* GetLastError() const { return reason_; }
 
  private:
+  struct ModelSettingsState {
+    int target = 2;
+    unsigned int style = 0;
+    unsigned int render_preset = 1;
+    float working_scale = 1.0f;
+    bool working_scale_x2 = false;
+    float local_tone = 1.0f;
+    float local_structure = 1.0f;
+    float skin_structure = -1.0f;
+    bool auto_mask = true;
+    bool ui_correction = true;
+  };
+
+  void ObserveModelSettings(const feature::pass::PassSnapshot& pass);
+
   NVSDK_NGX_Handle* feature_handle_ = nullptr;
-  bool first_evaluate_ = true;
+  // Kept pending until NGX accepts an evaluation carrying DLSSNR.Reset=1.
+  bool reset_pending_ = true;
   bool just_rebuilt_ = false;
   const char* reason_ = "";
+
+  ModelSettingsState model_settings_ = {};
+  bool model_settings_valid_ = false;
 
   unsigned int built_width_ = 0;
   unsigned int built_height_ = 0;

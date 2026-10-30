@@ -2,6 +2,7 @@
 #include "profiling/profile.h"
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 
 #include <reshade.hpp>
@@ -10,6 +11,103 @@
 
 namespace reshade_dlssnr {
 
+namespace {
+
+constexpr float kModelSettingsEpsilon = 1.0e-5f;
+
+const char* StyleName(unsigned int style) {
+  switch (style) {
+    case 0: return "A";
+    case 1: return "B";
+    case 2: return "C";
+    default: return "?";
+  }
+}
+
+const char* TargetName(int target) {
+  switch (target) {
+    case 0: return "Pre-DLSS";
+    case 1: return "Post-DLSS";
+    case 2: return "Backbuffer";
+    default: return "?";
+  }
+}
+
+bool NearlyEqual(float a, float b) {
+  return std::fabs(a - b) <= kModelSettingsEpsilon;
+}
+
+}  // namespace
+
+void FeatureLifecycle::ObserveModelSettings(
+    const feature::pass::PassSnapshot& pass) {
+  ModelSettingsState current = {};
+  current.target = std::clamp(pass.target, 0, 2);
+  current.style = static_cast<unsigned int>(std::clamp(pass.preset, 0, 2));
+  current.render_preset =
+      static_cast<unsigned int>(std::clamp(pass.render_preset, 1, 3));
+  current.working_scale = pass.working_scale;
+  current.working_scale_x2 = pass.working_scale_x2;
+  current.local_tone = pass.local_tone;
+  current.local_structure = pass.local_structure;
+  current.skin_structure = pass.auto_mask ? pass.skin_structure : -1.0f;
+  current.auto_mask = pass.auto_mask;
+  current.ui_correction = pass.ui_correction;
+
+  if (model_settings_valid_) {
+    const bool style_changed = current.style != model_settings_.style;
+    const bool target_changed = current.target != model_settings_.target;
+    const bool settings_changed =
+        style_changed || target_changed ||
+        current.render_preset != model_settings_.render_preset ||
+        !NearlyEqual(current.working_scale, model_settings_.working_scale) ||
+        current.working_scale_x2 != model_settings_.working_scale_x2 ||
+        !NearlyEqual(current.local_tone, model_settings_.local_tone) ||
+        !NearlyEqual(current.local_structure, model_settings_.local_structure) ||
+        !NearlyEqual(current.skin_structure, model_settings_.skin_structure) ||
+        current.auto_mask != model_settings_.auto_mask ||
+        current.ui_correction != model_settings_.ui_correction;
+
+    if (settings_changed) {
+      // DLSSNR keeps its own temporal state inside the NGX feature. Updating
+      // Style (or changing the stage/input contract) without Reset leaves
+      // that state conditioned by the previous configuration. Keep the
+      // reset pending until an EvaluateFeature call actually succeeds.
+      reset_pending_ = true;
+
+      std::string message = "DLSSNR model settings changed:";
+      if (style_changed) {
+        message += " Style ";
+        message += StyleName(model_settings_.style);
+        message += " -> ";
+        message += StyleName(current.style);
+      }
+      if (target_changed) {
+        message += " Target ";
+        message += TargetName(model_settings_.target);
+        message += " -> ";
+        message += TargetName(current.target);
+      }
+      if (current.render_preset != model_settings_.render_preset) {
+        message += " RenderPreset ";
+        message += std::to_string(model_settings_.render_preset);
+        message += " -> ";
+        message += std::to_string(current.render_preset);
+      }
+      if (!style_changed && !target_changed &&
+          current.render_preset == model_settings_.render_preset) {
+        message += " model input controls";
+      }
+      message +=
+          " (NGX Reset will be asserted on the next successful evaluation)";
+      reshade::log::message(reshade::log::level::info, message.c_str());
+    }
+  }
+
+  model_settings_ = current;
+  model_settings_valid_ = true;
+}
+
 bool FeatureLifecycle::EnsureFeature(
     NgxRuntime& runtime,
     const feature::pass::PassSnapshot& pass,
@@ -17,11 +115,14 @@ bool FeatureLifecycle::EnsureFeature(
     unsigned int width,
     unsigned int height) {
   DLSSNR_PROFILE_CORE_L2("FeatureLifecycle::EnsureFeature");
-  // Only a size change requires a rebuild. Tuning values (preset, intensity,
-  // structure strengths, etc.) are re-applied at every evaluation via
-  // FillEvaluateParams -> ApplyModelTuningParams, so they never need to
-  // trigger a feature rebuild. Rebuilding on tuning was causing a rebuild on
-  // every slider drag and making the UI sluggish.
+  // Read the current pass snapshot every time. Model tuning is written to the
+  // shared NGX parameter block per evaluation, but NGX also retains temporal
+  // state internally; changes to model identity or its input contract need a
+  // one-shot Reset without rebuilding the feature.
+  ObserveModelSettings(pass);
+
+  // Only a size change requires a feature rebuild. Rebuilding for tuning
+  // changes was causing unnecessary feature churn during slider edits.
   if (feature_handle_ != nullptr &&
       built_width_ == width &&
       built_height_ == height) {
@@ -31,7 +132,7 @@ bool FeatureLifecycle::EnsureFeature(
   if (feature_handle_ != nullptr) {
     runtime.ReleaseFeature(feature_handle_);
     feature_handle_ = nullptr;
-    first_evaluate_ = true;
+    reset_pending_ = true;
   }
 
   just_rebuilt_ = true;
@@ -91,6 +192,7 @@ bool FeatureLifecycle::EnsureFeature(
 
 void FeatureLifecycle::ReleaseFeature(NgxRuntime& runtime) {
   DLSSNR_PROFILE_RESOURCE_L2("FeatureLifecycle::ReleaseFeature");
+  reset_pending_ = true;
   if (feature_handle_ == nullptr) return;
 
   runtime.ReleaseFeature(feature_handle_);
@@ -103,8 +205,10 @@ void FeatureLifecycle::Shutdown(NgxRuntime& runtime) {
 
   built_width_ = 0;
   built_height_ = 0;
-  first_evaluate_ = true;
+  reset_pending_ = true;
   just_rebuilt_ = false;
+  model_settings_ = {};
+  model_settings_valid_ = false;
 }
 
 }  // namespace reshade_dlssnr

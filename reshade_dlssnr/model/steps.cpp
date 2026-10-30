@@ -387,6 +387,9 @@ PipelineStatus PassSession::StepEvaluateFeature(PassRun& run) {
       self->StageList(run, self->command_), self->feature_.FeatureHandle(),
       run.runtime->Parameters().Get(), nullptr);
   run.codec->InvalidateBindings();
+  if (run.eval_result == NVSDK_NGX_Result_Success) {
+    self->feature_.MarkEvaluated();
+  }
   return PipelineStatus::Ok;
 }
 // NGX writes to the model output through a UAV. A state transition alone does

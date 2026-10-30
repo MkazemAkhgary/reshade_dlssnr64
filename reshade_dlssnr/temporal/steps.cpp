@@ -38,7 +38,9 @@ uint64_t TemporalSettingsSignature(const PassRun& run) {
   HashTemporalValue(&hash, run.work_height);
   HashTemporalValue(&hash, p.target);
   HashTemporalValue(&hash, p.preset);
+  HashTemporalValue(&hash, p.render_preset);
   HashTemporalValue(&hash, p.working_scale);
+  HashTemporalValue(&hash, p.working_scale_x2);
   HashTemporalValue(&hash, p.intensity);
   HashTemporalValue(&hash, p.temporal_photometric_abs_threshold);
   HashTemporalValue(&hash, p.temporal_photometric_rel_threshold);
@@ -697,6 +699,7 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
               run.codec->InvalidateBindings();
 
               if (cheap_result == NVSDK_NGX_Result_Success) {
+                self->feature_.MarkEvaluated();
                 self->command_.UavBarrier(list, cheap_output);
                 self->command_.Transition(list, cheap_output,
                                           D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);

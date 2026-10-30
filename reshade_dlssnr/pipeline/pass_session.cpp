@@ -457,7 +457,6 @@ bool PassSession::FillEvaluateParams(
   block.SetUInt("DLSSNR.MVecSubrectHeight",
                 guides.valid ? guides.motion_height : 0u);
   block.SetUInt("DLSSNR.Reset", feature_.ShouldReset() ? 1u : 0u);
-  feature_.MarkEvaluated();
 
   return true;
 }

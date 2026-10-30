@@ -99,12 +99,12 @@ const char* const kTemporalTips[] = {
 const char* const kPresetNames[] = {"A", "B", "C"};
 // Presets are a name, not an enum: the C++ type is an int the model reads.
 const char* const kPresetTips[] = {
-    "Use model preset A. Preset changes are applied per evaluation and do not "
-    "rebuild the feature.",
-    "Use model preset B. Preset changes are applied per evaluation and do not "
-    "rebuild the feature.",
-    "Use model preset C. Preset changes are applied per evaluation and do not "
-    "rebuild the feature."};
+    "Use model preset A. Changes are applied per evaluation and reset the "
+    "model's internal history without rebuilding the feature.",
+    "Use model preset B. Changes are applied per evaluation and reset the "
+    "model's internal history without rebuilding the feature.",
+    "Use model preset C. Changes are applied per evaluation and reset the "
+    "model's internal history without rebuilding the feature."};
 
 bool DrawGradeSections(const void*, ctl::ValueStore& store,
                        const ctl::DrawOptions& options,
@@ -157,7 +157,9 @@ bool DrawWorkingScaleRow(const void*, ctl::ValueStore& store,
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     Tip("The model's working resolution as a fraction of the frame.\n\n"
         "Very low values are raised to a minimum of 180p vertical "
-        "resolution, so temporal reprojection always has usable history.");
+        "resolution, so temporal reprojection always has usable history. "
+        "Changing this value resets the model's internal history on its next "
+        "evaluation.");
   }
 
   ImGui::SameLine();
@@ -165,7 +167,8 @@ bool DrawWorkingScaleRow(const void*, ctl::ValueStore& store,
   const bool x2_changed = ImGui::Checkbox("x2##working_scale_x2", &new_x2);
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     if (!new_x2) {
-      Tip("Double the model's working resolution for supersampling.\n\n"
+      Tip("Double the model's working resolution for supersampling. This "
+          "resets the model's internal history on its next evaluation.\n\n"
           "WARNING: enabling this can freeze the game for a brief moment on "
           "the first frame after toggling, while the larger working-scale "
           "resources (working input/output, temporal history, unlifted "
@@ -180,7 +183,9 @@ bool DrawWorkingScaleRow(const void*, ctl::ValueStore& store,
           "has run out of VRAM; toggle this off to recover.");
     } else {
       Tip("Currently doubling the model's working resolution for "
-          "supersampling. Uncheck to return to the slider's value.\n\n"
+          "supersampling. Uncheck to return to the slider's value. Changing "
+          "this setting resets the model's internal history on its next "
+          "evaluation.\n\n"
           "The first frame after unchecking can also freeze briefly while "
           "smaller resources are allocated and the previous ones retire on "
           "the GPU.");
@@ -251,7 +256,9 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .Availability(&TargetAvailability)
       .Tooltip("Each pass can independently target Pre-DLSS, Post-DLSS, or "
                "Backbuffer. Execution order is grouped by stage; passes "
-               "within each stage follow their pass-tab order.");
+               "within each stage follow their pass-tab order. Changing the "
+               "target resets the model's internal history on its next "
+               "evaluation.");
 
   // The tab label. A pass shows its own name; the cap matches the buffer the
   // tab bar formats into.
@@ -285,7 +292,8 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .ClampRange(1, 3)
       .Category(kCatModel)
       .Tooltip("DLSSNR.Hint.Render.Preset value for this pass (1, 2, or 3). "
-               "Applied per evaluation; changes do not rebuild the feature.");
+               "Applied per evaluation; changes reset internal model history "
+               "without rebuilding the feature.");
   pass.Add<ctl::FloatSetting>(kIntensity, "Intensity", 1.0f)
       .ClampRange(0.0f, 2.0f)
       .Category(kCatModel)
