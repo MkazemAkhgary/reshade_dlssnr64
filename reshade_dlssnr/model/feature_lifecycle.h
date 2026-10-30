@@ -54,7 +54,10 @@ class FeatureLifecycle {
     bool ui_correction = true;
   };
 
-  void ObserveModelSettings(const feature::pass::PassSnapshot& pass);
+  // Returns true when DLSSNR.Hint.Render.Preset changed. Unlike other model
+  // controls, NGX latches this hint at feature creation, so it requires a
+  // feature rebuild rather than only a temporal Reset.
+  bool ObserveModelSettings(const feature::pass::PassSnapshot& pass);
 
   NVSDK_NGX_Handle* feature_handle_ = nullptr;
   // Kept pending until NGX accepts an evaluation carrying DLSSNR.Reset=1.

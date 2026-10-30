@@ -39,8 +39,9 @@ bool NearlyEqual(float a, float b) {
 
 }  // namespace
 
-void FeatureLifecycle::ObserveModelSettings(
+bool FeatureLifecycle::ObserveModelSettings(
     const feature::pass::PassSnapshot& pass) {
+  bool render_preset_changed = false;
   ModelSettingsState current = {};
   current.target = std::clamp(pass.target, 0, 2);
   current.style = static_cast<unsigned int>(std::clamp(pass.preset, 0, 2));
@@ -54,12 +55,14 @@ void FeatureLifecycle::ObserveModelSettings(
   current.auto_mask = pass.auto_mask;
   current.ui_correction = pass.ui_correction;
 
+
   if (model_settings_valid_) {
     const bool style_changed = current.style != model_settings_.style;
     const bool target_changed = current.target != model_settings_.target;
-    const bool settings_changed =
+    render_preset_changed =
+        current.render_preset != model_settings_.render_preset;
+    const bool reset_required =
         style_changed || target_changed ||
-        current.render_preset != model_settings_.render_preset ||
         !NearlyEqual(current.working_scale, model_settings_.working_scale) ||
         current.working_scale_x2 != model_settings_.working_scale_x2 ||
         !NearlyEqual(current.local_tone, model_settings_.local_tone) ||
@@ -67,14 +70,16 @@ void FeatureLifecycle::ObserveModelSettings(
         !NearlyEqual(current.skin_structure, model_settings_.skin_structure) ||
         current.auto_mask != model_settings_.auto_mask ||
         current.ui_correction != model_settings_.ui_correction;
+    const bool settings_changed = reset_required || render_preset_changed;
+
+    if (reset_required) {
+      // NGX keeps temporal state inside the feature. Changes to live model
+      // controls require Reset; Render Preset is different because NGX latches
+      // it at creation, and a rebuilt feature starts with fresh history.
+      reset_pending_ = true;
+    }
 
     if (settings_changed) {
-      // DLSSNR keeps its own temporal state inside the NGX feature. Updating
-      // Style (or changing the stage/input contract) without Reset leaves
-      // that state conditioned by the previous configuration. Keep the
-      // reset pending until an EvaluateFeature call actually succeeds.
-      reset_pending_ = true;
-
       std::string message = "DLSSNR model settings changed:";
       if (style_changed) {
         message += " Style ";
@@ -88,24 +93,28 @@ void FeatureLifecycle::ObserveModelSettings(
         message += " -> ";
         message += TargetName(current.target);
       }
-      if (current.render_preset != model_settings_.render_preset) {
+      if (render_preset_changed) {
         message += " RenderPreset ";
         message += std::to_string(model_settings_.render_preset);
         message += " -> ";
         message += std::to_string(current.render_preset);
       }
-      if (!style_changed && !target_changed &&
-          current.render_preset == model_settings_.render_preset) {
+      if (!style_changed && !target_changed && !render_preset_changed) {
         message += " model input controls";
       }
-      message +=
-          " (NGX Reset will be asserted on the next successful evaluation)";
+      if (reset_required) {
+        message +=
+            " (NGX Reset will be asserted on the next successful evaluation)";
+      } else {
+        message += " (NGX feature rebuild required)";
+      }
       reshade::log::message(reshade::log::level::info, message.c_str());
     }
   }
 
   model_settings_ = current;
   model_settings_valid_ = true;
+  return render_preset_changed;
 }
 
 bool FeatureLifecycle::EnsureFeature(
@@ -115,24 +124,26 @@ bool FeatureLifecycle::EnsureFeature(
     unsigned int width,
     unsigned int height) {
   DLSSNR_PROFILE_CORE_L2("FeatureLifecycle::EnsureFeature");
-  // Read the current pass snapshot every time. Model tuning is written to the
-  // shared NGX parameter block per evaluation, but NGX also retains temporal
-  // state internally; changes to model identity or its input contract need a
-  // one-shot Reset without rebuilding the feature.
-  ObserveModelSettings(pass);
+  // Read the current pass snapshot every time. Most model controls are live
+  // evaluation parameters and only need the one-shot temporal Reset. NGX
+  // latches DLSSNR.Hint.Render.Preset at CreateFeature, however, so changing
+  // that specific value must release and recreate the feature.
+  const bool render_preset_changed = ObserveModelSettings(pass);
 
-  // Only a size change requires a feature rebuild. Rebuilding for tuning
-  // changes was causing unnecessary feature churn during slider edits.
-  if (feature_handle_ != nullptr &&
-      built_width_ == width &&
-      built_height_ == height) {
+  if (feature_handle_ != nullptr && !render_preset_changed &&
+      built_width_ == width && built_height_ == height) {
     return true;
   }
 
   if (feature_handle_ != nullptr) {
     runtime.ReleaseFeature(feature_handle_);
     feature_handle_ = nullptr;
-    reset_pending_ = true;
+    if (!render_preset_changed) reset_pending_ = true;
+    if (render_preset_changed) {
+      reshade::log::message(
+          reshade::log::level::info,
+          "DLSSNR Render Preset changed; rebuilding NGX feature");
+    }
   }
 
   just_rebuilt_ = true;

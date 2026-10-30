@@ -292,8 +292,8 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .ClampRange(1, 3)
       .Category(kCatModel)
       .Tooltip("DLSSNR.Hint.Render.Preset value for this pass (1, 2, or 3). "
-               "Applied per evaluation; changes reset internal model history "
-               "without rebuilding the feature.");
+               "NGX latches this hint at feature creation, so changing it "
+               "rebuilds this pass's feature.");
   pass.Add<ctl::FloatSetting>(kIntensity, "Intensity", 1.0f)
       .ClampRange(0.0f, 2.0f)
       .Category(kCatModel)
