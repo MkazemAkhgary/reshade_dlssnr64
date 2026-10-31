@@ -202,14 +202,13 @@ void DlssGuides::CaptureGuides(
       GetNgxResource(params, NVSDK_NGX_Parameter_Depth, "DLSSD.Depth");
   ID3D12Resource* motion = GetNgxResource(params, NVSDK_NGX_Parameter_MotionVectors, "DLSSD.MotionVectors");
 
-  if (depth == nullptr || motion == nullptr) {
+  if (depth == nullptr && motion == nullptr) {
     static LogOnceState logged_missing_guides;
     if (ShouldLogOnce(logged_missing_guides)) {
       reshade::log::message(
           reshade::log::level::warning,
-          depth == nullptr
-              ? "DLSS guides: the NGX evaluation has no Depth parameter"
-              : "DLSS guides: the NGX evaluation has no MotionVectors parameter");
+          "DLSS guides: the NGX evaluation supplies neither Depth nor "
+          "MotionVectors");
     }
     // In direct mode the retained game resources must not keep an obsolete
     // frame's guides alive indefinitely if the game temporarily stops
@@ -221,6 +220,20 @@ void DlssGuides::CaptureGuides(
     state_.clone_resources = clone_resources_;
     state_.capture_serial = capture_serial;
     return;
+  }
+  // A game may supply depth and motion independently. Synthesis and the exposure
+  // filters need depth even when there is no motion field.
+  if (depth == nullptr || motion == nullptr) {
+    static LogOnceState logged_partial_guides;
+    if (ShouldLogOnce(logged_partial_guides)) {
+      reshade::log::message(
+          reshade::log::level::warning,
+          depth == nullptr
+              ? "DLSS guides: the NGX evaluation supplies no Depth parameter; "
+                "only motion vectors are available"
+              : "DLSS guides: the NGX evaluation supplies no MotionVectors "
+                "parameter; only depth is available");
+    }
   }
 
   ID3D12Device* queried_device = nullptr;
@@ -244,10 +257,14 @@ void DlssGuides::CaptureGuides(
     }
   }
 
-  const D3D12_RESOURCE_DESC depth_desc = depth->GetDesc();
-  const D3D12_RESOURCE_DESC motion_desc = motion->GetDesc();
-  const unsigned int guide_width = static_cast<unsigned int>(depth_desc.Width);
-  const unsigned int guide_height = static_cast<unsigned int>(depth_desc.Height);
+  const D3D12_RESOURCE_DESC depth_desc =
+      depth != nullptr ? depth->GetDesc() : D3D12_RESOURCE_DESC{};
+  const D3D12_RESOURCE_DESC motion_desc =
+      motion != nullptr ? motion->GetDesc() : D3D12_RESOURCE_DESC{};
+  const unsigned int guide_width = static_cast<unsigned int>(
+      depth != nullptr ? depth_desc.Width : motion_desc.Width);
+  const unsigned int guide_height = static_cast<unsigned int>(
+      depth != nullptr ? depth_desc.Height : motion_desc.Height);
   const unsigned int motion_width = static_cast<unsigned int>(motion_desc.Width);
   const unsigned int motion_height = static_cast<unsigned int>(motion_desc.Height);
   auto get_uint = [params](const char* name, unsigned int fallback) {
@@ -271,14 +288,18 @@ void DlssGuides::CaptureGuides(
   const unsigned int reference_height = get_uint(
       NVSDK_NGX_Parameter_DLSS_Render_Subrect_Dimensions_Height,
       get_uint(NVSDK_NGX_Parameter_Height, guide_height));
-  const unsigned int guide_subrect_width = guide_base_x < guide_width
-      ? std::min(reference_width, guide_width - guide_base_x) : 0u;
-  const unsigned int guide_subrect_height = guide_base_y < guide_height
-      ? std::min(reference_height, guide_height - guide_base_y) : 0u;
-  const unsigned int motion_subrect_width = motion_base_x < motion_width
-      ? std::min(reference_width, motion_width - motion_base_x) : 0u;
-  const unsigned int motion_subrect_height = motion_base_y < motion_height
-      ? std::min(reference_height, motion_height - motion_base_y) : 0u;
+  const unsigned int guide_subrect_width =
+      depth != nullptr && guide_base_x < guide_width
+          ? std::min(reference_width, guide_width - guide_base_x) : 0u;
+  const unsigned int guide_subrect_height =
+      depth != nullptr && guide_base_y < guide_height
+          ? std::min(reference_height, guide_height - guide_base_y) : 0u;
+  const unsigned int motion_subrect_width =
+      motion != nullptr && motion_base_x < motion_width
+          ? std::min(reference_width, motion_width - motion_base_x) : 0u;
+  const unsigned int motion_subrect_height =
+      motion != nullptr && motion_base_y < motion_height
+          ? std::min(reference_height, motion_height - motion_base_y) : 0u;
 
   unsigned int create_flags = 0;
   params->Get(NVSDK_NGX_Parameter_DLSS_Feature_Create_Flags, &create_flags);
@@ -297,19 +318,28 @@ void DlssGuides::CaptureGuides(
   ID3D12Resource* published_depth = depth;
   ID3D12Resource* published_motion = motion;
   if (clone_resources_) {
-    published_depth = depth_.PublishClone(device.Get(), command_list,
-                                          depth, "depth_clone");
-    published_motion = motion_.PublishClone(device.Get(), command_list,
-                                            motion, "motion_clone");
-    if (published_depth == nullptr || published_motion == nullptr) {
+    if (depth != nullptr) {
+      published_depth = depth_.PublishClone(device.Get(), command_list,
+                                            depth, "depth_clone");
+    }
+    if (motion != nullptr) {
+      published_motion = motion_.PublishClone(device.Get(), command_list,
+                                              motion, "motion_clone");
+    }
+    if ((depth != nullptr && published_depth == nullptr) ||
+        (motion != nullptr && published_motion == nullptr)) {
       state_ = {};
       state_.clone_resources = clone_resources_;
       state_.capture_serial = capture_serial;
       return;
     }
   } else {
-    published_depth = depth_.PublishDirect(depth, retirement_fence_hint);
-    published_motion = motion_.PublishDirect(motion, retirement_fence_hint);
+    if (depth != nullptr) {
+      published_depth = depth_.PublishDirect(depth, retirement_fence_hint);
+    }
+    if (motion != nullptr) {
+      published_motion = motion_.PublishDirect(motion, retirement_fence_hint);
+    }
   }
 
   state_.depth = published_depth;
@@ -333,7 +363,7 @@ void DlssGuides::CaptureGuides(
   state_.depth_inverted =
       (create_flags & NVSDK_NGX_DLSS_Feature_Flags_DepthInverted) != 0;
   state_.clone_resources = clone_resources_;
-  state_.valid = true;
+  state_.valid = published_depth != nullptr || published_motion != nullptr;
   state_.capture_serial = capture_serial;
 }
 

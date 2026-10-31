@@ -69,13 +69,27 @@ PipelineStatus PassSession::StepRenderDebugView(PassRun& run) {
     const ExposureMask::Output mask = run.exposure_mask->GetGeneratedOutput();
     if (mask.valid) debug.exposure_mask = mask.mask;
   }
-  if (run.guides_valid) {
-    debug.motion = run.guides.motion;
-    debug.motion_width = run.guides.guide_width;
-    debug.motion_height = run.guides.guide_height;
+  // Depth and motion are reported independently: a pass can have depth from the
+  // fallback and motion only from the synthesizer.
+  if (run.guides.depth != nullptr) {
     debug.depth = run.guides.depth;
-    debug.depth_width = run.guides.guide_width;
-    debug.depth_height = run.guides.guide_height;
+    debug.depth_width = run.guides.guide_subrect_width != 0
+                            ? run.guides.guide_subrect_width
+                            : run.guides.guide_width;
+    debug.depth_height = run.guides.guide_subrect_height != 0
+                             ? run.guides.guide_subrect_height
+                             : run.guides.guide_height;
+  }
+  if (run.guides.motion != nullptr) {
+    // Either the game's guide subrect or a field produced at working
+    // resolution; report the subrect that holds it.
+    debug.motion = run.guides.motion;
+    debug.motion_width = run.guides.motion_subrect_width != 0
+                             ? run.guides.motion_subrect_width
+                             : run.guides.motion_width;
+    debug.motion_height = run.guides.motion_subrect_height != 0
+                              ? run.guides.motion_subrect_height
+                              : run.guides.motion_height;
   }
   debug.temporal_available = run.temporal_candidate_ready;
   if (debug.temporal_available) {

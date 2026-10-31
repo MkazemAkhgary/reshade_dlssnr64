@@ -621,6 +621,8 @@ Debug views show the pre-depth candidate, post-depth validation result, and per-
 
 **The debug target uses the swapchain's format and dimensions.** Pre-DLSS and Post-DLSS sources may have a different format or render extent. `DebugDisplay` renders into a backbuffer-sized debug texture and samples the selected source over its normalized extent, so the Release stage can copy it directly to the swapchain.
 
+**Guides are reported per resource.** The debug snapshot carries depth and motion separately rather than behind one "valid" flag: a Backbuffer pass may have depth from the fallback and motion only from the synthesizer, and the two views have to work independently.
+
 **Debug selection is global, rendering is pass-local.** The Debug section's `ctl` value is snapshotted into each `PassRun`; only the active pass renders the selected view.
 
 **The debug image lives for an evaluation, not for a presentation.** Each evaluate entry point clears it before its passes run; Present never does. A frame can be presented more than once per evaluation - frame generation presents twice - and clearing at Present strips the overlay from every presentation after the first.
