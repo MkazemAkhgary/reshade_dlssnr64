@@ -429,6 +429,14 @@ struct PipelinePhaseDef {
   bool (*conditional)(const PassRun&);  // nullptr = always run
 };
 
+// How a phase is declared: by the node that opens it. `MakePhases` resolves that
+// node to an index and length in the stage's step list.
+struct PipelinePhaseDecl {
+  const char* name;
+  PipelineNodeId first_node;
+  bool (*conditional)(const PassRun&);  // nullptr = always run
+};
+
 struct PipelineStageDef {
   const char* name;
 

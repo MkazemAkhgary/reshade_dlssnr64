@@ -205,16 +205,54 @@ constexpr PipelineNodeId kPresentSteps[] = {
     PipelineNodeId::SubmitBackbuffer,        // includes CleanupFrameState
 };
 
-constexpr PipelinePhaseDef kPresentPhases[] = {
-    {"setup", 0, 5, nullptr},
-    {"feature", 5, 2, nullptr},
-    {"snapshot", 7, 1, nullptr},
-    {"input", 8, 1, nullptr},
-    {"prepare", 9, 3, nullptr},
-    {"evaluate", 12, 3, nullptr},
-    {"compose", 15, 2, nullptr},
-    {"output", 17, 3, nullptr},
+// A phase is declared by the node that opens it; its index and length are
+// resolved from the step list, so the two cannot disagree.
+constexpr size_t IndexOfNode(const PipelineNodeId* steps, size_t count,
+                             PipelineNodeId node) {
+  for (size_t i = 0; i < count; ++i) {
+    if (steps[i] == node) return i;
+  }
+  return count;
+}
+
+template <size_t N, size_t P>
+constexpr std::array<PipelinePhaseDef, P> MakePhases(
+    const PipelinePhaseDecl (&decls)[P], const PipelineNodeId (&steps)[N]) {
+  std::array<PipelinePhaseDef, P> phases{};
+  for (size_t p = 0; p < P; ++p) {
+    const size_t first = IndexOfNode(steps, N, decls[p].first_node);
+    const size_t next =
+        p + 1 < P ? IndexOfNode(steps, N, decls[p + 1].first_node) : N;
+    phases[p] = PipelinePhaseDef{decls[p].name, static_cast<uint32_t>(first),
+                                 static_cast<uint32_t>(next - first),
+                                 decls[p].conditional};
+  }
+  return phases;
+}
+
+template <size_t N, size_t P>
+constexpr bool PhaseDeclsResolve(const PipelinePhaseDecl (&decls)[P],
+                                 const PipelineNodeId (&steps)[N]) {
+  size_t previous = 0;
+  for (size_t p = 0; p < P; ++p) {
+    const size_t index = IndexOfNode(steps, N, decls[p].first_node);
+    if (index >= N || index < previous) return false;
+    previous = index;
+  }
+  return true;
+}
+
+constexpr PipelinePhaseDecl kPresentPhaseDecls[] = {
+    {"setup", PipelineNodeId::AcquireBackbuffer, nullptr},
+    {"feature", PipelineNodeId::EnsureFeature, nullptr},
+    {"snapshot", PipelineNodeId::EnsureComputeEngine, nullptr},
+    {"input", PipelineNodeId::ResolveModelInput, nullptr},
+    {"prepare", PipelineNodeId::PrepareModelInput, nullptr},
+    {"evaluate", PipelineNodeId::FillEvaluateParams, nullptr},
+    {"compose", PipelineNodeId::GradeModelOutput, nullptr},
+    {"output", PipelineNodeId::RenderDebugView, nullptr},
 };
+constexpr auto kPresentPhases = MakePhases(kPresentPhaseDecls, kPresentSteps);
 
 // -- Pre-DLSS stage ---------------------------------------------------------
 // Runs on the game's input Color resource before the original EvaluateFeature.
@@ -248,15 +286,16 @@ constexpr PipelineNodeId kPreDlssSteps[] = {
     PipelineNodeId::WriteToGameResource,
 };
 
-constexpr PipelinePhaseDef kPreDlssPhases[] = {
-    {"setup", 0, 4, nullptr},
-    {"resources", 4, 4, nullptr},
-    {"feature", 8, 3, nullptr},
-    {"prepare", 11, 7, nullptr},
-    {"evaluate", 18, 3, nullptr},
-    {"compose", 21, 2, nullptr},
-    {"output", 23, 2, nullptr},
+constexpr PipelinePhaseDecl kPreDlssPhaseDecls[] = {
+    {"setup", PipelineNodeId::ResolveDevice, nullptr},
+    {"resources", PipelineNodeId::ResolveWorkingScale, nullptr},
+    {"feature", PipelineNodeId::ResolveModelInput, nullptr},
+    {"prepare", PipelineNodeId::BuildHdrUniforms, nullptr},
+    {"evaluate", PipelineNodeId::EvaluateFeature, nullptr},
+    {"compose", PipelineNodeId::GradeModelOutput, nullptr},
+    {"output", PipelineNodeId::RenderDebugView, nullptr},
 };
+constexpr auto kPreDlssPhases = MakePhases(kPreDlssPhaseDecls, kPreDlssSteps);
 
 // -- Post-DLSS stage --------------------------------------------------------
 constexpr PipelineNodeId kPostDlssSteps[] = {
@@ -289,15 +328,16 @@ constexpr PipelineNodeId kPostDlssSteps[] = {
     PipelineNodeId::WriteToGameResource,  // includes CleanupFrameState
 };
 
-constexpr PipelinePhaseDef kPostDlssPhases[] = {
-    {"setup", 0, 4, nullptr},
-    {"resources", 4, 4, nullptr},
-    {"feature", 8, 3, nullptr},
-    {"prepare", 11, 6, nullptr},
-    {"evaluate", 17, 4, nullptr},
-    {"compose", 21, 2, nullptr},
-    {"output", 23, 2, nullptr},
+constexpr PipelinePhaseDecl kPostDlssPhaseDecls[] = {
+    {"setup", PipelineNodeId::ResolveDevice, nullptr},
+    {"resources", PipelineNodeId::ResolveWorkingScale, nullptr},
+    {"feature", PipelineNodeId::ResolveModelInput, nullptr},
+    {"prepare", PipelineNodeId::BuildHdrUniforms, nullptr},
+    {"evaluate", PipelineNodeId::FillEvaluateParams, nullptr},
+    {"compose", PipelineNodeId::GradeModelOutput, nullptr},
+    {"output", PipelineNodeId::RenderDebugView, nullptr},
 };
+constexpr auto kPostDlssPhases = MakePhases(kPostDlssPhaseDecls, kPostDlssSteps);
 
 constexpr PipelineNodeId kReleaseSteps[] = {
     PipelineNodeId::GradeBackbuffer,
@@ -305,9 +345,10 @@ constexpr PipelineNodeId kReleaseSteps[] = {
     PipelineNodeId::SignalHdrAtPresent,
 };
 
-constexpr PipelinePhaseDef kReleasePhases[] = {
-    {"present", 0, 3, nullptr},
+constexpr PipelinePhaseDecl kReleasePhaseDecls[] = {
+    {"present", PipelineNodeId::GradeBackbuffer, nullptr},
 };
+constexpr auto kReleasePhases = MakePhases(kReleasePhaseDecls, kReleaseSteps);
 
 constexpr size_t kPresentStepCount =
     sizeof(kPresentSteps) / sizeof(kPresentSteps[0]);
@@ -318,45 +359,17 @@ constexpr size_t kPostDlssStepCount =
 constexpr size_t kReleaseStepCount =
     sizeof(kReleaseSteps) / sizeof(kReleaseSteps[0]);
 
-constexpr size_t kPresentPhaseCount =
-    sizeof(kPresentPhases) / sizeof(kPresentPhases[0]);
-constexpr size_t kPreDlssPhaseCount =
-    sizeof(kPreDlssPhases) / sizeof(kPreDlssPhases[0]);
-constexpr size_t kPostDlssPhaseCount =
-    sizeof(kPostDlssPhases) / sizeof(kPostDlssPhases[0]);
-constexpr size_t kReleasePhaseCount =
-    sizeof(kReleasePhases) / sizeof(kReleasePhases[0]);
-
-// Phase ranges are hand-written (first_step, step_count) so that a phase can
-// be described without repeating the step list. These assertions catch an edit
-// that adds or removes a step without updating the ranges.
-//
-// The check is a recursive constexpr function rather than a loop: each
-// recursive call re-reads the array through a fresh constant index, which the
-// compiler folds, whereas a loop that indexes with a runtime `i` is rejected
-// as a non-constant read.
-constexpr bool PhasesCover(const PipelinePhaseDef* phases, size_t count,
-                           size_t step_count) {
-  return count == 0 ? step_count == 0
-                    : (phases[count - 1].first_step +
-                           phases[count - 1].step_count ==
-                       step_count) &&
-                          PhasesCover(phases, count - 1,
-                                      phases[count - 1].first_step);
-}
-
-static_assert(PhasesCover(kPresentPhases, kPresentPhaseCount,
-                          kPresentStepCount),
-              "Present phases must span kPresentSteps with no gap or overlap");
-static_assert(PhasesCover(kPreDlssPhases, kPreDlssPhaseCount,
-                          kPreDlssStepCount),
-              "PreDLSS phases must span kPreDlssSteps with no gap or overlap");
-static_assert(PhasesCover(kPostDlssPhases, kPostDlssPhaseCount,
-                          kPostDlssStepCount),
-              "PostDLSS phases must span kPostDlssSteps with no gap or overlap");
-static_assert(PhasesCover(kReleasePhases, kReleasePhaseCount,
-                          kReleaseStepCount),
-              "Release phases must span kReleaseSteps with no gap or overlap");
+// Each boundary must name a step in its own stage, in list order. Nothing has
+// to check that the phases cover every step: the last phase always runs to the
+// end of the list.
+static_assert(PhaseDeclsResolve(kPresentPhaseDecls, kPresentSteps),
+              "Present phase boundaries must name steps in order");
+static_assert(PhaseDeclsResolve(kPreDlssPhaseDecls, kPreDlssSteps),
+              "PreDlss phase boundaries must name steps in order");
+static_assert(PhaseDeclsResolve(kPostDlssPhaseDecls, kPostDlssSteps),
+              "PostDlss phase boundaries must name steps in order");
+static_assert(PhaseDeclsResolve(kReleasePhaseDecls, kReleaseSteps),
+              "Release phase boundaries must name steps in order");
 
 // The step lists above must match the copies in pipeline_graph.h, which exist
 // so that every translation unit defining a step can static_assert its own
@@ -399,8 +412,8 @@ const PipelineStageDef kPipelineStages[] = {
         /*is_post_dlss=*/false,
         /*steps=*/kPreDlssSteps,
         /*step_count=*/static_cast<uint32_t>(kPreDlssStepCount),
-        /*phases=*/kPreDlssPhases,
-        /*phase_count=*/static_cast<uint32_t>(kPreDlssPhaseCount),
+        /*phases=*/kPreDlssPhases.data(),
+        /*phase_count=*/static_cast<uint32_t>(kPreDlssPhases.size()),
         /*default_failure=*/FailurePolicy::Transient,
         /*owns_submit=*/false,
         /*hdr_capable=*/true,
@@ -416,8 +429,8 @@ const PipelineStageDef kPipelineStages[] = {
         /*is_post_dlss=*/true,
         /*steps=*/kPostDlssSteps,
         /*step_count=*/static_cast<uint32_t>(kPostDlssStepCount),
-        /*phases=*/kPostDlssPhases,
-        /*phase_count=*/static_cast<uint32_t>(kPostDlssPhaseCount),
+        /*phases=*/kPostDlssPhases.data(),
+        /*phase_count=*/static_cast<uint32_t>(kPostDlssPhases.size()),
         /*default_failure=*/FailurePolicy::Transient,
         /*owns_submit=*/false,
         /*hdr_capable=*/true,
@@ -435,8 +448,8 @@ const PipelineStageDef kPipelineStages[] = {
         /*is_post_dlss=*/false,
         /*steps=*/kPresentSteps,
         /*step_count=*/static_cast<uint32_t>(kPresentStepCount),
-        /*phases=*/kPresentPhases,
-        /*phase_count=*/static_cast<uint32_t>(kPresentPhaseCount),
+        /*phases=*/kPresentPhases.data(),
+        /*phase_count=*/static_cast<uint32_t>(kPresentPhases.size()),
         /*default_failure=*/FailurePolicy::Fail,
         /*owns_submit=*/true,
         /*hdr_capable=*/false,
@@ -455,8 +468,8 @@ const PipelineStageDef kPipelineStages[] = {
         /*is_post_dlss=*/false,
         /*steps=*/kReleaseSteps,
         /*step_count=*/static_cast<uint32_t>(kReleaseStepCount),
-        /*phases=*/kReleasePhases,
-        /*phase_count=*/static_cast<uint32_t>(kReleasePhaseCount),
+        /*phases=*/kReleasePhases.data(),
+        /*phase_count=*/static_cast<uint32_t>(kReleasePhases.size()),
         /*default_failure=*/FailurePolicy::Ignore,
         /*owns_submit=*/true,
         /*hdr_capable=*/false,
