@@ -73,12 +73,13 @@ reshade_dlssnr/
     prepare_model_input.hlsl        Box-area resize into the model working buffer
   shaders/exposure_mask/
     build_exposure_mask.hlsl             Builds the per-frame Exposure Mask from model input/output difference
-  shaders/temporal/
+  shaders/motion/
+    reconstruct_motion_vectors.hlsl Estimates a motion field from depth when the game supplies none
+  shaders/temporal_reprojection/
     reproject_edit.hlsl             Motion-reprojects the previous edit, samples it with Catmull-Rom, and scores its confidence
     validate_depth.hlsl             Folds the depth-discontinuity test into the confidence and accumulates reuse statistics
     apply_edit.hlsl                 Applies a validated edit to the current model input
     commit_history.hlsl             Accumulates the fresh edit into the stored history and stores the current depth
-    reconstruct_motion_vectors.hlsl Estimates a motion field from depth when the game supplies none
     clear_stats.hlsl                Clears temporal feedback counters
 
   ctl/                             Declarative settings framework
@@ -184,7 +185,7 @@ reshade_dlssnr/
     trace.h                         Settings trace interface
     trace.cpp                       Settings change tracing
     version.h                       Addon version constant
-  temporal/
+  temporal_reprojection/
     steps.cpp                       Temporal prepare/commit steps and reuse policy
     stats.h                         Live reprojection snapshot published to the overlay
   ui/
@@ -541,7 +542,7 @@ The photometric test compares current and motion-reprojected previous input luma
 
 Debug views show the pre-depth candidate, post-depth validation result, and per-channel reprojected log edit. Confidence is stored in alpha in the temporal working textures; debug views translate it to readable colors. They are rendered on the pass command list while the produced resources are still in known states.
 
-**The Temporal Reprojection category ends with a live readout.** It reports reuse or refresh for the current frame with its age over the effective cadence, the reuse ratio since load, the invalid fraction from the GPU readback, mean confidence and mean absolute log gain of the reprojected edit, and the smoothed frame interval for each class with the step between them. That step is the judder amplitude, and nothing else in the addon exposes it. `temporal/stats.h` holds the snapshot; the temporal stage publishes it once per frame and the overlay reads it. The GPU side accumulates the invalid count, a marker, the confidence sum, and the edit-luma sum in one small buffer that the reproject dispatch clears and the validate dispatch fills.
+**The Temporal Reprojection category ends with a live readout.** It reports reuse or refresh for the current frame with its age over the effective cadence, the reuse ratio since load, the invalid fraction from the GPU readback, mean confidence and mean absolute log gain of the reprojected edit, and the smoothed frame interval for each class with the step between them. That step is the judder amplitude, and nothing else in the addon exposes it. `temporal_reprojection/stats.h` holds the snapshot; the temporal stage publishes it once per frame and the overlay reads it. The GPU side accumulates the invalid count, a marker, the confidence sum, and the edit-luma sum in one small buffer that the reproject dispatch clears and the validate dispatch fills.
 
 ### Streamline
 

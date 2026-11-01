@@ -13,7 +13,7 @@
 #include "pass_resources.h"
 #include "pipeline_graph.h"
 #include "pipeline_trace.h"
-#include "temporal/stats.h"
+#include "temporal_reprojection/stats.h"
 
 namespace reshade_dlssnr {
 

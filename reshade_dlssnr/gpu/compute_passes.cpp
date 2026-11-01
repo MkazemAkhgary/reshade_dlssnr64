@@ -19,13 +19,13 @@ std::size_t BytecodeSize(const char* root) {
 }  // namespace
 
 const ComputePassDef kComputePasses[] = {
-    {"TemporalReconstructMotion", "temporal/reconstruct_motion_vectors.hlsl", BytecodeData("temporal/reconstruct_motion_vectors.hlsl"), BytecodeSize("temporal/reconstruct_motion_vectors.hlsl")},
-    {"TemporalClearStats", "temporal/clear_stats.hlsl", BytecodeData("temporal/clear_stats.hlsl"), BytecodeSize("temporal/clear_stats.hlsl")},
-    {"TemporalReprojectEdit", "temporal/reproject_edit.hlsl", BytecodeData("temporal/reproject_edit.hlsl"), BytecodeSize("temporal/reproject_edit.hlsl")},
-    {"TemporalValidateDepth", "temporal/validate_depth.hlsl", BytecodeData("temporal/validate_depth.hlsl"), BytecodeSize("temporal/validate_depth.hlsl")},
-    {"TemporalCommitHistory", "temporal/commit_history.hlsl", BytecodeData("temporal/commit_history.hlsl"), BytecodeSize("temporal/commit_history.hlsl")},
-    {"TemporalApplyEdit", "temporal/apply_edit.hlsl", BytecodeData("temporal/apply_edit.hlsl"), BytecodeSize("temporal/apply_edit.hlsl")},
-    {"TemporalBlendCheap", "temporal/blend_cheap.hlsl", BytecodeData("temporal/blend_cheap.hlsl"), BytecodeSize("temporal/blend_cheap.hlsl")},
+    {"TemporalReconstructMotion", "motion/reconstruct_motion_vectors.hlsl", BytecodeData("motion/reconstruct_motion_vectors.hlsl"), BytecodeSize("motion/reconstruct_motion_vectors.hlsl")},
+    {"TemporalClearStats", "temporal_reprojection/clear_stats.hlsl", BytecodeData("temporal_reprojection/clear_stats.hlsl"), BytecodeSize("temporal_reprojection/clear_stats.hlsl")},
+    {"TemporalReprojectEdit", "temporal_reprojection/reproject_edit.hlsl", BytecodeData("temporal_reprojection/reproject_edit.hlsl"), BytecodeSize("temporal_reprojection/reproject_edit.hlsl")},
+    {"TemporalValidateDepth", "temporal_reprojection/validate_depth.hlsl", BytecodeData("temporal_reprojection/validate_depth.hlsl"), BytecodeSize("temporal_reprojection/validate_depth.hlsl")},
+    {"TemporalCommitHistory", "temporal_reprojection/commit_history.hlsl", BytecodeData("temporal_reprojection/commit_history.hlsl"), BytecodeSize("temporal_reprojection/commit_history.hlsl")},
+    {"TemporalApplyEdit", "temporal_reprojection/apply_edit.hlsl", BytecodeData("temporal_reprojection/apply_edit.hlsl"), BytecodeSize("temporal_reprojection/apply_edit.hlsl")},
+    {"TemporalBlendCheap", "temporal_reprojection/blend_cheap.hlsl", BytecodeData("temporal_reprojection/blend_cheap.hlsl"), BytecodeSize("temporal_reprojection/blend_cheap.hlsl")},
     {"ZeroHistogram",         "hdr/zero_histogram.hlsl",        BytecodeData("hdr/zero_histogram.hlsl"),        BytecodeSize("hdr/zero_histogram.hlsl")},
     {"BuildHistogram",        "hdr/build_histogram.hlsl",       BytecodeData("hdr/build_histogram.hlsl"),       BytecodeSize("hdr/build_histogram.hlsl")},
     {"GainMapSplit",          "hdr/gain_map_split.hlsl",        BytecodeData("hdr/gain_map_split.hlsl"),        BytecodeSize("hdr/gain_map_split.hlsl")},

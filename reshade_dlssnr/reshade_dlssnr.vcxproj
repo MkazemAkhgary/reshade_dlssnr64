@@ -90,13 +90,13 @@
     <ShaderSourceFiles Include="exposure_mask\build_exposure_mask.hlsl" />
     <ShaderSourceFiles Include="exposure_mask\classify_exposure_mask.hlsl" />
     <ShaderSourceFiles Include="model\prepare_model_input.hlsl" />
-    <ShaderSourceFiles Include="temporal\apply_edit.hlsl" />
-    <ShaderSourceFiles Include="temporal\blend_cheap.hlsl" />
-    <ShaderSourceFiles Include="temporal\clear_stats.hlsl" />
-    <ShaderSourceFiles Include="temporal\commit_history.hlsl" />
-    <ShaderSourceFiles Include="temporal\reconstruct_motion_vectors.hlsl" />
-    <ShaderSourceFiles Include="temporal\reproject_edit.hlsl" />
-    <ShaderSourceFiles Include="temporal\validate_depth.hlsl" />
+    <ShaderSourceFiles Include="temporal_reprojection\apply_edit.hlsl" />
+    <ShaderSourceFiles Include="temporal_reprojection\blend_cheap.hlsl" />
+    <ShaderSourceFiles Include="temporal_reprojection\clear_stats.hlsl" />
+    <ShaderSourceFiles Include="temporal_reprojection\commit_history.hlsl" />
+    <ShaderSourceFiles Include="motion\reconstruct_motion_vectors.hlsl" />
+    <ShaderSourceFiles Include="temporal_reprojection\reproject_edit.hlsl" />
+    <ShaderSourceFiles Include="temporal_reprojection\validate_depth.hlsl" />
   </ItemGroup>
 
   <ItemGroup>
@@ -228,7 +228,7 @@
            them. Program Database (/Zi) is the correct format here. -->
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <ObjectFileName>$(IntDir)%(RelativeDir)%(Filename).obj</ObjectFileName>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)generated;$(ProjectDir)third_party\reshade\include;$(ProjectDir)third_party\reshade;$(ProjectDir)third_party\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\nvngx_dlss_sdk\include;$(ProjectDir)third_party\d3dx\include\directx;$(ProjectDir)third_party\Detours\detours\src;$(ProjectDir)third_party\tracy\public;$(ProjectDir)third_party\tracy\public\tracy;$(ProjectDir)gpu;$(ProjectDir)model;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)compose;$(ProjectDir)grade;$(ProjectDir)hdr;$(ProjectDir)exposure_mask;$(ProjectDir)debug;$(ProjectDir)temporal;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)generated;$(ProjectDir)third_party\reshade\include;$(ProjectDir)third_party\reshade;$(ProjectDir)third_party\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\nvngx_dlss_sdk\include;$(ProjectDir)third_party\d3dx\include\directx;$(ProjectDir)third_party\Detours\detours\src;$(ProjectDir)third_party\tracy\public;$(ProjectDir)third_party\tracy\public\tracy;$(ProjectDir)gpu;$(ProjectDir)model;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)compose;$(ProjectDir)grade;$(ProjectDir)hdr;$(ProjectDir)exposure_mask;$(ProjectDir)debug;$(ProjectDir)motion;$(ProjectDir)temporal_reprojection;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -256,7 +256,7 @@
       <ForcedIncludeFiles>pch.h</ForcedIncludeFiles>
       <ErrorLog>$(IntDir)$(MSBuildProjectName).error.log</ErrorLog>
       <ObjectFileName>$(IntDir)%(RelativeDir)%(Filename).obj</ObjectFileName>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)generated;$(ProjectDir)third_party\reshade\include;$(ProjectDir)third_party\reshade;$(ProjectDir)third_party\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\nvngx_dlss_sdk\include;$(ProjectDir)third_party\d3dx\include\directx;$(ProjectDir)third_party\Detours\detours\src;$(ProjectDir)third_party\tracy\public;$(ProjectDir)third_party\tracy\public\tracy;$(ProjectDir)gpu;$(ProjectDir)model;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)compose;$(ProjectDir)grade;$(ProjectDir)hdr;$(ProjectDir)exposure_mask;$(ProjectDir)debug;$(ProjectDir)temporal;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)generated;$(ProjectDir)third_party\reshade\include;$(ProjectDir)third_party\reshade;$(ProjectDir)third_party\reshade\deps\imgui;$(ProjectDir)third_party;$(ProjectDir)third_party\nvngx_dlss_sdk\include;$(ProjectDir)third_party\d3dx\include\directx;$(ProjectDir)third_party\Detours\detours\src;$(ProjectDir)third_party\tracy\public;$(ProjectDir)third_party\tracy\public\tracy;$(ProjectDir)gpu;$(ProjectDir)model;$(ProjectDir)pipeline;$(ProjectDir)hooks;$(ProjectDir)ui;$(ProjectDir)state;$(ProjectDir)compose;$(ProjectDir)grade;$(ProjectDir)hdr;$(ProjectDir)exposure_mask;$(ProjectDir)debug;$(ProjectDir)motion;$(ProjectDir)temporal_reprojection;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -396,7 +396,7 @@
     <ClCompile Include="compose\steps.cpp" />
     <ClCompile Include="grade\grade.cpp" />
     <ClCompile Include="grade\steps.cpp" />
-    <ClCompile Include="temporal\steps.cpp" />
+    <ClCompile Include="temporal_reprojection\steps.cpp" />
     <ClCompile Include="exposure_mask\exposure_mask.cpp" />
     <ClCompile Include="state\settings.cpp" />
     <ClCompile Include="state\trace.cpp" />

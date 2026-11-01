@@ -1,7 +1,7 @@
 #include "pass_resources.h"
 #include "profiling/profile.h"
 
-#include "temporal/stats.h"
+#include "temporal_reprojection/stats.h"
 
 namespace reshade_dlssnr {
 

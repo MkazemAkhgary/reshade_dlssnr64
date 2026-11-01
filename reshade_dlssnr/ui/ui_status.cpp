@@ -17,7 +17,7 @@
 #include "gpu/d3d12_utils.h"
 #include "state/settings.h"
 #include "status.h"
-#include "temporal/stats.h"
+#include "temporal_reprojection/stats.h"
 #include "ui/ui_widgets.h"
 #include "feature/ui_state/settings.h"
 
