@@ -7,16 +7,17 @@
 #include "common/grade.hlsli"
 #include "common/compose_common.hlsli"
 
-Texture2D<float4>   gOriginal    : register(t0);
-Texture2D<float4>   gLowInput    : register(t1);
-Texture2D<float4>   gLowEnhanced : register(t2);
-Texture2D<float4>   gLocalScale  : register(t3);
-RWTexture2D<float4> gOutput      : register(u0);
-SamplerState        s0           : register(s0);
+Texture2D<float4>   gOriginal     : register(t0);
+Texture2D<float4>   gLowInput     : register(t1);
+Texture2D<float4>   gLowEnhanced  : register(t2);
+Texture2D<float4>   gLiftInput    : register(t4);
+Texture2D<float4>   gLiftEnhanced : register(t5);
+RWTexture2D<float4> gOutput       : register(u0);
+SamplerState        s0            : register(s0);
 
-// Set when the local-exposure lift belongs on the base rather than in the
-// residual. The HDR path does the same with its base scale.
-#define kApplyLocalScale (shader.Params0.z > 0.5)
+// Set when the residual is the product of two ratios: the model's edit, and the
+// local-exposure lift the model input carries but the pre-grade base does not.
+#define kHasLiftPair (shader.Params0.z > 0.5)
 
 #include "common/compose_upsample.hlsli"
 
@@ -31,21 +32,35 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     // 1:1 with the dispatch, so a filtered fetch would only add sampler work.
     const float4 original = gOriginal.Load(int3(id.xy, 0));
 
-    // Reconstruct both model-domain images with the fixed joint-bilateral 3x3 filter.
+    // Reconstruct both model-domain images with the fixed joint-bilateral 3x3
+    // filter. The lift pair goes through the same filter with the same guide,
+    // which is what makes an identity grade cancel exactly.
+    const int2 full_size_int = int2((int)Width, (int)Height);
+    const int2 full_xy = int2((int)id.x, (int)id.y);
     float3 in_rgb = float3(0.0, 0.0, 0.0);
     float3 out_rgb = float3(0.0, 0.0, 0.0);
+    float3 lift_in_rgb = float3(0.0, 0.0, 0.0);
+    float3 lift_out_rgb = float3(0.0, 0.0, 0.0);
     uint low_w = 0u;
     uint low_h = 0u;
     gLowInput.GetDimensions(low_w, low_h);
     if (low_w == Width && low_h == Height) {
         in_rgb = gLowInput.Load(int3(id.xy, 0)).rgb;
         out_rgb = gLowEnhanced.Load(int3(id.xy, 0)).rgb;
+        if (kHasLiftPair > 0.5) {
+            lift_in_rgb = gLiftInput.Load(int3(id.xy, 0)).rgb;
+            lift_out_rgb = gLiftEnhanced.Load(int3(id.xy, 0)).rgb;
+        }
     } else {
-        const int2 full_size_int = int2((int)Width, (int)Height);
-        const int2 full_xy = int2((int)id.x, (int)id.y);
         JointBilateralUpsamplePair(
             full_xy, full_size_int, gLowInput, gLowEnhanced, gOriginal,
             kUpsampleSharpness, kUpsampleSharpness, in_rgb, out_rgb);
+        if (kHasLiftPair > 0.5) {
+            JointBilateralUpsamplePair(
+                full_xy, full_size_int, gLiftInput, gLiftEnhanced, gOriginal,
+                kUpsampleSharpness, kUpsampleSharpness, lift_in_rgb,
+                lift_out_rgb);
+        }
     }
 
     // The residual is a ratio of linear light and the base is multiplied in
@@ -54,20 +69,19 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     // equals the reference; everywhere the base carries detail the reference
     // was averaged over, the transfer curve leaves a residue, and a lift
     // multiplies that residue by its own size.
-    float3 base_lin = SrgbToLinearExt(original.rgb);
-    if (kApplyLocalScale > 0.5) {
-        // The multiplier is a linear factor, so it multiplies linear light.
-        // Bilinear is enough: the map is a working-resolution field and carries
-        // no detail the base does not already have.
-        const float2 uv = (float2(id.xy) + 0.5) / float2(Width, Height);
-        base_lin *= max(gLocalScale.SampleLevel(s0, uv, 0).r, 1e-4);
-    }
+    const float3 base_lin = SrgbToLinearExt(original.rgb);
     const float3 in_lin = max(SrgbToLinearExt(in_rgb), 0.0);
     const float3 out_lin = max(SrgbToLinearExt(out_rgb), 0.0);
 
     // The model's edit as a per-channel ratio, held in log space so the
-    // compression sliders can bound it on both sides.
+    // compression sliders can bound it on both sides. The lift joins it before
+    // the clamp so the bound covers the whole residual, as it does when the
+    // lift arrives inside the model's own ratio.
     float3 residual_log = safe_log3(out_lin) - safe_log3(in_lin);
+    if (kHasLiftPair > 0.5) {
+        residual_log += safe_log3(max(SrgbToLinearExt(lift_out_rgb), 0.0)) -
+                        safe_log3(max(SrgbToLinearExt(lift_in_rgb), 0.0));
+    }
 
     if (kRatioClampsEnabled) {
         residual_log = clamp(residual_log,

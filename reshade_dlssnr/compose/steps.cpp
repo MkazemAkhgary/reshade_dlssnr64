@@ -26,29 +26,16 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
   // Compare against the actual Grade Model Input result, then apply only the
   // model residual to the image before that grade section. The option remains
   // active at zero model intensity: there the comparison endpoints are made
-  // identical, while the HDR compose path retains local exposure in its base.
+  // identical and the lift pair alone reaches the output.
   const bool apply_edit_to_pre_grade =
       run.input_grade_apply_to_pre_grade && run.grade_input.enabled &&
       run.model_color != nullptr && run.model_output != nullptr;
-
-  // The pre-grade base is the source before the grade, so it has to carry the
-  // local-exposure lift itself. That lift is built at working resolution in
-  // StepPrepareModelInput and replaces the packed carrier in the t0 slot; the
-  // compose reconstructs it instead of re-evaluating it per full-resolution
-  // pixel, which would give the lift full-resolution contrast.
-  const bool pre_grade_lift =
-      apply_edit_to_pre_grade && hdr_active &&
-      run.hdr_uniforms.local_exposure_strength > 0.0f &&
-      self->resources_.GetUnliftedWorkingInput() != nullptr;
 
   ID3D12Resource* original = hdr_active
                                  ? self->resources_.GetPackedOutput()
                                  : (run.stage != nullptr && run.stage->owns_submit
                                         ? run.backbuffer
                                         : run.model_input);
-  if (pre_grade_lift) {
-    original = self->resources_.GetUnliftedWorkingInput();
-  }
 
   const model_pipeline::HdrUniforms* hdr_ptr =
       hdr_active ? &run.hdr_uniforms : nullptr;
@@ -76,20 +63,34 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
   // edit is applied to the pre-grade image.
   ID3D12Resource* compose_input = run.compose_reference;
   if (compose_input == nullptr) compose_input = run.model_input;
-  if (hdr_active && !bypass_model && !pre_grade_lift &&
+  if (hdr_active && !bypass_model && !apply_edit_to_pre_grade &&
       run.hdr_uniforms.local_exposure_strength > 0.0f &&
       self->resources_.GetUnliftedWorkingInput() != nullptr) {
     compose_input = self->resources_.GetUnliftedWorkingInput();
   }
 
-  // The pre-grade base is the image before the grade and before the lift, so
-  // it has to carry the lift itself; the residual is measured against the
-  // lifted model input and therefore holds the model's edit alone. The HDR
-  // path does the same with its base scale.
-  ID3D12Resource* local_scale = nullptr;
-  if (apply_edit_to_pre_grade && !hdr_active &&
-      self->local_exposure_.scale_valid) {
-    local_scale = self->resources_.GetLocalExposureScale();
+  // The model input carries the local-exposure lift, and the base does not, so
+  // the residual has to supply it: the same ratio of the same two images the
+  // normal path measures its lift between. Deriving it here rather than from
+  // the gain map is what makes the two modes agree - a separately reconstructed
+  // lift is not the lift the model saw.
+  ID3D12Resource* lift_input = nullptr;
+  ID3D12Resource* lift_enhanced = nullptr;
+  if (apply_edit_to_pre_grade &&
+      run.hdr_uniforms.local_exposure_strength > 0.0f) {
+    if (hdr_active) {
+      lift_input = self->resources_.GetUnliftedWorkingInput();
+      lift_enhanced = self->resources_.GetWorkingInput();
+    } else if (self->local_exposure_.scale_valid) {
+      // The lifted texture survives the frame, so only bind it when this
+      // frame's lift ran into it.
+      lift_input = self->resources_.GetWorkingInput();
+      lift_enhanced = self->resources_.GetLiftedWorkingInput();
+    }
+    if (lift_input == nullptr || lift_enhanced == nullptr) {
+      lift_input = nullptr;
+      lift_enhanced = nullptr;
+    }
   }
 
   if (!model_pipeline::ComposeOutput(
@@ -97,7 +98,7 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
           self->resources_, run.codec, original, run.model_input,
           compose_input, enhanced_for_compose, run.width, run.height,
           run.pass_state.strength, run.pass_state.residual, hdr_ptr,
-          apply_edit_to_pre_grade, local_scale)) {
+          apply_edit_to_pre_grade, lift_input, lift_enhanced)) {
     return self->FailStep("failed to compose model output");
   }
   return PipelineStatus::Ok;

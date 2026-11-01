@@ -1,5 +1,10 @@
 // Composes the model's edit into PassResources::GetCompositeOutput(), in SDR
 // or HDR depending on whether `hdr` is set.
+//
+// The residual is the ratio between `low_input` and `low_enhanced`. When
+// `lift_input` and `lift_enhanced` are given, a second ratio between them is
+// multiplied in: the local-exposure lift the model input carries but the
+// pre-grade base does not.
 #pragma once
 
 #include <d3d12.h>
@@ -28,6 +33,7 @@ bool ComposeOutput(
     const ResidualSettings& residual = {},
     const HdrUniforms* hdr = nullptr,
     bool apply_edit_to_pre_grade = false,
-    ID3D12Resource* local_scale = nullptr);
+    ID3D12Resource* lift_input = nullptr,
+    ID3D12Resource* lift_enhanced = nullptr);
 
 }  // namespace reshade_dlssnr::model_pipeline
