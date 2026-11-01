@@ -598,7 +598,7 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
                 blend_constants.Width = run.work_width;
                 blend_constants.Height = run.work_height;
                 ID3D12Resource* blend_srvs[kSrvCount] = {
-                    run.model_color, validated, cheap_output, cheap_output};
+                    run.model_color, validated, cheap_output, cheap_input};
                 ID3D12Resource* blend_uavs[kUavCount] = {run.model_output};
 
                 if (run.codec->Dispatch("TemporalBlendCheap", list,
