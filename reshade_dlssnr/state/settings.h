@@ -16,8 +16,9 @@
 namespace reshade_dlssnr {
 
 // On-disk format version for the addon's settings store. Bumped when the
-// persisted tree shape changes in a way older builds would misread. This is
-// independent of kAddonVersion: settings survive addon updates, so a build
+// persisted tree shape changes in a way older builds would misread; every bump
+// needs one matching step in the migration table in state/migrations.cpp. This
+// is independent of kAddonVersion: settings survive addon updates, so a build
 // identifier is not a suitable format version.
 constexpr int kSettingsVersion = 1;
 

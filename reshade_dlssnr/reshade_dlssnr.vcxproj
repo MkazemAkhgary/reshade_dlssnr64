@@ -313,6 +313,7 @@
     <ClInclude Include="temporal_reprojection\stats.h" />
     <ClInclude Include="exposure_mask\exposure_mask.h" />
     <ClInclude Include="exposure_mask\settings.h" />
+    <ClInclude Include="state\migrations.h" />
     <ClInclude Include="state\settings.h" />
     <ClInclude Include="state\trace.h" />
     <ClInclude Include="state\version.h" />
@@ -400,6 +401,7 @@
     <ClCompile Include="motion\steps.cpp" />
     <ClCompile Include="temporal_reprojection\steps.cpp" />
     <ClCompile Include="exposure_mask\exposure_mask.cpp" />
+    <ClCompile Include="state\migrations.cpp" />
     <ClCompile Include="state\settings.cpp" />
     <ClCompile Include="state\trace.cpp" />
     <ClCompile Include="ui\ui.cpp" />

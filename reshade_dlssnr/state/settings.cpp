@@ -31,6 +31,7 @@
 #include "feature/pass/ui.h"
 #include "feature/preferences/settings.h"
 #include "grade/settings.h"
+#include "state/migrations.h"
 #include "state/trace.h"
 
 namespace reshade_dlssnr {
@@ -226,43 +227,74 @@ class JsonStore {
     path_ = ResolveJsonPath();
 
     std::error_code ec;
-    if (std::filesystem::exists(path_, ec)) {
-      const std::string text = ReadTextFile(path_);
-      if (text.empty()) {
-        root_ = json::Value::MakeObject();
-        root_["Version"] = json::Value(kSettingsVersion);
-        Save();
-        return true;
-      }
-      std::string error;
-      root_ = json::Value::parse(text, &error);
-      if (error.empty() && !root_.is_object()) {
-        error = "root is not an object";
-      }
-      if (!error.empty()) {
-        reshade::log::message(
-            reshade::log::level::error,
-            ("DLSSNR: JSON settings parse failed: " + error).c_str());
-        std::filesystem::path backup = path_;
-        backup += ".broken";
-        std::filesystem::rename(path_, backup, ec);
-        root_ = json::Value::MakeObject();
-        root_["Version"] = json::Value(kSettingsVersion);
-        Save();
-        return true;
-      }
-    } else {
+    if (!std::filesystem::exists(path_, ec)) {
       root_ = json::Value::MakeObject();
       root_["Version"] = json::Value(kSettingsVersion);
       Save();
       return true;
     }
 
+    const std::string text = ReadTextFile(path_);
+    if (text.empty()) {
+      root_ = json::Value::MakeObject();
+      root_["Version"] = json::Value(kSettingsVersion);
+      Save();
+      return true;
+    }
+
+    std::string error;
+    root_ = json::Value::parse(text, &error);
+    if (error.empty() && !root_.is_object()) {
+      error = "root is not an object";
+    }
+    if (!error.empty()) {
+      reshade::log::message(
+          reshade::log::level::error,
+          ("DLSSNR: JSON settings parse failed: " + error).c_str());
+      std::filesystem::path backup = path_;
+      backup += ".broken";
+      std::filesystem::rename(path_, backup, ec);
+      root_ = json::Value::MakeObject();
+      root_["Version"] = json::Value(kSettingsVersion);
+      Save();
+      return true;
+    }
+
+    // A file written before the format was versioned has no key; a key of zero
+    // or less is hand-edited damage. Both mean "oldest shape".
+    const json::Value* version = root_.find("Version");
+    int file_version = version != nullptr ? version->as_int(1) : 1;
+    if (file_version < 1) file_version = 1;
+
+    if (file_version > kSettingsVersion) {
+      // Refuse. Migrating a newer tree would rewrite data this build cannot
+      // express, and saving over the file would silently downgrade it, so the
+      // store goes read-only and the file keeps its contents.
+      std::filesystem::path backup = path_;
+      backup += ".newer";
+      std::filesystem::copy_file(path_, backup,
+                                 std::filesystem::copy_options::overwrite_existing,
+                                 ec);
+      char message[192];
+      std::snprintf(message, sizeof(message),
+                    "DLSSNR: settings file is version %d, this build writes %d; "
+                    "left untouched (copy at %s)",
+                    file_version, kSettingsVersion, backup.string().c_str());
+      reshade::log::message(reshade::log::level::error, message);
+      read_only_ = true;
+      return true;
+    }
+
+    if (file_version < kSettingsVersion) {
+      MigrateSettingsTree(root_, file_version);
+      root_["Version"] = json::Value(kSettingsVersion);
+      Save();
+    }
     return true;
   }
 
   bool Save() {
-    if (!loaded_ || path_.empty()) return false;
+    if (!loaded_ || path_.empty() || read_only_) return false;
     return WriteTextFile(path_, root_.dump());
   }
 
@@ -275,6 +307,9 @@ class JsonStore {
   json::Value root_;
   std::filesystem::path path_;
   bool loaded_ = false;
+  // Set when the file came from a newer build. The in-memory tree is then a
+  // default one and must never reach the disk.
+  bool read_only_ = false;
 };
 
 template <typename T>
@@ -457,8 +492,8 @@ feature::pass::PassId NewPassId() {
 
 void LoadSettings() {
   DLSSNR_PROFILE_CTL_L1("LoadSettings");
-  // EnsureLoaded migrates the file to the current shape (array presets,
-  // compact pass keys, no legacy counters) before anything is read.
+  // EnsureLoaded brings the file to the current format version, so everything
+  // read below already has the shape this build expects.
   JsonStore::Get().EnsureLoaded();
   LoadSettingsValues(g_settings, "");
   LoadStore(g_settings, "", ctl::PersistenceTarget::Global, true);
@@ -503,7 +538,6 @@ void SaveSettings() {
   }
 
   SaveSettingsValues(g_settings, "");
-  root["Version"] = json::Value(kSettingsVersion);
 
   // Drop any top-level key the addon no longer writes, so legacy fields from
   // older builds (PassNextId, UserPresetOrder, UserPresetNextId, ...) cannot
