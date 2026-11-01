@@ -23,6 +23,7 @@
 #include "feature/exposure_mask/settings.h"
 #include "feature/pass/settings.h"
 #include "feature/pass/ui.h"
+#include "fragments/hdr_filter_rows/rows.h"
 #include "feature/preferences/settings.h"
 #include "feature/ui_state/settings.h"
 #include "feature/ui_state/view.h"
@@ -241,10 +242,26 @@ void RemoveActivePass(Settings& settings, bool& changed) {
 
 namespace {
 
-bool FeatureRowGate(void*, ctl::ValueStore& store, const std::string& section,
-                    const ctl::InstanceKey& key) {
-  if (section != feature::exposure_mask::kSection) return true;
-  return store.Read(feature::hdr::kSection, key, feature::hdr::kEnable).as_bool;
+// Sections that are drawn but cannot be edited. A Backbuffer pass has no
+// scene-referred source, so HDR has nothing to act on there. The Exposure Mask
+// is metering input for Adaptive Exposure, so it needs HDR, that layer, and
+// that layer's mask checkbox.
+bool FeatureSectionEnabled(void*, ctl::ValueStore& store,
+                           const std::string& section,
+                           const ctl::InstanceKey& key) {
+  const int target =
+      store.Read(feature::pass::kSection, key, feature::pass::kTarget).as_int;
+  const bool backbuffer = target == 2;
+  if (section == feature::hdr::kSection) return !backbuffer;
+  if (section == feature::exposure_mask::kSection) {
+    if (backbuffer) return false;
+    const std::string adaptive = feature::hdr::kAdaptiveSection;
+    return store.Read(feature::hdr::kSection, key, feature::hdr::kEnable).as_bool &&
+           store.Read(adaptive, key, feature::hdr::kAdaptiveEnabled).as_bool &&
+           store.Read(adaptive, key,
+                      hdr_filter_rows::names::kExposureMask).as_bool;
+  }
+  return true;
 }
 
 void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
@@ -403,13 +420,15 @@ void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
   changed |= local_changed;
   SectionDivider();
   local_changed = false;
+  ctl::DrawOptions hdr_options = MakeOptions(/*headers=*/true, /*indent=*/true);
+  hdr_options.section_gate = &FeatureSectionEnabled;
   ctl::DrawSection(store, feature::hdr::kSection, key, local_changed,
-                   MakeOptions(/*headers=*/true, /*indent=*/true));
+                   hdr_options);
   changed |= local_changed;
   SectionDivider();
   local_changed = false;
   ctl::DrawOptions mask_options = MakeOptions(/*headers=*/true, /*indent=*/true);
-  mask_options.row_gate = &FeatureRowGate;
+  mask_options.section_gate = &FeatureSectionEnabled;
   ctl::DrawSection(store, feature::exposure_mask::kSection, key,
                    local_changed, mask_options);
   changed |= local_changed;
@@ -439,9 +458,6 @@ void DrawOne(ctl::ValueStore& store, const char* name, bool& changed,
   bool local_changed = false;
   ctl::DrawOptions options = MakeOptions(/*headers=*/true, /*indent=*/true);
   options.header_action = header_action;
-  if (std::string(name) == feature::exposure_mask::kSection) {
-    options.row_gate = &FeatureRowGate;
-  }
   ctl::DrawSection(store, name, ctl::InstanceKey::Shared(), local_changed,
                    options);
   changed |= local_changed;

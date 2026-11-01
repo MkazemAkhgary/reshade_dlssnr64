@@ -52,6 +52,10 @@ struct DrawOptions {
   // The header and its toggle stay interactive when a body row is gated off.
   RowGate row_gate = nullptr;
 
+  // Optional application-owned gate for the section as a whole. False leaves
+  // it drawn and expandable, but not editable.
+  RowGate section_gate = nullptr;
+
   // Draw the section header at all. Off for sections the caller inlines.
   bool draw_headers = true;
 

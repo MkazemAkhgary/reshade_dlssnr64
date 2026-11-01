@@ -249,6 +249,10 @@ bool DrawSection(ValueStore& store, const std::string& section_name,
   const Section* section = schema.FindSection(section_name);
   if (section == nullptr) return false;
 
+  const bool section_enabled =
+      options.section_gate == nullptr ||
+      options.section_gate(options.ui_context, store, section_name, key);
+
   const std::string instance_scope = section_name + "/" + key.ToText();
   ImGui::PushID(instance_scope.c_str());
 
@@ -261,7 +265,9 @@ bool DrawSection(ValueStore& store, const std::string& section_name,
     const Setting* toggle_setting =
         FindSetting(*section, section->header_toggle_setting());
     if (toggle_setting != nullptr) {
-      DrawSectionToggle(*section, store, key, *toggle_setting, local_changed);
+      WithDisabled(!section_enabled, [&] {
+        DrawSectionToggle(*section, store, key, *toggle_setting, local_changed);
+      });
     }
 
     const char* label = section->name().c_str();
@@ -285,6 +291,8 @@ bool DrawSection(ValueStore& store, const std::string& section_name,
     if (options.indent_bodies) ImGui::Indent(16.0f);
   }
 
+  // Body only: a disabled section must still open, so it can be read.
+  if (!section_enabled) ImGui::BeginDisabled();
   std::vector<std::string> active_path;
   std::vector<bool> active_open;
 
@@ -373,6 +381,7 @@ bool DrawSection(ValueStore& store, const std::string& section_name,
   }
 
   switch_path({});
+  if (!section_enabled) ImGui::EndDisabled();
   if (options.draw_headers && options.indent_bodies) ImGui::Unindent(16.0f);
 
   changed |= local_changed;
