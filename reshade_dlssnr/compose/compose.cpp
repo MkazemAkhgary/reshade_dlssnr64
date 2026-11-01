@@ -17,7 +17,8 @@ bool ComposeOutput(
     const StrengthSettings& strength,
     const ResidualSettings& residual,
     const HdrUniforms* hdr,
-    bool apply_edit_to_pre_grade) {
+    bool apply_edit_to_pre_grade,
+    ID3D12Resource* local_scale) {
   DLSSNR_PROFILE_RENDER_L2("ComposeOutput");
   if (codec == nullptr || command_list == nullptr || packed_source == nullptr ||
       hdr_source == nullptr || low_input == nullptr || low_enhanced == nullptr) {
@@ -30,6 +31,10 @@ bool ComposeOutput(
   constants.shader.Params0.x = strength.luma_strength;
   constants.shader.Params0.y = strength.chroma_strength;
   constants.shader.Params1.w = apply_edit_to_pre_grade ? 1.0f : 0.0f;
+  // A display-referred pass applies the local-exposure lift to the base rather
+  // than through the residual when the edit lands on the pre-grade image; the
+  // HDR path does the same with its base scale.
+  constants.shader.Params0.z = local_scale != nullptr ? 1.0f : 0.0f;
   constants.shader.Params1.z = residual.ratio_clamps_enabled ? 1.0f : 0.0f;
   constants.residual.EditStrength = residual.edit_strength;
   constants.residual.ChromaStrength = residual.chroma_strength;
@@ -71,10 +76,15 @@ bool ComposeOutput(
                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
   state.Transition(command_list, hdr_source,
                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  if (local_scale != nullptr) {
+    state.Transition(command_list, local_scale,
+                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
 
   ID3D12Resource* srvs[kSrvCount] = {
       packed_source, low_input, low_enhanced,
-      hdr != nullptr ? hdr_source : packed_source};
+      local_scale != nullptr ? local_scale
+                             : (hdr != nullptr ? hdr_source : packed_source)};
   ID3D12Resource* uavs[kUavCount] = {resources.GetCompositeOutput()};
 
   return codec->Dispatch(pass_name, command_list, constants, srvs, uavs);

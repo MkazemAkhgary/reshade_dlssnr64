@@ -117,38 +117,39 @@ enum class PipelineNodeId : uint32_t {
   BuildHdrUniforms = 16,
   GainMapSplit = 17,
   PrepareModelInput = 18,
-  BuildEffectiveLocalExposure = 19,
-  GradeModelInput = 20,
+  LocalExposureScale = 19,
+  BuildEffectiveLocalExposure = 20,
+  GradeModelInput = 21,
 
   // -- model evaluation -----------------------------------------------------
-  EnsureFeature = 21,
-  SnapshotGuides = 22,
+  EnsureFeature = 22,
+  SnapshotGuides = 23,
   // Motion-vector synthesis/correction: feeds the model and the reprojection
   // below, and runs even when temporal reuse is off.
-  SynthesizeMotion = 23,
-  TemporalPrepare = 24,  // reprojection/validation before the optional NGX evaluation
-  FillEvaluateParams = 25,
-  EvaluateFeature = 26,
-  ModelOutputBarrier = 27,
+  SynthesizeMotion = 24,
+  TemporalPrepare = 25,  // reprojection/validation before the optional NGX evaluation
+  FillEvaluateParams = 26,
+  EvaluateFeature = 27,
+  ModelOutputBarrier = 28,
 
   // -- post-evaluation analysis and composition ----------------------------
-  BuildExposureMask = 28,
-  ComposeModelOutput = 29,
-  ComposeModelOutputHdr = 30,
-  GradeModelOutput = 31,
+  BuildExposureMask = 29,
+  ComposeModelOutput = 30,
+  ComposeModelOutputHdr = 31,
+  GradeModelOutput = 32,
 
   // -- output ---------------------------------------------------------------
-  RenderDebugView = 32,
-  WriteToBackbuffer = 33,
-  WriteToGameResource = 34,
-  SubmitBackbuffer = 35,
+  RenderDebugView = 33,
+  WriteToBackbuffer = 34,
+  WriteToGameResource = 35,
+  SubmitBackbuffer = 36,
 
   // -- release stage --------------------------------------------------------
-  GradeBackbuffer = 36,
-  WriteDebugToBackbuffer = 37,
-  SignalHdrAtPresent = 38,
+  GradeBackbuffer = 37,
+  WriteDebugToBackbuffer = 38,
+  SignalHdrAtPresent = 39,
 
-  Count = 39
+  Count = 40
 };
 
 const char* PipelineNodeName(PipelineNodeId id);
@@ -283,11 +284,14 @@ struct PassRun {
   ID3D12Resource* model_input = nullptr;
   ID3D12Resource* model_color = nullptr;
   ID3D12Resource* model_output = nullptr;
-  // Ungraded model input at working resolution. The compose step
-  // measures the model's edit against this, so spatial preprocessing
-  // (softening, CAS) and the color curve are not amplified onto the
-  // source by a ratio against a preprocessed denominator.
+  // The image the compose divides the model output by. Set where that image
+  // is produced: model-input preparation sets the ungraded one, and the input
+  // grade replaces it when the edit is applied to the pre-grade image. A step
+  // that replaces the model input must leave it alone.
   ID3D12Resource* compose_reference = nullptr;
+  // The model input as it stood immediately before the input grade ran, for
+  // the debug view of that name. Null when no grade ran this frame.
+  ID3D12Resource* pre_grade_model_color = nullptr;
   unsigned int eval_width = 0;
   unsigned int eval_height = 0;
 
@@ -709,6 +713,7 @@ inline constexpr PipelineNodeId kPresentStepNodes[] = {
     PipelineNodeId::EnsureComputeEngine,
     PipelineNodeId::ResolveModelInput,
     PipelineNodeId::PrepareModelInput,
+    PipelineNodeId::LocalExposureScale,
     PipelineNodeId::GradeModelInput,
     PipelineNodeId::SynthesizeMotion,
     PipelineNodeId::TemporalPrepare,
@@ -738,6 +743,7 @@ inline constexpr PipelineNodeId kPreDlssStepNodes[] = {
     PipelineNodeId::GainMapSplit,
     PipelineNodeId::PrepareModelInput,
     PipelineNodeId::BuildEffectiveLocalExposure,
+    PipelineNodeId::LocalExposureScale,
     PipelineNodeId::GradeModelInput,
     PipelineNodeId::SynthesizeMotion,
     PipelineNodeId::TemporalPrepare,
@@ -767,6 +773,7 @@ inline constexpr PipelineNodeId kPostDlssStepNodes[] = {
     PipelineNodeId::GainMapSplit,
     PipelineNodeId::PrepareModelInput,
     PipelineNodeId::BuildEffectiveLocalExposure,
+    PipelineNodeId::LocalExposureScale,
     PipelineNodeId::GradeModelInput,
     PipelineNodeId::SynthesizeMotion,
     PipelineNodeId::TemporalPrepare,
@@ -809,6 +816,7 @@ inline constexpr NodeDispatchCost kNodeDispatchCosts[] = {
     {PipelineNodeId::GainMapSplit, 3},
     // Downsample, unlifted composition reference, local-exposure gain.
     {PipelineNodeId::PrepareModelInput, 3},
+    {PipelineNodeId::LocalExposureScale, 1},
     {PipelineNodeId::BuildEffectiveLocalExposure, 1},
     // ApplyGrade, plus ApplyCas on an SDR target.
     {PipelineNodeId::GradeModelInput, 2},

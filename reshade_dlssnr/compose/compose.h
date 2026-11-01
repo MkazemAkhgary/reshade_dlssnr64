@@ -27,6 +27,7 @@ bool ComposeOutput(
     const StrengthSettings& strength,
     const ResidualSettings& residual = {},
     const HdrUniforms* hdr = nullptr,
-    bool apply_edit_to_pre_grade = false);
+    bool apply_edit_to_pre_grade = false,
+    ID3D12Resource* local_scale = nullptr);
 
 }  // namespace reshade_dlssnr::model_pipeline

@@ -57,15 +57,26 @@ float3 EncodeSource(float3 lin)
     return result;
 }
 
+// The local multiplier arrives either as a carrier pair, which encodes it as
+// the ratio of the global alpha to the local alpha, or as the per-pixel scale
+// map the standalone local-exposure pass writes. In the second case t2 is not
+// bound and must not be read.
+#define kLocalScaleIsDirect (hdr.LocalExposureParams.z > 0.5)
+
 float3 RestoreExposureAt(uint2 pixel, float3 linear_rgb)
 {
     float3 result = linear_rgb;
     if (kRestoreExposureFlag >= 0.0) {
         const float2 uv = (float2(pixel) + 0.5) / float2(Width, Height);
-        const float local_inverse_scale = gLocalCarrier.SampleLevel(s0, uv, 0).a;
-        const float global_inverse_scale = gGlobalCarrier.SampleLevel(s0, uv, 0).a;
-        const float local_scale = max(
-            global_inverse_scale / max(local_inverse_scale, 1.0e-8), 1.0e-6);
+        float local_scale;
+        if (kLocalScaleIsDirect > 0.5) {
+            local_scale = max(gLocalCarrier.SampleLevel(s0, uv, 0).r, 1.0e-6);
+        } else {
+            const float local_inverse_scale = gLocalCarrier.SampleLevel(s0, uv, 0).a;
+            const float global_inverse_scale = gGlobalCarrier.SampleLevel(s0, uv, 0).a;
+            local_scale = max(
+                global_inverse_scale / max(local_inverse_scale, 1.0e-8), 1.0e-6);
+        }
         const float mode = saturate(kRestoreExposureFlag);
         float restore_scale = local_scale;
         if (mode > 0.0) {

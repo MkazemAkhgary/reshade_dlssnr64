@@ -81,7 +81,9 @@ DLSSNR_BLOCK(HdrBlock)
     // x = local exposure strength, y = max brighten stops, z = max darken
     // stops, w = model midtone target. Zero strength disables local exposure.
     float4 LocalExposure;
-    // x = neighborhood radius in source pixels, y = neighborhood tap count.
+    // x = neighborhood radius in source pixels, y = neighborhood tap count,
+    // z = the local exposure input is a per-pixel scale map rather than a
+    // carrier pair, w = restore strength.
     float4 LocalExposureParams;
 };
 

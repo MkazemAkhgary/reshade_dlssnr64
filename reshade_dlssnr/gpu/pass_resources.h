@@ -56,6 +56,13 @@ class PassResources {
                                   unsigned int width,
                                   unsigned int height);
   void ReleaseEffectiveExposureMap();
+  bool EnsureLocalExposureScale(ID3D12Device* device,
+                                unsigned int width,
+                                unsigned int height);
+  bool EnsureLiftedWorkingInput(ID3D12Device* device,
+                                const D3D12_RESOURCE_DESC& desc,
+                                unsigned int width,
+                                unsigned int height);
   bool EnsureLocalExposureRestoreResources(ID3D12Device* device,
                                            unsigned int width,
                                            unsigned int height);
@@ -107,6 +114,12 @@ class PassResources {
   }
   ID3D12Resource* GetEffectiveExposureMap() const {
     return effective_exposure_map_.Get();
+  }
+  ID3D12Resource* GetLocalExposureScale() const {
+    return local_exposure_scale_.Get();
+  }
+  ID3D12Resource* GetLiftedWorkingInput() const {
+    return lifted_working_input_.Get();
   }
   ID3D12Resource* GetLocalExposurePartialSums() const {
     return local_exposure_partial_sums_.Get();
@@ -201,6 +214,13 @@ class PassResources {
   // stores global exposure x the exact local exposure factor applied by the
   // gain-map split to that source pixel.
   OwnedTexture effective_exposure_map_;
+  // Local-exposure multiplier at the model input's resolution, written by the
+  // standalone local-exposure pass. R32_FLOAT: it is a linear factor, not a
+  // colour.
+  OwnedTexture local_exposure_scale_;
+  // The model input after the local-exposure lift, which is what the model
+  // reads on a display-referred source.
+  OwnedTexture lifted_working_input_;
   OwnedTexture local_exposure_partial_sums_;
   // One R32_FLOAT scalar holding the geometric-mean local multiplier for
   // global restoration. The per-pixel multiplier is read directly from the

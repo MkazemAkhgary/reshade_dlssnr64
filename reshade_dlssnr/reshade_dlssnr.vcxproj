@@ -89,6 +89,7 @@
     <ShaderSourceFiles Include="hdr\reduce_local_exposure_tiles.hlsl" />
     <ShaderSourceFiles Include="hdr\zero_gain_map_stats.hlsl" />
     <ShaderSourceFiles Include="hdr\zero_histogram.hlsl" />
+    <ShaderSourceFiles Include="local_exposure\local_exposure_scale.hlsl" />
     <ShaderSourceFiles Include="model\prepare_model_input.hlsl" />
     <ShaderSourceFiles Include="temporal_reprojection\apply_edit.hlsl" />
     <ShaderSourceFiles Include="temporal_reprojection\blend_cheap.hlsl" />
@@ -401,6 +402,7 @@
     <ClCompile Include="compose\steps.cpp" />
     <ClCompile Include="grade\grade.cpp" />
     <ClCompile Include="grade\steps.cpp" />
+    <ClCompile Include="local_exposure\steps.cpp" />
     <ClCompile Include="feature\local_exposure\schema.cpp" />
     <ClCompile Include="feature\local_exposure\view.cpp" />
     <ClCompile Include="motion\steps.cpp" />

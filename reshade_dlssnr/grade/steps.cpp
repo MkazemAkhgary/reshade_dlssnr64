@@ -44,8 +44,8 @@ PipelineStatus PassSession::GradeInPlace(PassRun& run, ID3D12Resource* source,
   if (self == nullptr) return PipelineStatus::Ok;
   if (source == nullptr || target == nullptr) return PipelineStatus::Ok;
   // Runs even when the grade is disabled; exposure restoration is separate.
-  const bool restoring = local_carrier != nullptr &&
-                         global_carrier != nullptr;
+  // A carrier pair arrives as two resources; a scale map arrives alone.
+  const bool restoring = local_carrier != nullptr;
   if (!grade.enabled && !restoring) return PipelineStatus::Ok;
   if (run.device == nullptr || run.codec == nullptr) return PipelineStatus::Ok;
 
@@ -91,6 +91,7 @@ PipelineStatus PassSession::StepGradeModelInput(PassRun& run) {
   if (graded == nullptr) {
     return self->FailStep("graded model input buffer is unavailable");
   }
+  run.pre_grade_model_color = run.model_color;
 
   PipelineStatus status = GradeInPlace(
       run, run.model_color, graded, grade, kGradeScratchSlotA,
@@ -98,6 +99,10 @@ PipelineStatus PassSession::StepGradeModelInput(PassRun& run) {
   if (status != PipelineStatus::Ok) return status;
 
   run.model_color = graded;
+  // Apply-to-pre-grade measures the model's edit against the graded image, so
+  // that is what the compose divides by. The lift is not part of the edit: the
+  // compose puts it on the base instead, which is how the HDR path arranges it.
+  if (run.input_grade_apply_to_pre_grade) run.compose_reference = graded;
   return PipelineStatus::Ok;
 }
 
@@ -134,27 +139,42 @@ PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
   const GradeSettings& grade = run.grade_output;
 
   // Restore model exposure after the model has reconstructed local shading.
-  // The local multiplier is read per pixel from the carrier pair. Only the
-  // global endpoint needs a reduction; there is no blurred tile map.
+  // The per-pixel multiplier is either the carrier pair, which encodes it as a
+  // ratio of two alphas, or the scale map the standalone pass writes. Only the
+  // global endpoint needs a reduction either way.
   ID3D12Resource* local_carrier = nullptr;
   ID3D12Resource* global_carrier = nullptr;
   ID3D12Resource* global_scale = nullptr;
   const LocalExposureSettings& local = run.local_exposure;
   const float restore_mode = std::clamp(local.restore_mode, 0.0f, 1.0f);
   const float restore_strength = std::clamp(local.restore_strength, 0.0f, 1.0f);
-  if (run.hdr_state.enable && local.enabled && local.restore_exposure &&
-      run.hdr_uniforms_ready && run.hdr != nullptr &&
-      run.hdr->ResolvedFormat() != HdrFormat::Sdr &&
-      run.hdr_uniforms.local_exposure_strength > 0.0f &&
-      restore_strength > 0.0f &&
-      self->resources_.GetPackedOutput() != nullptr &&
-      self->resources_.GetGlobalHdrCarrier() != nullptr) {
-    local_carrier = self->resources_.GetPackedOutput();
-    global_carrier = self->resources_.GetGlobalHdrCarrier();
+  const bool hdr_path = run.hdr_uniforms_ready && run.hdr != nullptr &&
+                        run.hdr->ResolvedFormat() != HdrFormat::Sdr;
+  const bool restoring = local.enabled && local.restore_exposure &&
+                         run.hdr_uniforms.local_exposure_strength > 0.0f &&
+                         restore_strength > 0.0f;
+  if (restoring) {
+    if (hdr_path) {
+      if (self->resources_.GetPackedOutput() != nullptr &&
+          self->resources_.GetGlobalHdrCarrier() != nullptr) {
+        local_carrier = self->resources_.GetPackedOutput();
+        global_carrier = self->resources_.GetGlobalHdrCarrier();
+      }
+    } else if (self->local_exposure_.scale_valid) {
+      local_carrier = self->resources_.GetLocalExposureScale();
+    }
+  }
+  const bool local_scale_map = local_carrier != nullptr && global_carrier == nullptr;
 
+  if (local_carrier != nullptr) {
     if (restore_mode > 0.0f) {
+      // The reduction covers the multiplier's own grid, which is the frame on
+      // the HDR path and the model input on the display-referred one.
+      const D3D12_RESOURCE_DESC local_desc = local_carrier->GetDesc();
+      const unsigned int local_width = static_cast<unsigned int>(local_desc.Width);
+      const unsigned int local_height = local_desc.Height;
       if (!self->resources_.EnsureLocalExposureRestoreResources(
-              run.device, run.width, run.height)) {
+              run.device, local_width, local_height)) {
         return self->FailStep("failed to create local exposure restore resources");
       }
 
@@ -163,15 +183,18 @@ PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
       global_scale = self->resources_.GetLocalExposureGlobalScale();
       ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
       ComputeConstants reduce_constants = {};
-      reduce_constants.Width = run.width;
-      reduce_constants.Height = run.height;
+      reduce_constants.Width = local_width;
+      reduce_constants.Height = local_height;
+      reduce_constants.hdr.LocalExposureParams.z = local_scale_map ? 1.0f : 0.0f;
       ID3D12Resource* reduce_srvs[kSrvCount] = {
           local_carrier, global_carrier, local_carrier, global_carrier};
       ID3D12Resource* reduce_uavs[kUavCount] = {tile_log_scales};
       self->command_.Transition(list, local_carrier,
                                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-      self->command_.Transition(list, global_carrier,
-                                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+      if (global_carrier != nullptr) {
+        self->command_.Transition(list, global_carrier,
+                                  D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+      }
       self->command_.Transition(list, tile_log_scales,
                                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
       if (run.codec == nullptr || !run.codec->Dispatch(
@@ -186,8 +209,8 @@ PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
       ComputeConstants global_constants = {};
       global_constants.Width = self->resources_.LocalExposurePartialWidth();
       global_constants.Height = self->resources_.LocalExposurePartialHeight();
-      global_constants.shader.Params0.x = static_cast<float>(run.width);
-      global_constants.shader.Params0.y = static_cast<float>(run.height);
+      global_constants.shader.Params0.x = static_cast<float>(local_width);
+      global_constants.shader.Params0.y = static_cast<float>(local_height);
       ID3D12Resource* global_srvs[kSrvCount] = {
           tile_log_scales, tile_log_scales, tile_log_scales, tile_log_scales};
       ID3D12Resource* global_uavs[kUavCount] = {global_scale};

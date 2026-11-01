@@ -5,6 +5,11 @@ Texture2D<float4> gLocalCarrier : register(t0);
 Texture2D<float4> gGlobalCarrier : register(t1);
 RWTexture2D<float> gTileLogScales : register(u0);
 
+// A carrier pair encodes the local multiplier as the ratio of the global alpha
+// to the local alpha. A per-pixel scale map already holds it, so it needs no
+// second input and no division.
+#define kLocalInputIsScale (hdr.LocalExposureParams.z > 0.5)
+
 groupshared float gSum[64];
 
 [numthreads(8, 8, 1)]
@@ -15,11 +20,17 @@ void CSMain(uint3 id : SV_DispatchThreadID,
     const uint local_index = group_thread_id.x + group_thread_id.y * 8;
     float value = 0.0;
     if (id.x < Width && id.y < Height) {
-        const float local_inverse_scale = gLocalCarrier.Load(int3(id.xy, 0)).a;
-        const float global_inverse_scale = gGlobalCarrier.Load(int3(id.xy, 0)).a;
-        if (isfinite(local_inverse_scale) && isfinite(global_inverse_scale) &&
-            local_inverse_scale > 0.0 && global_inverse_scale > 0.0) {
-            const float local_scale = global_inverse_scale / local_inverse_scale;
+        float local_scale;
+        if (kLocalInputIsScale > 0.5) {
+            local_scale = gLocalCarrier.Load(int3(id.xy, 0)).r;
+        } else {
+            const float local_inverse_scale = gLocalCarrier.Load(int3(id.xy, 0)).a;
+            const float global_inverse_scale = gGlobalCarrier.Load(int3(id.xy, 0)).a;
+            local_scale = local_inverse_scale > 0.0 && global_inverse_scale > 0.0
+                ? global_inverse_scale / local_inverse_scale
+                : 1.0;
+        }
+        if (isfinite(local_scale) && local_scale > 0.0) {
             value = log2(max(local_scale, 1.0e-6));
         }
     }

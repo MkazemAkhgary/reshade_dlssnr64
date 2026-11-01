@@ -98,6 +98,8 @@ constexpr PassResourceState kPassResourceStates[] = {
     {&PassResources::GetUnliftedWorkingInput, D3D12_RESOURCE_STATE_UNORDERED_ACCESS},
     {&PassResources::GetPackedOutput, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE},
     {&PassResources::GetEffectiveExposureMap, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE},
+    {&PassResources::GetLocalExposureScale, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE},
+    {&PassResources::GetLiftedWorkingInput, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE},
     {&PassResources::GetGainStats, D3D12_RESOURCE_STATE_UNORDERED_ACCESS},
     {&PassResources::GetTemporalPreviousInput, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE},
     {&PassResources::GetTemporalPreviousEdit, D3D12_RESOURCE_STATE_UNORDERED_ACCESS},
@@ -586,6 +588,7 @@ void PassSession::Shutdown(NgxRuntime& runtime) {
   temporal_.readback.Shutdown();
   temporal_ = PassTemporalState{};
   motion_ = PassMotionState{};
+  local_exposure_ = PassLocalExposureState{};
   feature_.Shutdown(runtime);
   resources_.Shutdown();
   exposure_mask_.Shutdown();
@@ -1267,6 +1270,8 @@ constexpr PipelineStepDef kSessionSteps[] = {
      &PassSession::StepSnapshotGuides, kNoDeps, StageInput::None, false},
     {PipelineNodeId::PrepareModelInput, "PrepareModelInput",
      &PassSession::StepPrepareModelInput, kNoDeps, StageInput::None, false},
+    {PipelineNodeId::LocalExposureScale, "LocalExposureScale",
+     &PassSession::StepLocalExposureScale, kNoDeps, StageInput::None, false},
     {PipelineNodeId::BuildEffectiveLocalExposure, "BuildEffectiveLocalExposure",
      &PassSession::StepBuildEffectiveLocalExposure, kNoDeps, StageInput::None, false},
     // Records through StageList(), which is the session's own list in Backbuffer

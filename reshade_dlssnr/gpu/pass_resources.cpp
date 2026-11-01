@@ -63,6 +63,32 @@ void PassResources::ReleaseEffectiveExposureMap() {
   effective_exposure_map_.Reset();
 }
 
+bool PassResources::EnsureLocalExposureScale(ID3D12Device* device,
+                                             unsigned int width,
+                                             unsigned int height) {
+  DLSSNR_PROFILE_RESOURCE_L2("PassResources::EnsureLocalExposureScale");
+  if (device == nullptr || width == 0 || height == 0) return false;
+  return local_exposure_scale_.EnsureUav(
+      device, Texture2DDesc(width, height, DXGI_FORMAT_R32_FLOAT),
+      "local_exposure_scale");
+}
+
+bool PassResources::EnsureLiftedWorkingInput(ID3D12Device* device,
+                                             const D3D12_RESOURCE_DESC& desc,
+                                             unsigned int width,
+                                             unsigned int height) {
+  DLSSNR_PROFILE_RESOURCE_L2("PassResources::EnsureLiftedWorkingInput");
+  if (device == nullptr || width == 0 || height == 0) return false;
+  if (lifted_working_input_.Matches(device, width, height, desc.Format)) {
+    return true;
+  }
+  D3D12_RESOURCE_DESC lifted_desc = desc;
+  lifted_desc.Width = width;
+  lifted_desc.Height = height;
+  return lifted_working_input_.EnsureUav(device, lifted_desc,
+                                         "lifted_working_input");
+}
+
 bool PassResources::EnsureLocalExposureRestoreResources(ID3D12Device* device,
                                                         unsigned int width,
                                                         unsigned int height) {

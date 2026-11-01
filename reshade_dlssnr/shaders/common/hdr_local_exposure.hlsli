@@ -13,6 +13,26 @@
 #define kLocalRadiusPx max(hdr.LocalExposureParams.x, 1.0)
 #define kLocalSampleCount ((uint)clamp(round(hdr.LocalExposureParams.y / 4.0) * 4.0, 4.0, 32.0))
 
+// The operator needs one thing from its source: the display-referred luminance
+// of a texel. Scene-referred input reaches that through the tone curve and the
+// exposure; display-referred input already is it. Defining
+// kLocalExposureSdrSource selects the second reading. Nothing else about the
+// operator changes, so both paths return the same multiplier for the same
+// displayed luminance.
+#if defined(kLocalExposureSdrSource)
+
+float SourceSdrLuma(float3 encoded)
+{
+    return max(dot(SrgbToLinear(encoded), kLuma709), 1e-8);
+}
+
+float SampleGlobalSdrLuma(float2 uv)
+{
+    return SourceSdrLuma(gSource.SampleLevel(s0, saturate(uv), 0).rgb);
+}
+
+#else
+
 float GlobalHdrLumaToSdr(float hdr_luma, float exposure)
 {
     const float y_exposed = max(hdr_luma, 0.0) * max(exposure, 1e-6);
@@ -33,6 +53,8 @@ float SampleGlobalSdrLuma(float2 uv)
     const float result = max(GlobalHdrLumaToSdr(hdr_luma, kExposure), 1e-8);
     return result;
 }
+
+#endif
 
 float LocalBaseLogLuma(float2 uv, float center_log2)
 {

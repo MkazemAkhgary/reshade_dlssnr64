@@ -54,8 +54,11 @@ bool ApplyGrade(CommandContext& state,
                 float restore_mode,
                 float restore_strength) {
   DLSSNR_PROFILE_RENDER_L2("ApplyGrade");
-  const bool restore_exposure =
-      local_carrier != nullptr && global_carrier != nullptr;
+  // A carrier pair arrives as two resources; a per-pixel scale map arrives
+  // alone.
+  const bool local_scale_map =
+      local_carrier != nullptr && global_carrier == nullptr;
+  const bool restore_exposure = local_carrier != nullptr;
   if (!grade.enabled && !restore_exposure) return true;
 
   if (codec == nullptr || command_list == nullptr || source == nullptr ||
@@ -73,6 +76,7 @@ bool ApplyGrade(CommandContext& state,
       restore_exposure ? std::clamp(restore_mode, 0.0f, 1.0f) : -1.0f;
   constants.hdr.LocalExposureParams.w =
       restore_exposure ? std::clamp(restore_strength, 0.0f, 1.0f) : 1.0f;
+  constants.hdr.LocalExposureParams.z = local_scale_map ? 1.0f : 0.0f;
 
   // FidelityFX CAS is defined for linear [0, 1] color. Compute its dimension-
   // dependent constants on CPU only when the option is active and the target

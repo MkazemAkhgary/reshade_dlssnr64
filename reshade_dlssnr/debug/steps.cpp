@@ -44,8 +44,13 @@ PipelineStatus PassSession::StepRenderDebugView(PassRun& run) {
     }
   }
   debug.prepared_input_height = run.eval_height;
-  if (run.compose_reference != nullptr) {
-    debug.pre_grade_input = run.compose_reference;
+  if (run.pre_grade_model_color != nullptr) {
+    debug.pre_grade_input = run.pre_grade_model_color;
+    debug.pre_grade_input_width = run.eval_width;
+    debug.pre_grade_input_height = run.eval_height;
+  } else if (run.model_color != nullptr) {
+    // No grade ran, so the model input is already the pre-grade image.
+    debug.pre_grade_input = run.model_color;
     debug.pre_grade_input_width = run.eval_width;
     debug.pre_grade_input_height = run.eval_height;
   }

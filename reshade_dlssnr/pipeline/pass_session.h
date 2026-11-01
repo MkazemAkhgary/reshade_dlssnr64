@@ -40,6 +40,15 @@ struct PassMotionState {
   bool published = false;
 };
 
+// CPU-side state of the local-exposure step.
+//
+// The scale map is a GPU resource and outlives the frame, so a reader cannot
+// tell a current map from the previous frame's by looking at it.
+struct PassLocalExposureState {
+  // True when the scale map describes this frame's model input.
+  bool scale_valid = false;
+};
+
 // All CPU-side state owned by one pass's temporal reprojection path.
 //
 // GPU history lives in PassResources; this struct holds only the policy
@@ -166,6 +175,7 @@ class PassSession {
   static PipelineStatus StepEnsureFeature(PassRun& run);
   static PipelineStatus StepSnapshotGuides(PassRun& run);
   static PipelineStatus StepPrepareModelInput(PassRun& run);
+  static PipelineStatus StepLocalExposureScale(PassRun& run);
   static PipelineStatus StepBuildEffectiveLocalExposure(PassRun& run);
   static PipelineStatus StepFillEvaluateParams(PassRun& run);
   static PipelineStatus StepEvaluateFeature(PassRun& run);
@@ -352,6 +362,7 @@ class PassSession {
 
   PassTemporalState temporal_;
   PassMotionState motion_;
+  PassLocalExposureState local_exposure_;
 
   DlssGuides* guides_ = nullptr;
   // The pass's stable id, set per RunStage call. Sessions are keyed by id,

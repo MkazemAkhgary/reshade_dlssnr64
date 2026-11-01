@@ -10,7 +10,13 @@
 Texture2D<float4>   gOriginal    : register(t0);
 Texture2D<float4>   gLowInput    : register(t1);
 Texture2D<float4>   gLowEnhanced : register(t2);
+Texture2D<float4>   gLocalScale  : register(t3);
 RWTexture2D<float4> gOutput      : register(u0);
+SamplerState        s0           : register(s0);
+
+// Set when the local-exposure lift belongs on the base rather than in the
+// residual. The HDR path does the same with its base scale.
+#define kApplyLocalScale (shader.Params0.z > 0.5)
 
 #include "common/compose_upsample.hlsli"
 
@@ -48,7 +54,14 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     // equals the reference; everywhere the base carries detail the reference
     // was averaged over, the transfer curve leaves a residue, and a lift
     // multiplies that residue by its own size.
-    const float3 base_lin = SrgbToLinearExt(original.rgb);
+    float3 base_lin = SrgbToLinearExt(original.rgb);
+    if (kApplyLocalScale > 0.5) {
+        // The multiplier is a linear factor, so it multiplies linear light.
+        // Bilinear is enough: the map is a working-resolution field and carries
+        // no detail the base does not already have.
+        const float2 uv = (float2(id.xy) + 0.5) / float2(Width, Height);
+        base_lin *= max(gLocalScale.SampleLevel(s0, uv, 0).r, 1e-4);
+    }
     const float3 in_lin = max(SrgbToLinearExt(in_rgb), 0.0);
     const float3 out_lin = max(SrgbToLinearExt(out_rgb), 0.0);
 
