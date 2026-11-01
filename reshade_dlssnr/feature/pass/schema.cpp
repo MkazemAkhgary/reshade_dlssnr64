@@ -224,6 +224,22 @@ bool DrawWorkingScaleRow(const void*, ctl::ValueStore& store,
   return local_changed;
 }
 
+// The cheap scale means nothing unless a cheap model runs, so the row follows
+// both the temporal mode and the cheap model's own toggle.
+struct CheapScaleGate {
+  const char* mode;
+  const char* enabled;
+};
+constexpr CheapScaleGate kCheapScaleGate{kTemporalMode, kTemporalCheapEnabled};
+
+bool CheapScaleEnabled(const void* context, const ctl::ValueStore& store,
+                       const ctl::InstanceKey& key,
+                       const std::string& section) {
+  const auto* gate = static_cast<const CheapScaleGate*>(context);
+  return ctl::BoolFromSetting(gate->mode, store, key, section) &&
+         ctl::BoolFromSetting(gate->enabled, store, key, section);
+}
+
 }  // namespace
 
 }  // namespace pass
@@ -367,14 +383,22 @@ void RegisterPassSchema(ctl::Schema& schema) {
                "this is the maximum; the effective cadence halves when the "
                "invalid pixel fraction is high. In Fixed mode, this is the "
                "exact cadence.");
+  pass.Add<ctl::BoolSetting>(kTemporalCheapEnabled, "Cheap Model", true)
+      .Category(kCatTemporal)
+      .Tooltip("Run a second, cheaper model on the frames between full "
+               "evaluations and take its edit where reprojection confidence is "
+               "low. Off, those frames are reconstructed from history alone, "
+               "which costs nothing extra but leaves disocclusions and fast "
+               "motion unresolved until the next full evaluation.");
   pass.Add<ctl::FloatSetting>(kTemporalCheapScale, "Cheap Model Scale", 0.5f)
       .ClampRange(0.1f, 1.0f)
-      .EnableWhen(kTemporalMode)
+      .InlineToggle(kTemporalCheapEnabled)
+      .EnableWhen(&CheapScaleEnabled, &kCheapScaleGate)
       .Category(kCatTemporal)
-      .Tooltip("Resolution of the cheaper model used on frames between model "
-               "evaluations, as a fraction of the working scale. 0.5 means "
-               "50% of the working scale resolution. Lower values are faster "
-               "but fill low-confidence reprojection areas with less detail.");
+      .Tooltip("Resolution of the cheaper model, as a fraction of the working "
+               "scale. 0.5 means 50% of the working scale resolution. Lower "
+               "values are faster but fill low-confidence reprojection areas "
+               "with less detail.");
   pass.Add<ctl::FloatSetting>(kTemporalPhotometricAbsThreshold,
                               "Photo Abs.", 0.06f)
       .ClampRange(0.001f, 0.25f)

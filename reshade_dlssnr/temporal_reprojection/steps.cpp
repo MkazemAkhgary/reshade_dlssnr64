@@ -48,6 +48,7 @@ uint64_t TemporalSettingsSignature(const PassRun& run) {
   HashTemporalValue(&hash, p.temporal_depth_rel_threshold);
   HashTemporalValue(&hash, p.temporal_max_displacement);
   HashTemporalValue(&hash, p.temporal_max_invalid_percent);
+  HashTemporalValue(&hash, p.temporal_cheap_enabled);
   HashTemporalValue(&hash, p.temporal_cheap_scale);
   HashTemporalValue(&hash, p.temporal_cadence);
   HashTemporalValue(&hash, p.temporal_fp16_history);
@@ -541,8 +542,8 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
       cheap_h = kMinWorkingResolutionHeight;
     }
 
-    if (cheap_scale < 0.999f && run.runtime != nullptr &&
-        run.codec != nullptr &&
+    if (run.pass_state.temporal_cheap_enabled && cheap_scale < 0.999f &&
+        run.runtime != nullptr && run.codec != nullptr &&
         self->feature_.HasFeature()) {
       const D3D12_RESOURCE_DESC cheap_input_desc =
           run.model_color->GetDesc();
