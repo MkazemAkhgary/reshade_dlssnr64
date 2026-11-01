@@ -16,36 +16,6 @@ RWTexture2D<float4> gOutput      : register(u0);
 
 // Shared shader state is declared by the common cbuffer/bindings includes.
 
-// Same shaping as ShapeResidual in the HDR compose, but on the SDR path's
-// log-space residual rather than a per-channel ratio. Separate functions
-// because the input spaces differ and the region protection reads a
-// different luma; the sliders are the same.
-float3 ShapeResidualSdr(float3 delta, float3 original_srgb) {
-    if (kEditGamma != 1.0 && kEditGamma > 0.0) {
-        delta = sign(delta) * pow(abs(delta), kEditGamma);
-    }
-
-    if (kResidualChroma != 1.0) {
-        const float3 kL = float3(0.2126, 0.7152, 0.0722);
-        float d_luma = dot(delta, kL);
-        delta = lerp(float3(d_luma, d_luma, d_luma), delta, kResidualChroma);
-    }
-
-    const float3 kL = float3(0.2126, 0.7152, 0.0722);
-    float luma = dot(original_srgb, kL);
-    float protect = 1.0;
-    if (kHighlightProtect > 0.0) {
-        float h = saturate((luma - 0.7) / 0.3);
-        protect *= 1.0 - kHighlightProtect * h;
-    }
-    if (kShadowProtect > 0.0) {
-        float s = saturate((0.3 - luma) / 0.3);
-        protect *= 1.0 - kShadowProtect * s;
-    }
-
-    return delta * protect * kEditStrength;
-}
-
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
@@ -72,9 +42,19 @@ void CSMain(uint3 id : SV_DispatchThreadID)
             kUpsampleSharpness, kUpsampleSharpness, in_rgb, out_rgb);
     }
 
+    // The residual is a ratio of linear light and the base is multiplied in
+    // linear light, which is what the HDR compose does. Applying the ratio to
+    // the encoded values instead is exact only where the full-resolution base
+    // equals the reference; everywhere the base carries detail the reference
+    // was averaged over, the transfer curve leaves a residue, and a lift
+    // multiplies that residue by its own size.
+    const float3 base_lin = SrgbToLinearExt(original.rgb);
+    const float3 in_lin = max(SrgbToLinearExt(in_rgb), 0.0);
+    const float3 out_lin = max(SrgbToLinearExt(out_rgb), 0.0);
+
     // The model's edit as a per-channel ratio, held in log space so the
     // compression sliders can bound it on both sides.
-    float3 residual_log = safe_log3(out_rgb) - safe_log3(in_rgb);
+    float3 residual_log = safe_log3(out_lin) - safe_log3(in_lin);
 
     if (kRatioClampsEnabled) {
         residual_log = clamp(residual_log,
@@ -90,11 +70,11 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     // reconstructs a plausible image, so its edit has to land as the model
     // produced it; inverting the grade first would move the result away from
     // that intent, not toward it.
-    const float3 protection_rgb = kApplyEditToPreGrade > 0.5 ? in_rgb : original.rgb;
-    const float3 residual_shaped = ShapeResidualSdr(residual_log, protection_rgb);
-    float3 edited = original.rgb * exp(residual_shaped);
-    float3 final_rgb = BlendYCbCr(original.rgb, edited,
+    const float3 protection_rgb = kApplyEditToPreGrade > 0.5 ? in_lin : base_lin;
+    const float3 residual_shaped = ShapeResidual(
+        residual_log, dot(protection_rgb, float3(0.2126, 0.7152, 0.0722)));
+    float3 edited = base_lin * exp(residual_shaped);
+    float3 final_lin = BlendYCbCr(base_lin, edited,
                                   kLumaStrength, kChromaStrength);
-    final_rgb = max(final_rgb, 0.0);
-    gOutput[id.xy] = float4(final_rgb, original.a);
+    gOutput[id.xy] = float4(LinearToSrgb(max(final_lin, 0.0)), original.a);
 }
