@@ -332,20 +332,33 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .Category(kCatStrength)
       .Tooltip("Blend between original and edited chroma.");
 
+  // --- Motion vectors ----------------------------------------------------
+  // A top-level row: the field it produces is what the model evaluates with, so
+  // it applies whether or not temporal reuse is enabled.
+  pass.Add<ctl::BoolSetting>(kSyntheticMotionGuides,
+                             "Correct Motion Vectors", false)
+      .Category(nullptr)
+      .Tooltip("Produce a motion field this pass can trust. The first "
+               "Pre/Post-DLSS pass of a frame keeps the game's vectors as-is, "
+               "because it processes the image they were authored for. Every "
+               "pass after it, and every Backbuffer pass, gets a corrected "
+               "field: the search is bounded to a few pixels around the game's "
+               "vector and biased toward the previous field. With no game "
+               "vectors the pass synthesizes them from colour and depth "
+               "instead. Feeds the model and temporal reprojection alike; "
+               "costs one GPU dispatch per pass and needs a usable depth "
+               "guide.");
+
   // --- Temporal Reprojection --------------------------------------------
-  pass.Add<ctl::BoolSetting>(kSyntheticMotionGuides, "Synthetic Motion Guides", false)
-      .Category(kCatTemporal)
-      .Tooltip("When native motion vectors are missing, estimate a current-to-previous "
-               "motion field by color matching constrained by current and previous depth. "
-               "This costs additional GPU work and needs a usable depth guide.");
   pass.Add<ctl::EnumSetting>(kTemporalMode, "Mode", 0)
       .Items(kTemporalNames, kTemporalTips, 3)
       .AsGroup()
       .Category(kCatTemporal)
       .Tooltip("Reuse a motion-reprojected multiplicative model edit instead "
                "of evaluating the model every frame. Requires current-frame "
-               "depth and native or synthetic motion guides; uncertain history "
-               "forces a fresh evaluation.");
+               "depth and a motion field - the game's, or one produced by "
+               "Correct Motion Vectors; uncertain history forces a fresh "
+               "evaluation.");
   pass.Add<ctl::IntSetting>(kTemporalCadence, "Cadence", 2)
       .ClampRange(2, 8)
       .EnableWhen(kTemporalMode)

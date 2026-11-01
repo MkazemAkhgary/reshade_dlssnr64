@@ -70,6 +70,13 @@
 // Weight of the fresh edit accumulated into the stored one: 1 replaces it,
 // lower converges over several refreshes.
 #define kTemporalFreshEditBlend temporal.HistoryControl.y
+// Motion-vector step mode: 0 synthesize, 1 correct the game's field,
+// 2 seed history from the game's field.
+#define kTemporalMotionMode temporal.HistoryControl.z
+// Correction search radius in working-resolution pixels, and how strongly the
+// previous field is preferred over a candidate of equal photometric cost.
+#define kTemporalMotionRadius temporal.MotionLimits.z
+#define kTemporalMotionPriorWeight temporal.MotionLimits.w
 
 #define kHistogramSampleStride histogram.Settings.x
 #define kHistogramPixelsPerThreadAxis histogram.Settings.y

@@ -41,6 +41,7 @@ const char* const kNodeNames[] = {
     "GradeModelInput",
     "EnsureFeature",
     "SnapshotGuides",
+    "SynthesizeMotion",
     "TemporalPrepare",
     "FillEvaluateParams",
     "EvaluateFeature",
@@ -120,6 +121,7 @@ const PipelineStepDef* const* StepIndex() {
       {"hdr_state.cpp", &HdrStepFor},
       {"exposure_mask.cpp", &ExposureMaskStepFor},
       {"debug_view.cpp", &DebugStepFor},
+      {"motion_steps.cpp", &MotionStepFor},
       {"addon_controller.cpp", &ControllerStepFor},
   };
 
@@ -194,6 +196,7 @@ constexpr PipelineNodeId kPresentSteps[] = {
     PipelineNodeId::ResolveModelInput,    // backbuffer -> SRV
     PipelineNodeId::PrepareModelInput,
     PipelineNodeId::GradeModelInput,
+    PipelineNodeId::SynthesizeMotion,
     PipelineNodeId::TemporalPrepare,
     PipelineNodeId::FillEvaluateParams,
     PipelineNodeId::EvaluateFeature,
@@ -275,6 +278,7 @@ constexpr PipelineNodeId kPreDlssSteps[] = {
     PipelineNodeId::PrepareModelInput,
     PipelineNodeId::BuildEffectiveLocalExposure,
     PipelineNodeId::GradeModelInput,
+    PipelineNodeId::SynthesizeMotion,
     PipelineNodeId::TemporalPrepare,
     PipelineNodeId::FillEvaluateParams,
     PipelineNodeId::EvaluateFeature,
@@ -317,6 +321,7 @@ constexpr PipelineNodeId kPostDlssSteps[] = {
     PipelineNodeId::PrepareModelInput,
     PipelineNodeId::BuildEffectiveLocalExposure,
     PipelineNodeId::GradeModelInput,
+    PipelineNodeId::SynthesizeMotion,
     PipelineNodeId::TemporalPrepare,
     PipelineNodeId::FillEvaluateParams,
     PipelineNodeId::EvaluateFeature,

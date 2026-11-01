@@ -31,6 +31,15 @@ namespace reshade_dlssnr {
 
 class ExposureMask;
 
+// CPU-side state of the motion step: the stored previous field, the frame that
+// produced it, and whether the field produced for the current frame has already
+// been published to the model.
+struct PassMotionState {
+  bool history_valid = false;
+  uint64_t history_frame = 0;
+  bool published = false;
+};
+
 // All CPU-side state owned by one pass's temporal reprojection path.
 //
 // GPU history lives in PassResources; this struct holds only the policy
@@ -45,9 +54,6 @@ struct PassTemporalState {
   bool cadence_short = false;
   uint32_t feedback_wait_frames = 0;
   float invalid_fraction = 1.0f;
-
-  bool synthetic_history_valid = false;
-  uint64_t synthetic_history_frame = 0;
 
   bool last_tick_valid = false;
   std::chrono::steady_clock::time_point last_tick{};
@@ -105,6 +111,7 @@ class PassSession {
                           IDXGISwapChain* swapchain,
                           feature::pass::PassId pass_id = 0,
                           uint64_t frame_id = 0,
+                          uint32_t frame_pass_index = 0,
                           ID3D12Fence* temporal_feedback_fence = nullptr,
                           uint64_t temporal_feedback_fence_value = 0);
 
@@ -165,6 +172,7 @@ class PassSession {
   static PipelineStatus StepModelOutputBarrier(PassRun& run);
   static PipelineStatus StepComposeModelOutput(PassRun& run);
   static PipelineStatus StepGradeModelInput(PassRun& run);
+  static PipelineStatus StepSynthesizeMotion(PassRun& run);
   static PipelineStatus StepTemporalPrepare(PassRun& run);
   static PipelineStatus StepGradeModelOutput(PassRun& run);
   static PipelineStatus StepRenderDebugView(PassRun& run);
@@ -225,6 +233,7 @@ class PassSession {
                   IDXGISwapChain* swapchain,
                   feature::pass::PassId pass_id = 0,
                   uint64_t frame_id = 0,
+                  uint32_t frame_pass_index = 0,
                   ID3D12Fence* temporal_feedback_fence = nullptr,
                   uint64_t temporal_feedback_fence_value = 0);
 
@@ -342,6 +351,7 @@ class PassSession {
   ExposureMask exposure_mask_;
 
   PassTemporalState temporal_;
+  PassMotionState motion_;
 
   DlssGuides* guides_ = nullptr;
   // The pass's stable id, set per RunStage call. Sessions are keyed by id,

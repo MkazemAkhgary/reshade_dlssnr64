@@ -56,7 +56,11 @@ constexpr uint32_t kMaxDispatchesPerFrame = kMaxPasses * 19 + 10 + 3;
 constexpr uint32_t kDescriptorRingSize =
     kMaxFramesInFlight * kMaxDispatchesPerFrame;
 
-constexpr uint32_t kSrvCount = 4;
+// Six SRV slots: the motion-vector step reads current/previous colour, current
+// and previous depth, the game's motion field, and its own previous field.
+// Every other pass binds t0..t3 and repeats t0 for the rest; BindAndDispatch
+// substitutes t0 for a null slot, so a four-entry initializer stays valid.
+constexpr uint32_t kSrvCount = 6;
 constexpr uint32_t kUavCount = 2;
 constexpr uint32_t kCbvCount = 1;
 constexpr uint32_t kDescriptorsPerDispatch = kSrvCount + kUavCount + kCbvCount;
@@ -69,11 +73,12 @@ class ComputeEngine {
   // compiled by the background worker; a post-ready miss gets one fallback
   // compile attempt and then is remembered as failed.
   //
-  // `srvs` must point to an array of exactly kSrvCount valid
-  // resources (t0..tN-1). `uavs` must point to an array of exactly
+  // `srvs` must point to an array of exactly kSrvCount resources
+  // (t0..tN-1). `uavs` must point to an array of exactly
   // kUavCount valid resources (u0..uN-1). Fill unused slots by
-  // repeating an already-bound resource. See the descriptor layout
-  // contract above for details.
+  // repeating an already-bound resource, or leave them null: a null slot is
+  // bound as t0, which is what a shader that does not read it expects. See the
+  // descriptor layout contract above for details.
   //
   // By default the thread-group grid is derived from constants.Width/Height
   // assuming an 8x8 thread group (matches the built-in passes). Pass

@@ -69,13 +69,15 @@
     <ShaderSourceFiles Include="common\luma.hlsli" />
     <ShaderSourceFiles Include="common\math.hlsli" />
     <ShaderSourceFiles Include="common\params.h" />
+    <ShaderSourceFiles Include="common\registers.hlsli" />
     <ShaderSourceFiles Include="common\temporal_helpers.hlsli" />
     <ShaderSourceFiles Include="common\temporal_motion.hlsli" />
-    <ShaderSourceFiles Include="common\registers.hlsli" />
     <ShaderSourceFiles Include="compose\compose_model_output.hlsl" />
     <ShaderSourceFiles Include="compose\compose_model_output_hdr.hlsl" />
     <ShaderSourceFiles Include="debug\debug_display.hlsl" />
     <ShaderSourceFiles Include="debug\debug_hdr_roundtrip.hlsl" />
+    <ShaderSourceFiles Include="exposure_mask\build_exposure_mask.hlsl" />
+    <ShaderSourceFiles Include="exposure_mask\classify_exposure_mask.hlsl" />
     <ShaderSourceFiles Include="grade\apply_cas.hlsl" />
     <ShaderSourceFiles Include="grade\apply_grade.hlsl" />
     <ShaderSourceFiles Include="hdr\build_effective_local_exposure.hlsl" />
@@ -87,8 +89,6 @@
     <ShaderSourceFiles Include="hdr\reduce_local_exposure_tiles.hlsl" />
     <ShaderSourceFiles Include="hdr\zero_gain_map_stats.hlsl" />
     <ShaderSourceFiles Include="hdr\zero_histogram.hlsl" />
-    <ShaderSourceFiles Include="exposure_mask\build_exposure_mask.hlsl" />
-    <ShaderSourceFiles Include="exposure_mask\classify_exposure_mask.hlsl" />
     <ShaderSourceFiles Include="model\prepare_model_input.hlsl" />
     <ShaderSourceFiles Include="temporal_reprojection\apply_edit.hlsl" />
     <ShaderSourceFiles Include="temporal_reprojection\blend_cheap.hlsl" />
@@ -270,7 +270,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="project_constants.h" />
-    <ClInclude Include="util\log_once.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="profiling\tracy_integration.h" />
     <ClInclude Include="profiling\profile.h" />
@@ -311,6 +310,7 @@
     <ClInclude Include="compose\settings.h" />
     <ClInclude Include="grade\grade.h" />
     <ClInclude Include="grade\settings.h" />
+    <ClInclude Include="temporal_reprojection\stats.h" />
     <ClInclude Include="exposure_mask\exposure_mask.h" />
     <ClInclude Include="exposure_mask\settings.h" />
     <ClInclude Include="state\settings.h" />
@@ -335,13 +335,13 @@
     <ClInclude Include="fragments\hdr_filter_rows\rows.h" />
     <ClInclude Include="feature\debug_log\settings.h" />
     <ClInclude Include="feature\debug_log\view.h" />
+    <ClInclude Include="feature\exposure_mask\settings.h" />
+    <ClInclude Include="feature\exposure_mask\view.h" />
     <ClInclude Include="feature\grade\settings.h" />
     <ClInclude Include="feature\grade\view.h" />
     <ClInclude Include="feature\hdr\settings.h" />
     <ClInclude Include="feature\hdr\ui.h" />
     <ClInclude Include="feature\hdr\view.h" />
-    <ClInclude Include="feature\exposure_mask\settings.h" />
-    <ClInclude Include="feature\exposure_mask\view.h" />
     <ClInclude Include="feature\pass\settings.h" />
     <ClInclude Include="feature\pass\ui.h" />
     <ClInclude Include="feature\pass\view.h" />
@@ -350,6 +350,7 @@
     <ClInclude Include="feature\settings_store.h" />
     <ClInclude Include="feature\ui_state\settings.h" />
     <ClInclude Include="feature\ui_state\view.h" />
+    <ClInclude Include="util\log_once.h" />
     <ClCompile Include="addon.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
@@ -364,7 +365,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <ForcedIncludeFiles></ForcedIncludeFiles>
     </ClCompile>
-    <ClCompile Include="$(DlssnrBytecodeSource)">
+    <ClCompile Include="generated\shader_bytecode.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <ForcedIncludeFiles></ForcedIncludeFiles>
     </ClCompile>
@@ -396,6 +397,7 @@
     <ClCompile Include="compose\steps.cpp" />
     <ClCompile Include="grade\grade.cpp" />
     <ClCompile Include="grade\steps.cpp" />
+    <ClCompile Include="motion\steps.cpp" />
     <ClCompile Include="temporal_reprojection\steps.cpp" />
     <ClCompile Include="exposure_mask\exposure_mask.cpp" />
     <ClCompile Include="state\settings.cpp" />
@@ -420,13 +422,13 @@
     <ClCompile Include="fragments\hdr_filter_rows\rows.cpp" />
     <ClCompile Include="feature\debug_log\schema.cpp" />
     <ClCompile Include="feature\debug_log\view.cpp" />
+    <ClCompile Include="feature\exposure_mask\schema.cpp" />
+    <ClCompile Include="feature\exposure_mask\view.cpp" />
     <ClCompile Include="feature\grade\schema.cpp" />
     <ClCompile Include="feature\grade\view.cpp" />
     <ClCompile Include="feature\hdr\schema.cpp" />
     <ClCompile Include="feature\hdr\ui.cpp" />
     <ClCompile Include="feature\hdr\view.cpp" />
-    <ClCompile Include="feature\exposure_mask\schema.cpp" />
-    <ClCompile Include="feature\exposure_mask\view.cpp" />
     <ClCompile Include="feature\pass\schema.cpp" />
     <ClCompile Include="feature\pass\view.cpp" />
     <ClCompile Include="feature\preferences\schema.cpp" />

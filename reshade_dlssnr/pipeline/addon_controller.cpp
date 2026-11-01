@@ -107,11 +107,14 @@ PipelineStatus AddonController::RunPassStage(const PipelineStageDef& stage,
     }
   }
 
-  return slot->RunStage(
+  const PipelineStatus status = slot->RunStage(
       stage, settings, codec_, runtime_, command_list, output_resource,
       is_first_pass, frame_debug_, &slot->Hdr(), previous_hdr, &pass1_command_,
       &slot->Mask(), exposure_texture, command_queue, swapchain, pass_id,
-      run_frame_id, feedback_fence, feedback_fence_value);
+      run_frame_id, frame_pass_count_, feedback_fence, feedback_fence_value);
+  // A pass that ran consumes a slot in the frame; a skipped one does not.
+  if (status == PipelineStatus::Ok) ++frame_pass_count_;
+  return status;
 }
 
 PipelineStatus AddonController::RunSingleStage(
@@ -495,6 +498,9 @@ void AddonController::OnPresent(
   }
 
   if (sync) SyncRetiredResources(command_queue, marker);
+
+  // A presented frame ends here, so the next pass is first again.
+  frame_pass_count_ = 0;
 }
 
 uint64_t AddonController::RunPresentFrame(

@@ -185,6 +185,8 @@ reshade_dlssnr/
     trace.h                         Settings trace interface
     trace.cpp                       Settings change tracing
     version.h                       Addon version constant
+  motion/
+    steps.cpp                       Motion-vector synthesis and correction step
   temporal_reprojection/
     steps.cpp                       Temporal prepare/commit steps and reuse policy
     stats.h                         Live reprojection snapshot published to the overlay
@@ -273,6 +275,7 @@ GainMapSplit
 PrepareModelInput
 BuildEffectiveLocalExposure
 GradeModelInput
+SynthesizeMotion
 TemporalPrepare
 FillEvaluateParams
 EvaluateFeature
@@ -318,6 +321,7 @@ EnsureComputeEngine
 ResolveModelInput
 PrepareModelInput
 GradeModelInput
+SynthesizeMotion
 TemporalPrepare
 FillEvaluateParams
 EvaluateFeature
@@ -520,7 +524,7 @@ Pipeline step definitions can live in the file that owns their concern. `pass_se
 
 ### Temporal edit reprojection
 
-Temporal reprojection runs after `GradeModelInput` and before `FillEvaluateParams`/NGX evaluation on each pass. It expresses the model's per-channel edit as bounded log gain, reprojects the stored edit with the current motion vectors, and scores how far that reprojected value can be trusted.
+Temporal reprojection runs after `SynthesizeMotion` and before `FillEvaluateParams`/NGX evaluation on each pass. It expresses the model's per-channel edit as bounded log gain, reprojects the stored edit with the current motion vectors, and scores how far that reprojected value can be trusted.
 
 **Confidence is continuous, and each term is a deadzone.** The score combines agreement with the stored edit's own neighbourhood in YCoCg, photometric agreement between the current and reprojected previous input, and a depth-discontinuity test. Each term is full confidence inside half its tolerance and falls to zero at the tolerance. A term that leaks weight on every pixel becomes a periodic gain step, because a reuse frame sits between two full-weight fresh frames. Depth is a disocclusion gate, not a confidence measure, so it is weighted the same way rather than scaling linearly with the depth error.
 
@@ -658,7 +662,11 @@ JSON is the default because the JSON store is rewritten wholesale: `state/settin
 
 **The debug selection is not per-pass.** The active UI tab selects which pass renders the shared debug view. Temporal reprojection adds `Temporal Candidate Status`, `Temporal Validation Status`, and `Temporal Reprojected Edit`; unavailable history is blue, accepted pixels are green, photometric mismatches are yellow, depth/guide rejection is magenta, and rejected/no-candidate pixels are red or dark in the edit view.
 
-**Synthetic Motion Guides are optional and pass-scoped.** When enabled and no native motion texture is available, the pass searches the previous image at working resolution and scores candidates against current/previous depth to reject cross-surface matches. The generated current-to-previous vector field is supplied to NGX and temporal reprojection; ambiguous/disoccluded pixels fall back to zero motion. The extra optical-flow dispatch is opt-in because of its GPU cost, and requires a usable depth guide.
+**Motion-vector correction is its own step, and the pass decides whether it applies.** `SynthesizeMotion` runs before `TemporalPrepare` in every stage, because the field it produces is what the model evaluates with: it applies with temporal reuse off, and it feeds both consumers. `Correct Motion Vectors` opts in.
+
+Which passes need a corrected field follows from what the vectors describe. The game's vectors are authored for its render-resolution image and DLSS consumes them there, so the **first** Pre/Post-DLSS pass of a frame takes them as-is - that pass runs on exactly that image. Everything after it, and every Backbuffer pass, does not: the Backbuffer has been through the game's post-processing and is not the DLSS render, and a later pass consumes the previous pass's result. `PassRun::frame_pass_index` carries the position; the controller increments it across all three stages within one presented frame and resets it at the frame boundary, so a pass that skipped does not consume a slot.
+
+Three cases, one dispatch each. With no game field the pass synthesizes one: a search over the previous image at working resolution, seeded by the field produced last frame and scored against current and previous depth. With a game field and no stored field it seeds - it records the game's vector and leaves the model reading the game's own texture, so the first frame that could correct is never second-guessed. After that it corrects: a search bounded by `kCorrectionRadius`, biased toward the previous field by `kPriorWeight`, where an ambiguous or disoccluded pixel keeps the game's vector. Depth is the only guide the step requires; publishing a produced field marks the guide state valid, which is what makes the parameter fill and the debug views read it. A first Pre/Post pass with a game field returns before allocating anything.
 
 **Temporal reprojection is configured per pass and sits before Advanced/model grading.** The `Temporal Reprojection` section follows Strength and precedes the Advanced settings and grade-boundary sections. Mode defaults to Off. Its controls expose absolute/relative photometric thresholds, absolute/relative depth thresholds, maximum working-resolution motion displacement, and the maximum invalid-pixel percentage that shortens the reuse window. Defaults are 0.06/0.10 photometric, 0.005/0.03 depth, 40 working pixels, and 15% invalid/mismatched pixels. Threshold changes are included in the temporal-history signature and invalidate stale history. The category ends with the live reprojection readout, drawn as a schema hook row rather than a separate section, so its collapsible is the category header. The pass-tab row wraps when buttons no longer fit beside the toolbar.
 

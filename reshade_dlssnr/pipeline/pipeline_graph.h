@@ -121,29 +121,32 @@ enum class PipelineNodeId : uint32_t {
   // -- model evaluation -----------------------------------------------------
   EnsureFeature = 21,
   SnapshotGuides = 22,
-  TemporalPrepare = 23,  // reprojection/validation before the optional NGX evaluation
-  FillEvaluateParams = 24,
-  EvaluateFeature = 25,
-  ModelOutputBarrier = 26,
+  // Motion-vector synthesis/correction: feeds the model and the reprojection
+  // below, and runs even when temporal reuse is off.
+  SynthesizeMotion = 23,
+  TemporalPrepare = 24,  // reprojection/validation before the optional NGX evaluation
+  FillEvaluateParams = 25,
+  EvaluateFeature = 26,
+  ModelOutputBarrier = 27,
 
   // -- post-evaluation analysis and composition ----------------------------
-  BuildExposureMask = 27,
-  ComposeModelOutput = 28,
-  ComposeModelOutputHdr = 29,
-  GradeModelOutput = 30,
+  BuildExposureMask = 28,
+  ComposeModelOutput = 29,
+  ComposeModelOutputHdr = 30,
+  GradeModelOutput = 31,
 
   // -- output ---------------------------------------------------------------
-  RenderDebugView = 31,
-  WriteToBackbuffer = 32,
-  WriteToGameResource = 33,
-  SubmitBackbuffer = 34,
+  RenderDebugView = 32,
+  WriteToBackbuffer = 33,
+  WriteToGameResource = 34,
+  SubmitBackbuffer = 35,
 
   // -- release stage --------------------------------------------------------
-  GradeBackbuffer = 35,
-  WriteDebugToBackbuffer = 36,
-  SignalHdrAtPresent = 37,
+  GradeBackbuffer = 36,
+  WriteDebugToBackbuffer = 37,
+  SignalHdrAtPresent = 38,
 
-  Count = 38
+  Count = 39
 };
 
 const char* PipelineNodeName(PipelineNodeId id);
@@ -229,6 +232,10 @@ struct PassRun {
   // one presentation frame share this value so duplicate view evaluations
   // cannot incorrectly reuse another view's edit history.
   uint64_t frame_id = 0;
+  // Position of this pass among those that run in one presented frame, in
+  // execution order. The motion step uses it to decide whether the game's
+  // field describes this pass's input.
+  uint32_t frame_pass_index = 0;
   ID3D12Fence* temporal_feedback_fence = nullptr;
   uint64_t temporal_feedback_fence_value = 0;
   bool temporal_active = false;
@@ -699,6 +706,7 @@ inline constexpr PipelineNodeId kPresentStepNodes[] = {
     PipelineNodeId::ResolveModelInput,
     PipelineNodeId::PrepareModelInput,
     PipelineNodeId::GradeModelInput,
+    PipelineNodeId::SynthesizeMotion,
     PipelineNodeId::TemporalPrepare,
     PipelineNodeId::FillEvaluateParams,
     PipelineNodeId::EvaluateFeature,
@@ -727,6 +735,7 @@ inline constexpr PipelineNodeId kPreDlssStepNodes[] = {
     PipelineNodeId::PrepareModelInput,
     PipelineNodeId::BuildEffectiveLocalExposure,
     PipelineNodeId::GradeModelInput,
+    PipelineNodeId::SynthesizeMotion,
     PipelineNodeId::TemporalPrepare,
     PipelineNodeId::FillEvaluateParams,
     PipelineNodeId::EvaluateFeature,
@@ -755,6 +764,7 @@ inline constexpr PipelineNodeId kPostDlssStepNodes[] = {
     PipelineNodeId::PrepareModelInput,
     PipelineNodeId::BuildEffectiveLocalExposure,
     PipelineNodeId::GradeModelInput,
+    PipelineNodeId::SynthesizeMotion,
     PipelineNodeId::TemporalPrepare,
     PipelineNodeId::FillEvaluateParams,
     PipelineNodeId::EvaluateFeature,
@@ -780,6 +790,7 @@ const PipelineStepDef* HdrStepFor(PipelineNodeId id);
 const PipelineStepDef* ExposureMaskStepFor(PipelineNodeId id);
 const PipelineStepDef* DebugStepFor(PipelineNodeId id);
 const PipelineStepDef* ControllerStepFor(PipelineNodeId id);
+const PipelineStepDef* MotionStepFor(PipelineNodeId id);
 
 template <size_t N>
 const PipelineStepDef* FindStepDef(const PipelineStepDef (&defs)[N],

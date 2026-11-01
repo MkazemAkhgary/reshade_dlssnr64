@@ -274,6 +274,8 @@ PassStatus PassSession::GetStatus() const {
                  resources_.GetSyntheticCurrentDepth());
   AppendResource(s.resources, "synthetic_motion",
                  resources_.GetSyntheticMotion());
+  AppendResource(s.resources, "synthetic_previous_motion",
+                 resources_.GetSyntheticPreviousMotion());
   for (uint32_t i = 0; i < kScratchCount; ++i) {
     char name[16];
     std::snprintf(name, sizeof(name), "scratch[%u]", i);
@@ -582,6 +584,7 @@ void PassSession::Shutdown(NgxRuntime& runtime) {
 
   temporal_.readback.Shutdown();
   temporal_ = PassTemporalState{};
+  motion_ = PassMotionState{};
   feature_.Shutdown(runtime);
   resources_.Shutdown();
   exposure_mask_.Shutdown();
@@ -616,6 +619,7 @@ void PassSession::PrepareRun(PassRun& run,
                              IDXGISwapChain* swapchain,
                              feature::pass::PassId pass_id,
                              uint64_t frame_id,
+                             uint32_t frame_pass_index,
                              ID3D12Fence* temporal_feedback_fence,
                              uint64_t temporal_feedback_fence_value) {
   // Set before anything can read it: PrepareRun keys the store by it.
@@ -633,6 +637,7 @@ void PassSession::PrepareRun(PassRun& run,
   run.game_exposure_texture = game_exposure_texture;
   run.frame_debug = &frame_debug;
   run.frame_id = frame_id;
+  run.frame_pass_index = frame_pass_index;
   run.temporal_feedback_fence = temporal_feedback_fence;
   run.temporal_feedback_fence_value = temporal_feedback_fence_value;
 
@@ -712,6 +717,7 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
                                      IDXGISwapChain* swapchain,
                                      feature::pass::PassId pass_id,
                                      uint64_t frame_id,
+                                     uint32_t frame_pass_index,
                                      ID3D12Fence* temporal_feedback_fence,
                                      uint64_t temporal_feedback_fence_value) {
   DLSSNR_PROFILE_RENDER_L1("PassSession::RunStage");
@@ -746,7 +752,7 @@ PipelineStatus PassSession::RunStage(const PipelineStageDef& stage,
   PrepareRun(run, settings, codec, runtime, command_list, output_resource,
              is_first_pass, frame_debug, hdr, previous_hdr, hdr_cmd, exposure_mask,
              game_exposure_texture, command_queue, swapchain, pass_id,
-             frame_id, temporal_feedback_fence,
+             frame_id, frame_pass_index, temporal_feedback_fence,
              temporal_feedback_fence_value);
 
   codec.InvalidateBindings();

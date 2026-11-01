@@ -192,6 +192,8 @@ bool PassResources::EnsureSyntheticMotionResources(
                                        DXGI_FORMAT_R32_FLOAT) &&
       synthetic_motion_.Matches(device, width, height,
                                 DXGI_FORMAT_R32G32_FLOAT) &&
+      synthetic_previous_motion_.Matches(device, width, height,
+                                         DXGI_FORMAT_R32G32_FLOAT) &&
       synthetic_width_ == width && synthetic_height_ == height &&
       synthetic_input_format_ == input_desc.Format;
   if (matches) return true;
@@ -200,6 +202,7 @@ bool PassResources::EnsureSyntheticMotionResources(
   synthetic_previous_depth_.Reset();
   synthetic_current_depth_.Reset();
   synthetic_motion_.Reset();
+  synthetic_previous_motion_.Reset();
 
   const D3D12_RESOURCE_DESC input_copy_desc = TextureCopyDesc(input_desc);
   if (!synthetic_previous_input_.Ensure(
@@ -214,11 +217,15 @@ bool PassResources::EnsureSyntheticMotionResources(
           "synthetic_current_depth") ||
       !synthetic_motion_.EnsureUav(
           device, Texture2DDesc(width, height, DXGI_FORMAT_R32G32_FLOAT),
-          "synthetic_motion")) {
+          "synthetic_motion") ||
+      !synthetic_previous_motion_.EnsureUav(
+          device, Texture2DDesc(width, height, DXGI_FORMAT_R32G32_FLOAT),
+          "synthetic_previous_motion")) {
     synthetic_previous_input_.Reset();
     synthetic_previous_depth_.Reset();
     synthetic_current_depth_.Reset();
     synthetic_motion_.Reset();
+    synthetic_previous_motion_.Reset();
     return false;
   }
 
@@ -386,6 +393,7 @@ void PassResources::Shutdown() {
   synthetic_previous_depth_.Reset();
   synthetic_current_depth_.Reset();
   synthetic_motion_.Reset();
+  synthetic_previous_motion_.Reset();
 
   for (uint32_t i = 0; i < kScratchCount; ++i) scratch_[i].Reset();
 

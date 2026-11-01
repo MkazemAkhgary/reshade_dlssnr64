@@ -318,6 +318,10 @@ class AddonController {
   // mutex that guards every other controller entry point.
   StatusSnapshot status_;
 
+  // Passes that have run this presented frame, across all three stages. The
+  // motion step uses it to tell the first pass from the ones after it.
+  uint32_t frame_pass_count_ = 0;
+
   // Sticky until cleared by SetPostDlssBlocked(nullptr). Copied into the
   // status snapshot by RefreshStatus.
   bool post_dlss_blocked_ = false;

@@ -128,10 +128,12 @@ bool ComputeEngine::BindAndDispatch(
   gpu_handle.ptr += static_cast<UINT64>(slot) *
                     kDescriptorsPerDispatch * descriptor_size_;
 
+  // A null slot is bound as t0; Dispatch has already rejected a null t0.
   for (uint32_t i = 0; i < kSrvCount; ++i) {
     D3D12_CPU_DESCRIPTOR_HANDLE handle = cpu_handle;
     handle.ptr += static_cast<SIZE_T>(i) * descriptor_size_;
-    CreateShaderResourceView(srvs[i], handle);
+    ID3D12Resource* resource = srvs[i] != nullptr ? srvs[i] : srvs[0];
+    CreateShaderResourceView(resource, handle);
   }
 
   for (uint32_t i = 0; i < kUavCount; ++i) {
@@ -504,14 +506,11 @@ bool ComputeEngine::Dispatch(
     return false;
   }
 
-  // Every descriptor slot is consumed unconditionally below. Reject a null
-  // resource before CreateShaderResourceView/CreateUnorderedAccessView can
-  // dereference it. Callers should repeat an otherwise-unused valid resource
-  // to satisfy the fixed descriptor-table contract.
-  for (uint32_t i = 0; i < kSrvCount; ++i) {
-    if (srvs[i] == nullptr) return false;
-  }
-  if (uavs[0] == nullptr) return false;
+  // t0 and u0 have to be real: every shader reads them, and a dispatch with no
+  // resource at all has nothing to sample. The remaining slots may be null and
+  // are bound as t0/u0, so a caller only fills what its shader reads - the
+  // descriptor table is fixed, but the resources behind it need not be.
+  if (srvs[0] == nullptr || uavs[0] == nullptr) return false;
 
   ID3D12PipelineState* pso = nullptr;
 

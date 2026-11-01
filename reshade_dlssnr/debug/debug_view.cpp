@@ -147,8 +147,9 @@ const DebugViewDef kDebugViews[] = {
      "composed with the source. This is what gets written to the target.",
      DebugDisplayMode::Color, SelectComposedOutput},
     {"Motion Vectors",
-     "The motion vectors the game supplied to DLSS. Shown as R = x "
-     "direction, G = y direction.",
+     "The motion field this pass evaluates with: the game's vectors, or the "
+     "field Correct Motion Vectors produced for it. Shown as R = x direction, "
+     "G = y direction.",
      DebugDisplayMode::Motion, SelectMotion},
     {"Depth",
      "The depth buffer the game supplied to DLSS. Shown as grayscale.",

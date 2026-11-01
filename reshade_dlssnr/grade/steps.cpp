@@ -111,37 +111,6 @@ PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
   if (!run.pass_bound || run.session == nullptr) return PipelineStatus::Ok;
   PassSession* self = run.session;
 
-  // Keep the synthetic guide history after the current model evaluation has
-  // consumed the generated vector field. Update only after a successful model
-  // result so a failed frame cannot become the next motion reference.
-  if (run.synthetic_motion_ready && run.eval_result == NVSDK_NGX_Result_Success &&
-      run.resources != nullptr && run.model_color != nullptr) {
-    ID3D12GraphicsCommandList* list = self->StageList(run, self->command_);
-    ID3D12Resource* previous_input = run.resources->GetSyntheticPreviousInput();
-    ID3D12Resource* previous_depth = run.resources->GetSyntheticPreviousDepth();
-    ID3D12Resource* current_depth = run.resources->GetSyntheticCurrentDepth();
-    if (list != nullptr && previous_input != nullptr && previous_depth != nullptr &&
-        current_depth != nullptr) {
-      const D3D12_RESOURCE_STATES input_state =
-          self->command_.GetResourceState(run.model_color);
-      self->command_.CopyWithTransitions(
-          list, run.model_color,
-          input_state == D3D12_RESOURCE_STATE_COMMON
-              ? D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE
-              : input_state,
-          previous_input, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-      self->command_.CopyWithTransitions(
-          list, current_depth, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-          previous_depth, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-      self->temporal_.synthetic_history_valid = true;
-      self->temporal_.synthetic_history_frame = run.frame_id;
-    } else {
-      self->temporal_.synthetic_history_valid = false;
-      self->temporal_.synthetic_history_frame = 0;
-    }
-  }
-
   // Observer-only: snapshot the ungraded model output for the "raw" debug
   // view before the Output Grade overwrites it. Gated on the view being
   // selected by the active pass; no cost otherwise.

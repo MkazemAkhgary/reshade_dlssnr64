@@ -130,6 +130,9 @@ class PassResources {
     return synthetic_current_depth_.Get();
   }
   ID3D12Resource* GetSyntheticMotion() const { return synthetic_motion_.Get(); }
+  ID3D12Resource* GetSyntheticPreviousMotion() const {
+    return synthetic_previous_motion_.Get();
+  }
   ID3D12Resource* GetTemporalPreviousInput() const {
     return temporal_previous_input_.Get();
   }
@@ -225,6 +228,9 @@ class PassResources {
   OwnedTexture synthetic_previous_depth_;
   OwnedTexture synthetic_current_depth_;
   OwnedTexture synthetic_motion_;
+  // Last frame's produced field. The motion step corrects the game's vectors
+  // against it and seeds the synthesised ones from it.
+  OwnedTexture synthetic_previous_motion_;
   // Shape of the last synthetic/temporal set, so a size or format change can
   // force history invalidation.
   unsigned int synthetic_width_ = 0;
