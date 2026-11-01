@@ -21,7 +21,17 @@ void Tip(const char* fmt, ...) {
   if (!g_show_tooltips || fmt == nullptr) return;
   va_list args;
   va_start(args, fmt);
-  ImGui::SetTooltipV(fmt, args);
+  // A tooltip is drawn as one line, and the longest in the schema are wider
+  // than the display. Wrap at a fixed column, narrowed when the display is
+  // narrower than that. A newline in the text still starts a line.
+  const float wrap_width =
+      std::min(ImGui::GetFontSize() * 35.0f,
+               ImGui::GetIO().DisplaySize.x * 0.8f);
+  ImGui::BeginTooltip();
+  ImGui::PushTextWrapPos(wrap_width);
+  ImGui::TextV(fmt, args);
+  ImGui::PopTextWrapPos();
+  ImGui::EndTooltip();
   va_end(args);
 }
 
