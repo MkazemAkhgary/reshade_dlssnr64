@@ -77,30 +77,6 @@ HdrSnapshotView Read(const ctl::ValueStore& store,
     a.filters = ReadFilters(store, key, sec);
   }
 
-  // Local layer.
-  {
-    const std::string sec = kLocalSection;
-    LocalExposureLayerSettings& l = s.local_exposure;
-    l.enabled = store.Read(sec, key, kLocalEnabled).as_bool;
-    l.strength = store.Read(sec, key, kLocalStrength).as_float;
-    l.max_brighten = store.Read(sec, key, kLocalMaxBrighten).as_float;
-    l.max_darken = store.Read(sec, key, kLocalMaxDarken).as_float;
-    l.midtone = store.Read(sec, key, kLocalMidtone).as_float;
-    l.shadow_strength = store.Read(sec, key, kLocalShadowStrength).as_float;
-    l.highlight_strength = store.Read(sec, key, kLocalHighlightStrength).as_float;
-    l.shadow_range = store.Read(sec, key, kLocalShadowRange).as_float;
-    l.highlight_range = store.Read(sec, key, kLocalHighlightRange).as_float;
-    l.highlight_protection = store.Read(sec, key, kLocalHighlightProtection).as_float;
-    l.shadow_protection = store.Read(sec, key, kLocalShadowProtection).as_float;
-    l.detail_retention = store.Read(sec, key, kLocalDetailRetention).as_float;
-    l.edge_protection = store.Read(sec, key, kLocalEdgeProtection).as_float;
-    l.radius_px = store.Read(sec, key, kLocalRadius).as_float;
-    l.samples = store.Read(sec, key, kLocalSamples).as_int;
-    l.restore_exposure = store.Read(sec, key, kLocalRestoreEnabled).as_bool;
-    l.restore_mode = store.Read(sec, key, kLocalRestoreMode).as_float;
-    l.restore_strength = store.Read(sec, key, kLocalRestoreStrength).as_float;
-  }
-
   return s;
 }
 

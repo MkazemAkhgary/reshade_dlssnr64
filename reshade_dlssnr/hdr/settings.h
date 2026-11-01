@@ -1,4 +1,7 @@
-// HDR settings and independent, stackable exposure layers.
+// HDR settings and the two global exposure layers that feed them.
+//
+// Local exposure is not here: it needs no HDR input, so it is a pass of its own
+// (local_exposure/settings.h) rather than a third layer of this stack.
 #pragma once
 
 #include <algorithm>
@@ -42,29 +45,6 @@ struct AdaptiveExposureLayerSettings {
   ExposureFilterSettings filters = {};
 };
 
-struct LocalExposureLayerSettings {
-  bool enabled = false;
-  float strength = 0.5f;
-  float max_brighten = 2.50f;
-  float max_darken = 2.50f;
-  float midtone = 0.18f;
-  float shadow_strength = 1.0f;
-  float highlight_strength = 1.0f;
-  float shadow_range = 1.0f;
-  float highlight_range = 1.0f;
-  float highlight_protection = 1.0f;
-  float shadow_protection = 1.0f;
-  float detail_retention = 1.0f;
-  float edge_protection = 0.5f;
-  float radius_px = 8.0f;
-  int samples = 8;
-  bool restore_exposure = false;
-  // 0 = exact per-pixel restoration; 1 = uniform global restoration.
-  // Intermediate values interpolate the correction in log exposure space.
-  float restore_mode = 0.5f;
-  float restore_strength = 1.0f;
-};
-
 // Encoding code consumed by the shaders: 0 sRGB, 1 scRGB, 2 HDR10.
 inline int HdrFormatCode(HdrFormat format) {
   switch (format) {
@@ -88,7 +68,6 @@ struct HdrSettings {
 
   GameExposureLayerSettings game_exposure = {};
   AdaptiveExposureLayerSettings adaptive_exposure = {};
-  LocalExposureLayerSettings local_exposure = {};
 
   // BT.2446C tone-curve source parameters; derived k2/k4 are computed on CPU.
   float bt2446_k1 = 0.83802f;

@@ -7,6 +7,8 @@
 
 #include "command_context.h"
 #include "grade/settings.h"
+#include "hdr/settings.h"
+#include "local_exposure/settings.h"
 #include "compute_engine.h"
 #include "pass_resources.h"
 #include "shaders/common/color_constants.h"
@@ -60,6 +62,13 @@ struct HdrUniforms {
 
 void SetLocalExposureConstants(ComputeConstants& constants,
                               const HdrUniforms& hdr);
+
+// Copies the local-exposure layer into the uniforms its consumers read. A
+// disabled layer reports zero strength, which is how every consumer knows to
+// skip the work; the other fields keep their defaults and are not consulted
+// while the strength is zero.
+void SetLocalExposureUniforms(HdrUniforms& uniforms,
+                              const LocalExposureSettings& local);
 
 // The source is already in the model domain (gain-map split happens in its
 // own pipeline step for HDR). This pass only downsamples it to working scale.

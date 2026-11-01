@@ -1,9 +1,9 @@
-// HDR schema: source preparation and the three exposure layers.
+// HDR schema: source preparation and the two global exposure layers.
 //
 // One translation unit per feature, declared whole here. Only Adaptive
 // Exposure has histogram filters; Game Exposure is a scalar bias on the
-// game's NGX ExposureTexture, and Local Exposure uses spatial-neighborhood
-// controls only.
+// game's NGX ExposureTexture. Local Exposure is a section of its own
+// (feature/local_exposure), because it needs no HDR input.
 //
 // The layer collapsibles and the diagnostics block are hooks: they are
 // rendering, not settings, and a hook's identity is data so it is declared
@@ -183,110 +183,6 @@ void RegisterHdrSchema(ctl::Schema& schema) {
                "enabled.")
       .EnableWhen(kAdaptiveEnabled);
   hdr_filter_rows::Declare(adaptive, "Filters");
-
-  // --- HDR Local Exposure ------------------------------------------------
-  ctl::Section& local = schema.AddSection(kLocalSection, ctl::SectionKind::Instanced);
-  local.HeaderToggle(kLocalEnabled);
-  local.Add<ctl::BoolSetting>(kLocalEnabled, "Local Exposure", false)
-      .Tooltip("Apply spatially varying exposure correction after the Game "
-               "and Adaptive layers.");
-  local.Add<ctl::FloatSetting>(kLocalStrength, "Strength", 0.5f)
-      .ClampRange(0.0f, 1.0f)
-      .Tooltip("Overall amount of local exposure correction.")
-      .EnableWhen(kLocalEnabled);
-  local.Add<ctl::FloatSetting>(kLocalMaxBrighten, "Max Brighten", 2.50f)
-      .ClampRange(0.0f, 8.0f)
-      .Tooltip("Maximum shadow lift in stops. At full bright-detail protection, pixels above "
-               "the midtone pivot are not lifted even when their neighborhood is dark.")
-      .EnableWhen(kLocalEnabled);
-  local.Add<ctl::FloatSetting>(kLocalMaxDarken, "Max Darken", 2.50f)
-      .ClampRange(0.0f, 8.0f)
-      .Tooltip("Maximum highlight reduction in stops. At full dark-detail protection, pixels below "
-               "the pivot are not darkened even when their neighborhood is bright.")
-      .EnableWhen(kLocalEnabled);
-  local.Add<ctl::FloatSetting>(kLocalMidtone, "Local Midtone", 0.18f)
-      .ClampRange(0.01f, 0.5f)
-      .Tooltip("Target luminance pivot in the model's SDR domain. Pixels near "
-               "this pivot receive little correction; shadows move up and "
-               "highlights move down toward it.")
-      .EnableWhen(kLocalEnabled);
-  local.Add<ctl::FloatSetting>(kLocalShadowStrength, "Shadow Lift", 1.0f)
-      .ClampRange(0.0f, 1.0f)
-      .Tooltip("Independent multiplier for shadow lifting. Set to zero to leave "
-               "dark regions where they are while still reducing highlights.")
-      .EnableWhen(kLocalEnabled);
-  local.Add<ctl::FloatSetting>(kLocalHighlightStrength, "Highlight Reduction", 1.0f)
-      .ClampRange(0.0f, 1.0f)
-      .Tooltip("Independent multiplier for highlight reduction. Set to zero to "
-               "leave bright regions where they are while still lifting shadows.")
-      .EnableWhen(kLocalEnabled);
-  local.Add<ctl::BoolSetting>(kLocalRestoreEnabled, "Restore Model Exposure", false)
-      .Tooltip("Apply a correction to the model output after evaluation. When "
-               "disabled, the model's reconstructed local shading is left alone.")
-      .EnableWhen(kLocalEnabled);
-  local.Add<ctl::FloatSetting>(kLocalRestoreMode, "Restore Spatial Scale", 0.5f)
-      .ClampRange(0.0f, 1.0f)
-      .Tooltip("Controls the spatial scale of exposure restoration: 0 = exact "
-               "per-pixel cancellation of the local lift, 1 = uniform global "
-               "correction, with log-space blending between them. Global restore "
-               "retains more of the model's reconstructed brightness relations.")
-      .EnableWhen(kLocalRestoreEnabled);
-  local.Add<ctl::FloatSetting>(kLocalRestoreStrength, "Restore Strength", 1.0f)
-      .ClampRange(0.0f, 1.0f)
-      .Tooltip("Amount of exposure restoration: 0 = no correction, 1 = full correction. "
-               "Intermediate values blend the selected restoration in log-exposure space.")
-      .EnableWhen(kLocalRestoreEnabled);
-  local.Add<ctl::FloatSetting>(kLocalRadius, "Local Radius", 8.0f)
-      .ClampRange(1.0f, 32.0f)
-      .Tooltip("Radius in source pixels. A radius of 1 disables multi-tap "
-               "neighborhood sampling and uses only the center pixel. Larger "
-               "radii respond to broader dark/bright regions instead of "
-               "individual pixel noise.")
-      .Category(kCatAdvanced)
-      .EnableWhen(kLocalEnabled);
-  local.Add<ctl::IntSetting>(kLocalSamples, "Neighborhood Samples", 8)
-      .ClampRange(4, 32)
-      .Tooltip("Requested spatial taps in the local log-luminance estimate. The effective "
-               "count rounds to groups of four to keep sampling spatially balanced.")
-      .Category(kCatAdvanced)
-      .EnableWhen(kLocalEnabled);
-  local.Add<ctl::FloatSetting>(kLocalShadowRange, "Shadow Transition", 1.0f)
-      .ClampRange(0.25f, 6.0f)
-      .Tooltip("Stops from the midtone pivot over which shadow lift ramps to full "
-               "strength. A smaller value acts more aggressively on dark regions.")
-      .Category(kCatAdvanced)
-      .EnableWhen(kLocalEnabled);
-  local.Add<ctl::FloatSetting>(kLocalHighlightRange, "Highlight Transition", 1.0f)
-      .ClampRange(0.25f, 6.0f)
-      .Tooltip("Stops above the midtone pivot over which highlight reduction "
-               "ramps to full strength. A smaller value acts more aggressively.")
-      .Category(kCatAdvanced)
-      .EnableWhen(kLocalEnabled);
-  local.Add<ctl::FloatSetting>(kLocalHighlightProtection, "Bright Detail Protection", 1.0f)
-      .ClampRange(0.0f, 1.0f)
-      .Tooltip("Controls whether a dark neighborhood may lift pixels above the pivot. "
-               "1 keeps bright spots anchored; 0 allows correction across the pivot.")
-      .Category(kCatAdvanced)
-      .EnableWhen(kLocalEnabled);
-  local.Add<ctl::FloatSetting>(kLocalShadowProtection, "Dark Detail Protection", 1.0f)
-      .ClampRange(0.0f, 1.0f)
-      .Tooltip("Controls whether a bright neighborhood may darken pixels below the pivot. "
-               "1 keeps dark details anchored; 0 allows correction across the pivot.")
-      .Category(kCatAdvanced)
-      .EnableWhen(kLocalEnabled);
-  local.Add<ctl::FloatSetting>(kLocalDetailRetention, "Detail Retention", 1.0f)
-      .ClampRange(0.0f, 1.0f)
-      .Tooltip("Retains the pixel's log-luminance detail relative to its local "
-               "base. 1 preserves all relative detail; lower values compress it.")
-      .Category(kCatAdvanced)
-      .EnableWhen(kLocalEnabled);
-  local.Add<ctl::FloatSetting>(kLocalEdgeProtection, "Edge Protection", 0.5f)
-      .ClampRange(0.0f, 1.0f)
-      .Tooltip("Reduces the influence of samples across strong log-luminance edges. "
-               "0 uses spatial weights only; higher values reduce halos but can "
-               "make adaptation more local.")
-      .Category(kCatAdvanced)
-      .EnableWhen(kLocalEnabled);
 }
 
 }  // namespace feature

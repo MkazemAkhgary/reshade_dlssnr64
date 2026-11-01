@@ -24,6 +24,27 @@ void SetLocalExposureConstants(ComputeConstants& constants,
   constants.localExposure.Detail.w = hdr.local_edge_protection;
 }
 
+void SetLocalExposureUniforms(HdrUniforms& uniforms,
+                              const LocalExposureSettings& local) {
+  DLSSNR_PROFILE_RENDER_L3("SetLocalExposureUniforms");
+  uniforms.local_exposure_strength = local.enabled ? local.strength : 0.0f;
+  uniforms.local_max_brighten = local.max_brighten;
+  uniforms.local_max_darken = local.max_darken;
+  uniforms.midtone = local.midtone;
+  uniforms.local_shadow_strength = local.shadow_strength;
+  uniforms.local_highlight_strength = local.highlight_strength;
+  uniforms.local_shadow_range = local.shadow_range;
+  uniforms.local_highlight_range = local.highlight_range;
+  uniforms.local_highlight_protection = local.highlight_protection;
+  uniforms.local_shadow_protection = local.shadow_protection;
+  uniforms.local_detail_retention = local.detail_retention;
+  uniforms.local_edge_protection = local.edge_protection;
+  uniforms.local_radius_px = local.radius_px;
+  uniforms.local_samples = local.samples;
+  uniforms.restore_local_exposure = local.restore_exposure;
+  uniforms.restore_local_mode = local.restore_mode;
+}
+
 bool PrepareInput(
     CommandContext& state,
     ID3D12GraphicsCommandList* command_list,

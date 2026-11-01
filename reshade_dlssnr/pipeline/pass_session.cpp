@@ -21,6 +21,7 @@
 #include "feature/grade/view.h"
 #include "feature/hdr/view.h"
 #include "feature/exposure_mask/view.h"
+#include "feature/local_exposure/view.h"
 #include "feature/pass/settings.h"
 #include "feature/preferences/settings.h"
 #include "feature/pass/ui.h"
@@ -671,6 +672,7 @@ void PassSession::PrepareRun(PassRun& run,
     const ctl::InstanceKey shared = ctl::InstanceKey::Shared();
     run.debug_view = feature::debug_log::Read(store, shared);
     run.hdr_state = feature::hdr::Read(store, key);
+    run.local_exposure = feature::local_exposure::Read(store, key);
     run.mask_state = feature::exposure_mask::Read(store, key);
     run.fp16_storage =
         store.Read(feature::preferences::kSection, shared,

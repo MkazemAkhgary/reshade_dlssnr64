@@ -19,11 +19,13 @@ struct DrawOptions;
 namespace feature {
 namespace hdr {
 
-// Draw the three exposure layers as nested collapsibles, with the stack-order
-// note below them. Each collapsible's open state is persisted via
+// Draw the two global exposure layers as nested collapsibles, with the
+// stack-order note below them. Each collapsible's open state is persisted via
 // feature::ui_state, so the layers are independent of each other and of the
 // parent HDR section. The layer bodies are drawn for the same instance key the
 // HDR section is being drawn for, which the hook receives and forwards.
+//
+// Local Exposure is not here: it is a top-level section of its own.
 bool DrawHdrLayers(const void* context, ctl::ValueStore& store,
                    const ctl::DrawOptions& options,
                    const std::string& section, const ctl::InstanceKey& key,

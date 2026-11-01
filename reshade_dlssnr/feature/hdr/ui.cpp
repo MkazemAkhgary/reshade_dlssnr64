@@ -1,7 +1,7 @@
 // HDR non-row UI: the exposure-layer collapsibles and the diagnostics
 // readout.
 //
-// The three layers are separate sections. Each layer header is rendered by
+// The two global layers are separate sections. Each layer header is rendered by
 // PersistentSettingHeader (with the section's HeaderToggle providing the
 // row-skip for the `enabled` setting) and its body by DrawSection with
 // draw_headers = false. That is the whole reason the layers are sections and
@@ -77,14 +77,8 @@ bool DrawHdrLayers(const void* context, ctl::ValueStore& store,
        hdr::kAdaptiveSection,
        feature::ui_state::kHdrAdaptiveOpen,
        hdr::kAdaptiveEnabled},
-      {"Local Exposure",
-       "Spatially varying exposure correction applied after the global "
-       "layers.",
-       hdr::kLocalSection,
-       feature::ui_state::kHdrLocalOpen,
-       hdr::kLocalEnabled},
   };
-  constexpr int kLayerCount = 3;
+  constexpr int kLayerCount = 2;
 
   for (int i = 0; i < kLayerCount; ++i) {
     // Layer on/off is a header checkbox. HeaderToggle on the section keeps
@@ -130,8 +124,8 @@ bool DrawHdrLayers(const void* context, ctl::ValueStore& store,
   }
 
   ImGui::TextDisabled(
-      "Stack order: Game Exposure base, Adaptive correction, then Local "
-      "Exposure. Each layer's controls are independent.");
+      "Stack order: Game Exposure base, then Adaptive correction. Local "
+      "Exposure is a separate section and applies after both.");
 
   changed |= local_changed;
   return local_changed;

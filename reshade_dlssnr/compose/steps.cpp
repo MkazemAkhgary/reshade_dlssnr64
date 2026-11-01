@@ -60,10 +60,10 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
   const bool restore_exposure_active =
       hdr_active &&
       run.hdr_state.enable &&
-      run.hdr_state.local_exposure.enabled &&
-      run.hdr_state.local_exposure.restore_exposure &&
+      run.local_exposure.enabled &&
+      run.local_exposure.restore_exposure &&
       run.hdr_uniforms.local_exposure_strength > 0.0f &&
-      run.hdr_state.local_exposure.restore_strength > 0.0f &&
+      run.local_exposure.restore_strength > 0.0f &&
       self->resources_.GetPackedOutput() != nullptr &&
       self->resources_.GetGlobalHdrCarrier() != nullptr;
   const bool bypass_model =

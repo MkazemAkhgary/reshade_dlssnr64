@@ -20,7 +20,7 @@ namespace reshade_dlssnr {
 // needs one matching step in the migration table in state/migrations.cpp. This
 // is independent of kAddonVersion: settings survive addon updates, so a build
 // identifier is not a suitable format version.
-constexpr int kSettingsVersion = 1;
+constexpr int kSettingsVersion = 2;
 
 enum class InjectionStage : int {
   PreDLSS = 0,

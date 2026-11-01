@@ -26,6 +26,7 @@
 #include "ctl/values.h"
 #include "feature/debug_log/settings.h"
 #include "feature/hdr/settings.h"
+#include "feature/local_exposure/settings.h"
 #include "feature/exposure_mask/settings.h"
 #include "feature/pass/settings.h"
 #include "feature/pass/ui.h"
@@ -131,7 +132,7 @@ const char* const kPassSections[] = {
     feature::hdr::kSection,
     feature::hdr::kGameSection,
     feature::hdr::kAdaptiveSection,
-    feature::hdr::kLocalSection,
+    feature::local_exposure::kSection,
     feature::exposure_mask::kSection,
 };
 

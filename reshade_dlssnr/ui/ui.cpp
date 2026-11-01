@@ -19,6 +19,7 @@
 #include "feature/grade/settings.h"
 #include "feature/grade/view.h"
 #include "feature/hdr/settings.h"
+#include "feature/local_exposure/settings.h"
 #include "feature/exposure_mask/settings.h"
 #include "feature/pass/settings.h"
 #include "feature/pass/ui.h"
@@ -59,7 +60,7 @@ const char* SectionOpenSetting(const std::string& name) {
   if (name == feature::hdr::kSection) return feature::ui_state::kHdrOpen;
   if (name == feature::hdr::kGameSection) return feature::ui_state::kHdrGameOpen;
   if (name == feature::hdr::kAdaptiveSection) return feature::ui_state::kHdrAdaptiveOpen;
-  if (name == feature::hdr::kLocalSection) return feature::ui_state::kHdrLocalOpen;
+  if (name == feature::local_exposure::kSection) return feature::ui_state::kLocalExposureOpen;
   if (name == feature::pass::kSection) return feature::ui_state::kPassesOpen;
   if (name == feature::exposure_mask::kSection) return feature::ui_state::kExposureMaskOpen;
   return nullptr;
@@ -82,9 +83,9 @@ const char* CategoryOpenSetting(const std::string& section,
     if (category == "Diagnostics") return feature::ui_state::kHdrDiagnosticsOpen;
     return nullptr;
   }
-  if (section == feature::hdr::kLocalSection &&
+  if (section == feature::local_exposure::kSection &&
       category == "Advanced") {
-    return feature::ui_state::kHdrLocalAdvancedOpen;
+    return feature::ui_state::kLocalExposureAdvancedOpen;
   }
   if (section == feature::hdr::kAdaptiveSection &&
       category == "Filters") {
@@ -399,6 +400,11 @@ void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
   local_changed = false;
   ctl::DrawSection(store, feature::hdr::kSection, key, local_changed,
                    MakeOptions(/*headers=*/true, /*indent=*/true));
+  changed |= local_changed;
+  SectionDivider();
+  local_changed = false;
+  ctl::DrawSection(store, feature::local_exposure::kSection, key,
+                   local_changed, MakeOptions(/*headers=*/true, /*indent=*/true));
   changed |= local_changed;
   SectionDivider();
   local_changed = false;

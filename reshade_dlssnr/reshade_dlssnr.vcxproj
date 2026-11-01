@@ -313,6 +313,9 @@
     <ClInclude Include="temporal_reprojection\stats.h" />
     <ClInclude Include="exposure_mask\exposure_mask.h" />
     <ClInclude Include="exposure_mask\settings.h" />
+    <ClInclude Include="local_exposure\settings.h" />
+    <ClInclude Include="feature\local_exposure\settings.h" />
+    <ClInclude Include="feature\local_exposure\view.h" />
     <ClInclude Include="state\migrations.h" />
     <ClInclude Include="state\settings.h" />
     <ClInclude Include="state\trace.h" />
@@ -398,6 +401,8 @@
     <ClCompile Include="compose\steps.cpp" />
     <ClCompile Include="grade\grade.cpp" />
     <ClCompile Include="grade\steps.cpp" />
+    <ClCompile Include="feature\local_exposure\schema.cpp" />
+    <ClCompile Include="feature\local_exposure\view.cpp" />
     <ClCompile Include="motion\steps.cpp" />
     <ClCompile Include="temporal_reprojection\steps.cpp" />
     <ClCompile Include="exposure_mask\exposure_mask.cpp" />

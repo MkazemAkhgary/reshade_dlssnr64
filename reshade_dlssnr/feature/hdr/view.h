@@ -1,12 +1,15 @@
-// HDR view: read the four HDR sections out of the store as an HdrSettings.
+// HDR view: read the HDR sections out of the store as an HdrSettings.
 //
 // The store is the source of truth; the runtime wants the plain HdrSettings it
 // already passes around. This is the one place that translates between them,
 // so the setting spellings appear once and the runtime never spells one.
 //
-// The four sections are all pass-keyed and independent: HDR itself, and
-// the three exposure layers. Each layer owns an ExposureFilterSettings, so
-// the filter rows are read here rather than by the fragment.
+// The sections are all pass-keyed and independent: HDR itself, and the two
+// global exposure layers. Each layer owns an ExposureFilterSettings, so the
+// filter rows are read here rather than by the fragment.
+//
+// Local exposure is not one of them. It is a pass of its own and its view lives
+// in feature/local_exposure.
 
 #pragma once
 
@@ -26,7 +29,7 @@ namespace hdr {
 // HdrSettings that might have come from anywhere.
 using HdrSnapshotView = HdrSettings;
 
-// Read all four sections for `key` (the stable pass ID used by the HDR sections).
+// Read every HDR section for `key` (the stable pass ID used by the sections).
 HdrSnapshotView Read(const ctl::ValueStore& store,
                      const ctl::InstanceKey& key);
 

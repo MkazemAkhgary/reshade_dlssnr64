@@ -139,7 +139,7 @@ PipelineStatus PassSession::StepGradeModelOutput(PassRun& run) {
   ID3D12Resource* local_carrier = nullptr;
   ID3D12Resource* global_carrier = nullptr;
   ID3D12Resource* global_scale = nullptr;
-  const LocalExposureLayerSettings& local = run.hdr_state.local_exposure;
+  const LocalExposureSettings& local = run.local_exposure;
   const float restore_mode = std::clamp(local.restore_mode, 0.0f, 1.0f);
   const float restore_strength = std::clamp(local.restore_strength, 0.0f, 1.0f);
   if (run.hdr_state.enable && local.enabled && local.restore_exposure &&

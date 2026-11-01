@@ -16,11 +16,15 @@ namespace reshade_dlssnr {
 PipelineStatus PassSession::StepBuildHdrUniforms(PassRun& run) {
   DLSSNR_PROFILE_RENDER_L2("PassSession::StepBuildHdrUniforms");
   run.hdr_uniforms_ready = false;
+  // Local exposure does not depend on the HDR path, so its uniforms are filled
+  // before the gates that describe HDR itself. Everything below this point
+  // needs a live HDR source.
+  model_pipeline::SetLocalExposureUniforms(run.hdr_uniforms,
+                                           run.local_exposure);
   if (run.hdr == nullptr) return PipelineStatus::Ok;
   if (!run.hdr->Enabled()) return PipelineStatus::Ok;
 
   const HdrSettings& hs = run.hdr_state;
-  const LocalExposureLayerSettings& local = hs.local_exposure;
   run.hdr_uniforms.format = static_cast<float>(HdrFormatCode(run.hdr->ResolvedFormat()));
   run.hdr_uniforms.exposure = run.hdr->Exposure();
   const float bt2446_k1 = std::max(hs.bt2446_k1, 1e-6f);
@@ -37,22 +41,6 @@ PipelineStatus PassSession::StepBuildHdrUniforms(PassRun& run) {
   run.hdr_uniforms.gain_min_log2 = hs.gain_min_log2;
   run.hdr_uniforms.gain_max_log2 = hs.gain_max_log2;
   run.hdr_uniforms.effective_scene_white_nits = run.hdr->EffectiveSceneWhiteNits(hs);
-  run.hdr_uniforms.local_exposure_strength = local.enabled ? local.strength : 0.0f;
-  run.hdr_uniforms.local_max_brighten = local.max_brighten;
-  run.hdr_uniforms.local_max_darken = local.max_darken;
-  run.hdr_uniforms.midtone = local.midtone;
-  run.hdr_uniforms.local_shadow_strength = local.shadow_strength;
-  run.hdr_uniforms.local_highlight_strength = local.highlight_strength;
-  run.hdr_uniforms.local_shadow_range = local.shadow_range;
-  run.hdr_uniforms.local_highlight_range = local.highlight_range;
-  run.hdr_uniforms.local_highlight_protection = local.highlight_protection;
-  run.hdr_uniforms.local_shadow_protection = local.shadow_protection;
-  run.hdr_uniforms.local_detail_retention = local.detail_retention;
-  run.hdr_uniforms.local_edge_protection = local.edge_protection;
-  run.hdr_uniforms.local_radius_px = local.radius_px;
-  run.hdr_uniforms.local_samples = local.samples;
-  run.hdr_uniforms.restore_local_exposure = local.restore_exposure;
-  run.hdr_uniforms.restore_local_mode = local.restore_mode;
   run.hdr_uniforms_ready = true;
   return PipelineStatus::Ok;
 }

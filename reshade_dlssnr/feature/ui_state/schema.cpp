@@ -39,10 +39,11 @@ void RegisterUiStateSchema(ctl::Schema& schema) {
                                 "HDR Adaptive Filters Open", false).GlobalOnly();
   section.Add<ctl::BoolSetting>(ui_state::kHdrAdaptiveOpen,
                                 "HDR Adaptive Exposure Open", false).GlobalOnly();
-  section.Add<ctl::BoolSetting>(ui_state::kHdrLocalOpen,
-                                "HDR Local Exposure Open", false).GlobalOnly();
-  section.Add<ctl::BoolSetting>(ui_state::kHdrLocalAdvancedOpen,
-                                "HDR Local Advanced Open", false).GlobalOnly();
+  section.Add<ctl::BoolSetting>(ui_state::kLocalExposureOpen,
+                                "Local Exposure Open", false).GlobalOnly();
+  section.Add<ctl::BoolSetting>(ui_state::kLocalExposureAdvancedOpen,
+                                "Local Exposure Advanced Open", false)
+      .GlobalOnly();
   section.Add<ctl::BoolSetting>(ui_state::kModelOpen, "Model Open", true)
       .GlobalOnly();
   section.Add<ctl::BoolSetting>(ui_state::kStrengthOpen, "Strength Open", true)

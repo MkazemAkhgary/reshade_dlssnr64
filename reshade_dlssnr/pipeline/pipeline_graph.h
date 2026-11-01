@@ -31,6 +31,7 @@
 #include "feature/pass/ui.h"
 #include "feature/pass/view.h"
 #include "hdr/settings.h"
+#include "local_exposure/settings.h"
 #include "exposure_mask/settings.h"
 #include "model/model_pipeline.h"
 
@@ -212,8 +213,9 @@ struct PassRun {
   // `settings` is the whole Settings struct, still read by the trace
   // diagnostic and by the few steps that have not moved to a snapshot. What
   // the render path reads about the pass comes from `pass_state` / `grade_*`,
-  // about per-pass HDR from `hdr_state`, about that pass mask from `mask_state`, and
-  // `pass_bound` says whether a pass instance was bound at all.
+  // about per-pass HDR from `hdr_state`, about local exposure from
+  // `local_exposure`, about that pass mask from `mask_state`, and `pass_bound`
+  // says whether a pass instance was bound at all.
   const Settings* settings = nullptr;
   int debug_view = 0;
   bool pass_bound = false;
@@ -327,6 +329,7 @@ struct PassRun {
   // the graded input and applied to the pre-grade image.
   bool input_grade_apply_to_pre_grade = false;
   HdrSettings hdr_state = {};
+  LocalExposureSettings local_exposure = {};
   ExposureMaskSettings mask_state = {};
 
   // -- bookkeeping ----------------------------------------------------------
