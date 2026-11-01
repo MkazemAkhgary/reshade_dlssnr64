@@ -490,10 +490,9 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .Tooltip("Grade the image the model reads, before model evaluation.");
   grade_input.Add<ctl::BoolSetting>(kGradeInputApplyToPreGrade,
                                     "Apply Edit to Pre-Grade Image", false)
-      .Tooltip("Measure the model edit against the actual Grade Model Input result, "
-               "then apply that edit to the image before this grade section. "
-               "Earlier processing, including HDR/local exposure and prior "
-               "passes, remains part of the model's input context.")
+      .Tooltip("Apply the model's edit to the image before the grade, so the "
+               "grade does not reach the output. Off, the graded model output "
+               "is used as it is.")
       .EnableWhen(kGradeEnabled);
   grade_rows::Declare(grade_input, kGradeInputPrefix, kGradeEnabled);
 
