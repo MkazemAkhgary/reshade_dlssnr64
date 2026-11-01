@@ -6,7 +6,8 @@
 namespace reshade_dlssnr {
 
 void ApplyModelTuningParams(NgxParameterBlock& block,
-                            const feature::pass::PassSnapshot& pass) {
+                            const feature::pass::PassSnapshot& pass,
+                            unsigned int render_preset_override) {
   DLSSNR_PROFILE_CORE_L3("ApplyModelTuningParams");
   const unsigned int model_value =
       static_cast<unsigned int>(std::clamp(pass.preset, 0, 2));
@@ -15,9 +16,10 @@ void ApplyModelTuningParams(NgxParameterBlock& block,
   block.SetUInt("DLSSNR.Upscaling", 1u);
   block.SetFloat("DLSSNR.ScalingRatio", 1.0f);
   block.SetFloat("DLSSNR.Scale", 1.0f);
-  block.SetUInt(
-      "DLSSNR.Hint.Render.Preset",
-      static_cast<unsigned int>(std::clamp(pass.render_preset, 1, 3)));
+  block.SetUInt("DLSSNR.Hint.Render.Preset",
+                render_preset_override != 0
+                    ? render_preset_override
+                    : feature::pass::RenderPresetHint(pass.render_preset));
   block.SetUInt("DLSSNR.Style", model_value);
   block.SetFloat("DLSSNR.Intensity", pass.intensity);
   block.SetFloat("DLSSNR.LocalStructureStrength", pass.local_structure);

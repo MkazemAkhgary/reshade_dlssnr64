@@ -1,8 +1,11 @@
 #include "state/migrations.h"
 
 #include <array>
+#include <string>
+#include <vector>
 
 #include "feature/local_exposure/settings.h"
+#include "feature/pass/settings.h"
 #include "state/settings.h"
 
 namespace reshade_dlssnr {
@@ -40,12 +43,45 @@ void MigrateLocalExposureOutOfHdr(json::Value& root) {
   }
 }
 
+// Render Preset used to store the NGX hint; it is an enum now and stores the
+// item index, where 0 is Quality (hint 1) and 1 is Performance (hint 2).
+void RemapRenderPreset(json::Value& s_subtree) {
+  json::Value* passes = s_subtree.find(feature::pass::kSection);
+  if (passes == nullptr || !passes->is_object()) return;
+
+  std::vector<std::string> keys;
+  keys.reserve(passes->object().size());
+  for (const auto& entry : passes->object()) keys.push_back(entry.first);
+
+  for (const std::string& key : keys) {
+    json::Value& instance = (*passes)[key];
+    if (!instance.is_object()) continue;
+    if (json::Value* preset = instance.find(feature::pass::kRenderPreset)) {
+      *preset = json::Value(preset->as_int() >= 2 ? 1 : 0);
+    }
+  }
+}
+
+// v2 -> v3: Render Preset became an enum.
+void MigrateRenderPreset(json::Value& root) {
+  if (json::Value* s = root.find("S")) RemapRenderPreset(*s);
+
+  json::Value* presets = root.find("UserPreset");
+  if (presets == nullptr || !presets->is_array()) return;
+  for (json::Value& preset : presets->array()) {
+    json::Value* data = preset.find("Data");
+    if (data == nullptr) continue;
+    if (json::Value* s = data->find("S")) RemapRenderPreset(*s);
+  }
+}
+
 // Append-only. Never edit a shipped step: a file in the field may already have
 // run it, so changing what it does changes what those files mean.
-constexpr int kMigrationCount = 1;
+constexpr int kMigrationCount = 2;
 
 constexpr std::array<SettingsMigration, kMigrationCount> kSettingsMigrations = {{
     {1, &MigrateLocalExposureOutOfHdr},
+    {2, &MigrateRenderPreset},
 }};
 
 // True when the table holds exactly one step per version from 1 to

@@ -45,8 +45,10 @@ bool FeatureLifecycle::ObserveModelSettings(
   ModelSettingsState current = {};
   current.target = std::clamp(pass.target, 0, 2);
   current.style = static_cast<unsigned int>(std::clamp(pass.preset, 0, 2));
-  current.render_preset =
-      static_cast<unsigned int>(std::clamp(pass.render_preset, 1, 3));
+  current.render_preset = feature::pass::RenderPresetHint(pass.render_preset);
+  current.cheap_render_preset = feature::pass::CheapRenderPresetHint(
+      pass.temporal_cheap_render_preset, current.render_preset);
+  current.cheap_enabled = pass.temporal_cheap_enabled;
   current.working_scale = pass.working_scale;
   current.working_scale_x2 = pass.working_scale_x2;
   current.local_tone = pass.local_tone;
@@ -59,8 +61,12 @@ bool FeatureLifecycle::ObserveModelSettings(
   if (model_settings_valid_) {
     const bool style_changed = current.style != model_settings_.style;
     const bool target_changed = current.target != model_settings_.target;
+    // The cheap model's feature exists only while it is enabled and wants a
+    // preset of its own, so both are rebuild conditions.
     render_preset_changed =
-        current.render_preset != model_settings_.render_preset;
+        current.render_preset != model_settings_.render_preset ||
+        current.cheap_render_preset != model_settings_.cheap_render_preset ||
+        current.cheap_enabled != model_settings_.cheap_enabled;
     const bool reset_required =
         style_changed || target_changed ||
         !NearlyEqual(current.working_scale, model_settings_.working_scale) ||
@@ -98,6 +104,13 @@ bool FeatureLifecycle::ObserveModelSettings(
         message += std::to_string(model_settings_.render_preset);
         message += " -> ";
         message += std::to_string(current.render_preset);
+        if (current.cheap_render_preset !=
+            model_settings_.cheap_render_preset) {
+          message += " CheapRenderPreset ";
+          message += std::to_string(model_settings_.cheap_render_preset);
+          message += " -> ";
+          message += std::to_string(current.cheap_render_preset);
+        }
       }
       if (!style_changed && !target_changed && !render_preset_changed) {
         message += " model input controls";
@@ -191,6 +204,36 @@ bool FeatureLifecycle::EnsureFeature(
     return false;
   }
 
+  // NGX latches the render preset at CreateFeature, so a cheap model with a
+  // different one needs its own feature. Everything else is the pass's own.
+  const unsigned int primary_preset =
+      feature::pass::RenderPresetHint(pass.render_preset);
+  const unsigned int cheap_preset = feature::pass::CheapRenderPresetHint(
+      pass.temporal_cheap_render_preset, primary_preset);
+  if (pass.temporal_cheap_enabled && cheap_preset != primary_preset) {
+    ApplyModelTuningParams(parameter_block, pass, cheap_preset);
+    const NVSDK_NGX_Result cheap_result = runtime.CreateFeature(
+        command_list,
+        static_cast<NVSDK_NGX_Feature>(18),
+        params,
+        &cheap_feature_handle_);
+    // The block outlives both creations and a later rebuild reads it again.
+    ApplyModelTuningParams(parameter_block, pass);
+    if (cheap_result != NVSDK_NGX_Result_Success ||
+        cheap_feature_handle_ == nullptr) {
+      cheap_feature_handle_ = nullptr;
+      reshade::log::message(
+          reshade::log::level::warning,
+          "DLSSNR: cheap model feature creation failed; it will use the "
+          "pass's own feature");
+    } else {
+      std::string cheap_msg = "DLSSNR cheap model feature created with render "
+                              "preset ";
+      cheap_msg += std::to_string(cheap_preset);
+      reshade::log::message(reshade::log::level::info, cheap_msg.c_str());
+    }
+  }
+
   built_width_ = width;
   built_height_ = height;
 
@@ -203,11 +246,20 @@ bool FeatureLifecycle::EnsureFeature(
 
 void FeatureLifecycle::RetireFeature(bool request_reset) {
   DLSSNR_PROFILE_RESOURCE_L2("FeatureLifecycle::RetireFeature");
-  if (request_reset) reset_pending_ = true;
-  if (feature_handle_ == nullptr) return;
+  if (request_reset) {
+    reset_pending_ = true;
+    cheap_reset_pending_ = true;
+  }
+  if (feature_handle_ == nullptr && cheap_feature_handle_ == nullptr) return;
 
-  retired_features_.push_back({feature_handle_, 0});
-  feature_handle_ = nullptr;
+  if (feature_handle_ != nullptr) {
+    retired_features_.push_back({feature_handle_, 0});
+    feature_handle_ = nullptr;
+  }
+  if (cheap_feature_handle_ != nullptr) {
+    retired_features_.push_back({cheap_feature_handle_, 0});
+    cheap_feature_handle_ = nullptr;
+  }
   reshade::log::message(
       reshade::log::level::info,
       "DLSSNR: queued previous NGX feature for fence-delayed release");
@@ -255,6 +307,10 @@ void FeatureLifecycle::Shutdown(NgxRuntime& runtime) {
     runtime.ReleaseFeature(feature_handle_);
     feature_handle_ = nullptr;
   }
+  if (cheap_feature_handle_ != nullptr) {
+    runtime.ReleaseFeature(cheap_feature_handle_);
+    cheap_feature_handle_ = nullptr;
+  }
   for (const RetiredFeature& retired : retired_features_) {
     if (retired.handle != nullptr) runtime.ReleaseFeature(retired.handle);
   }
@@ -263,6 +319,7 @@ void FeatureLifecycle::Shutdown(NgxRuntime& runtime) {
   built_width_ = 0;
   built_height_ = 0;
   reset_pending_ = true;
+  cheap_reset_pending_ = true;
   just_rebuilt_ = false;
   model_settings_ = {};
   model_settings_valid_ = false;

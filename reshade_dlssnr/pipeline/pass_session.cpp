@@ -403,7 +403,8 @@ bool PassSession::FillEvaluateParams(
     unsigned int eval_width,
     unsigned int eval_height,
     unsigned int width,
-    unsigned int height) {
+    unsigned int height,
+    bool for_cheap_model) {
   auto* params = runtime.Parameters().Get();
   if (params == nullptr) {
     reason_ = "DLSSNR parameter block unavailable";
@@ -461,7 +462,8 @@ bool PassSession::FillEvaluateParams(
                 guides.valid ? guides.motion_width : 0u);
   block.SetUInt("DLSSNR.MVecSubrectHeight",
                 guides.valid ? guides.motion_height : 0u);
-  block.SetUInt("DLSSNR.Reset", feature_.ShouldReset() ? 1u : 0u);
+  block.SetUInt("DLSSNR.Reset",
+                feature_.ShouldReset(for_cheap_model) ? 1u : 0u);
 
   return true;
 }

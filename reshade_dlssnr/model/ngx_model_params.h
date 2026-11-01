@@ -13,7 +13,10 @@ namespace reshade_dlssnr {
 // It takes the pass snapshot, not the whole PassSettings: the model tuning is
 // the only part of a pass NGX ever sees, and taking the snapshot is what lets
 // this stay independent of where the pass's settings are stored.
+// `render_preset_override` is 0 to use the pass's own; a 1..3 value is what
+// the cheap model's separate feature is created with.
 void ApplyModelTuningParams(NgxParameterBlock& block,
-                            const feature::pass::PassSnapshot& pass);
+                            const feature::pass::PassSnapshot& pass,
+                            unsigned int render_preset_override = 0);
 
 }  // namespace reshade_dlssnr

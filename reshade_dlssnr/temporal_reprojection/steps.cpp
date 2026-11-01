@@ -578,15 +578,15 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
             if (self->FillEvaluateParams(
                     *run.runtime, run.pass_state, run.guides,
                     cheap_input, cheap_output, cheap_w, cheap_h,
-                    run.width, run.height)) {
+                    run.width, run.height, /*for_cheap_model=*/true)) {
               const NVSDK_NGX_Result cheap_result =
                   run.runtime->EvaluateFeature(
-                      list, self->feature_.FeatureHandle(),
+                      list, self->feature_.CheapFeatureHandle(),
                       run.runtime->Parameters().Get(), nullptr);
               run.codec->InvalidateBindings();
 
               if (cheap_result == NVSDK_NGX_Result_Success) {
-                self->feature_.MarkEvaluated();
+                self->feature_.MarkEvaluated(/*cheap=*/true);
                 self->command_.UavBarrier(list, cheap_output);
                 self->command_.Transition(list, cheap_output,
                                           D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);

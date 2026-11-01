@@ -43,6 +43,8 @@ PassSnapshot Read(const ctl::ValueStore& store, const ctl::InstanceKey& key) {
   p.temporal_cheap_enabled =
       store.Read(section, key, kTemporalCheapEnabled).as_bool;
   p.temporal_cheap_scale = store.Read(section, key, kTemporalCheapScale).as_float;
+  p.temporal_cheap_render_preset =
+      store.Read(section, key, kTemporalCheapRenderPreset).as_int;
   p.temporal_fp16_history = store.Read(section, key, kTemporalFp16History).as_bool;
   p.local_tone = store.Read(section, key, kLocalTone).as_float;
   p.local_structure = store.Read(section, key, kLocalStructure).as_float;

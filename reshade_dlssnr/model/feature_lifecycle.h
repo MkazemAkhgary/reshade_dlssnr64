@@ -33,9 +33,30 @@ class FeatureLifecycle {
   bool HasFeature() const { return feature_handle_ != nullptr; }
   NVSDK_NGX_Handle* FeatureHandle() const { return feature_handle_; }
 
-  bool ShouldReset() const { return reset_pending_; }
-  void MarkEvaluated() { reset_pending_ = false; }
-  void SetShouldReset(bool value) { reset_pending_ = value; }
+  // The handle the cheap model evaluates with: its own when one was created
+  // for a different render preset, the pass's otherwise.
+  NVSDK_NGX_Handle* CheapFeatureHandle() const {
+    return cheap_feature_handle_ != nullptr ? cheap_feature_handle_
+                                            : feature_handle_;
+  }
+
+  // Reset state is per handle: NGX latches history inside the feature, so a
+  // reset asserted for one does not reach the other.
+  bool ShouldReset(bool cheap = false) const {
+    return cheap && cheap_feature_handle_ != nullptr ? cheap_reset_pending_
+                                                     : reset_pending_;
+  }
+  void MarkEvaluated(bool cheap = false) {
+    if (cheap && cheap_feature_handle_ != nullptr) {
+      cheap_reset_pending_ = false;
+    } else {
+      reset_pending_ = false;
+    }
+  }
+  void SetShouldReset(bool value) {
+    reset_pending_ = value;
+    cheap_reset_pending_ = value;
+  }
 
   // True once after EnsureFeature actually (re)created the handle. Callers
   // use this to skip the evaluation frame so the model has one frame to
@@ -55,6 +76,8 @@ class FeatureLifecycle {
     int target = 2;
     unsigned int style = 0;
     unsigned int render_preset = 1;
+    unsigned int cheap_render_preset = 1;
+    bool cheap_enabled = false;
     float working_scale = 1.0f;
     bool working_scale_x2 = false;
     float local_tone = 1.0f;
@@ -64,14 +87,18 @@ class FeatureLifecycle {
     bool ui_correction = true;
   };
 
-  // Returns true when DLSSNR.Hint.Render.Preset changed. Unlike other model
+  // Returns true when either render preset changed. Unlike other model
   // controls, NGX latches this hint at feature creation, so it requires a
   // feature rebuild rather than only a temporal Reset.
   bool ObserveModelSettings(const feature::pass::PassSnapshot& pass);
 
   NVSDK_NGX_Handle* feature_handle_ = nullptr;
+  // Created only for a render preset the pass does not use; null means the
+  // cheap model shares feature_handle_.
+  NVSDK_NGX_Handle* cheap_feature_handle_ = nullptr;
   // Kept pending until NGX accepts an evaluation carrying DLSSNR.Reset=1.
   bool reset_pending_ = true;
+  bool cheap_reset_pending_ = true;
   bool just_rebuilt_ = false;
   const char* reason_ = "";
 

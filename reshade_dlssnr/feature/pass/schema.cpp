@@ -85,6 +85,17 @@ const char* const kTargetTips[] = {
     "when the game does not use DLSS; it is not ordered with Pre/Post-DLSS "
     "passes unless those stages are available."};
 
+const char* const kRenderPresetNames[] = {"Quality", "Performance"};
+const char* const kRenderPresetTips[] = {
+    "Hint 1: the quality-oriented preset.",
+    "Hint 2: the performance-oriented preset."};
+
+const char* const kCheapRenderPresetNames[] = {"Auto", "Quality", "Performance"};
+const char* const kCheapRenderPresetTips[] = {
+    "Use this pass's own Render Preset. One NGX feature serves both models.",
+    "Create the cheap model's feature with hint 1.",
+    "Create the cheap model's feature with hint 2."};
+
 const char* const kTemporalNames[] = {"Off", "Adaptive", "Fixed"};
 const char* const kTemporalTips[] = {
     "Evaluate the neural model on every frame.",
@@ -304,12 +315,13 @@ void RegisterPassSchema(ctl::Schema& schema) {
       .AsGroup()
       .Category(kCatModel)
       .Tooltip("Select the model quality/behavior preset for this pass.");
-  pass.Add<ctl::IntSetting>(kRenderPreset, "Render Preset", 1)
-      .ClampRange(1, 3)
+  pass.Add<ctl::EnumSetting>(kRenderPreset, "Render Preset", 0)
+      .Items(kRenderPresetNames, kRenderPresetTips, 2)
+      .AsGroup()
       .Category(kCatModel)
-      .Tooltip("DLSSNR.Hint.Render.Preset value for this pass (1, 2, or 3). "
-               "NGX latches this hint at feature creation, so changing it "
-               "rebuilds this pass's feature.");
+      .Tooltip("DLSSNR.Hint.Render.Preset hint for this pass. NGX latches it "
+               "at feature creation, so changing it rebuilds this pass's "
+               "feature.");
   pass.Add<ctl::FloatSetting>(kIntensity, "Intensity", 1.0f)
       .ClampRange(0.0f, 2.0f)
       .Category(kCatModel)
@@ -399,6 +411,15 @@ void RegisterPassSchema(ctl::Schema& schema) {
                "scale. 0.5 means 50% of the working scale resolution. Lower "
                "values are faster but fill low-confidence reprojection areas "
                "with less detail.");
+  pass.Add<ctl::EnumSetting>(kTemporalCheapRenderPreset,
+                             "Cheap Model Preset", 0)
+      .Items(kCheapRenderPresetNames, kCheapRenderPresetTips, 3)
+      .AsGroup()
+      .EnableWhen(&CheapScaleEnabled, &kCheapScaleGate)
+      .Category(kCatTemporal)
+      .Tooltip("Render preset for the cheap model's own feature. Auto follows "
+               "this pass's, which needs no second feature; the others create "
+               "one, because NGX latches the hint at creation.");
   pass.Add<ctl::FloatSetting>(kTemporalPhotometricAbsThreshold,
                               "Photo Abs.", 0.06f)
       .ClampRange(0.001f, 0.25f)

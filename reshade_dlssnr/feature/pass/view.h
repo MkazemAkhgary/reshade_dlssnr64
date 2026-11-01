@@ -42,7 +42,8 @@ struct PassSnapshot {
 
   // Model group.
   int preset = 0;
-  int render_preset = 1;
+  // Item index: 0 Quality, 1 Performance.
+  int render_preset = 0;
   float working_scale = 1.0f;
   bool working_scale_x2 = false;
   float intensity = 1.0f;
@@ -61,6 +62,8 @@ struct PassSnapshot {
   float temporal_max_invalid_percent = 5.0f;
   bool temporal_cheap_enabled = true;
   float temporal_cheap_scale = 0.5f;
+  // Item index: 0 Auto (the pass's own), 1 Quality, 2 Performance.
+  int temporal_cheap_render_preset = 0;
   bool temporal_fp16_history = false;
   float local_tone = 1.0f;
   float local_structure = 1.0f;
@@ -77,6 +80,17 @@ struct PassSnapshot {
 
 // Read the Pass section for `key`.
 PassSnapshot Read(const ctl::ValueStore& store, const ctl::InstanceKey& key);
+
+// The NGX hint a Render Preset item means: Quality is 1, Performance is 2.
+inline unsigned int RenderPresetHint(int item) {
+  return item >= 1 ? 2u : 1u;
+}
+
+// The cheap model's item is Auto (0), Quality (1) or Performance (2). Auto
+// means the hint the pass itself uses.
+inline unsigned int CheapRenderPresetHint(int item, unsigned int pass_hint) {
+  return item <= 0 ? pass_hint : RenderPresetHint(item - 1);
+}
 
 }  // namespace pass
 }  // namespace feature

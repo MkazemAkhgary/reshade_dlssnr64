@@ -51,6 +51,11 @@ inline constexpr const char* kTemporalMaxDisplacement = "temporal_max_displaceme
 inline constexpr const char* kTemporalMaxInvalidPercent = "temporal_max_invalid_percent";
 inline constexpr const char* kTemporalFp16History = "temporal_fp16_history";
 inline constexpr const char* kTemporalCheapEnabled = "temporal_cheap_enabled";
+// The render preset the cheap model's own feature is created with. NGX
+// latches it at creation, so a value the pass does not use needs a second
+// feature.
+inline constexpr const char* kTemporalCheapRenderPreset =
+    "temporal_cheap_render_preset";
 inline constexpr const char* kTemporalCheapScale = "temporal_cheap_scale";
 
 // Category "Advanced".

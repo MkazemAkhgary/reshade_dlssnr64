@@ -278,7 +278,10 @@ class PassSession {
       unsigned int eval_width,
       unsigned int eval_height,
       unsigned int width,
-      unsigned int height);
+      unsigned int height,
+      // True when filling for the cheap model's own feature: NGX keeps reset
+      // state per feature, so the two must not share one flag.
+      bool for_cheap_model = false);
 
   // Registers the known frame-boundary state of every pass-owned resource.
   // Called after ClearState() so inference never has to guess for resources
