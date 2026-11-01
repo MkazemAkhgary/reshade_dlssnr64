@@ -398,13 +398,13 @@ void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
 
   SectionDivider();
   local_changed = false;
-  ctl::DrawSection(store, feature::hdr::kSection, key, local_changed,
-                   MakeOptions(/*headers=*/true, /*indent=*/true));
+  ctl::DrawSection(store, feature::local_exposure::kSection, key,
+                   local_changed, MakeOptions(/*headers=*/true, /*indent=*/true));
   changed |= local_changed;
   SectionDivider();
   local_changed = false;
-  ctl::DrawSection(store, feature::local_exposure::kSection, key,
-                   local_changed, MakeOptions(/*headers=*/true, /*indent=*/true));
+  ctl::DrawSection(store, feature::hdr::kSection, key, local_changed,
+                   MakeOptions(/*headers=*/true, /*indent=*/true));
   changed |= local_changed;
   SectionDivider();
   local_changed = false;

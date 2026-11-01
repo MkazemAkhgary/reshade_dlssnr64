@@ -125,7 +125,7 @@ bool DrawHdrLayers(const void* context, ctl::ValueStore& store,
 
   ImGui::TextDisabled(
       "Stack order: Game Exposure base, then Adaptive correction. Local "
-      "Exposure is a separate section and applies after both.");
+      "Exposure is its own section and applies after both.");
 
   changed |= local_changed;
   return local_changed;
