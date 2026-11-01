@@ -15,9 +15,16 @@
 #include "gpu_resources.h"
 #include "generated/shader_sources.h"
 #include "generated/shader_bytecode.h"
+#include "pipeline/pipeline_graph.h"
 #include "pipeline_trace.h"
 
 namespace reshade_dlssnr {
+
+// Ring depth, in dispatches. The descriptor table and the constant buffer each
+// hold one slot per dispatch, and the ring has to cover every frame the CPU can
+// be ahead of the GPU.
+constexpr uint32_t kDescriptorRingSize =
+    kMaxFramesInFlight * kMaxFrameDispatches;
 
 namespace {
 
@@ -512,6 +519,19 @@ bool ComputeEngine::Dispatch(
   // descriptor table is fixed, but the resources behind it need not be.
   if (srvs[0] == nullptr || uavs[0] == nullptr) return false;
 
+  // The next slot may belong to a frame the GPU has not finished with yet, so
+  // refuse the dispatch rather than overwrite it.
+  if (frame_dispatches_ >= kMaxFrameDispatches) {
+    char message[256];
+    std::snprintf(message, sizeof(message),
+                  "compute: '%s' exceeded the frame dispatch budget (%u); "
+                  "kMaxFrameDispatches is too small for the step list",
+                  pass_name, kMaxFrameDispatches);
+    DLSSNR_LOG_ONCE(reshade::log::level::error, message);
+    return false;
+  }
+  ++frame_dispatches_;
+
   ID3D12PipelineState* pso = nullptr;
 
   {
@@ -561,6 +581,10 @@ bool ComputeEngine::Dispatch(
   return BindAndDispatch(
       command_list, pso, constants, srvs, uavs,
       threads_x, threads_y, threads_z);
+}
+
+void ComputeEngine::BeginFrame() {
+  frame_dispatches_ = 0;
 }
 
 bool ComputeEngine::Init(ID3D12Device* device) {

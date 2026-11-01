@@ -1379,18 +1379,6 @@ static_assert(
     "a session step in the Backbuffer stage needs an input the Backbuffer call site "
     "does not supply");
 
-// The dispatch ring has to hold one whole frame at the maximum pass count: its
-// descriptors and constants are written when the command is recorded and read
-// when it executes, so a slot reused too early hands a pending dispatch another
-// dispatch's resources. See kDescriptorRingSize in compute_engine.h.
-// +3, not +2: the histogram contributes two and the Release stage's
-// backbuffer grade contributes one. Leaving the Release grade out sized the
-// ring for fifteen frames of work rather than sixteen, which is what
-// kMaxFramesInFlight promises.
-static_assert(kMaxDispatchesPerFrame >= kMaxPasses * 9 + 4 + 3,
-              "kMaxDispatchesPerFrame no longer covers a frame at kMaxPasses "
-              "with the extra Exposure Mask build dispatch - raise it, and kDescriptorRingSize with it");
-
 const PipelineStepDef* SessionStepFor(PipelineNodeId id) {
   return FindStepDef(kSessionSteps, id);
 }

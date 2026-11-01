@@ -48,13 +48,8 @@ struct TransparentStringEqual {
 // submitted whenever the game gets round to it, so the ring has to cover every
 // frame the CPU can be ahead of the GPU.
 constexpr uint32_t kMaxFramesInFlight = 16;  // DXGI's maximum swapchain buffers
-// The ring covers the prior twelve per-pass dispatches plus up to seven
-// temporal edit/reprojection/validation/history dispatches, one game-exposure
-// read, HDR histogram work, Release grading, and Exposure Mask. Descriptors
-// and constants are consumed asynchronously by the GPU.
-constexpr uint32_t kMaxDispatchesPerFrame = kMaxPasses * 19 + 10 + 3;
-constexpr uint32_t kDescriptorRingSize =
-    kMaxFramesInFlight * kMaxDispatchesPerFrame;
+// The count the ring is sized from is kMaxFrameDispatches, which the pipeline's
+// step lists define.
 
 // Six SRV slots: the motion-vector step reads current/previous colour, current
 // and previous depth, the game's motion field, and its own previous field.
@@ -68,6 +63,10 @@ constexpr uint32_t kDescriptorsPerDispatch = kSrvCount + kUavCount + kCbvCount;
 class ComputeEngine {
  public:
   bool Init(ID3D12Device* device);
+
+  // Starts a new dispatch-budget window. Call it once per presented frame; the
+  // ring is sized for kMaxFrameDispatches in one window.
+  void BeginFrame();
 
   // Dispatches a registered compute pass by name. Passes are normally
   // compiled by the background worker; a post-ready miss gets one fallback
@@ -134,6 +133,9 @@ class ComputeEngine {
   Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptor_heap_;
   uint32_t descriptor_size_ = 0;
   uint32_t heap_index_ = 0;
+  // Dispatches taken since BeginFrame. Exceeding kMaxFrameDispatches would
+  // rewrite a slot the GPU may still be reading, so Dispatch refuses instead.
+  uint32_t frame_dispatches_ = 0;
   ID3D12GraphicsCommandList* bound_command_list_ = nullptr;
   bool descriptor_heap_bound_ = false;
   bool root_signature_bound_ = false;

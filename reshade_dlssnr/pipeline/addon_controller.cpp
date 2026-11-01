@@ -501,6 +501,9 @@ void AddonController::OnPresent(
 
   // A presented frame ends here, so the next pass is first again.
   frame_pass_count_ = 0;
+
+  // The dispatch budget resets here too, so its window is one presented frame.
+  codec_.BeginFrame();
 }
 
 uint64_t AddonController::RunPresentFrame(

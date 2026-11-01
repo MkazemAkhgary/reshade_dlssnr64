@@ -25,6 +25,7 @@
 #include <dxgi1_4.h>
 #include <wrl/client.h>
 
+#include "project_constants.h"
 #include "debug/debug_view.h"
 #include "dlss_guides.h"
 #include "feature/pass/ui.h"
@@ -781,6 +782,85 @@ inline constexpr PipelineNodeId kReleaseStepNodes[] = {
     PipelineNodeId::WriteDebugToBackbuffer,
     PipelineNodeId::SignalHdrAtPresent,
 };
+
+// ---------------------------------------------------------------------------
+// Dispatch budget
+// ---------------------------------------------------------------------------
+//
+// The engine's descriptor and constant ring is sized once, at Init, from a
+// compile-time count of dispatches per frame. That count has to be an upper
+// bound on what one frame can record.
+//
+// The count is the sum of the stage step lists, so a step added to a stage is
+// included without anyone updating a number here. Each per-step cost assumes
+// that every optional dispatch the step can make is taken.
+struct NodeDispatchCost {
+  PipelineNodeId node;
+  uint32_t max_dispatches;
+};
+
+inline constexpr NodeDispatchCost kNodeDispatchCosts[] = {
+    // Game exposure read + histogram clear + histogram build.
+    {PipelineNodeId::HdrBeginFrame, 3},
+    // Split, plus the two opt-in statistics dispatches.
+    {PipelineNodeId::GainMapSplit, 3},
+    // Downsample, unlifted composition reference, local-exposure gain.
+    {PipelineNodeId::PrepareModelInput, 3},
+    {PipelineNodeId::BuildEffectiveLocalExposure, 1},
+    // ApplyGrade, plus ApplyCas on an SDR target.
+    {PipelineNodeId::GradeModelInput, 2},
+    {PipelineNodeId::SynthesizeMotion, 1},
+    // Reprojection, depth validation, cheap-model downsample, cheap blend, and
+    // the reproject-only apply used when the blend does not run.
+    {PipelineNodeId::TemporalPrepare, 5},
+    // Temporal history commit, plus the edit apply on a refresh frame.
+    {PipelineNodeId::ModelOutputBarrier, 2},
+    // Classify, then smooth.
+    {PipelineNodeId::BuildExposureMask, 2},
+    // Tile reduction, global reduction, ApplyGrade, ApplyCas.
+    {PipelineNodeId::GradeModelOutput, 4},
+    {PipelineNodeId::ComposeModelOutput, 1},
+    {PipelineNodeId::RenderDebugView, 1},
+    // Release stage: ApplyGrade and ApplyCas. The other two steps only copy and
+    // signal a fence.
+    {PipelineNodeId::GradeBackbuffer, 2},
+};
+
+constexpr uint32_t NodeDispatchCost(PipelineNodeId node) {
+  for (size_t i = 0; i < ArrayCount(kNodeDispatchCosts); ++i) {
+    if (kNodeDispatchCosts[i].node == node) {
+      return kNodeDispatchCosts[i].max_dispatches;
+    }
+  }
+  return 0;
+}
+
+constexpr uint32_t StageDispatchBudget(const PipelineNodeId* steps,
+                                       size_t count) {
+  uint32_t total = 0;
+  for (size_t i = 0; i < count; ++i) {
+    total += NodeDispatchCost(steps[i]);
+  }
+  return total;
+}
+
+constexpr uint32_t MaxOfThree(uint32_t a, uint32_t b, uint32_t c) {
+  return a > b ? (a > c ? a : c) : (b > c ? b : c);
+}
+
+// One pass runs one injection stage, so the frame's per-pass cost is the most
+// expensive of the three.
+inline constexpr uint32_t kMaxPassDispatches = MaxOfThree(
+    StageDispatchBudget(kPresentStepNodes, ArrayCount(kPresentStepNodes)),
+    StageDispatchBudget(kPreDlssStepNodes, ArrayCount(kPreDlssStepNodes)),
+    StageDispatchBudget(kPostDlssStepNodes, ArrayCount(kPostDlssStepNodes)));
+
+// The release stage runs once per frame, after every pass.
+inline constexpr uint32_t kReleaseDispatches =
+    StageDispatchBudget(kReleaseStepNodes, ArrayCount(kReleaseStepNodes));
+
+inline constexpr uint32_t kMaxFrameDispatches =
+    kMaxPasses * kMaxPassDispatches + kReleaseDispatches;
 
 // Per-translation-unit step registries. Each owning .cpp implements the ones
 // covering the nodes whose bodies live there; returning nullptr for a node it
