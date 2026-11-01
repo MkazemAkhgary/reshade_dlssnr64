@@ -28,6 +28,10 @@ PipelineStatus RunBuildExposureMask(PassRun& run) {
   if (run.stage == nullptr || run.stage->owns_submit ||
       (!run.stage->is_pre_dlss && !run.stage->is_post_dlss) ||
       !run.hdr_state.enable || !run.mask_state.enable ||
+      // The mask is metering input for Adaptive Exposure alone, and only when
+      // that layer asks for it. Building it otherwise is work nothing reads.
+      !run.hdr_state.adaptive_exposure.enabled ||
+      !run.hdr_state.adaptive_exposure.filters.exposure_mask ||
       run.exposure_mask == nullptr ||
       run.model_color == nullptr || run.model_output == nullptr ||
       run.eval_result != NVSDK_NGX_Result_Success || run.temporal_reuse ||

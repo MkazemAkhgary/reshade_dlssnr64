@@ -3,11 +3,11 @@
 // The mask is built by the first Pre/Post-DLSS pass from the model's actual
 // input/output difference. Every row is gated by the section toggle alone.
 //
-// The other condition -- "HDR is on" -- is not expressed here. It is a fact
-// about a different feature, and this file has no way to read it except by
-// naming HDR's keys, which would silently break if HDR renamed one. The
-// overlay hosts both sections, so it owns that coupling: it disables this
-// whole section when HDR is off. See ui/ui.cpp.
+// The other conditions -- HDR on, Adaptive Exposure on and asking for the mask,
+// and a pass that is not a Backbuffer pass -- belong to other features and to
+// the pass. Reading them here would mean naming their keys, which breaks
+// silently if one is renamed. The overlay hosts every section and owns that
+// coupling: it draws this one disabled when they do not hold. See ui/ui.cpp.
 
 #include "ctl/builtin_settings.h"
 #include "profiling/profile.h"

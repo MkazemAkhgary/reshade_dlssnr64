@@ -948,8 +948,10 @@ void AddonController::AdvanceMaskFrames(bool master_enabled) {
   for (auto& entry : sessions_) {
     if (entry.second == nullptr) continue;
     const ctl::InstanceKey key = feature::pass::PassKey(entry.first);
-    const bool enabled = master_enabled &&
-        feature::hdr::Read(store, key).enable &&
+    const HdrSettings hdr = feature::hdr::Read(store, key);
+    const bool enabled = master_enabled && hdr.enable &&
+        hdr.adaptive_exposure.enabled &&
+        hdr.adaptive_exposure.filters.exposure_mask &&
         feature::exposure_mask::Read(store, key).enable;
     entry.second->AdvanceMaskFrame(enabled);
   }
