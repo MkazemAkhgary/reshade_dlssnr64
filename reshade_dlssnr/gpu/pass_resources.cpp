@@ -26,6 +26,19 @@ bool PassResources::EnsureOutput(ID3D12Device* device,
 
 void PassResources::ReleaseOutput() { output_.Reset(); }
 
+void PassResources::ReleaseTemporalResources() {
+  temporal_previous_input_.Reset();
+  temporal_previous_edit_.Reset();
+  temporal_previous_depth_.Reset();
+  temporal_candidate_.Reset();
+  temporal_validated_candidate_.Reset();
+  temporal_stats_.Reset();
+  temporal_width_ = 0;
+  temporal_height_ = 0;
+  temporal_input_format_ = DXGI_FORMAT_UNKNOWN;
+  temporal_edit_format_ = DXGI_FORMAT_UNKNOWN;
+}
+
 bool PassResources::EnsureCompositeOutput(ID3D12Device* device,
                                           const D3D12_RESOURCE_DESC& desc) {
   DLSSNR_PROFILE_RESOURCE_L2("PassResources::EnsureCompositeOutput");

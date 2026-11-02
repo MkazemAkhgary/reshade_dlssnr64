@@ -85,6 +85,9 @@ class PassResources {
                                     unsigned int width,
                                     unsigned int height);
 
+  // Drop the temporal history; the next ensure recreates it zero-filled.
+  void ReleaseTemporalResources();
+
   // Ensures scratch slot `index` matches the given size and format.
   bool EnsureScratch(ID3D12Device* device,
                      const D3D12_RESOURCE_DESC& desc,

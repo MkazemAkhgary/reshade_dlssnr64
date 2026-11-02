@@ -183,6 +183,11 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
                        ? 0
                        : std::clamp(run.pass_state.temporal_mode, 0, 3);
   if (mode == 0) {
+    // The buffers outlive the mode, so drop them: a stale edit left behind is
+    // a ghost on the first frame after it is switched back on.
+    if (self->temporal_.last_mode != 0) {
+      self->resources_.ReleaseTemporalResources();
+    }
     self->temporal_.history_valid = false;
     self->temporal_.feedback_valid = false;
     self->temporal_.invalid_fraction = 1.0f;
