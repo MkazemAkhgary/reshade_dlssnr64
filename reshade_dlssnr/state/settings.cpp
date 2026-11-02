@@ -355,25 +355,6 @@ void SaveSettingsValues(const Settings& settings,
   WriteValue(key_prefix, "Enabled", settings.enabled);
 }
 
-feature::pass::PassOrder ReadPassOrder(const ctl::ValueStore& store) {
-  const ctl::Value value = store.Read(
-      feature::pass::kOrderSection, ctl::InstanceKey::Shared(),
-      feature::pass::kOrderSetting);
-  feature::pass::PassOrder order;
-  order.reserve(value.as_int_list.size());
-  for (int64_t id : value.as_int_list) {
-    if (id <= 0 || id > std::numeric_limits<feature::pass::PassId>::max()) {
-      continue;
-    }
-    const auto pass_id = static_cast<feature::pass::PassId>(id);
-    if (std::find(order.begin(), order.end(), pass_id) == order.end()) {
-      order.push_back(pass_id);
-    }
-    if (order.size() >= kMaxPasses) break;
-  }
-  return order;
-}
-
 void WritePassOrder(ctl::ValueStore& store,
                     const feature::pass::PassOrder& order) {
   std::vector<int64_t> values;
@@ -468,6 +449,25 @@ void ApplyPresetData(const json::Value& data) {
 
 Settings& GetSettings() {
   return g_settings;
+}
+
+feature::pass::PassOrder ReadPassOrder(const ctl::ValueStore& store) {
+  const ctl::Value value = store.Read(
+      feature::pass::kOrderSection, ctl::InstanceKey::Shared(),
+      feature::pass::kOrderSetting);
+  feature::pass::PassOrder order;
+  order.reserve(value.as_int_list.size());
+  for (int64_t id : value.as_int_list) {
+    if (id <= 0 || id > std::numeric_limits<feature::pass::PassId>::max()) {
+      continue;
+    }
+    const auto pass_id = static_cast<feature::pass::PassId>(id);
+    if (std::find(order.begin(), order.end(), pass_id) == order.end()) {
+      order.push_back(pass_id);
+    }
+    if (order.size() >= kMaxPasses) break;
+  }
+  return order;
 }
 
 void SetPassOrder(Settings& settings, feature::pass::PassOrder order) {

@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include "ctl/menu.h"
 #include "ctl/schema.h"
 
 namespace reshade_dlssnr {
@@ -27,6 +28,10 @@ namespace feature {
 // declares everything about its settings inside it, inline at the declaration
 // site.
 void RegisterAllSchemas(ctl::Schema& schema);
+
+// Declare every feature's context-menu commands. Same shape and same reason
+// as the schemas: one line per feature, order is menu order within a group.
+void RegisterAllMenuCommands(ctl::MenuCommandRegistry& registry);
 
 }  // namespace feature
 }  // namespace reshade_dlssnr

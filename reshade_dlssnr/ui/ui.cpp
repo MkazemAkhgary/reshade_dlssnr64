@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "ctl/draw.h"
+#include "ctl/menu.h"
 #include "feature/settings_store.h"
 #include "ctl/values.h"
 #include "feature/debug_log/settings.h"
@@ -111,6 +112,13 @@ void WriteCategoryOpen(void* /*context*/, const std::string& section,
   if (setting != nullptr) feature::ui_state::Write(setting, open);
 }
 
+// What the context menu copied. UI state, not a setting, so it lives here and
+// is handed to the drawer rather than stored in the settings tree.
+ctl::Clipboard& Clipboard() {
+  static ctl::Clipboard clipboard;
+  return clipboard;
+}
+
 ctl::DrawOptions MakeOptions(bool headers, bool indent) {
   ctl::DrawOptions options;
   options.section_open = &ReadSectionOpen;
@@ -119,6 +127,8 @@ ctl::DrawOptions MakeOptions(bool headers, bool indent) {
   options.set_category_open = &WriteCategoryOpen;
   options.category_style = ctl::DrawOptions::CategoryStyle::SubHeader;
   options.ui_context = Ui();
+  options.menu_commands = &feature::MenuCommands();
+  options.clipboard = &Clipboard();
   options.draw_headers = headers;
   options.indent_bodies = indent;
   return options;
@@ -244,6 +254,10 @@ namespace {
 void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
                         bool& changed) {
   DLSSNR_PROFILE_UI_L2("DrawTabsRowAndBody");
+  // Only the context menu reads these two fields, and a tab is drawn outside
+  // any section, so one set of options serves every tab.
+  const ctl::DrawOptions menu_options = MakeOptions(/*headers=*/true,
+                                                    /*indent=*/true);
   // The section header keeps the legacy label.
   DrawCollapsible(
       "Passes", feature::ui_state::kPassesOpen, changed,
@@ -363,8 +377,18 @@ void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
       Tip("%s", tab.tooltip.c_str());
     }
+    // The tab is the handle for the whole pass: its menu acts on every
+    // section instance the pass owns, not on the Pass section alone.
+    const ImVec2 tab_min = ImGui::GetItemRectMin();
+    const ImVec2 tab_max = ImGui::GetItemRectMax();
     ImGui::PopStyleColor(3);
     ImGui::PopStyleVar();
+    const ctl::MenuTarget tab_target{nullptr, nullptr,
+                                     feature::pass::PassKey(tab.id)};
+    const ctl::Rect tab_rect{tab_min.x, tab_min.y, tab_max.x, tab_max.y};
+    if (ctl::DrawContextMenu(store, menu_options, tab_target, tab_rect)) {
+      changed = true;
+    }
     ImGui::PopID();
   }
 

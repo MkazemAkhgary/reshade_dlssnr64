@@ -9,6 +9,9 @@ reshade_dlssnr/generated/
 # diff script
 apply_diff.py
 
+# ImGui window layout, written wherever a context is destroyed
+imgui.ini
+
 # User-specific files
 *.rsuser
 *.suo

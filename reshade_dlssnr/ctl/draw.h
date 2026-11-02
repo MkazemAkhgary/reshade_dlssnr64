@@ -14,6 +14,9 @@
 namespace reshade_dlssnr {
 namespace ctl {
 
+class MenuCommandRegistry;
+struct Clipboard;
+
 struct DrawOptions {
   using HeaderAction = void (*)(void* context, const std::string& section,
                                bool& changed);
@@ -45,6 +48,13 @@ struct DrawOptions {
   // header (for example, a reset action). The section toggle itself remains
   // native to ctl and is driven by Section::HeaderToggle.
   HeaderAction header_action = nullptr;
+
+  // Commands the application contributes to the row context menu. Unset
+  // leaves the framework's own copy and paste.
+  const MenuCommandRegistry* menu_commands = nullptr;
+
+  // Where the context menu keeps what it copied. Unset disables the menu.
+  Clipboard* clipboard = nullptr;
 
   // Draw the section header at all. Off for sections the caller inlines.
   bool draw_headers = true;

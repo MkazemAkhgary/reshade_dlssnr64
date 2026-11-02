@@ -12,6 +12,7 @@
 //   ctl/registry.h value-type registry (add a type without touching the core)
 //   ctl/serialize.h versioned save/load/delete persistence
 //   ctl/draw.h     ImGui rendering of a schema
+//   ctl/menu.h     context menu: copy, paste, registered commands
 //
 // Typical use:
 //   ctl::Registry registry;
@@ -32,3 +33,4 @@
 #include "ctl/registry.h"
 #include "ctl/serialize.h"
 #include "ctl/draw.h"
+#include "ctl/menu.h"

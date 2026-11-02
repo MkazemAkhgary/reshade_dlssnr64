@@ -15,6 +15,7 @@ ctl/
   values.h/.cpp         InstanceKey, Instance, InstanceSet, ValueStore (storage)
   serialize.h/.cpp      KeyValueWriter/Reader, Save/Load (persistence)
   draw.h/.cpp           DrawSection                  (rendering)
+  menu.h/.cpp           DrawContextMenu, copy/paste, MenuCommandRegistry
   builtin_settings.h/.cpp  FloatSetting, IntSetting, BoolSetting, EnumSetting, StringSetting, IntListSetting
   trace.h/.cpp             schema-driven setting trace recorder
   ctl_acceptance.cpp    acceptance harness
@@ -131,6 +132,28 @@ row.
 list, so a hook participates in ordering exactly like a setting. Within a
 category sub-group a hook obeys the group's collapse state, so a tab bar or
 readout cannot leak out of a collapsed sub-section.
+
+### Context menu
+
+Every row and every section header answers a right-click with Copy and Paste,
+and with whatever commands the application registered. Copy takes the target's
+own value, its section, or its whole instance; Paste applies as much of the
+clipboard as the target can hold.
+
+A command is data plus three predicates, the same shape Unreal's
+`FUICommandList` maps a `FUICommandInfo` through:
+
+```cpp
+registry.Add({.name = "pass.copy_from_previous",
+              .group = "pass",
+              .label = "Copy from previous pass",
+              .visible = &HasNeighbour,   // absent when there is no neighbour
+              .enabled = nullptr,         // always enabled when visible
+              .execute = &CopyFromPrevious});
+```
+
+`visible` hides the entry, `enabled` greys it out. A caller that draws its own
+widget passes that widget's rectangle to `DrawContextMenu`.
 
 ### Types are one class plus one registration line
 

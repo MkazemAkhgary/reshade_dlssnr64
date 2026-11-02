@@ -27,5 +27,14 @@ ctl::ValueStore& SettingsStore() {
   return store;
 }
 
+ctl::MenuCommandRegistry& MenuCommands() {
+  static ctl::MenuCommandRegistry registry = [] {
+    ctl::MenuCommandRegistry result;
+    RegisterAllMenuCommands(result);
+    return result;
+  }();
+  return registry;
+}
+
 }  // namespace feature
 }  // namespace reshade_dlssnr

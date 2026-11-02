@@ -15,6 +15,10 @@ void RegisterExposureMaskSchema(ctl::Schema& schema);
 void RegisterPassSchema(ctl::Schema& schema);
 void RegisterUiStateSchema(ctl::Schema& schema);
 
+namespace pass {
+void RegisterPassMenuCommands(ctl::MenuCommandRegistry& registry);
+}  // namespace pass
+
 void RegisterAllSchemas(ctl::Schema& schema) {
   DLSSNR_PROFILE_CTL_L1("RegisterAllSchemas");
   RegisterUiStateSchema(schema);
@@ -33,6 +37,10 @@ void RegisterAllSchemas(ctl::Schema& schema) {
   RegisterHdrSchema(schema);
   RegisterLocalExposureSchema(schema);
   RegisterExposureMaskSchema(schema);
+}
+
+void RegisterAllMenuCommands(ctl::MenuCommandRegistry& registry) {
+  pass::RegisterPassMenuCommands(registry);
 }
 
 }  // namespace feature

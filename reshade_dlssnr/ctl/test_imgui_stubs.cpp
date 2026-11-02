@@ -33,6 +33,7 @@ void SetItemDefaultFocus() {}
 void SetNextItemOpen(bool, ImGuiCond) {}
 
 ImVec2 GetContentRegionAvail() { return ImVec2(200.0f, 20.0f); }
+ImVec2 GetCursorScreenPos() { return ImVec2(0.0f, 0.0f); }
 
 ImGuiStyle& GetStyle() {
   static ImGuiStyle style;
@@ -42,6 +43,17 @@ ImGuiStyle& GetStyle() {
 // --- Hover / item state ----------------------------------------------------
 
 bool IsItemHovered(ImGuiHoveredFlags) { return false; }
+bool IsWindowHovered(ImGuiHoveredFlags) { return false; }
+bool IsMouseClicked(ImGuiMouseButton, bool) { return false; }
+ImVec2 GetMousePos() { return ImVec2(0.0f, 0.0f); }
+
+// --- Popups and menus ------------------------------------------------------
+
+void OpenPopup(const char*, ImGuiPopupFlags) {}
+bool BeginPopup(const char*, ImGuiWindowFlags) { return false; }
+void EndPopup() {}
+bool MenuItem(const char*, const char*, bool, bool) { return false; }
+void Separator() {}
 
 // --- Widgets ---------------------------------------------------------------
 

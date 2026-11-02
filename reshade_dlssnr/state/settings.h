@@ -57,6 +57,10 @@ feature::pass::PassId NewPassId();
 
 Settings& GetSettings();
 
+// The pass order as persisted, validated and deduplicated. The store is the
+// source of truth; Settings::pass_order mirrors it for the UI.
+feature::pass::PassOrder ReadPassOrder(const ctl::ValueStore& store);
+
 void LoadSettings();
 void SaveSettings();
 void SetPassOrder(Settings& settings, feature::pass::PassOrder order);

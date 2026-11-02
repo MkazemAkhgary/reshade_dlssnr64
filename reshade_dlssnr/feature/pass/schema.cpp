@@ -14,6 +14,7 @@
 #include "ctl/builtin_settings.h"
 #include "profiling/profile.h"
 #include "ctl/draw.h"
+#include "ctl/menu.h"
 #include "ctl/schema.h"
 #include "ctl/values.h"
 #include "feature/pass/settings.h"
@@ -137,11 +138,15 @@ bool DrawGradeSections(const void*, ctl::ValueStore& store,
 }
 
 bool DrawWorkingScaleRow(const void*, ctl::ValueStore& store,
-                        const ctl::DrawOptions&, const std::string& section,
+                        const ctl::DrawOptions& options,
+                        const std::string& section,
                         const ctl::InstanceKey& key, bool& changed) {
   DLSSNR_PROFILE_UI_L3("DrawWorkingScaleRow");
   const float scale = store.Read(section, key, kWorkingScale).as_float;
   const bool x2 = store.Read(section, key, kWorkingScaleX2).as_bool;
+
+  const ImVec2 row_start = ImGui::GetCursorScreenPos();
+  const float row_right = row_start.x + ImGui::GetContentRegionAvail().x;
 
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("Working Scale");
@@ -212,7 +217,15 @@ bool DrawWorkingScaleRow(const void*, ctl::ValueStore& store,
   }
   ImGui::PopID();
 
-  bool local_changed = false;
+  // The row draws two settings; the menu speaks for the slider, which is the
+  // one the row is named after.
+  const ImVec2 row_end = ImGui::GetCursorScreenPos();
+  const ctl::Rect row_rect{row_start.x, row_start.y, row_right,
+                           row_end.y - ImGui::GetStyle().ItemSpacing.y};
+  const bool menu_changed = ctl::DrawSettingContextMenu(
+      store, options, section, key, kWorkingScale, row_rect);
+
+  bool local_changed = menu_changed;
   if (scale_changed) {
     store.Write(section, key, kWorkingScale,
                 ctl::Value::Float(new_scale), /*from_user=*/true);

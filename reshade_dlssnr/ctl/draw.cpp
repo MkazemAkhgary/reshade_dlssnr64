@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "ctl/menu.h"
 #include "ui/ui_widgets.h"
 
 namespace reshade_dlssnr {
@@ -265,6 +266,9 @@ bool DrawSection(ValueStore& store, const std::string& section_name,
   bool local_changed = false;
 
   if (options.draw_headers) {
+    const ImVec2 header_start = ImGui::GetCursorScreenPos();
+    const float header_right =
+        header_start.x + ImGui::GetContentRegionAvail().x;
     const Setting* toggle_setting =
         FindSetting(*section, section->header_toggle_setting());
     if (toggle_setting != nullptr) {
@@ -286,6 +290,13 @@ bool DrawSection(ValueStore& store, const std::string& section_name,
     if (options.header_action != nullptr) {
       options.header_action(options.ui_context, section_name, local_changed);
     }
+
+    const ImVec2 header_end = ImGui::GetCursorScreenPos();
+    const Rect header_rect{header_start.x, header_start.y, header_right,
+                           header_end.y - ImGui::GetStyle().ItemSpacing.y};
+    const MenuTarget header_target{section, nullptr, key};
+    local_changed |= DrawContextMenu(store, options, header_target, header_rect);
+
     if (!open) {
       changed |= local_changed;
       ImGui::PopID();
@@ -294,8 +305,8 @@ bool DrawSection(ValueStore& store, const std::string& section_name,
     if (options.indent_bodies) ImGui::Indent(16.0f);
   }
 
-  // Body only: a disabled section must still open, so it can be read.
-  if (!section_enabled) ImGui::BeginDisabled();
+  // The gate is applied per item, not around the body: a popup begun inside a
+  // disabled scope inherits it.
   std::vector<std::string> active_path;
   std::vector<bool> active_open;
 
@@ -319,10 +330,22 @@ bool DrawSection(ValueStore& store, const std::string& section_name,
         const bool was_open = CategoryIsOpen(options, section_name, full_path);
         const std::string id_path = JoinCategoryPath(desired, desired.size()) +
             "/level/" + std::to_string(i);
-        open = DrawCategoryHeader(options, store, *section, key, label,
-                                  full_path, id_path, was_open,
-                                  FindCategoryToggle(*section, full_path),
-                                  local_changed);
+        const ImVec2 header_start = ImGui::GetCursorScreenPos();
+        const float header_right =
+            header_start.x + ImGui::GetContentRegionAvail().x;
+        WithDisabled(!section_enabled, [&] {
+          open = DrawCategoryHeader(options, store, *section, key, label,
+                                    full_path, id_path, was_open,
+                                    FindCategoryToggle(*section, full_path),
+                                    local_changed);
+        });
+        const ImVec2 header_end = ImGui::GetCursorScreenPos();
+        const Rect header_rect{header_start.x, header_start.y, header_right,
+                               header_end.y - ImGui::GetStyle().ItemSpacing.y};
+        MenuTarget category_target{section, nullptr, key};
+        category_target.category = full_path;
+        local_changed |=
+            DrawContextMenu(store, options, category_target, header_rect);
       }
       active_path.push_back(desired[i]);
       active_open.push_back(open);
@@ -336,7 +359,9 @@ bool DrawSection(ValueStore& store, const std::string& section_name,
       if (hook.has_category) switch_path(SplitCategoryPath(hook.category));
       const bool path_open = active_open.empty() || active_open.back();
       if (!path_open) continue;
-      DrawHook(hook, store, options, section->name(), key, local_changed);
+      WithDisabled(!section_enabled, [&] {
+        DrawHook(hook, store, options, section->name(), key, local_changed);
+      });
       continue;
     }
 
@@ -355,6 +380,9 @@ bool DrawSection(ValueStore& store, const std::string& section_name,
     const bool indented = !category.empty();
     if (indented) ImGui::Indent(16.0f);
 
+    const ImVec2 row_start = ImGui::GetCursorScreenPos();
+    const float row_right = row_start.x + ImGui::GetContentRegionAvail().x;
+
     if (!setting.meta().inline_toggle_setting.empty() &&
         DrawInlineToggle(*section, store, key, setting)) {
       local_changed = true;
@@ -364,7 +392,7 @@ bool DrawSection(ValueStore& store, const std::string& section_name,
 
     SettingContext context;
     context.setting = &setting;
-    context.enabled = RowEnabled(*section, setting, store, key);
+    context.enabled = section_enabled && RowEnabled(*section, setting, store, key);
 
     Value written = resolved;
     bool row_changed = false;
@@ -377,11 +405,16 @@ bool DrawSection(ValueStore& store, const std::string& section_name,
       local_changed = true;
     }
 
+    const ImVec2 row_end = ImGui::GetCursorScreenPos();
+    const Rect row_rect{row_start.x, row_start.y, row_right,
+                        row_end.y - ImGui::GetStyle().ItemSpacing.y};
+    const MenuTarget row_target{section, &setting, key};
+    local_changed |= DrawContextMenu(store, options, row_target, row_rect);
+
     if (indented) ImGui::Unindent(16.0f);
   }
 
   switch_path({});
-  if (!section_enabled) ImGui::EndDisabled();
   if (options.draw_headers && options.indent_bodies) ImGui::Unindent(16.0f);
 
   changed |= local_changed;
