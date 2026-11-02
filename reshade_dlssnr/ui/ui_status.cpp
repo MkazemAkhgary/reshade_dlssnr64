@@ -53,7 +53,7 @@ void FormatPassStatus(const PassStatus& pass,
       stage == InjectionStage::PostDLSS ? "Post-DLSS" : "Backbuffer";
 
   char scale[24] = "";
-  if (pass.enabled && working_scale < 0.999f) {
+  if (pass.enabled) {
     std::snprintf(scale, sizeof(scale), " - %.3gx",
                   static_cast<double>(working_scale));
   }
@@ -237,9 +237,11 @@ void DrawStatusSection(Settings& settings, bool& changed) {
       if (pass.target != static_cast<int>(display_stage)) continue;
 
       char buf[kStatusTextLength];
-      // Read the working scale from the store so the row shows the value
-      // the runtime actually runs at.
-      FormatPassStatus(entry.status, display_stage, pass.working_scale,
+      // The x2 toggle doubles the working scale, so the row shows the scale the
+      // runtime runs at rather than the slider's value.
+      const float working_scale =
+          pass.working_scale * (pass.working_scale_x2 ? 2.0f : 1.0f);
+      FormatPassStatus(entry.status, display_stage, working_scale,
                        pass.intensity <= 0.0f, snap.post_dlss_blocked, buf,
                        sizeof(buf));
 
