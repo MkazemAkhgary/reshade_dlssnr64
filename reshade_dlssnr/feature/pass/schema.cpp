@@ -338,8 +338,8 @@ void RegisterPassSchema(ctl::Schema& schema) {
   pass.Add<ctl::FloatSetting>(kIntensity, "Intensity", 1.0f)
       .ClampRange(0.0f, 2.0f)
       .Category(kCatModel)
-      .Tooltip("How strongly the model is instructed to edit the image. 0 "
-               "turns the model's edits off entirely.");
+      .Tooltip("How strongly the model is instructed to edit the image.\n"
+               "0 skips the model evaluation entirely");
   pass.Add<ctl::FloatSetting>(kLocalTone, "Local Tone", 1.0f)
       .ClampRange(0.0f, 2.0f)
       .Category(kCatModel)

@@ -58,7 +58,9 @@ PipelineStatus PassSession::StepSynthesizeMotion(PassRun& run) {
   run.synthetic_motion_ready = false;
   if (self == nullptr) return PipelineStatus::Ok;
 
-  const bool enabled = run.pass_bound && run.pass_state.synthetic_motion_guides;
+  // The model and reprojection are the only readers, and both are off.
+  const bool enabled = run.pass_bound && !run.model_bypassed &&
+                       run.pass_state.synthetic_motion_guides;
   // Depth is the one guide this step cannot work without: it rejects matches
   // across surfaces, and the correction needs it to trust the game's vector.
   // Motion is optional - synthesizing it is the point.

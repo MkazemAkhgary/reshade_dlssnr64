@@ -213,7 +213,7 @@ PipelineStatus PassSession::StepPrepareModelInput(PassRun& run) {
 PipelineStatus PassSession::StepFillEvaluateParams(PassRun& run) {
   DLSSNR_PROFILE_CORE_L2("StepFillEvaluateParams");
   PassSession* self = run.session;
-  if (run.temporal_reuse) return PipelineStatus::Ok;
+  if (run.temporal_reuse || run.model_bypassed) return PipelineStatus::Ok;
   if (run.runtime == nullptr || !run.pass_bound) {
     return PipelineStatus::SkipFrame;
   }
@@ -326,6 +326,20 @@ bool PassSession::EvalKeysDiffer(const EvalLogKey& a, const EvalLogKey& b) {
 PipelineStatus PassSession::StepEvaluateFeature(PassRun& run) {
   DLSSNR_PROFILE_RENDER_L2("StepEvaluateFeature");
   PassSession* self = run.session;
+  if (run.model_bypassed) {
+    // Intensity zero: the model is not asked and its output is its input. The
+    // steps after this one still see two images; they are equal.
+    if (run.model_color == nullptr || run.model_output == nullptr) {
+      return PipelineStatus::SkipFrame;
+    }
+    self->command_.CopyWithTransitions(
+        self->StageList(run, self->command_), run.model_color,
+        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, run.model_output,
+        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    run.eval_result = NVSDK_NGX_Result_Success;
+    TRACE_EVT(self, "model bypass pass=%u intensity=0", self->pass_id_);
+    return PipelineStatus::Ok;
+  }
   if (run.temporal_reuse) {
     run.eval_result = NVSDK_NGX_Result_Success;
     TRACE_EVT(self, "temporal skip NGX pass=%u", self->pass_id_);

@@ -45,6 +45,7 @@ void FormatBytes(uint64_t bytes, char* out, size_t out_size) {
 void FormatPassStatus(const PassStatus& pass,
                       InjectionStage stage,
                       float working_scale,
+                      bool model_passthrough,
                       bool post_dlss_blocked,
                       char* out, size_t out_size) {
   const char* stage_name =
@@ -74,6 +75,11 @@ void FormatPassStatus(const PassStatus& pass,
   }
   if (!pass.has_feature) {
     std::snprintf(out, out_size, "%s - initializing%s", stage_name, scale);
+    return;
+  }
+  if (model_passthrough) {
+    std::snprintf(out, out_size, "%s - running (model passthrough)%s",
+                  stage_name, scale);
     return;
   }
   std::snprintf(out, out_size, "%s - running%s", stage_name, scale);
@@ -234,7 +240,8 @@ void DrawStatusSection(Settings& settings, bool& changed) {
       // Read the working scale from the store so the row shows the value
       // the runtime actually runs at.
       FormatPassStatus(entry.status, display_stage, pass.working_scale,
-                       snap.post_dlss_blocked, buf, sizeof(buf));
+                       pass.intensity <= 0.0f, snap.post_dlss_blocked, buf,
+                       sizeof(buf));
 
       char label[32];
       std::snprintf(label, sizeof(label), "Pass %u",
@@ -257,7 +264,7 @@ void DrawStatusSection(Settings& settings, bool& changed) {
       ImGui::SameLine(kControlLabelWidth);
       ImGui::TextUnformatted(buf);
       if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        Tip("Current runtime status for this pass, including its target stage, working scale, initialization state, and any failure reason.");
+        Tip("Current runtime status for this pass, including its target stage, working scale, initialization state, whether the model is being skipped, and any failure reason.");
       }
     }
   }

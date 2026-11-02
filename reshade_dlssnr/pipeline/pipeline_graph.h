@@ -248,6 +248,8 @@ struct PassRun {
   bool temporal_duplicate_frame = false;
   bool temporal_candidate_ready = false;
   bool synthetic_motion_ready = false;
+  // Model intensity is zero: no evaluation, and the output is the input.
+  bool model_bypassed = false;
 
   // Present only: the swapchain's IDXGISwapChain3 interface, kept alive for
   // the duration of the stage. The steps that need it (the backbuffer

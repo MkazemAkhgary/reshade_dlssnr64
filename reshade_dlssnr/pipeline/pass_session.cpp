@@ -661,6 +661,7 @@ void PassSession::PrepareRun(PassRun& run,
     const ctl::ValueStore& store = feature::SettingsStore();
     const ctl::InstanceKey key = feature::pass::PassKey(pass_id_);
     run.pass_state = feature::pass::Read(store, key);
+    run.model_bypassed = run.pass_state.intensity <= 0.0f;
     run.grade_input =
         feature::grade::Read(store, key, feature::pass::kGradeInputSection,
                              feature::pass::kGradeInputPrefix);

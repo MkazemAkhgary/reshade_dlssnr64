@@ -24,9 +24,7 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
                           run.hdr->ResolvedFormat() != HdrFormat::Sdr;
 
   // Compare against the actual Grade Model Input result, then apply only the
-  // model residual to the image before that grade section. The option remains
-  // active at zero model intensity: there the comparison endpoints are made
-  // identical and the lift pair alone reaches the output.
+  // model residual to the image before that grade section.
   const bool apply_edit_to_pre_grade =
       run.input_grade_apply_to_pre_grade && run.grade_input.enabled &&
       run.model_color != nullptr && run.model_output != nullptr;
@@ -40,30 +38,16 @@ PipelineStatus PassSession::StepComposeModelOutput(PassRun& run) {
   const model_pipeline::HdrUniforms* hdr_ptr =
       hdr_active ? &run.hdr_uniforms : nullptr;
 
-  // Restore exposure applies to the model output at every intensity, so the
-  // composition must see the model output and its restored scale even when
-  // intensity is zero. Bypass the model output only when no such correction is
-  // active.
-  const bool restore_exposure_active =
-      run.local_exposure.enabled &&
-      run.local_exposure.restore_exposure &&
-      run.hdr_uniforms.local_exposure_strength > 0.0f &&
-      run.local_exposure.restore_strength > 0.0f;
-  const bool bypass_model =
-      run.pass_state.intensity <= 0.0f && !restore_exposure_active;
-
-  // Intensity == 0 means the model edit is explicitly disabled. Use the
-  // exact model input as the compose reference so NGX/evaluation noise cannot
-  // create a residual when the model output is intentionally bypassed.
-  ID3D12Resource* enhanced_for_compose =
-      bypass_model ? run.model_color : run.model_output;
+  // The model output is a real image at every intensity: at zero the evaluation
+  // step writes the model input into it, so nothing here special-cases that.
+  ID3D12Resource* enhanced_for_compose = run.model_output;
 
   // The reference is resolved where its image is produced: model-input
   // preparation sets the ungraded one, and the input grade replaces it when the
   // edit is applied to the pre-grade image.
   ID3D12Resource* compose_input = run.compose_reference;
   if (compose_input == nullptr) compose_input = run.model_input;
-  if (hdr_active && !bypass_model && !apply_edit_to_pre_grade &&
+  if (hdr_active && !apply_edit_to_pre_grade &&
       run.hdr_uniforms.local_exposure_strength > 0.0f &&
       self->resources_.GetUnliftedWorkingInput() != nullptr) {
     compose_input = self->resources_.GetUnliftedWorkingInput();

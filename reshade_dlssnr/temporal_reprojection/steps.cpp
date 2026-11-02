@@ -178,7 +178,10 @@ PipelineStatus PassSession::StepTemporalPrepare(PassRun& run) {
   self->temporal_.last_tick = now;
   self->temporal_.last_tick_valid = true;
 
-  const int mode = std::clamp(run.pass_state.temporal_mode, 0, 3);
+  // A bypassed model has no edit to reproject. Treated exactly as Off.
+  const int mode = run.model_bypassed
+                       ? 0
+                       : std::clamp(run.pass_state.temporal_mode, 0, 3);
   if (mode == 0) {
     self->temporal_.history_valid = false;
     self->temporal_.feedback_valid = false;
