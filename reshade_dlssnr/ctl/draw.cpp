@@ -49,6 +49,17 @@ bool DrawHook(const Hook& hook, ValueStore& store, const DrawOptions& options,
   return changed != before;
 }
 
+// The section-wide rule, when the section declares one. False leaves the
+// section drawn and expandable, but not editable.
+bool SectionEnabled(const Section& section, const ValueStore& store,
+                    const InstanceKey& key) {
+  for (const EnableRule& rule : section.enable_rules()) {
+    if (rule.enabled == nullptr || !rule.setting.empty()) continue;
+    return rule.enabled(rule.context, store, key, section.name());
+  }
+  return true;
+}
+
 bool RowEnabled(const Section& section, const Setting& setting,
                 const ValueStore& store, const InstanceKey& key) {
   if (setting.enabled() != nullptr) {
@@ -59,12 +70,6 @@ bool RowEnabled(const Section& section, const Setting& setting,
   for (const EnableRule& rule : section.enable_rules()) {
     if (rule.enabled == nullptr) continue;
     if (rule.setting == meta.name) {
-      return rule.enabled(rule.context, store, key, section.name());
-    }
-  }
-  for (const EnableRule& rule : section.enable_rules()) {
-    if (rule.enabled == nullptr) continue;
-    if (rule.setting.empty()) {
       return rule.enabled(rule.context, store, key, section.name());
     }
   }
@@ -249,9 +254,7 @@ bool DrawSection(ValueStore& store, const std::string& section_name,
   const Section* section = schema.FindSection(section_name);
   if (section == nullptr) return false;
 
-  const bool section_enabled =
-      options.section_gate == nullptr ||
-      options.section_gate(options.ui_context, store, section_name, key);
+  const bool section_enabled = SectionEnabled(*section, store, key);
 
   const std::string instance_scope = section_name + "/" + key.ToText();
   ImGui::PushID(instance_scope.c_str());
@@ -361,10 +364,7 @@ bool DrawSection(ValueStore& store, const std::string& section_name,
 
     SettingContext context;
     context.setting = &setting;
-    context.enabled = RowEnabled(*section, setting, store, key) &&
-                      (options.row_gate == nullptr ||
-                       options.row_gate(options.ui_context, store,
-                                        section_name, key));
+    context.enabled = RowEnabled(*section, setting, store, key);
 
     Value written = resolved;
     bool row_changed = false;

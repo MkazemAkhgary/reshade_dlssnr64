@@ -104,8 +104,8 @@ class Setting;
 // metadata. It is re-exported here for callers that only include schema.h.
 using ctl::EnablePredicate;
 
-// One enable rule. `setting` empty means it applies to the whole section;
-// otherwise it applies to the named setting.
+// One enable rule. `setting` empty means it gates the section; otherwise it
+// gates the named setting.
 struct EnableRule {
   std::string setting;
   EnablePredicate enabled = nullptr;
@@ -156,8 +156,9 @@ class Section {
     return *this;
   }
 
-  // Gate every setting in the section. A per-setting rule, if any, is
-  // consulted first, so a section-wide gate acts as the default.
+  // Gate the section as a whole: its header toggle and its rows are drawn
+  // disabled, and the header still expands, so the section can be read. A
+  // per-setting rule cannot re-enable a row inside a gated section.
   Section& EnableSectionWhen(EnablePredicate enabled,
                              const void* context = nullptr) {
     enable_rules_.push_back(EnableRule{{}, enabled, context});

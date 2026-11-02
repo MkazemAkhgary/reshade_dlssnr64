@@ -3,21 +3,40 @@
 // The mask is built by the first Pre/Post-DLSS pass from the model's actual
 // input/output difference. Every row is gated by the section toggle alone.
 //
-// The other conditions -- HDR on, Adaptive Exposure on and asking for the mask,
-// and a pass that is not a Backbuffer pass -- belong to other features and to
-// the pass. Reading them here would mean naming their keys, which breaks
-// silently if one is renamed. The overlay hosts every section and owns that
-// coupling: it draws this one disabled when they do not hold. See ui/ui.cpp.
+// The section as a whole is gated by conditions that belong to other features
+// and to the pass. They are declared here because a section gate is a property
+// of the section; the names are constants, so a rename is a compile error.
 
 #include "ctl/builtin_settings.h"
 #include "profiling/profile.h"
 #include "ctl/schema.h"
 #include "ctl/values.h"
 #include "feature/exposure_mask/settings.h"
+#include "feature/hdr/settings.h"
+#include "feature/pass/settings.h"
+#include "fragments/hdr_filter_rows/rows.h"
+#include "state/settings.h"
 
 namespace reshade_dlssnr {
 namespace feature {
 namespace exposure_mask {
+
+namespace {
+
+// The mask is metering input for Adaptive Exposure: without HDR metering, that
+// layer, or that layer's mask checkbox, there is nothing to feed. A Backbuffer
+// pass has no scene-referred source to measure the mask against.
+bool SectionEnabled(const void*, const ctl::ValueStore& store,
+                    const ctl::InstanceKey& key, const std::string&) {
+  const int target = store.Read(pass::kSection, key, pass::kTarget).as_int;
+  if (target == static_cast<int>(InjectionStage::Backbuffer)) return false;
+  return store.Read(hdr::kSection, key, hdr::kEnable).as_bool &&
+         store.Read(hdr::kAdaptiveSection, key, hdr::kAdaptiveEnabled).as_bool &&
+         store.Read(hdr::kAdaptiveSection, key,
+                    hdr_filter_rows::names::kExposureMask).as_bool;
+}
+
+}  // namespace
 
 }  // namespace exposure_mask
 
@@ -28,6 +47,7 @@ void RegisterExposureMaskSchema(ctl::Schema& schema) {
   ctl::Section& mask =
       schema.AddSection(kSection, ctl::SectionKind::Instanced);
   mask.HeaderToggle(kEnable);
+  mask.EnableSectionWhen(&SectionEnabled);
 
   mask.Add<ctl::BoolSetting>(kEnable, "Enable", false)
       .Tooltip("This pass builds its Exposure Mask after model evaluation. "

@@ -33,6 +33,7 @@ MSYS2_ARG_CONV_EXCL='*' cl.exe /nologo /W3 /permissive- /std:c++20 /EHsc \
   "/I$PROJW/ui" \
   "/I$PROJW/third_party/reshade/include" \
   "/I$PROJW/third_party/reshade" \
+  "/I$PROJW/third_party/tracy/public" \
   "/Fo$OUT/" /Fe"$OUT/ctl_acceptance.exe" \
   ctl/ctl_acceptance.cpp ctl/types.cpp ctl/schema.cpp ctl/values.cpp \
   ctl/registry.cpp ctl/serialize.cpp ctl/builtin_settings.cpp ctl/draw.cpp \

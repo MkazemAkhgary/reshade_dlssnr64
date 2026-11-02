@@ -67,6 +67,9 @@ bool Selectable(const char*, bool, ImGuiSelectableFlags, const ImVec2&) {
 }
 bool CollapsingHeader(const char*, bool*, ImGuiTreeNodeFlags) { return false; }
 bool CollapsingHeader(const char*, ImGuiTreeNodeFlags) { return false; }
+// Closed, so the drawer stops at the header. The harness never reads a row
+// back out of the drawer; it reads the store.
+bool TreeNodeEx(const char*, int) { return false; }
 void TextUnformatted(const char*, const char*) {}
 
 }  // namespace ImGui

@@ -15,7 +15,9 @@
 #include "ctl/values.h"
 #include "feature/hdr/settings.h"
 #include "feature/hdr/ui.h"
+#include "feature/pass/settings.h"
 #include "fragments/hdr_filter_rows/rows.h"
+#include "state/settings.h"
 
 namespace reshade_dlssnr {
 namespace feature {
@@ -44,6 +46,14 @@ const char* const kMeteringDensityTips[] = {
 constexpr const char* kCatAdvanced = "Advanced";
 constexpr const char* kCatDiagnostics = "Diagnostics";
 
+// A Backbuffer pass has no scene-referred source, so there is nothing for HDR
+// to meter there.
+bool EnabledOnPass(const void*, const ctl::ValueStore& store,
+                   const ctl::InstanceKey& key, const std::string&) {
+  const int target = store.Read(pass::kSection, key, pass::kTarget).as_int;
+  return target != static_cast<int>(InjectionStage::Backbuffer);
+}
+
 }  // namespace
 
 }  // namespace hdr
@@ -55,6 +65,7 @@ void RegisterHdrSchema(ctl::Schema& schema) {
   // --- HDR ---------------------------------------------------------------
   ctl::Section& hdr = schema.AddSection(kSection, ctl::SectionKind::Instanced);
   hdr.HeaderToggle(kEnable);
+  hdr.EnableSectionWhen(&EnabledOnPass);
   hdr.Add<ctl::BoolSetting>(kEnable, "Enable", true)
       .Tooltip("Meters the HDR image immediately before this pass. Later passes "
                "measure the image composed by the previous pass unless metering "

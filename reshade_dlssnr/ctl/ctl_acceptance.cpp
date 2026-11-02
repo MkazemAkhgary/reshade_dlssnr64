@@ -278,6 +278,8 @@ bool HasPrefix(const MemStore& mem, const std::string& prefix) {
 }  // namespace
 
 int main() {
+  // Unbuffered, so a crash keeps the log up to the test that caused it.
+  std::setvbuf(stdout, nullptr, _IONBF, 0);
   std::printf("ctl acceptance harness\n");
   std::printf("======================\n\n");
 
@@ -1270,6 +1272,28 @@ int main() {
     bad.Add<FloatSetting>("toggle", "Toggle", 1.0f);
     bad.Add<FloatSetting>("target", "Target", 1.0f).InlineToggle("toggle");
     Check(!bad_schema.Build(&error), "InlineToggle rejects non-boolean sources");
+  }
+
+  std::printf("\n[43] A section-wide enable rule gates the section\n");
+  {
+    // A section-wide rule names no setting: it decides the section as a
+    // whole, so the drawer gates the header toggle and every row with it.
+    struct Gate {
+      static bool Never(const void*, const ValueStore&, const InstanceKey&,
+                        const std::string&) {
+        return false;
+      }
+    };
+
+    Schema schema;
+    Section& s = schema.AddSection("S", SectionKind::Single);
+    s.Add<FloatSetting>("v", "V", 0.5f);
+    s.EnableSectionWhen(&Gate::Never);
+
+    std::string error;
+    Check(schema.Build(&error), "a schema with a section-wide rule builds");
+    Check(s.enable_rules().size() == 1 && s.enable_rules()[0].setting.empty(),
+          "a section-wide rule names no setting");
   }
 
   std::printf("\n======================\n");

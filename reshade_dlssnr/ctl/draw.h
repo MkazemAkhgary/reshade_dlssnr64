@@ -17,8 +17,6 @@ namespace ctl {
 struct DrawOptions {
   using HeaderAction = void (*)(void* context, const std::string& section,
                                bool& changed);
-  using RowGate = bool (*)(void* context, ValueStore& store,
-                           const std::string& section, const InstanceKey& key);
   // Section open/closed state, keyed by section name. The drawer owns no
   // persistent UI state of its own; the caller supplies it.
   bool (*section_open)(void* context, const std::string& section) = nullptr;
@@ -47,14 +45,6 @@ struct DrawOptions {
   // header (for example, a reset action). The section toggle itself remains
   // native to ctl and is driven by Section::HeaderToggle.
   HeaderAction header_action = nullptr;
-
-  // Optional application-owned gate combined with each row's declared gate.
-  // The header and its toggle stay interactive when a body row is gated off.
-  RowGate row_gate = nullptr;
-
-  // Optional application-owned gate for the section as a whole. False leaves
-  // it drawn and expandable, but not editable.
-  RowGate section_gate = nullptr;
 
   // Draw the section header at all. Off for sections the caller inlines.
   bool draw_headers = true;
