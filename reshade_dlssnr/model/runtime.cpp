@@ -1,13 +1,44 @@
 #include "model/runtime.h"
 #include "profiling/profile.h"
 
+#include <cstdio>
+
 #include <reshade.hpp>
+
+#pragma comment(lib, "advapi32.lib")
 
 namespace reshade_dlssnr {
 
+// Depth of the addon's own model evaluation on the current thread. The driver's
+// NGX core sits downstream of every model module, so a detour on the core sees
+// the addon's own evaluations as well as the game's.
+static thread_local int g_evaluation_depth = 0;
+
+bool AddonEvaluationInProgress() { return g_evaluation_depth > 0; }
+
 namespace {
 
+// Marks an evaluation for its duration, including any nested call the model
+// makes into the driver's core.
+struct EvaluationDepthScope {
+  EvaluationDepthScope() { ++g_evaluation_depth; }
+  ~EvaluationDepthScope() { --g_evaluation_depth; }
+};
+
 std::mutex g_runtime_mutex;
+
+// The driver's NGX core, as named from driver 471.11 onwards.
+constexpr const wchar_t* kCoreModuleName = L"_nvngx.dll";
+
+// Reported to the model module when it asks where it was loaded from. The
+// check it satisfies is on the directory: the model has to look like it was
+// installed next to the driver's core.
+wchar_t g_spoof_path[MAX_PATH] = {};
+
+// Used only when neither the process nor the driver's registry keys name a
+// directory for the installed core.
+constexpr const wchar_t* kFallbackSpoofPath =
+    L"C:\\Windows\\System32\\DriverStore\\FileRepository\\nvmdi.inf_amd64\\nvngx.dll";
 
 std::filesystem::path GetModuleDirectory() {
   HMODULE module = nullptr;
@@ -22,8 +53,96 @@ std::filesystem::path GetModuleDirectory() {
   return std::filesystem::path(path).remove_filename();
 }
 
-wchar_t g_spoof_path[MAX_PATH] =
-    L"C:\\Windows\\System32\\DriverStore\\FileRepository\\nvmdi.inf_amd64\\nvngx.dll";
+bool ReadRegistryString(const wchar_t* subkey, const wchar_t* value,
+                        wchar_t* out, DWORD size) {
+  HKEY key = nullptr;
+  if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, subkey, 0, KEY_QUERY_VALUE, &key) !=
+      ERROR_SUCCESS) {
+    return false;
+  }
+
+  DWORD type = 0;
+  DWORD bytes = size * sizeof(wchar_t);
+  const LONG status = RegQueryValueExW(key, value, nullptr, &type,
+                                       reinterpret_cast<LPBYTE>(out), &bytes);
+  RegCloseKey(key);
+
+  if (status != ERROR_SUCCESS || (type != REG_SZ && type != REG_EXPAND_SZ)) {
+    return false;
+  }
+  out[size - 1] = L'\0';
+  return out[0] != L'\0';
+}
+
+// Compares two directory paths without regard to case or a trailing separator.
+bool SameDirectory(const std::wstring& left_path, const std::wstring& right_path) {
+  std::wstring left = left_path;
+  std::wstring right = right_path;
+  while (!left.empty() && left.back() == L'\\') left.pop_back();
+  while (!right.empty() && right.back() == L'\\') right.pop_back();
+  return _wcsicmp(left.c_str(), right.c_str()) == 0;
+}
+
+// The directory the installed driver keeps its NGX core in. A driver install
+// lays down a new DriverStore folder, so this is read from the process or from
+// the driver's own registry keys rather than written down here.
+bool ResolveDriverNgxDirectory(wchar_t* out, DWORD size) {
+  // Only a core the driver already put in the process is trusted. Loading it by
+  // bare name here could pick up a stray copy from the game directory, which is
+  // the one location the model must not appear to live in.
+  HMODULE core = GetModuleHandleW(kCoreModuleName);
+  if (core != nullptr) {
+    wchar_t full[MAX_PATH] = {};
+    if (GetModuleFileNameW(core, full, MAX_PATH) != 0) {
+      wchar_t* separator = wcsrchr(full, L'\\');
+      if (separator != nullptr) {
+        *separator = L'\0';
+        // Streamline and some games ship their own copy next to the executable.
+        if (!SameDirectory(full, GetModuleDirectory().wstring())) {
+          wcscpy_s(out, size, full);
+          return true;
+        }
+      }
+    }
+  }
+
+  struct RegistryKey {
+    const wchar_t* subkey;
+    const wchar_t* value;
+  };
+  static const RegistryKey kKeys[] = {
+      {L"System\\CurrentControlSet\\Services\\nvlddmkm\\Parameters\\NGXCore",
+       L"NGXPath"},
+      {L"System\\CurrentControlSet\\Services\\nvlddmkm\\NGXCore", L"NGXPath"},
+      {L"SOFTWARE\\NVIDIA Corporation\\Global\\NGXCore", L"FullPath"},
+  };
+  for (const RegistryKey& key : kKeys) {
+    if (ReadRegistryString(key.subkey, key.value, out, size)) return true;
+  }
+
+  return false;
+}
+
+// Builds the path the model module is told it lives at. The file name stays
+// `nvngx.dll`; only the directory follows the installed driver.
+bool EnsureSpoofPath() {
+  if (g_spoof_path[0] != L'\0') return true;
+
+  wchar_t directory[MAX_PATH] = {};
+  wchar_t path[MAX_PATH] = {};
+  if (ResolveDriverNgxDirectory(directory, MAX_PATH) &&
+      swprintf_s(path, L"%s\\nvngx.dll", directory) > 0) {
+    wcscpy_s(g_spoof_path, path);
+    return true;
+  }
+
+  wcscpy_s(g_spoof_path, kFallbackSpoofPath);
+  reshade::log::message(
+      reshade::log::level::warning,
+      "DLSSNR: the installed driver's NGX directory could not be resolved; "
+      "the model is given the built-in path");
+  return false;
+}
 
 DWORD WINAPI HookedGetModuleFileNameW(HMODULE module, LPWSTR filename, DWORD size) {
   const DWORD len = static_cast<DWORD>(wcslen(g_spoof_path));
@@ -98,11 +217,22 @@ bool NgxRuntime::EnsureModelAndPatch() {
 
   if (model_module_ == nullptr) {
     reason_ = "nvngx_dlssnr.dll not found";
+    reshade::log::message(reshade::log::level::error, reason_);
     return false;
   }
 
-  PatchImport(model_module_, "KERNEL32.dll", "GetModuleFileNameW",
-              HookedGetModuleFileNameW);
+  EnsureSpoofPath();
+
+  // A failed patch is not fatal here, because the model may reach
+  // GetModuleFileNameW through an API set rather than through KERNEL32. It is
+  // still the first thing to suspect when initialization is refused.
+  if (!PatchImport(model_module_, "KERNEL32.dll", "GetModuleFileNameW",
+                   HookedGetModuleFileNameW)) {
+    reshade::log::message(
+        reshade::log::level::warning,
+        "DLSSNR: nvngx_dlssnr.dll does not import GetModuleFileNameW from "
+        "KERNEL32; its location check cannot be satisfied");
+  }
 
   init_ext_ = reinterpret_cast<PFN_InitExt>(
       GetProcAddress(model_module_, "NVSDK_NGX_D3D12_Init_Ext"));
@@ -115,6 +245,7 @@ bool NgxRuntime::EnsureModelAndPatch() {
 
   if (create_feature_ == nullptr || evaluate_feature_ == nullptr) {
     reason_ = "nvngx_dlssnr.dll is missing required exports";
+    reshade::log::message(reshade::log::level::error, reason_);
     return false;
   }
 
@@ -127,7 +258,11 @@ bool NgxRuntime::EnsureModelAndPatch() {
 bool NgxRuntime::EnsureInitialized(ID3D12Device* device) {
   DLSSNR_PROFILE_CORE_L2("NgxRuntime::EnsureInitialized");
   if (initialized_) return true;
-  if (init_ext_ == nullptr) return false;
+  if (init_ext_ == nullptr) {
+    reason_ = "nvngx_dlssnr.dll does not export NVSDK_NGX_D3D12_Init_Ext";
+    reshade::log::message(reshade::log::level::error, reason_);
+    return false;
+  }
 
   const std::wstring data_path = GetModuleDirectory().wstring();
   const NVSDK_NGX_Result result = init_ext_(
@@ -139,7 +274,13 @@ bool NgxRuntime::EnsureInitialized(ID3D12Device* device) {
 
   if (result != NVSDK_NGX_Result_Success) {
     reason_ = "nvngx_dlssnr.dll Init_Ext failed";
-    reshade::log::message(reshade::log::level::error, reason_);
+    char message[192];
+    std::snprintf(message, sizeof(message),
+                  "DLSSNR: Init_Ext failed: %s (0x%08X); SDK version asked "
+                  "for was 0x%08X",
+                  NgxResultName(result), static_cast<unsigned int>(result),
+                  static_cast<unsigned int>(NVSDK_NGX_Version_API));
+    reshade::log::message(reshade::log::level::error, message);
     return false;
   }
 
@@ -158,6 +299,7 @@ bool NgxRuntime::Initialize(ID3D12Device* device) {
   if (!EnsureInitialized(device)) return false;
   if (!parameter_block_.Initialize()) {
     reason_ = "driver NGX capability parameter block unavailable";
+    reshade::log::message(reshade::log::level::error, reason_);
     return false;
   }
 
@@ -188,6 +330,7 @@ NVSDK_NGX_Result NgxRuntime::EvaluateFeature(
     void* callback) {
   DLSSNR_PROFILE_CORE_L2("NgxRuntime::EvaluateFeature");
   if (evaluate_feature_ == nullptr) return NVSDK_NGX_Result_FAIL_NotInitialized;
+  const EvaluationDepthScope depth;
   return evaluate_feature_(command_list, feature_handle, params, callback);
 }
 
@@ -238,7 +381,12 @@ const char* NgxResultName(NVSDK_NGX_Result result) {
     case NVSDK_NGX_Result_FAIL_NotImplemented:
       return "FAIL_NotImplemented";
     default:
-      return "UNKNOWN";
+      // The enum grows with every SDK release, so an unrecognised code is
+      // reported numerically rather than as a bare "UNKNOWN".
+      static thread_local char unknown[24];
+      std::snprintf(unknown, sizeof(unknown), "0x%08X",
+                    static_cast<unsigned int>(result));
+      return unknown;
   }
 }
 

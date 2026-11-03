@@ -5,7 +5,6 @@
 #include <windows.h>
 #include <wrl/client.h>
 
-#include <atomic>
 #include <cstdio>
 #include <limits>
 #include <mutex>
@@ -24,6 +23,7 @@
 #include "d3d12_utils.h"
 #include "gpu/gpu_resources.h"
 #include "local_vtable.h"
+#include "model/runtime.h"
 #include "proxy_unwrap.h"
 #include "state/settings.h"
 #include "streamline_compat.h"
@@ -39,16 +39,47 @@ constexpr int kMaxHookInstallRetries = 120;
 // both take the same depth and motion vectors, so both can supply guides.
 struct NgxHooks {
   decltype(&NVSDK_NGX_D3D12_EvaluateFeature) evaluate = nullptr;
+  // The C-callback entry point. Its callback typedef differs from the plain
+  // one only in `bool*` versus `bool&`, which is the same argument slot, so the
+  // two share a signature here. A host that resolves NGX by name at runtime --
+  // Streamline is one -- may go through this export instead of the plain one,
+  // and hooking only the plain one leaves the whole evaluation path unobserved.
+  decltype(&NVSDK_NGX_D3D12_EvaluateFeature) evaluate_c = nullptr;
   decltype(&NVSDK_NGX_D3D12_CreateFeature) create = nullptr;
   decltype(&NVSDK_NGX_D3D12_ReleaseFeature) release = nullptr;
+  // The image the detours were attached to. An HMODULE is the base address of
+  // a loaded image, so a module that is unloaded and loaded again gets a
+  // different one, and comparing this against what the name resolves to now is
+  // the only way to tell that the detour is on an image nothing calls.
+  HMODULE module = nullptr;
   bool hooked = false;
 };
 
 static NgxHooks g_dlss_hooks;
 static NgxHooks g_dlssd_hooks;
 
+// The driver's NGX core. Every model module is a shim over it, so this is the
+// one module a host cannot avoid. Streamline runs DLSS without calling the
+// exports of nvngx_dlss.dll at all, which leaves a detour there installed on
+// the right image and never entered.
+static NgxHooks g_core_hooks;
+constexpr const wchar_t* kCoreModuleName = L"_nvngx.dll";
+
 static inline std::unordered_map<const NVSDK_NGX_Handle*, NVSDK_NGX_Feature> g_handle_to_feature;
 static inline std::mutex g_handle_to_feature_mutex;
+
+// Thread-local depth of the currently executing evaluate hooks.
+// A game evaluation that enters one hooked module and is forwarded by
+// it into another hooked module (a shim such as nvngx_dlss.dll calling
+// into the driver's core _nvngx.dll) fires the hook twice. Only the
+// outermost firing runs the addon's pre/post work; an inner firing
+// just forwards to the real evaluate.
+static thread_local int g_hook_depth = 0;
+
+struct HookDepthScope {
+  HookDepthScope() { ++g_hook_depth; }
+  ~HookDepthScope() { --g_hook_depth; }
+};
 
 // Logged once: whether the game's command list had to be resolved. ReShade
 // always wraps, so on any host this should say "unwrapped" -- if it ever says
@@ -549,11 +580,30 @@ static NVSDK_NGX_Feature ClassifyFeatureByParameters(
 }
 
 static NVSDK_NGX_Result NVSDK_CONV EvaluateFeatureImpl(
-    NgxHooks& hooks,
+    decltype(&NVSDK_NGX_D3D12_EvaluateFeature) evaluate,
     ID3D12GraphicsCommandList* command_list,
     const NVSDK_NGX_Handle* feature_handle,
     NVSDK_NGX_Parameter* parameters,
     PFN_NVSDK_NGX_ProgressCallback callback) {
+  // The addon's own model is a shim over this same core, so a detour on the
+  // core sees the addon's own evaluations as well as the game's. Recording a
+  // pass inside a pass is not meaningful and would recurse, so forward
+  // straight through. Set by NgxRuntime::EvaluateFeature, which every addon
+  // evaluation goes through.
+  if (AddonEvaluationInProgress()) {
+    return evaluate(command_list, feature_handle, parameters, callback);
+  }
+
+  // A nested firing means this is the same game evaluation that
+  // already entered through another hooked module (a shim's evaluate
+  // forwarding into the driver core). Forward without counting it
+  // again or running the pre/post work a second time.
+  if (g_hook_depth > 0) {
+    return evaluate(command_list, feature_handle, parameters, callback);
+  }
+
+  HookDepthScope hook_depth_scope;
+
   D3D12Hooks::Get().SetTrackingEnabled(false);
 
   // Exposure and Color are captured before NGX evaluates, since the parameter
@@ -708,7 +758,7 @@ static NVSDK_NGX_Result NVSDK_CONV EvaluateFeatureImpl(
   }
 
   const NVSDK_NGX_Result result =
-      hooks.evaluate(command_list, feature_handle, parameters, callback);
+      evaluate(command_list, feature_handle, parameters, callback);
 
   // Parameters belong to the game's shared NGX block. Restore the original
   // resource and geometry as soon as this evaluation has recorded its work;
@@ -795,8 +845,8 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeature(
     const NVSDK_NGX_Handle* feature_handle,
     NVSDK_NGX_Parameter* parameters,
     PFN_NVSDK_NGX_ProgressCallback callback) {
-  return EvaluateFeatureImpl(g_dlss_hooks, command_list, feature_handle,
-                             parameters, callback);
+  return EvaluateFeatureImpl(g_dlss_hooks.evaluate, command_list, feature_handle, parameters,
+                             callback);
 }
 
 static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeatureD(
@@ -804,14 +854,62 @@ static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeatureD(
     const NVSDK_NGX_Handle* feature_handle,
     NVSDK_NGX_Parameter* parameters,
     PFN_NVSDK_NGX_ProgressCallback callback) {
-  return EvaluateFeatureImpl(g_dlssd_hooks, command_list, feature_handle,
-                             parameters, callback);
+  return EvaluateFeatureImpl(g_dlssd_hooks.evaluate, command_list, feature_handle, parameters,
+                             callback);
+}
+
+// The C entry point's callback is declared with `bool*` where the plain one
+// uses `bool&`. Both arrive as a pointer in the same argument slot, so the
+// callback is forwarded unchanged.
+static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeatureC(
+    ID3D12GraphicsCommandList* command_list,
+    const NVSDK_NGX_Handle* feature_handle,
+    NVSDK_NGX_Parameter* parameters,
+    PFN_NVSDK_NGX_ProgressCallback_C callback) {
+  return EvaluateFeatureImpl(g_dlss_hooks.evaluate_c, command_list,
+      feature_handle, parameters,
+      reinterpret_cast<PFN_NVSDK_NGX_ProgressCallback>(callback));
+}
+
+static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeatureCD(
+    ID3D12GraphicsCommandList* command_list,
+    const NVSDK_NGX_Handle* feature_handle,
+    NVSDK_NGX_Parameter* parameters,
+    PFN_NVSDK_NGX_ProgressCallback_C callback) {
+  return EvaluateFeatureImpl(g_dlssd_hooks.evaluate_c, command_list,
+      feature_handle, parameters,
+      reinterpret_cast<PFN_NVSDK_NGX_ProgressCallback>(callback));
+}
+
+static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_CreateFeatureCore(
+    ID3D12GraphicsCommandList* command_list,
+    NVSDK_NGX_Feature feature_id,
+    NVSDK_NGX_Parameter* parameters,
+    NVSDK_NGX_Handle** out_handle) {
+  return CreateFeatureImpl(g_core_hooks, command_list, feature_id,
+                           parameters, out_handle);
+}
+
+static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_ReleaseFeatureCore(
+    NVSDK_NGX_Handle* handle) {
+  return ReleaseFeatureImpl(g_core_hooks, handle);
+}
+
+static NVSDK_NGX_Result NVSDK_CONV hooked_NVSDK_NGX_D3D12_EvaluateFeatureCore(
+    ID3D12GraphicsCommandList* command_list,
+    const NVSDK_NGX_Handle* feature_handle,
+    NVSDK_NGX_Parameter* parameters,
+    PFN_NVSDK_NGX_ProgressCallback callback) {
+  return EvaluateFeatureImpl(g_core_hooks.evaluate, command_list, feature_handle, parameters,
+                             callback);
 }
 
 using HookItem = local_vtable::HookItem;
 
 // Separate thunks per module: each detour has to call its own module's
-// original entry point.
+// original entry point. A name the module does not export is skipped by
+// `local_vtable::Hook`, so listing the C entry point costs nothing on a build
+// that does not have it.
 static std::vector<HookItem> HookItems(NgxHooks& hooks, bool ray_reconstruction) {
   return {
       {"NVSDK_NGX_D3D12_CreateFeature", (void**)&hooks.create,
@@ -820,64 +918,118 @@ static std::vector<HookItem> HookItems(NgxHooks& hooks, bool ray_reconstruction)
       {"NVSDK_NGX_D3D12_EvaluateFeature", (void**)&hooks.evaluate,
        ray_reconstruction ? (void*)&hooked_NVSDK_NGX_D3D12_EvaluateFeatureD
                           : (void*)&hooked_NVSDK_NGX_D3D12_EvaluateFeature},
+      {"NVSDK_NGX_D3D12_EvaluateFeature_C", (void**)&hooks.evaluate_c,
+       ray_reconstruction ? (void*)&hooked_NVSDK_NGX_D3D12_EvaluateFeatureCD
+                          : (void*)&hooked_NVSDK_NGX_D3D12_EvaluateFeatureC},
       {"NVSDK_NGX_D3D12_ReleaseFeature", (void**)&hooks.release,
        ray_reconstruction ? (void*)&hooked_NVSDK_NGX_D3D12_ReleaseFeatureD
                           : (void*)&hooked_NVSDK_NGX_D3D12_ReleaseFeature},
   };
 }
 
-static bool HookModule(const wchar_t* file_name, NgxHooks& hooks,
-                       bool ray_reconstruction, bool load_if_missing) {
-  if (hooks.hooked) return true;
+// The core is hooked for its full feature lifecycle. A Streamline host
+// drives DLSS through the core directly, so CreateFeature is the only
+// place the addon can learn a handle's real feature type. The
+// parameter-block classifier alone is not a substitute: it returns
+// SuperSampling for any evaluation carrying Color and Output, and Frame
+// Generation passes the same pair, so FG would be treated as a second
+// SR pass -- doubling the pre/post work and overwriting the guide
+// captures with the wrong frame's motion.
+static std::vector<HookItem> CoreHookItems(NgxHooks& hooks) {
+  return {
+      {"NVSDK_NGX_D3D12_CreateFeature", (void**)&hooks.create,
+       (void*)&hooked_NVSDK_NGX_D3D12_CreateFeatureCore},
+      {"NVSDK_NGX_D3D12_EvaluateFeature", (void**)&hooks.evaluate,
+       (void*)&hooked_NVSDK_NGX_D3D12_EvaluateFeatureCore},
+      {"NVSDK_NGX_D3D12_ReleaseFeature", (void**)&hooks.release,
+       (void*)&hooked_NVSDK_NGX_D3D12_ReleaseFeatureCore},
+  };
+}
 
+static bool HookModule(const wchar_t* file_name, NgxHooks& hooks,
+                       const std::vector<HookItem>& items,
+                       bool load_if_missing) {
   HMODULE module = GetModuleHandleW(file_name);
   if (module == nullptr && load_if_missing) module = LoadLibraryW(file_name);
   if (module == nullptr) return false;
 
-  const std::vector<HookItem> items = HookItems(hooks, ray_reconstruction);
+  // `hooked` is not proof that the detour is on the image being called. A
+  // module that is unloaded and loaded again lands at a new base, and the
+  // detour stays behind on the old one; the only symptom is that evaluation
+  // stops arriving. Compare the base the name resolves to now against the one
+  // held and start over when they differ. Comparing the export address would
+  // not work: Detours rewrites the pointer it is handed when the target is a
+  // thunk, so the address it stored is not the address GetProcAddress returns.
+  if (hooks.hooked) {
+    if (hooks.module == module) return true;
+    hooks = {};
+  }
+
   if (!local_vtable::Hook(module, items)) return false;
 
+  hooks.module = module;
   hooks.hooked = true;
 
   wchar_t path[MAX_PATH] = {};
   GetModuleFileNameW(module, path, MAX_PATH);
   char message[MAX_PATH * 2];
+  // Report exactly which names attached. A module that exports only some of
+  // them leaves the host that uses the others unobserved, and nothing else
+  // says so.
   std::snprintf(message, sizeof(message),
-                "Hooked NVSDK_NGX_D3D12_CreateFeature/EvaluateFeature in '%ls'",
-                path);
+                "Hooked %s%s in '%ls'",
+                hooks.create != nullptr
+                    ? "NVSDK_NGX_D3D12_CreateFeature/EvaluateFeature"
+                    : "NVSDK_NGX_D3D12_EvaluateFeature",
+                hooks.evaluate_c != nullptr ? "/EvaluateFeature_C" : "", path);
   reshade::log::message(reshade::log::level::info, message);
   return true;
 }
 
-// Installs the NGX hooks. Safe to call until both modules are hooked.
+// Installs the NGX hooks. Safe to call until every module is hooked.
 //
 // nvngx_dlss.dll is loaded here on demand: a feature created before the hook
 // attaches would never be recognised and nothing would run. Checking
 // GetModuleHandle first means an instance Streamline has already loaded is
 // never shadowed by a second copy. nvngx_dlssd.dll is only hooked once the
 // game loads it -- it is ~80 MB and most games never touch it.
+//
+// The driver's core is the one module that cannot be skipped. A Streamline
+// host runs DLSS without calling the exports of the game's own nvngx_dlss.dll,
+// and every model module is a shim over the core.
 static bool TryHookNgx() {
-  const bool dlss = HookModule(L"nvngx_dlss.dll", g_dlss_hooks, false, true);
-  const bool dlssd = HookModule(L"nvngx_dlssd.dll", g_dlssd_hooks, true, false);
-  return dlss || dlssd;
+  const bool dlss = HookModule(L"nvngx_dlss.dll", g_dlss_hooks,
+                               HookItems(g_dlss_hooks, false), true);
+  const bool dlssd = HookModule(L"nvngx_dlssd.dll", g_dlssd_hooks,
+                                HookItems(g_dlssd_hooks, true), false);
+  const bool core = HookModule(kCoreModuleName, g_core_hooks,
+                               CoreHookItems(g_core_hooks), false);
+  return dlss || dlssd || core;
 }
 
 static bool NgxHooksComplete() {
-  return g_dlss_hooks.hooked && g_dlssd_hooks.hooked;
+  return g_dlss_hooks.hooked && g_dlssd_hooks.hooked && g_core_hooks.hooked;
+}
+
+static void UnhookModule(const wchar_t* file_name, NgxHooks& hooks,
+                         const std::vector<HookItem>& items) {
+  // Detach from the image the detours are on, and only while that image is
+  // still the loaded one. If the module was reloaded, the detour sits on
+  // unmapped memory: DetourDetach would write to it, and nothing can call it
+  // any more, so leaving it is both safe and harmless.
+  if (hooks.module != nullptr && GetModuleHandleW(file_name) == hooks.module) {
+    local_vtable::Unhook(hooks.module, items);
+  }
+  hooks = {};
 }
 
 static void UnhookNgx() {
-  HMODULE dlss = GetModuleHandleW(L"nvngx_dlss.dll");
-  if (dlss != nullptr) {
-    local_vtable::Unhook(dlss, HookItems(g_dlss_hooks, false));
-    g_dlss_hooks = {};
-  }
-
-  HMODULE dlssd = GetModuleHandleW(L"nvngx_dlssd.dll");
-  if (dlssd != nullptr) {
-    local_vtable::Unhook(dlssd, HookItems(g_dlssd_hooks, true));
-    g_dlssd_hooks = {};
-  }
+  // The record is cleared either way. Leaving `hooked` set would make the next
+  // TryHookNgx believe a detour exists on the new image.
+  UnhookModule(L"nvngx_dlss.dll", g_dlss_hooks, HookItems(g_dlss_hooks, false));
+  UnhookModule(L"nvngx_dlssd.dll", g_dlssd_hooks,
+               HookItems(g_dlssd_hooks, true));
+  UnhookModule(kCoreModuleName, g_core_hooks, CoreHookItems(g_core_hooks));
 }
 
 }  // namespace reshade_dlssnr::ngx_hook_compat

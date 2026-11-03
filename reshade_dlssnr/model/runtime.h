@@ -18,6 +18,12 @@ namespace reshade_dlssnr {
 // result is otherwise a bare enum that the log cannot interpret.
 const char* NgxResultName(NVSDK_NGX_Result result);
 
+// True while the addon's own model evaluation is on the stack on this thread,
+// including any nested call the model makes into the driver's core. The NGX
+// core hook uses it to ignore the addon's own evaluations instead of mistaking
+// them for the game's DLSS.
+bool AddonEvaluationInProgress();
+
 class NgxRuntime {
  public:
   bool Initialize(ID3D12Device* device);

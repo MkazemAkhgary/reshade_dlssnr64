@@ -20,11 +20,14 @@ class NgxParameterBlock {
 
  private:
   void ProbeFloatSlot();
+  void ProbeUIntSlot();
 
   HMODULE core_module_ = nullptr;
   NVSDK_NGX_Parameter* params_ = nullptr;
   int float_slot_ = 1;
+  int uint_slot_ = 3;
   bool float_slot_known_ = false;
+  bool uint_slot_known_ = false;
 };
 
 }  // namespace reshade_dlssnr
