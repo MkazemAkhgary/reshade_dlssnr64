@@ -84,10 +84,9 @@ bool NgxParameterBlock::Initialize() {
   return true;
 }
 
-// Each overload is a separate vtable slot, and the driver's table is not the
-// one the SDK header describes: the float setter measured at slot 6 on driver
-// 621.1, where the header puts it at 1. The remaining slots are measured the
-// same way rather than assumed, because a wrong one is silent.
+// Each overload has its own vtable slot, and the driver's table doesn't
+// match the SDK header (float setter at slot 6, not 1 on driver 621.1).
+// Probe the rest rather than assume, because a wrong slot fails silently.
 void NgxParameterBlock::ProbeUIntSlot() {
   if (params_ == nullptr || uint_slot_known_) return;
 

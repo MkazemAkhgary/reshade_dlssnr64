@@ -352,20 +352,9 @@ using PipelineStepFn = PipelineStatus (*)(PassRun& run);
 // Stage inputs
 // ---------------------------------------------------------------------------
 
-// The frame inputs a stage requires the caller to supply.
-//
-// Each stage is entered from a different call site with a different set of
-// things available: Backbuffer passes a swapchain and command queue but no
-// command list, game-list stages pass the game's command list and resource
-// but no swapchain. A step that needs something its stage does not receive
-// dereferences a null pointer - and because the steps are shared across
-// stages, moving one line in a step table is enough to create that.
-//
-// Declaring the requirement on both the step and the stage lets a compile-time
-// check prove the stage supplies everything its steps need, before any of them
-// run. This is the same mechanism as `depends_on`, one level up: depends_on
-// says "another step must have run first", required_inputs says "the caller
-// must have supplied this".
+// Frame inputs a stage requires from its caller; stages are entered with
+// different inputs, so this lets a compile-time check prove each stage
+// supplies everything its steps need.
 enum class StageInput : uint32_t {
   None = 0,
   CommandList = 1u << 0,      // PassRun::list

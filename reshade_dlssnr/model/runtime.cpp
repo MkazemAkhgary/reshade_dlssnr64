@@ -9,17 +9,14 @@
 
 namespace reshade_dlssnr {
 
-// Depth of the addon's own model evaluation on the current thread. The driver's
-// NGX core sits downstream of every model module, so a detour on the core sees
-// the addon's own evaluations as well as the game's.
+// Depth of our own model evaluation on this thread, so the hook can skip it.
 static thread_local int g_evaluation_depth = 0;
 
 bool AddonEvaluationInProgress() { return g_evaluation_depth > 0; }
 
 namespace {
 
-// Marks an evaluation for its duration, including any nested call the model
-// makes into the driver's core.
+// Marks an evaluation for its duration, including nested calls into the core.
 struct EvaluationDepthScope {
   EvaluationDepthScope() { ++g_evaluation_depth; }
   ~EvaluationDepthScope() { --g_evaluation_depth; }
@@ -30,9 +27,8 @@ std::mutex g_runtime_mutex;
 // The driver's NGX core, as named from driver 471.11 onwards.
 constexpr const wchar_t* kCoreModuleName = L"_nvngx.dll";
 
-// Reported to the model module when it asks where it was loaded from. The
-// check it satisfies is on the directory: the model has to look like it was
-// installed next to the driver's core.
+// Reported to the model module when it checks its own load path; the check
+// is on the directory, so it has to look driver-installed.
 wchar_t g_spoof_path[MAX_PATH] = {};
 
 // Used only when neither the process nor the driver's registry keys name a
@@ -83,13 +79,11 @@ bool SameDirectory(const std::wstring& left_path, const std::wstring& right_path
   return _wcsicmp(left.c_str(), right.c_str()) == 0;
 }
 
-// The directory the installed driver keeps its NGX core in. A driver install
-// lays down a new DriverStore folder, so this is read from the process or from
-// the driver's own registry keys rather than written down here.
+// The directory the installed driver keeps its NGX core in; a driver
+// install lays down a new DriverStore folder, so this has to be looked up.
 bool ResolveDriverNgxDirectory(wchar_t* out, DWORD size) {
-  // Only a core the driver already put in the process is trusted. Loading it by
-  // bare name here could pick up a stray copy from the game directory, which is
-  // the one location the model must not appear to live in.
+  // Only trust a core already in the process; loading by bare name could
+  // pick up a stray copy from the game directory.
   HMODULE core = GetModuleHandleW(kCoreModuleName);
   if (core != nullptr) {
     wchar_t full[MAX_PATH] = {};
@@ -123,8 +117,8 @@ bool ResolveDriverNgxDirectory(wchar_t* out, DWORD size) {
   return false;
 }
 
-// Builds the path the model module is told it lives at. The file name stays
-// `nvngx.dll`; only the directory follows the installed driver.
+// Builds the path the model module is told it lives at; only the directory
+// follows the installed driver.
 bool EnsureSpoofPath() {
   if (g_spoof_path[0] != L'\0') return true;
 
@@ -223,9 +217,8 @@ bool NgxRuntime::EnsureModelAndPatch() {
 
   EnsureSpoofPath();
 
-  // A failed patch is not fatal here, because the model may reach
-  // GetModuleFileNameW through an API set rather than through KERNEL32. It is
-  // still the first thing to suspect when initialization is refused.
+  // The model may reach GetModuleFileNameW through an API set instead of
+  // KERNEL32, so a failed patch is a warning, not a fatal error.
   if (!PatchImport(model_module_, "KERNEL32.dll", "GetModuleFileNameW",
                    HookedGetModuleFileNameW)) {
     reshade::log::message(
