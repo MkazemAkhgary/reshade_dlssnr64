@@ -51,7 +51,7 @@
     <DlssnrLocalizationEnabled Condition="'$(DlssnrLocalizationEnabled)' == ''">true</DlssnrLocalizationEnabled>
     <DlssnrLocDefine Condition="'$(DlssnrLocalizationEnabled)' == 'true'">DLSSNR_LOCALIZATION_ENABLED=1;</DlssnrLocDefine>
     <DlssnrLocDefine Condition="'$(DlssnrLocalizationEnabled)' != 'true'">DLSSNR_LOCALIZATION_ENABLED=0;</DlssnrLocDefine>
-    <DlssnrLocLanguages Condition="'$(DlssnrLocLanguages)' == ''">en</DlssnrLocLanguages>
+    <DlssnrLocLanguages Condition="'$(DlssnrLocLanguages)' == ''">en,zh-Hans</DlssnrLocLanguages>
     <DlssnrLocEmbed Condition="'$(DlssnrLocalizationEnabled)' == 'true'">$(DlssnrLocLanguages)</DlssnrLocEmbed>
     <DlssnrLocEmbed Condition="'$(DlssnrLocalizationEnabled)' != 'true'">en</DlssnrLocEmbed>
     <DlssnrPython Condition="'$(DlssnrPython)' == ''">python</DlssnrPython>
@@ -392,9 +392,14 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <ForcedIncludeFiles></ForcedIncludeFiles>
     </ClCompile>
+    <!-- The generated table is the one translation unit that carries non-ASCII
+         literals, so it is the only one compiled with a UTF-8 execution
+         character set. The generated file also starts with a byte-order mark,
+         which is what makes the compiler read it as UTF-8 in the first place. -->
     <ClCompile Include="generated\localization_tables.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <ForcedIncludeFiles></ForcedIncludeFiles>
+      <AdditionalOptions>/execution-charset:utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile Include="localization\localization.cpp" />
     <ClCompile Include="generated\shader_sources.cpp">

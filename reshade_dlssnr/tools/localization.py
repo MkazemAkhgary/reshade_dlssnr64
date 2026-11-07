@@ -523,8 +523,11 @@ def command_build(root: Path, translations: Path, args: argparse.Namespace) -> i
     lines.append("")
 
     content = "\n".join(lines)
-    if not out.exists() or read_text(out) != content:
-        out.write_text(content, encoding="utf-8")
+    # The table holds non-ASCII literals. A byte-order mark is what tells the
+    # compiler the file is UTF-8 rather than the machine's code page, so the
+    # bytes in the binary are the bytes in the translation file.
+    if not out.exists() or out.read_text(encoding="utf-8-sig") != content:
+        out.write_text(content, encoding="utf-8-sig")
         print(f"localization: wrote {out}")
     for language in embedded:
         if language.code == "en":

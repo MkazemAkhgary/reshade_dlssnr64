@@ -436,7 +436,7 @@ echo.
 echo Languages to embed, comma separated. English is always embedded.
 set "LOC_LANGUAGES="
 set /p "LOC_LANGUAGES=Languages [%LOC_LANGUAGES%]: "
-if not defined LOC_LANGUAGES set "LOC_LANGUAGES=en"
+if not defined LOC_LANGUAGES set "LOC_LANGUAGES=en,zh-Hans"
 
 :ASK_TARGET
 echo.
@@ -485,7 +485,7 @@ REM ============================================================
 echo [1/3] Building (%BUILD_TARGET%)...
 echo.
 
-"%MSBUILD_PATH%" "%SOLUTION_PATH%" /t:%BUILD_TARGET% /p:Configuration=%CONFIG% /p:Platform=x64 /p:DlssnrTracyEnabled=%TRACY_ENABLED% /p:DlssnrProfileVerbosity=%PROFILE_VERBOSITY% /p:DlssnrProfileDomainCore=%DOMAIN_CORE% /p:DlssnrProfileDomainRender=%DOMAIN_RENDER% /p:DlssnrProfileDomainResource=%DOMAIN_RESOURCE% /p:DlssnrProfileDomainAsync=%DOMAIN_ASYNC% /p:DlssnrProfileDomainUi=%DOMAIN_UI% /p:DlssnrProfileDomainCtl=%DOMAIN_CTL% /p:DlssnrProfileDomainGpu=%DOMAIN_GPU% /p:DlssnrTraceEnabled=%TRACE_ENABLED% /p:DlssnrMutexCompatibility=%MUTEX_COMPAT% /p:VerifyShaders=%VERIFY_SHADERS% /p:PrecompileShaders=%PRECOMPILE_SHADERS% /p:DlssnrLocalizationEnabled=%LOC_ENABLED% /p:DlssnrLocLanguages=%LOC_LANGUAGES% /v:minimal /nologo
+"%MSBUILD_PATH%" "%SOLUTION_PATH%" /t:%BUILD_TARGET% /p:Configuration=%CONFIG% /p:Platform=x64 /p:DlssnrTracyEnabled=%TRACY_ENABLED% /p:DlssnrProfileVerbosity=%PROFILE_VERBOSITY% /p:DlssnrProfileDomainCore=%DOMAIN_CORE% /p:DlssnrProfileDomainRender=%DOMAIN_RENDER% /p:DlssnrProfileDomainResource=%DOMAIN_RESOURCE% /p:DlssnrProfileDomainAsync=%DOMAIN_ASYNC% /p:DlssnrProfileDomainUi=%DOMAIN_UI% /p:DlssnrProfileDomainCtl=%DOMAIN_CTL% /p:DlssnrProfileDomainGpu=%DOMAIN_GPU% /p:DlssnrTraceEnabled=%TRACE_ENABLED% /p:DlssnrMutexCompatibility=%MUTEX_COMPAT% /p:VerifyShaders=%VERIFY_SHADERS% /p:PrecompileShaders=%PRECOMPILE_SHADERS% /p:DlssnrLocalizationEnabled=%LOC_ENABLED% /p:DlssnrLocLanguages="%LOC_LANGUAGES%" /v:minimal /nologo
 if errorlevel 1 (
     echo.
     echo BUILD FAILED!
@@ -586,7 +586,7 @@ set "MUTEX_COMPAT=true"
 set "VERIFY_SHADERS=true"
 set "PRECOMPILE_SHADERS=false"
 set "LOC_ENABLED=true"
-set "LOC_LANGUAGES=en"
+set "LOC_LANGUAGES=en,zh-Hans"
 set "TARGET_EXE="
 exit /b 0
 

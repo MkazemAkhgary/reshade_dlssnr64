@@ -764,6 +764,12 @@ pass.intensity = Intensität
 Values use C string escapes (`\n`, `\"`) and are copied verbatim into the
 generated table, so a translated tooltip keeps its line breaks.
 
+The generated table is the only translation unit holding non-ASCII literals. It
+is written with a UTF-8 byte-order mark and compiled with
+`/execution-charset:utf-8`; without both, the compiler would read the text in
+the machine's code page and the bytes in the binary would not be the bytes in
+the translation file.
+
 `tools/localization.py` scans every `.h`/`.cpp` outside `generated/`, `build/`
 and `third_party/` and is the only thing that reads or writes the format:
 
