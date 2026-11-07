@@ -69,33 +69,6 @@ void DrawCollapsible(const char* label, const char* setting_key,
   body();
 }
 
-bool DrawFloatRow(const char* id,
-                  const char* label,
-                  const char* tooltip,
-                  float* raw_value,
-                  float lo,
-                  float hi,
-                  float default_value);
-
-bool DrawIntRow(const char* id,
-                const char* label,
-                const char* tooltip,
-                int* raw_value,
-                int lo,
-                int hi,
-                int default_value);
-
-bool DrawCheckboxAtLabel(const char* id, bool* value,
-                          const char* tooltip = nullptr);
-
-bool DrawComboRow(const char* id,
-                  const char* label,
-                  const char* tooltip,
-                  int* value,
-                  const char* const* items,
-                  const char* const* item_tooltips,
-                  int item_count);
-
 // `unavailable` marks items that can still be chosen but cannot run right now;
 // they are drawn dimmed and their tooltip prefers `unavailable_reasons[i]`.
 int DrawGroupButtons(const char* id,
@@ -107,14 +80,5 @@ int DrawGroupButtons(const char* id,
                      const bool* unavailable = nullptr,
                      const char* const* unavailable_reasons = nullptr,
                      float fixed_button_width = 0.0f);
-
-bool DrawGroupRow(const char* id,
-                  const char* label,
-                  const char* tooltip,
-                  const char* const* labels,
-                  const char* const* item_tooltips,
-                  int count,
-                  int* value,
-                  const bool* disabled);
 
 }  // namespace reshade_dlssnr

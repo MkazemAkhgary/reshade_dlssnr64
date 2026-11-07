@@ -26,30 +26,9 @@ bool DrawSubSectionHeader(const char*, bool&, bool&, const char*,
   return false;
 }
 
-bool DrawFloatRow(const char*, const char*, const char*, float*,
-                  float, float, float) {
-  return false;
-}
-
-bool DrawIntRow(const char*, const char*, const char*, int*, int, int, int) {
-  return false;
-}
-
-bool DrawCheckboxAtLabel(const char*, bool*, const char*) { return false; }
-
-bool DrawComboRow(const char*, const char*, const char*, int*,
-                  const char* const*, const char* const*, int) {
-  return false;
-}
-
 int DrawGroupButtons(const char*, const char* const*, const char* const*, int,
                      int, const bool*, const bool*, const char* const*, float) {
   return -1;
-}
-
-bool DrawGroupRow(const char*, const char*, const char*, const char* const*,
-                  const char* const*, int, int*, const bool*) {
-  return false;
 }
 
 }  // namespace reshade_dlssnr
