@@ -83,7 +83,10 @@ and the whole declaration stays one expression. Declaration order is render
 order - `Schema::Build` records it and the drawer replays it.
 
 `SettingMeta` carries `name`, `label`, `tooltip`, `category`, `persist`, and
-`persist_in_profiles` (both persistence flags default to true). Mark a setting
+`persist_in_profiles` (both persistence flags default to true). `label`,
+`tooltip` and `category` are `localization::TextRef`: the drawer resolves them
+each frame, so a translated string needs no schema rebuild. `name` is the
+persistence key and is never translated. Mark a setting
 `GlobalOnly()` when it belongs to global application state rather than a saved
 profile. The framework implements this generically: it does not infer what a
 setting means or which feature owns it.

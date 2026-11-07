@@ -22,6 +22,7 @@ reshade_dlssnr/
     shader_sources.cpp              Embedded shader-source table definition
     shader_bytecode.h               Optional embedded-bytecode table declaration
     shader_bytecode.cpp             Runtime-compile sentinel table definition
+    localization_tables.cpp         Embedded translation tables, written only by the localization step
     shader_bytecode_precompiled.cpp Precompiled table, written only by PrecompileShaders
     expanded_shaders/                Pragma-free, fully expanded FXC inputs (generated)
 
@@ -30,6 +31,7 @@ reshade_dlssnr/
     generate_shaders.py             Equivalent source generator for tooling/CI use
     verify_shaders.ps1              FXC build-time shader verification
     precompile_shaders.ps1          Optional FXC bytecode generation
+    localization.py                 Localized-string scanner, checker and table generator
 
   shaders/common/
     params.h                        Shared C++/HLSL cbuffer layout
@@ -190,8 +192,15 @@ reshade_dlssnr/
   temporal_reprojection/
     steps.cpp                       Temporal prepare/commit steps and reuse policy
     stats.h                         Live reprojection snapshot published to the overlay
+  localization/
+    localization.h                  NSLOC_TEXT, LOC_TEXT, TextRef, language selection
+    localization.cpp                Resolution against the active language
+    embedded.h                      Shape of the generated translation tables
+    translations/                   Per-language .lang files (created when a language is added)
+
   ui/
     ui.h                            Overlay entry point
+    ui_text.h                       Overlay strings drawn by more than one file
     ui.cpp                          Main overlay, section orchestration, and pass selection
     ui_pass.cpp                     Pass toolbar and reset controls
     ui_sections.h                   Section-drawer declarations
@@ -700,6 +709,91 @@ Three cases, one dispatch each. With no game field the pass synthesizes one: a s
 
 **Inline toggles belong to the target setting.** Chain `.InlineToggle(bool_setting)` on the target declaration. `ctl` validates the boolean source, draws it to the left of the target label, and hides its standalone row.
 
+## Localization
+
+Every string the overlay shows is declared where it is used, with the
+translation namespace and key that identify it and the English text:
+
+```cpp
+#define LOC_NAMESPACE "pass"
+
+pass.Add<ctl::FloatSetting>(kIntensity, LOC_TEXT("intensity", "Intensity"), 1.0f)
+    .Tooltip(LOC_TEXT("intensity.tip", "How strongly the model is instructed to edit the image."));
+
+#undef LOC_NAMESPACE
+```
+
+`NSLOC_TEXT(ns, key, text)` is the same declaration without the per-file
+shorthand. The namespace belongs to one file, so it is undefined at the end of
+that file; a file that never defines it fails to compile rather than declaring
+into a stale namespace.
+
+`localization::TextRef` holds the three literals. `c_str()` resolves the
+namespace and key against the active language and falls back to the English
+text when that language has no entry, so English needs no table at all - it
+travels with every declaration. Resolution is a binary search over a table
+sorted by `(namespace, key)`.
+
+**What is not translated.** Setting names, `ctl` section names, category
+identity, config keys, trace lines and log messages keep their English form.
+A category's English text doubles as its identity, which is what lets the
+framework key its open/closed state and row grouping on it while the header
+shows the translation. A language change therefore cannot move a value, change
+a key, or alter a preset.
+
+**The settings framework carries `TextRef`, not `std::string`.** `SettingMeta`
+holds localized label, tooltip and category, `Section` holds a title separate
+from its persistence name, and `EnumSetting` holds localized items. The drawer
+resolves them each frame, so a language change takes effect immediately with no
+schema rebuild and no reload.
+
+`Tip` takes text and draws it unformatted; `TipFormat` takes a format string
+and is used only where a value has to be interpolated. The split exists because
+a translation may contain `%`, which a format string would interpret.
+
+### Translation files and the build step
+
+`localization/translations/<code>.lang` holds one entry per line:
+
+```text
+# language: de
+# name: Deutsch
+pass.intensity = Intensität
+```
+
+Values use C string escapes (`\n`, `\"`) and are copied verbatim into the
+generated table, so a translated tooltip keeps its line breaks.
+
+`tools/localization.py` scans every `.h`/`.cpp` outside `generated/`, `build/`
+and `third_party/` and is the only thing that reads or writes the format:
+
+| Command | Purpose |
+|---|---|
+| `scan` | list every declared string and report duplicate keys |
+| `verify` | compare declarations against every translation file |
+| `build` | verify, then write `generated/localization_tables.cpp` |
+| `new CODE` | scaffold a translation file from the current keys |
+
+The build runs `verify` and then `build` before every compile. A duplicate key
+fails the build, because two declarations of one key are two sources of truth
+for the same translation. A missing translation is a warning: a partially
+translated language still builds and falls back per string.
+
+`DlssnrLocalizationEnabled` compiles the language selection out entirely;
+`DlssnrLocLanguages` is the comma-separated list embedded in the binary.
+English is always embedded and listing it explicitly is a no-op.
+
+### Adding a language
+
+1. `python tools/localization.py new de --name Deutsch` writes
+   `localization/translations/de.lang` with every key present and empty.
+2. Translate the values. `verify` reports what is still missing.
+3. Add `de` to `DlssnrLocLanguages` and rebuild.
+
+The language is selected in `Preferences`, which stores the code rather than an
+index so that adding a language cannot silently change which one a saved
+settings file selects. A code the build does not carry selects English.
+
 ## HDR model path
 
 The HDR path is gain-map based and runs on the Pre-DLSS and Post-DLSS targets. Backbuffer passes use the existing SDR composition path.
@@ -789,6 +883,8 @@ The build automatically embeds the new shader and the verification target compil
 ### Add a UI section
 
 The overlay owns cross-feature layout and coordination. A feature's ordinary rows are declared in its schema and rendered by `ctl::DrawSection`; use hooks for feature-specific UI that must appear between rows. Pass-toolbar operations belong in `ui_pass.cpp`, while the pass's settings body is schema-driven.
+
+Every visible string a hook draws goes through `LOC_TEXT`, and a string that two files draw is declared once in a shared header (`ui/ui_text.h`) rather than in both.
 
 ### Add a setting
 

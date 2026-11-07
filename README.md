@@ -27,6 +27,11 @@ Note: copying `reshade_dlssnr64.json` is optional. It contains pre-made presets.
 git submodule update --init --recursive
 ```
 
+The build also needs Python 3 on `PATH` for the localization step, which
+verifies the declared strings and writes the embedded translation tables.
+`/p:DlssnrPython=<path>` overrides the interpreter, and
+`/p:DlssnrLocLanguages=en,de` selects the languages to embed.
+
 ## Features
 
 - Named presets.
@@ -37,6 +42,7 @@ git submodule update --init --recursive
 - Optional OKLab grades, edge-aware softening, and CAS sharpening on the model input and output.
 - Temporal reprojection (experimental).
 - Debug views for inputs, outputs, guides, masks, HDR round-trip, and temporal states.
+- Overlay text in any language the build embeds, selected in Preferences.
 
 ## Limitations
 
