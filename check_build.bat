@@ -73,7 +73,9 @@ set "no_proxy="
  /p:DlssnrProfileDomainAsync=0 ^
  /p:DlssnrProfileDomainUi=0 ^
  /p:DlssnrProfileDomainCtl=0 ^
- /p:DlssnrProfileDomainGpu=0
+ /p:DlssnrProfileDomainGpu=0 ^
+ /p:DlssnrLocalizationEnabled=true ^
+ /p:DlssnrLocLanguages=en
 
 if errorlevel 1 (
     echo.

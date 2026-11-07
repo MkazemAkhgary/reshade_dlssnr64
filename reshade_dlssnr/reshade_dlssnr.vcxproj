@@ -45,6 +45,16 @@
     <DlssnrProfileDomainUi Condition="'$(DlssnrProfileDomainUi)' == ''">1</DlssnrProfileDomainUi>
     <DlssnrProfileDomainCtl Condition="'$(DlssnrProfileDomainCtl)' == ''">1</DlssnrProfileDomainCtl>
     <DlssnrProfileDomainGpu Condition="'$(DlssnrProfileDomainGpu)' == ''">0</DlssnrProfileDomainGpu>
+    <!-- Overlay localization. Off compiles the language selection out and
+         leaves English as the only text; the switch is a no-op for English,
+         which is always embedded because every declaration carries it. -->
+    <DlssnrLocalizationEnabled Condition="'$(DlssnrLocalizationEnabled)' == ''">true</DlssnrLocalizationEnabled>
+    <DlssnrLocDefine Condition="'$(DlssnrLocalizationEnabled)' == 'true'">DLSSNR_LOCALIZATION_ENABLED=1;</DlssnrLocDefine>
+    <DlssnrLocDefine Condition="'$(DlssnrLocalizationEnabled)' != 'true'">DLSSNR_LOCALIZATION_ENABLED=0;</DlssnrLocDefine>
+    <DlssnrLocLanguages Condition="'$(DlssnrLocLanguages)' == ''">en</DlssnrLocLanguages>
+    <DlssnrLocEmbed Condition="'$(DlssnrLocalizationEnabled)' == 'true'">$(DlssnrLocLanguages)</DlssnrLocEmbed>
+    <DlssnrLocEmbed Condition="'$(DlssnrLocalizationEnabled)' != 'true'">en</DlssnrLocEmbed>
+    <DlssnrPython Condition="'$(DlssnrPython)' == ''">python</DlssnrPython>
   </PropertyGroup>
   <!--
     Every shader source file, explicit. ShaderRootFiles below derives
@@ -157,6 +167,17 @@
       <FileWrites Include="$(DlssnrShaderStampDir)\verify.stamp" />
     </ItemGroup>
   </Target>
+  <!--
+    Localization runs before every compile: it rejects a duplicate key (an
+    error, because two declarations of one key are two sources of truth for the
+    same translation) and warns about keys a language has not translated yet,
+    then writes the embedded tables the addon links. It is fast enough that a
+    stamp would only add a way to skip it by mistake.
+  -->
+  <Target Name="VerifyLocalizationTarget" BeforeTargets="ClCompile">
+    <Exec Command="&quot;$(DlssnrPython)&quot; &quot;$(ProjectDir)tools\localization.py&quot; verify" />
+    <Exec Command="&quot;$(DlssnrPython)&quot; &quot;$(ProjectDir)tools\localization.py&quot; build --languages &quot;$(DlssnrLocEmbed)&quot; --out &quot;$(DlssnrGeneratedDir)\localization_tables.cpp&quot;" />
+  </Target>
   <Target Name="PrecompileShadersTarget" BeforeTargets="ClCompile" DependsOnTargets="GenerateEmbeddedShadersTarget;VerifyShadersTarget;ValidateFxcPath" Condition="'$(PrecompileShaders)' == 'true'" Inputs="@(ShaderSourceFiles->'shaders\%(Identity)');$(ProjectDir)tools\precompile_shaders.ps1" Outputs="$(DlssnrShaderStampDir)\precompile.stamp">
     <MakeDir Directories="$(DlssnrShaderStampDir)" />
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\precompile_shaders.ps1&quot; -ProjectDir &quot;$(DlssnrProjectDir)&quot; -GeneratedDir &quot;$(DlssnrGeneratedDir)&quot; -FxcPath &quot;$(FxcPath)&quot;" />
@@ -214,7 +235,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;WIN32;_WINDOWS;_USRDLL;NOMINMAX;WIN32_LEAN_AND_MEAN;$(DlssnrMutexDefine)$(DlssnrTraceDefine)$(DlssnrTracyDefine)DLSSNR_PROFILE_VERBOSITY=$(DlssnrProfileVerbosity);DLSSNR_PROFILE_DOMAIN_CORE=$(DlssnrProfileDomainCore);DLSSNR_PROFILE_DOMAIN_RENDER=$(DlssnrProfileDomainRender);DLSSNR_PROFILE_DOMAIN_RESOURCE=$(DlssnrProfileDomainResource);DLSSNR_PROFILE_DOMAIN_ASYNC=$(DlssnrProfileDomainAsync);DLSSNR_PROFILE_DOMAIN_UI=$(DlssnrProfileDomainUi);DLSSNR_PROFILE_DOMAIN_CTL=$(DlssnrProfileDomainCtl);DLSSNR_PROFILE_DOMAIN_GPU=$(DlssnrProfileDomainGpu);%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;WIN32;_WINDOWS;_USRDLL;NOMINMAX;WIN32_LEAN_AND_MEAN;$(DlssnrMutexDefine)$(DlssnrTraceDefine)$(DlssnrTracyDefine)$(DlssnrLocDefine)DLSSNR_PROFILE_VERBOSITY=$(DlssnrProfileVerbosity);DLSSNR_PROFILE_DOMAIN_CORE=$(DlssnrProfileDomainCore);DLSSNR_PROFILE_DOMAIN_RENDER=$(DlssnrProfileDomainRender);DLSSNR_PROFILE_DOMAIN_RESOURCE=$(DlssnrProfileDomainResource);DLSSNR_PROFILE_DOMAIN_ASYNC=$(DlssnrProfileDomainAsync);DLSSNR_PROFILE_DOMAIN_UI=$(DlssnrProfileDomainUi);DLSSNR_PROFILE_DOMAIN_CTL=$(DlssnrProfileDomainCtl);DLSSNR_PROFILE_DOMAIN_GPU=$(DlssnrProfileDomainGpu);%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -247,7 +268,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;WIN32;_WINDOWS;_USRDLL;NOMINMAX;WIN32_LEAN_AND_MEAN;$(DlssnrMutexDefine)$(DlssnrTraceDefine)$(DlssnrTracyDefine)DLSSNR_PROFILE_VERBOSITY=$(DlssnrProfileVerbosity);DLSSNR_PROFILE_DOMAIN_CORE=$(DlssnrProfileDomainCore);DLSSNR_PROFILE_DOMAIN_RENDER=$(DlssnrProfileDomainRender);DLSSNR_PROFILE_DOMAIN_RESOURCE=$(DlssnrProfileDomainResource);DLSSNR_PROFILE_DOMAIN_ASYNC=$(DlssnrProfileDomainAsync);DLSSNR_PROFILE_DOMAIN_UI=$(DlssnrProfileDomainUi);DLSSNR_PROFILE_DOMAIN_CTL=$(DlssnrProfileDomainCtl);DLSSNR_PROFILE_DOMAIN_GPU=$(DlssnrProfileDomainGpu);%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;WIN32;_WINDOWS;_USRDLL;NOMINMAX;WIN32_LEAN_AND_MEAN;$(DlssnrMutexDefine)$(DlssnrTraceDefine)$(DlssnrTracyDefine)$(DlssnrLocDefine)DLSSNR_PROFILE_VERBOSITY=$(DlssnrProfileVerbosity);DLSSNR_PROFILE_DOMAIN_CORE=$(DlssnrProfileDomainCore);DLSSNR_PROFILE_DOMAIN_RENDER=$(DlssnrProfileDomainRender);DLSSNR_PROFILE_DOMAIN_RESOURCE=$(DlssnrProfileDomainResource);DLSSNR_PROFILE_DOMAIN_ASYNC=$(DlssnrProfileDomainAsync);DLSSNR_PROFILE_DOMAIN_UI=$(DlssnrProfileDomainUi);DLSSNR_PROFILE_DOMAIN_CTL=$(DlssnrProfileDomainCtl);DLSSNR_PROFILE_DOMAIN_GPU=$(DlssnrProfileDomainGpu);%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -270,6 +291,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="localization\embedded.h" />
+    <ClInclude Include="localization\localization.h" />
     <ClInclude Include="project_constants.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="profiling\tracy_integration.h" />
@@ -319,6 +342,7 @@
     <ClInclude Include="state\version.h" />
     <ClInclude Include="ui\ui.h" />
     <ClInclude Include="ui\ui_sections.h" />
+    <ClInclude Include="ui\ui_text.h" />
     <ClInclude Include="ui\ui_widgets.h" />
     <ClInclude Include="ctl\builtin_settings.h" />
     <ClInclude Include="ctl\ctl.h" />
@@ -368,6 +392,11 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <ForcedIncludeFiles></ForcedIncludeFiles>
     </ClCompile>
+    <ClCompile Include="generated\localization_tables.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles></ForcedIncludeFiles>
+    </ClCompile>
+    <ClCompile Include="localization\localization.cpp" />
     <ClCompile Include="generated\shader_sources.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <ForcedIncludeFiles></ForcedIncludeFiles>
@@ -454,6 +483,7 @@
   <ItemGroup>
     <None Include="tools\generate_project.bat" />
     <None Include="tools\generate_project.py" />
+    <None Include="tools\localization.py" />
     <None Include="tools\generate_shaders.ps1" />
     <None Include="tools\generate_shaders.py" />
     <None Include="tools\precompile_shaders.ps1" />

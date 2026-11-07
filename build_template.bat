@@ -96,7 +96,7 @@ for /f "tokens=1* delims==" %%a in ('findstr /b /c:"REM TARGET_EXE=" "%~f0" 2^>n
 set "HAS_LAST="
 set "LAST_SUMMARY=none yet"
 if defined LAST_LINE (
-    for /f "tokens=1-15" %%a in ("!LAST_LINE!") do (
+    for /f "tokens=1-16" %%a in ("!LAST_LINE!") do (
         set "LAST_BUILD_TARGET=%%a"
         set "LAST_CONFIG=%%b"
         set "LAST_TRACY=%%c"
@@ -112,6 +112,8 @@ if defined LAST_LINE (
         set "LAST_MUTEX=%%m"
         set "LAST_VERIFY=%%n"
         set "LAST_PRECOMPILE=%%o"
+        set "LAST_LOC_ENABLED=%%p"
+        set "LAST_LOC_LANGUAGES=%%q"
         set "LAST_SUMMARY=%%a %%b, tracy=%%c verb=%%d trace=%%l"
         set "HAS_LAST=1"
     )
@@ -165,6 +167,8 @@ echo   6. Debug fast       Debug, no Tracy/trace/verify
 echo   7. Shipped          Release, no Tracy/trace, precompiled shaders
 echo   8. Custom           ask every switch
 echo.
+echo Localization: %LOC_ENABLED%, languages %LOC_LANGUAGES%
+echo.
 set "MENU_CHOICE="
 set /p "MENU_CHOICE=Choose [1-8]: "
 if not defined MENU_CHOICE set "MENU_CHOICE=1"
@@ -207,6 +211,8 @@ set "TRACE_ENABLED=!LAST_TRACE!"
 set "MUTEX_COMPAT=!LAST_MUTEX!"
 set "VERIFY_SHADERS=!LAST_VERIFY!"
 set "PRECOMPILE_SHADERS=!LAST_PRECOMPILE!"
+set "LOC_ENABLED=!LAST_LOC_ENABLED!"
+set "LOC_LANGUAGES=!LAST_LOC_LANGUAGES!"
 set "TARGET_EXE=!LAST_TARGET!"
 goto :AFTER_PRESET
 
@@ -399,7 +405,7 @@ if not defined PRECOMPILE_CHOICE set "PRECOMPILE_CHOICE=N"
 if /i "%PRECOMPILE_CHOICE:~0,1%"=="y" (
     set "PRECOMPILE_SHADERS=true"
     set "VERIFY_SHADERS=true"
-    goto :ASK_TARGET
+    goto :ASK_LOCALIZATION
 )
 set "PRECOMPILE_SHADERS=false"
 
@@ -413,6 +419,24 @@ if /i "%VERIFY_CHOICE:~0,1%"=="n" (
 ) else (
     set "VERIFY_SHADERS=true"
 )
+
+:ASK_LOCALIZATION
+echo.
+echo Localized overlay text is always verified at build time. This switch
+echo selects whether the language selection is compiled in at all.
+set "LOC_CHOICE="
+set /p "LOC_CHOICE=Compile in overlay localization? [Y/n]: "
+if not defined LOC_CHOICE set "LOC_CHOICE=Y"
+if /i "%LOC_CHOICE:~0,1%"=="n" (
+    set "LOC_ENABLED=false"
+    goto :ASK_TARGET
+)
+set "LOC_ENABLED=true"
+echo.
+echo Languages to embed, comma separated. English is always embedded.
+set "LOC_LANGUAGES="
+set /p "LOC_LANGUAGES=Languages [%LOC_LANGUAGES%]: "
+if not defined LOC_LANGUAGES set "LOC_LANGUAGES=en"
 
 :ASK_TARGET
 echo.
@@ -446,6 +470,7 @@ echo   Pipeline trace    : %TRACE_ENABLED%
 echo   Mutex workaround  : %MUTEX_COMPAT%
 echo   Verify shaders    : %VERIFY_SHADERS%
 echo   Precompile shaders: %PRECOMPILE_SHADERS%
+echo   Localization      : %LOC_ENABLED%, languages %LOC_LANGUAGES%
 echo   Launch target     : %TARGET_EXE%
 echo   MSBuild           : %MSBUILD_PATH%
 echo   Addon output      : %ADDON_OUTPUT%
@@ -460,7 +485,7 @@ REM ============================================================
 echo [1/3] Building (%BUILD_TARGET%)...
 echo.
 
-"%MSBUILD_PATH%" "%SOLUTION_PATH%" /t:%BUILD_TARGET% /p:Configuration=%CONFIG% /p:Platform=x64 /p:DlssnrTracyEnabled=%TRACY_ENABLED% /p:DlssnrProfileVerbosity=%PROFILE_VERBOSITY% /p:DlssnrProfileDomainCore=%DOMAIN_CORE% /p:DlssnrProfileDomainRender=%DOMAIN_RENDER% /p:DlssnrProfileDomainResource=%DOMAIN_RESOURCE% /p:DlssnrProfileDomainAsync=%DOMAIN_ASYNC% /p:DlssnrProfileDomainUi=%DOMAIN_UI% /p:DlssnrProfileDomainCtl=%DOMAIN_CTL% /p:DlssnrProfileDomainGpu=%DOMAIN_GPU% /p:DlssnrTraceEnabled=%TRACE_ENABLED% /p:DlssnrMutexCompatibility=%MUTEX_COMPAT% /p:VerifyShaders=%VERIFY_SHADERS% /p:PrecompileShaders=%PRECOMPILE_SHADERS% /v:minimal /nologo
+"%MSBUILD_PATH%" "%SOLUTION_PATH%" /t:%BUILD_TARGET% /p:Configuration=%CONFIG% /p:Platform=x64 /p:DlssnrTracyEnabled=%TRACY_ENABLED% /p:DlssnrProfileVerbosity=%PROFILE_VERBOSITY% /p:DlssnrProfileDomainCore=%DOMAIN_CORE% /p:DlssnrProfileDomainRender=%DOMAIN_RENDER% /p:DlssnrProfileDomainResource=%DOMAIN_RESOURCE% /p:DlssnrProfileDomainAsync=%DOMAIN_ASYNC% /p:DlssnrProfileDomainUi=%DOMAIN_UI% /p:DlssnrProfileDomainCtl=%DOMAIN_CTL% /p:DlssnrProfileDomainGpu=%DOMAIN_GPU% /p:DlssnrTraceEnabled=%TRACE_ENABLED% /p:DlssnrMutexCompatibility=%MUTEX_COMPAT% /p:VerifyShaders=%VERIFY_SHADERS% /p:PrecompileShaders=%PRECOMPILE_SHADERS% /p:DlssnrLocalizationEnabled=%LOC_ENABLED% /p:DlssnrLocLanguages=%LOC_LANGUAGES% /v:minimal /nologo
 if errorlevel 1 (
     echo.
     echo BUILD FAILED!
@@ -560,6 +585,8 @@ set "TRACE_ENABLED=true"
 set "MUTEX_COMPAT=true"
 set "VERIFY_SHADERS=true"
 set "PRECOMPILE_SHADERS=false"
+set "LOC_ENABLED=true"
+set "LOC_LANGUAGES=en"
 set "TARGET_EXE="
 exit /b 0
 
@@ -613,7 +640,7 @@ if /i "%DOMAIN_ANSWER:~0,1%"=="y" (
 exit /b 0
 
 :Persist
-set "NEW_CFG=REM CFG=%BUILD_TARGET% %CONFIG% %TRACY_ENABLED% %PROFILE_VERBOSITY% %DOMAIN_CORE% %DOMAIN_RENDER% %DOMAIN_RESOURCE% %DOMAIN_ASYNC% %DOMAIN_UI% %DOMAIN_CTL% %DOMAIN_GPU% %TRACE_ENABLED% %MUTEX_COMPAT% %VERIFY_SHADERS% %PRECOMPILE_SHADERS%"
+set "NEW_CFG=REM CFG=%BUILD_TARGET% %CONFIG% %TRACY_ENABLED% %PROFILE_VERBOSITY% %DOMAIN_CORE% %DOMAIN_RENDER% %DOMAIN_RESOURCE% %DOMAIN_ASYNC% %DOMAIN_UI% %DOMAIN_CTL% %DOMAIN_GPU% %TRACE_ENABLED% %MUTEX_COMPAT% %VERIFY_SHADERS% %PRECOMPILE_SHADERS% %LOC_ENABLED% %LOC_LANGUAGES%"
 set "PERSIST_TMP=%TEMP%\dlssnr_build_rewrite_%RANDOM%%RANDOM%.bat"
 findstr /v /b /c:"REM CFG=" /c:"REM TARGET_EXE=" "%~f0" > "%PERSIST_TMP%"
 >> "%PERSIST_TMP%" echo %NEW_CFG%
