@@ -1,4 +1,4 @@
-// Preferences: the three global toggles.
+// Preferences: the global toggles and the overlay language.
 //
 // The smallest complete feature. Everything about it -- the section, its
 // settings, their metadata and defaults -- is declared in RegisterSchema()
@@ -22,6 +22,12 @@ inline constexpr const char* kShowTooltips = "show_tooltips";
 inline constexpr const char* kCloneResources = "clone_resources";
 inline constexpr const char* kInvertFallbackDepth = "invert_fallback_depth";
 inline constexpr const char* kFp16Storage = "fp16_storage";
+// Stores a language code rather than an index: the embedded language set is a
+// build-time decision, so an index would mean a different language after an
+// update that adds one.
+inline constexpr const char* kLanguage = "language";
+
+inline constexpr const char* kDefaultLanguage = "en";
 
 inline constexpr int64_t kKey = 0;  // single instance
 

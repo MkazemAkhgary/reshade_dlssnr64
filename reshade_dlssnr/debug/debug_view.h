@@ -17,6 +17,7 @@
 #include "gpu/compute_engine.h"
 #include "gpu/pass_resources.h"
 #include "grade/settings.h"
+#include "localization/localization.h"
 #include "model/model_input.h"
 
 namespace reshade_dlssnr {
@@ -116,8 +117,8 @@ enum class DebugDisplayMode : uint32_t {
 };
 
 struct DebugViewDef {
-  const char* name;
-  const char* tooltip;
+  localization::TextRef name;
+  localization::TextRef tooltip;
   DebugDisplayMode display_mode;
   // Returns the selected resource and its content size. Returns nullptr if
   // the resource is unavailable this frame. The resource may be larger than

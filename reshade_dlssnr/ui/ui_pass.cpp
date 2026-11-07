@@ -25,6 +25,8 @@
 #include "state/settings.h"
 #include "ui/ui_widgets.h"
 
+#define LOC_NAMESPACE "ui"
+
 namespace reshade_dlssnr {
 
 // The deferred mutation queue the toolbar writes and the overlay drains.
@@ -87,13 +89,18 @@ void DrawPassToolbar(Settings& settings, bool& changed) {
     ctl::ValueStore& store = feature::SettingsStore();
     bool enabled = store.Read(feature::pass::kSection, active_key,
                               feature::pass::kPassEnabled).as_bool;
-    if (ImGui::Checkbox("Enable##pass_toolbar_enabled", &enabled)) {
+    const std::string enable_label =
+        std::string(LOC_TEXT("toolbar.enable", "Enable").c_str()) +
+        "##pass_toolbar_enabled";
+    if (ImGui::Checkbox(enable_label.c_str(), &enabled)) {
       store.Write(feature::pass::kSection, active_key,
                   feature::pass::kPassEnabled, ctl::Value::Bool(enabled));
       changed = true;
     }
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-      Tip("Enable or disable the selected pass without opening its settings.");
+      Tip(LOC_TEXT("toolbar.enable.tip",
+          "Enable or disable the selected pass without opening its "
+          "settings."));
     }
     ImGui::SameLine();
   }
@@ -113,8 +120,9 @@ void DrawPassToolbar(Settings& settings, bool& changed) {
     }
   });
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Move pass %d one position earlier. Execution still groups by target stage.",
-        position + 1);
+    TipFormat(LOC_TEXT("toolbar.move_left.tip",
+                 "Move pass %d one position earlier. Execution still groups by "
+                 "target stage."), position + 1);
   }
 
   ImGui::SameLine();
@@ -127,8 +135,9 @@ void DrawPassToolbar(Settings& settings, bool& changed) {
     }
   });
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Move pass %d one position later. Execution still groups by target stage.",
-        position + 1);
+    TipFormat(LOC_TEXT("toolbar.move_right.tip",
+                 "Move pass %d one position later. Execution still groups by "
+                 "target stage."), position + 1);
   }
 
   ImGui::SameLine();
@@ -137,8 +146,10 @@ void DrawPassToolbar(Settings& settings, bool& changed) {
     changed = true;
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Reset pass %d's model, residual, grade, sharpening, and shader settings to defaults. Its name, target, and enabled state are preserved.",
-        position + 1);
+    TipFormat(LOC_TEXT("toolbar.reset.tip",
+                 "Reset pass %d's model, residual, grade, sharpening, and shader "
+                 "settings to defaults. Its name, target, and enabled state are "
+                 "preserved."), position + 1);
   }
 
   ImGui::SameLine();
@@ -152,8 +163,8 @@ void DrawPassToolbar(Settings& settings, bool& changed) {
     }
   });
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Add a new pass after pass %d, up to the maximum of %u.", position + 1,
-        kMaxPasses);
+    TipFormat(LOC_TEXT("toolbar.add.tip",
+                 "Add a new pass after pass %d, up to the maximum of %u."), position + 1, kMaxPasses);
   }
 
   ImGui::SameLine();
@@ -165,8 +176,11 @@ void DrawPassToolbar(Settings& settings, bool& changed) {
     }
   });
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Remove pass %d. At least one pass remains.", position + 1);
+    TipFormat(LOC_TEXT("toolbar.remove.tip",
+                 "Remove pass %d. At least one pass remains."), position + 1);
   }
 }
 
 }  // namespace reshade_dlssnr
+
+#undef LOC_NAMESPACE

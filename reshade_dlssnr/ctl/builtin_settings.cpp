@@ -14,11 +14,16 @@
 #include "ctl/registry.h"
 #include "ui/ui_widgets.h"
 
+#define LOC_NAMESPACE "ctl"
+
 namespace reshade_dlssnr {
 namespace ctl {
 
 namespace {
 
+// Every row type resets through the same button, so it says the same thing.
+const localization::TextRef kResetDefaultTip =
+    LOC_TEXT("reset.default.tip", "Reset to the declared default.");
 
 }  // namespace
 
@@ -26,14 +31,17 @@ namespace {
 // FloatSetting
 // ---------------------------------------------------------------------------
 
-FloatSetting::FloatSetting(const char* name, const char* label) {
+FloatSetting::FloatSetting(const char* name,
+                           const localization::TextRef& label) {
   meta_.name = CStrToString(name);
-  meta_.label = CStrToString(label);
+  meta_.label = label;
 }
-FloatSetting::FloatSetting(const char* name, const char* label, float default_value)
+FloatSetting::FloatSetting(const char* name,
+                           const localization::TextRef& label,
+                           float default_value)
     : default_(default_value) {
   meta_.name = CStrToString(name);
-  meta_.label = CStrToString(label);
+  meta_.label = label;
 }
 
 Value FloatSetting::DefaultValue() const { return Value::Float(default_); }
@@ -85,7 +93,7 @@ bool FloatSetting::Draw(const SettingContext& ctx, const Value& resolved,
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted(meta_.label.c_str());
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("%s", meta_.tooltip.empty() ? meta_.label.c_str() : meta_.tooltip.c_str());
+    Tip(meta_.tooltip.empty() ? meta_.label : meta_.tooltip);
   }
   ImGui::SameLine(kSliderLabelWidth);
 
@@ -115,7 +123,7 @@ bool FloatSetting::Draw(const SettingContext& ctx, const Value& resolved,
                                  format_.c_str());
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("%s", meta_.tooltip.empty() ? meta_.label.c_str() : meta_.tooltip.c_str());
+    Tip(meta_.tooltip.empty() ? meta_.label : meta_.tooltip);
   }
 
   if (changed) {
@@ -134,7 +142,7 @@ bool FloatSetting::Draw(const SettingContext& ctx, const Value& resolved,
     changed = true;
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Reset to the declared default.");
+    Tip(kResetDefaultTip);
   }
   ImGui::PopID();
 
@@ -146,14 +154,16 @@ bool FloatSetting::Draw(const SettingContext& ctx, const Value& resolved,
 // IntSetting
 // ---------------------------------------------------------------------------
 
-IntSetting::IntSetting(const char* name, const char* label) {
+IntSetting::IntSetting(const char* name,
+                       const localization::TextRef& label) {
   meta_.name = CStrToString(name);
-  meta_.label = CStrToString(label);
+  meta_.label = label;
 }
-IntSetting::IntSetting(const char* name, const char* label, int default_value)
+IntSetting::IntSetting(const char* name,
+                       const localization::TextRef& label, int default_value)
     : default_(default_value) {
   meta_.name = CStrToString(name);
-  meta_.label = CStrToString(label);
+  meta_.label = label;
 }
 
 Value IntSetting::DefaultValue() const { return Value::Int(default_); }
@@ -205,7 +215,7 @@ bool IntSetting::Draw(const SettingContext& ctx, const Value& resolved,
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted(meta_.label.c_str());
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("%s", meta_.tooltip.empty() ? meta_.label.c_str() : meta_.tooltip.c_str());
+    Tip(meta_.tooltip.empty() ? meta_.label : meta_.tooltip);
   }
   ImGui::SameLine(kSliderLabelWidth);
 
@@ -234,7 +244,7 @@ bool IntSetting::Draw(const SettingContext& ctx, const Value& resolved,
     changed = ImGui::SliderInt(id.c_str(), &display, slider_lo, slider_hi);
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("%s", meta_.tooltip.empty() ? meta_.label.c_str() : meta_.tooltip.c_str());
+    Tip(meta_.tooltip.empty() ? meta_.label : meta_.tooltip);
   }
   if (changed) {
     Value candidate = Value::Int(display);
@@ -251,7 +261,7 @@ bool IntSetting::Draw(const SettingContext& ctx, const Value& resolved,
     changed = true;
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Reset to the declared default.");
+    Tip(kResetDefaultTip);
   }
   ImGui::PopID();
 
@@ -262,14 +272,17 @@ bool IntSetting::Draw(const SettingContext& ctx, const Value& resolved,
 // BoolSetting
 // ---------------------------------------------------------------------------
 
-BoolSetting::BoolSetting(const char* name, const char* label) {
+BoolSetting::BoolSetting(const char* name,
+                         const localization::TextRef& label) {
   meta_.name = CStrToString(name);
-  meta_.label = CStrToString(label);
+  meta_.label = label;
 }
-BoolSetting::BoolSetting(const char* name, const char* label, bool default_value)
+BoolSetting::BoolSetting(const char* name,
+                         const localization::TextRef& label,
+                         bool default_value)
     : default_(default_value) {
   meta_.name = CStrToString(name);
-  meta_.label = CStrToString(label);
+  meta_.label = label;
 }
 
 Value BoolSetting::DefaultValue() const { return Value::Bool(default_); }
@@ -321,12 +334,12 @@ bool BoolSetting::Draw(const SettingContext& ctx, const Value& resolved,
     changed = ImGui::Checkbox(id.c_str(), &display);
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("%s", meta_.tooltip.empty() ? meta_.label.c_str() : meta_.tooltip.c_str());
+    Tip(meta_.tooltip.empty() ? meta_.label : meta_.tooltip);
   }
   ImGui::SameLine();
   ImGui::TextUnformatted(meta_.label.c_str());
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("%s", meta_.tooltip.empty() ? meta_.label.c_str() : meta_.tooltip.c_str());
+    Tip(meta_.tooltip.empty() ? meta_.label : meta_.tooltip);
   }
 
   if (changed) {
@@ -342,16 +355,18 @@ bool BoolSetting::Draw(const SettingContext& ctx, const Value& resolved,
 // StringSetting
 // ---------------------------------------------------------------------------
 
-StringSetting::StringSetting(const char* name, const char* label) {
+StringSetting::StringSetting(const char* name,
+                             const localization::TextRef& label) {
   meta_.name = CStrToString(name);
-  meta_.label = CStrToString(label);
+  meta_.label = label;
 }
 
-StringSetting::StringSetting(const char* name, const char* label,
+StringSetting::StringSetting(const char* name,
+                             const localization::TextRef& label,
                              std::string default_value)
     : default_(std::move(default_value)) {
   meta_.name = CStrToString(name);
-  meta_.label = CStrToString(label);
+  meta_.label = label;
 }
 
 Value StringSetting::DefaultValue() const { return Value::String(default_); }
@@ -396,7 +411,7 @@ bool StringSetting::Draw(const SettingContext& ctx, const Value& resolved,
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted(meta_.label.c_str());
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("%s", meta_.tooltip.empty() ? meta_.label.c_str() : meta_.tooltip.c_str());
+    Tip(meta_.tooltip.empty() ? meta_.label : meta_.tooltip);
   }
   ImGui::SameLine(kControlLabelWidth);
 
@@ -419,7 +434,7 @@ bool StringSetting::Draw(const SettingContext& ctx, const Value& resolved,
     if (edited) text.assign(buffer.data());
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("%s", meta_.tooltip.empty() ? meta_.label.c_str() : meta_.tooltip.c_str());
+    Tip(meta_.tooltip.empty() ? meta_.label : meta_.tooltip);
   }
 
   if (edited && text !=
@@ -440,7 +455,7 @@ bool StringSetting::Draw(const SettingContext& ctx, const Value& resolved,
     edited = true;
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Reset to the declared default.");
+    Tip(kResetDefaultTip);
   }
   ImGui::PopID();
 
@@ -451,11 +466,12 @@ bool StringSetting::Draw(const SettingContext& ctx, const Value& resolved,
 // IntListSetting
 // ---------------------------------------------------------------------------
 
-IntListSetting::IntListSetting(const char* name, const char* label,
+IntListSetting::IntListSetting(const char* name,
+                               const localization::TextRef& label,
                                std::vector<int64_t> default_value)
     : default_(std::move(default_value)) {
   meta_.name = CStrToString(name);
-  meta_.label = CStrToString(label);
+  meta_.label = label;
 }
 
 Value IntListSetting::DefaultValue() const { return Value::IntList(default_); }
@@ -544,7 +560,7 @@ bool IntListSetting::Draw(const SettingContext&, const Value& resolved,
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted(meta_.label.c_str());
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("%s", meta_.tooltip.empty() ? meta_.label.c_str() : meta_.tooltip.c_str());
+    Tip(meta_.tooltip.empty() ? meta_.label : meta_.tooltip);
   }
   ImGui::SameLine(kControlLabelWidth);
   const float trailing = kResetButtonWidth;
@@ -575,18 +591,21 @@ bool IntListSetting::Draw(const SettingContext&, const Value& resolved,
 // EnumSetting
 // ---------------------------------------------------------------------------
 
-EnumSetting::EnumSetting(const char* name, const char* label) {
+EnumSetting::EnumSetting(const char* name,
+                         const localization::TextRef& label) {
   meta_.name = CStrToString(name);
-  meta_.label = CStrToString(label);
+  meta_.label = label;
 }
-EnumSetting::EnumSetting(const char* name, const char* label, int default_value)
+EnumSetting::EnumSetting(const char* name,
+                         const localization::TextRef& label,
+                         int default_value)
     : default_(default_value) {
   meta_.name = CStrToString(name);
-  meta_.label = CStrToString(label);
+  meta_.label = label;
 }
 
-EnumSetting& EnumSetting::Items(const char* const* names,
-                                const char* const* tips, int count) {
+EnumSetting& EnumSetting::Items(const localization::TextRef* names,
+                                const localization::TextRef* tips, int count) {
   names_.clear();
   tips_.clear();
   if (names == nullptr || count <= 0) {
@@ -597,11 +616,8 @@ EnumSetting& EnumSetting::Items(const char* const* names,
   names_.reserve(static_cast<size_t>(count));
   tips_.reserve(static_cast<size_t>(count));
   for (int i = 0; i < count; ++i) {
-    std::string name = CStrToString(names[i]);
-    std::string tip = CStrToString(tips != nullptr ? tips[i] : nullptr);
-    if (tips == nullptr || tips[i] == nullptr) tip = name;
-    names_.push_back(std::move(name));
-    tips_.push_back(std::move(tip));
+    names_.push_back(names[i]);
+    tips_.push_back(tips != nullptr ? tips[i] : names[i]);
   }
   resolved_ = true;
   return *this;
@@ -618,11 +634,8 @@ void EnumSetting::EnsureItems() const {
   resolved_ = true;
   if (provider_ == nullptr) return;
   for (const Item& item : provider_()) {
-    std::string name = CStrToString(item.name);
-    std::string tip = CStrToString(item.tip);
-    if (item.tip == nullptr) tip = name;
-    names_.push_back(std::move(name));
-    tips_.push_back(std::move(tip));
+    names_.push_back(item.name);
+    tips_.push_back(item.tip.empty() ? item.name : item.tip);
   }
 }
 
@@ -652,14 +665,18 @@ std::string EnumSetting::ToString(const Value& value) const {
   Value clamped = value;
   Clamp(clamped);
   const int idx = clamped.as_int;
-  if (idx >= 0 && idx < static_cast<int>(names_.size())) return names_[idx];
+  // Traces and INI values are read by humans and parsed by the loader, so they
+  // use the language-independent name.
+  if (idx >= 0 && idx < static_cast<int>(names_.size())) {
+    return names_[idx].fallback_text();
+  }
   return std::to_string(idx);
 }
 
 bool EnumSetting::FromString(const std::string& text, Value& out) const {
   EnsureItems();
   for (size_t i = 0; i < names_.size(); ++i) {
-    if (text == names_[i]) {
+    if (text == names_[i].fallback_text()) {
       out = Value::Enum(static_cast<int>(i));
       return true;
     }
@@ -682,7 +699,7 @@ bool EnumSetting::Draw(const SettingContext& ctx, const Value& resolved,
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted(meta_.label.c_str());
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("%s", meta_.tooltip.empty() ? meta_.label.c_str() : meta_.tooltip.c_str());
+    Tip(meta_.tooltip.empty() ? meta_.label : meta_.tooltip);
   }
   ImGui::SameLine(kControlLabelWidth);
 
@@ -692,12 +709,6 @@ bool EnumSetting::Draw(const SettingContext& ctx, const Value& resolved,
   // Selecting writes the value on this instance.
   {
     if (meta_.enum_presentation == EnumPresentation::GroupButtons) {
-      std::vector<const char*> labels;
-      std::vector<const char*> tooltips;
-      labels.reserve(names_.size());
-      tooltips.reserve(tips_.size());
-      for (const std::string& name : names_) labels.push_back(name.c_str());
-      for (const std::string& tip : tips_) tooltips.push_back(tip.c_str());
       // At most a handful of items; the array keeps the draw allocation-free.
       constexpr int kMaxItems = 16;
       bool unavailable[kMaxItems] = {};
@@ -713,7 +724,7 @@ bool EnumSetting::Draw(const SettingContext& ctx, const Value& resolved,
       const bool have_availability =
           availability_provider_ != nullptr && count <= kMaxItems;
       const int clicked = DrawGroupButtons(
-          meta_.name.c_str(), labels.data(), tooltips.data(), count, display,
+          meta_.name.c_str(), names_.data(), tips_.data(), count, display,
           nullptr, have_availability ? unavailable : nullptr,
           have_availability ? reasons : nullptr);
       if (clicked >= 0 && clicked != display) {
@@ -724,7 +735,8 @@ bool EnumSetting::Draw(const SettingContext& ctx, const Value& resolved,
       const std::string id = std::string("##") + meta_.name;
       const std::string preview_id = std::string("##") + meta_.name + "_preview";
       const std::string preview =
-          (display >= 0 && display < count) ? names_[display] : std::string();
+          (display >= 0 && display < count) ? names_[display].c_str()
+                                            : std::string();
       if (ImGui::BeginCombo(preview_id.c_str(), preview.c_str())) {
         for (int i = 0; i < count; ++i) {
           const bool selected = (i == display);
@@ -733,7 +745,7 @@ bool EnumSetting::Draw(const SettingContext& ctx, const Value& resolved,
             changed = true;
           }
           if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-            Tip("%s", tips_[i].c_str());
+            Tip(tips_[i]);
           }
           if (selected) ImGui::SetItemDefaultFocus();
         }
@@ -748,7 +760,7 @@ bool EnumSetting::Draw(const SettingContext& ctx, const Value& resolved,
   // setting tooltip is still shown when the label is hovered above.
   if (meta_.enum_presentation != EnumPresentation::GroupButtons &&
       ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("%s", meta_.tooltip.empty() ? meta_.label.c_str() : meta_.tooltip.c_str());
+    Tip(meta_.tooltip.empty() ? meta_.label : meta_.tooltip);
   }
 
   if (changed) {
@@ -777,3 +789,5 @@ void RegisterBuiltinTypes(Registry& registry) {
 
 }  // namespace ctl
 }  // namespace reshade_dlssnr
+
+#undef LOC_NAMESPACE

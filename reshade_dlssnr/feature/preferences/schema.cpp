@@ -1,57 +1,152 @@
 // Preferences schema, declared inline.
 
+#include <imgui.h>
+
+#include <string>
+
 #include "ctl/builtin_settings.h"
 #include "profiling/profile.h"
+#include "ctl/draw.h"
 #include "ctl/schema.h"
+#include "ctl/values.h"
 #include "feature/preferences/settings.h"
+#include "localization/localization.h"
+#include "ui/ui_widgets.h"
+
+#define LOC_NAMESPACE "prefs"
 
 namespace reshade_dlssnr {
 namespace feature {
 
 namespace {
 
+bool NeverVisible(const void*, const ctl::ValueStore&,
+                  const ctl::InstanceKey&, const std::string&) {
+  return false;
+}
+
+#if DLSSNR_LOCALIZATION_ENABLED
+
+// The language list is whatever the build embedded, so it cannot be an enum
+// declared here. The row draws a combo over that list and stores the code.
+//
+// The label and tooltip come from the setting's own metadata -- the hook is
+// handed it as context -- so each string is declared exactly once.
+bool DrawLanguageRow(const void* context, ctl::ValueStore& store,
+                     const ctl::DrawOptions&, const std::string& section,
+                     const ctl::InstanceKey& key, bool& changed) {
+  DLSSNR_PROFILE_UI_L3("DrawLanguageRow");
+  const auto* meta = static_cast<const ctl::SettingMeta*>(context);
+  const std::string current =
+      store.Read(section, key, preferences::kLanguage).as_string;
+  const std::vector<localization::Language>& languages =
+      localization::Languages();
+
+  // A language's own name is the same in every language, which is the point:
+  // someone who cannot read the current language still finds their own.
+  const char* preview = current.c_str();
+  for (const localization::Language& language : languages) {
+    if (current == language.code) {
+      preview = language.name;
+      break;
+    }
+  }
+
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted(meta->label.c_str());
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    Tip(meta->tooltip);
+  }
+
+  ImGui::SameLine(kControlLabelWidth);
+  ImGui::SetNextItemWidth(-1.0f);
+  if (ImGui::BeginCombo("##language", preview)) {
+    for (const localization::Language& language : languages) {
+      const bool selected = current == language.code;
+      if (ImGui::Selectable(language.name, selected) && !selected) {
+        store.Write(section, key, preferences::kLanguage,
+                    ctl::Value::String(language.code), /*from_user=*/true);
+        localization::SetLanguage(language.code);
+        changed = true;
+      }
+      if (selected) ImGui::SetItemDefaultFocus();
+    }
+    ImGui::EndCombo();
+  }
+  return false;
+}
+
+#endif
 
 }  // namespace
 
 void RegisterPreferencesSchema(ctl::Schema& schema) {
   DLSSNR_PROFILE_CTL_L3("RegisterPreferencesSchema");
   ctl::Section& prefs = schema.AddSection(preferences::kSection, ctl::SectionKind::Single);
+  prefs.Title(LOC_TEXT("title", "Preferences"));
   prefs.DefaultPersistenceBackend(ctl::PersistenceBackend::Ini);
 
   prefs
-      .Add<ctl::BoolSetting>(preferences::kShowTooltips, "Show Tooltips", true)
-      .Tooltip("Show contextual descriptions when hovering controls and "
-               "section headers.");
+      .Add<ctl::BoolSetting>(preferences::kShowTooltips,
+                             LOC_TEXT("show_tooltips", "Show Tooltips"), true)
+      .Tooltip(LOC_TEXT("show_tooltips.tip",
+                        "Show contextual descriptions when hovering controls and "
+                        "section headers."));
+
+#if DLSSNR_LOCALIZATION_ENABLED
+  // Hidden from the generic drawer: the hook renders the label and the combo
+  // as one row.
+  ctl::StringSetting& language =
+      prefs
+          .Add<ctl::StringSetting>(preferences::kLanguage,
+                                   LOC_TEXT("language", "Language"),
+                                   preferences::kDefaultLanguage)
+          .Tooltip(LOC_TEXT("language.tip",
+                            "Language of the overlay. Saved settings, presets, "
+                            "and log messages are not affected."))
+          .VisibleWhen(&NeverVisible);
+  prefs.AddHookAfter(preferences::kLanguage, "LanguageRow", &DrawLanguageRow,
+                     &language.meta());
+#endif
 
   prefs
       .Add<ctl::BoolSetting>(preferences::kCloneResources,
-                             "Clone Game Resources", false)
+                             LOC_TEXT("clone_resources", "Clone Game Resources"),
+                             false)
       .Tooltip(
-          "Off (default): read the game's current depth/motion resources and "
-          "the DLSS output directly. On: copy current-frame depth/motion, and "
-          "the DLSS output when Post-DLSS is enabled, into addon-owned "
-          "textures. This one option applies to all stages, including "
-          "Backbuffer; the requested mode is latched safely at a new DLSS "
-          "evaluation.");
+          LOC_TEXT("clone_resources.tip",
+                   "Off (default): read the game's current depth/motion resources and "
+                   "the DLSS output directly. On: copy current-frame depth/motion, and "
+                   "the DLSS output when Post-DLSS is enabled, into addon-owned "
+                   "textures. This one option applies to all stages, including "
+                   "Backbuffer; the requested mode is latched safely at a new DLSS "
+                   "evaluation."));
 
   prefs
       .Add<ctl::BoolSetting>(preferences::kInvertFallbackDepth,
-                             "Invert Fallback Depth", false)
+                             LOC_TEXT("invert_fallback_depth",
+                                      "Invert Fallback Depth"),
+                             false)
       .Tooltip(
-          "Invert the ReShade Generic Depth values when they are used because "
-          "the DLSS evaluation did not supply a depth resource. Does not alter "
-          "depth supplied by DLSS.");
+          LOC_TEXT("invert_fallback_depth.tip",
+                   "Invert the ReShade Generic Depth values when they are used because "
+                   "the DLSS evaluation did not supply a depth resource. Does not alter "
+                   "depth supplied by DLSS."));
 
   prefs
-      .Add<ctl::BoolSetting>(preferences::kFp16Storage, "FP16 Pipeline", true)
+      .Add<ctl::BoolSetting>(preferences::kFp16Storage,
+                             LOC_TEXT("fp16_storage", "FP16 Pipeline"), true)
       .Tooltip(
-          "Store the HDR gain-map carrier, model working textures, and "
-          "unlifted composition reference in RGBA16F instead of RGBA32F. "
-          "Halves the bandwidth and footprint of the HDR pipeline at the "
-          "cost of quantization in the carrier-to-HDR multiplier and the "
-          "model-domain deltas. SDR paths are unaffected. Toggling resets "
-          "temporal history and rebuilds the NGX feature.");
+          LOC_TEXT("fp16_storage.tip",
+                   "Store the HDR gain-map carrier, model working textures, and "
+                   "unlifted composition reference in RGBA16F instead of RGBA32F. "
+                   "Halves the bandwidth and footprint of the HDR pipeline at the "
+                   "cost of quantization in the carrier-to-HDR multiplier and the "
+                   "model-domain deltas. SDR paths are unaffected. Toggling resets "
+                   "temporal history and rebuilds the NGX feature."));
 }
 
 }  // namespace feature
 }  // namespace reshade_dlssnr
+
+#undef LOC_NAMESPACE

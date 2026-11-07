@@ -17,6 +17,8 @@
 #include "fragments/hdr_filter_rows/rows.h"
 #include "state/settings.h"
 
+#define LOC_NAMESPACE "exposure_mask"
+
 namespace reshade_dlssnr {
 namespace feature {
 namespace exposure_mask {
@@ -46,41 +48,58 @@ void RegisterExposureMaskSchema(ctl::Schema& schema) {
 
   ctl::Section& mask =
       schema.AddSection(kSection, ctl::SectionKind::Instanced);
+  mask.Title(LOC_TEXT("title", "Exposure Mask"));
   mask.HeaderToggle(kEnable);
   mask.EnableSectionWhen(&SectionEnabled);
 
-  mask.Add<ctl::BoolSetting>(kEnable, "Enable", false)
-      .Tooltip("This pass builds its Exposure Mask after model evaluation. "
-               "The mask affects only this pass's next-frame HDR metering.");
+  mask.Add<ctl::BoolSetting>(kEnable, LOC_TEXT("enabled", "Enable"), false)
+      .Tooltip(LOC_TEXT("enabled.tip",
+                        "This pass builds its Exposure Mask after model evaluation. "
+                        "The mask affects only this pass's next-frame HDR metering."));
 
-  mask.Add<ctl::FloatSetting>(kEditStrength, "Edit Strength", 0.5f)
+  mask.Add<ctl::FloatSetting>(kEditStrength,
+                              LOC_TEXT("edit_strength", "Edit Strength"), 0.5f)
       .ClampRange(0.1f, 8.0f)
-      .Tooltip("Scale the measured model-input/output difference before "
-               "thresholding.")
+      .Tooltip(LOC_TEXT("edit_strength.tip",
+                        "Scale the measured model-input/output difference before "
+                        "thresholding."))
       .EnableWhen(kEnable);
-  mask.Add<ctl::FloatSetting>(kSmoothing, "Spatial Smoothing", 0.5f)
+  mask.Add<ctl::FloatSetting>(kSmoothing,
+                              LOC_TEXT("smoothing", "Spatial Smoothing"), 0.5f)
       .ClampRange(0.0f, 1.0f)
-      .Tooltip("Majority-filter the binary exposure votes in a small "
-               "neighborhood.")
+      .Tooltip(LOC_TEXT("smoothing.tip",
+                        "Majority-filter the binary exposure votes in a small "
+                        "neighborhood."))
       .EnableWhen(kEnable);
-  mask.Add<ctl::FloatSetting>(kResponse, "Temporal Response", 0.5f)
+  mask.Add<ctl::FloatSetting>(kResponse,
+                              LOC_TEXT("response", "Temporal Response"), 0.5f)
       .ClampRange(0.0f, 1.0f)
-      .Tooltip("Blend new mask votes with the previous frame's mask.")
+      .Tooltip(LOC_TEXT("response.tip",
+                        "Blend new mask votes with the previous frame's mask."))
       .EnableWhen(kEnable);
-  mask.Add<ctl::FloatSetting>(kLumaThreshold, "Luma Threshold", 0.02f)
+  mask.Add<ctl::FloatSetting>(kLumaThreshold,
+                              LOC_TEXT("luma_threshold", "Luma Threshold"), 0.02f)
       .ClampRange(0.0f, 0.5f)
-      .Tooltip("Minimum absolute luma difference to mark a model edit.")
+      .Tooltip(LOC_TEXT("luma_threshold.tip",
+                        "Minimum absolute luma difference to mark a model edit."))
       .EnableWhen(kEnable);
-  mask.Add<ctl::FloatSetting>(kLumaRelative, "Relative Luma", 0.05f)
+  mask.Add<ctl::FloatSetting>(kLumaRelative,
+                              LOC_TEXT("luma_relative", "Relative Luma"), 0.05f)
       .ClampRange(0.0f, 1.0f)
-      .Tooltip("Minimum luma difference relative to the brighter input/output "
-               "luma.")
+      .Tooltip(LOC_TEXT("luma_relative.tip",
+                        "Minimum luma difference relative to the brighter input/output "
+                        "luma."))
       .EnableWhen(kEnable);
-  mask.Add<ctl::FloatSetting>(kChromaThreshold, "Chroma Threshold", 0.02f)
+  mask.Add<ctl::FloatSetting>(kChromaThreshold,
+                              LOC_TEXT("chroma_threshold", "Chroma Threshold"),
+                              0.02f)
       .ClampRange(0.0f, 0.5f)
-      .Tooltip("Minimum chroma-only difference to mark a model edit.")
+      .Tooltip(LOC_TEXT("chroma_threshold.tip",
+                        "Minimum chroma-only difference to mark a model edit."))
       .EnableWhen(kEnable);
 }
 
 }  // namespace feature
 }  // namespace reshade_dlssnr
+
+#undef LOC_NAMESPACE

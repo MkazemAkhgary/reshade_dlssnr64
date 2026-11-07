@@ -18,14 +18,19 @@
 #include "state/settings.h"
 #include "status.h"
 #include "temporal_reprojection/stats.h"
+#include "ui/ui_text.h"
 #include "ui/ui_widgets.h"
 #include "feature/ui_state/settings.h"
+
+#define LOC_NAMESPACE "ui"
 
 namespace reshade_dlssnr {
 
 
 namespace {
 
+// Unit symbols. A byte count reads the same in every language, so these are
+// not translated.
 void FormatBytes(uint64_t bytes, char* out, size_t out_size) {
   if (bytes >= 1024ull * 1024 * 1024) {
     std::snprintf(out, out_size, "%.2f GB",
@@ -49,8 +54,9 @@ void FormatPassStatus(const PassStatus& pass,
                       bool post_dlss_blocked,
                       char* out, size_t out_size) {
   const char* stage_name =
-      stage == InjectionStage::PreDLSS ? "Pre-DLSS" :
-      stage == InjectionStage::PostDLSS ? "Post-DLSS" : "Backbuffer";
+      stage == InjectionStage::PreDLSS ? ui_text::kStagePreDlss.c_str() :
+      stage == InjectionStage::PostDLSS ? ui_text::kStagePostDlss.c_str() :
+                                          ui_text::kStageBackbuffer.c_str();
 
   char scale[24] = "";
   if (pass.enabled) {
@@ -59,30 +65,43 @@ void FormatPassStatus(const PassStatus& pass,
   }
 
   if (!pass.enabled) {
-    std::snprintf(out, out_size, "Disabled");
+    std::snprintf(out, out_size, "%s",
+                  LOC_TEXT("pass.status.disabled", "Disabled").c_str());
     return;
   }
   if (post_dlss_blocked && stage == InjectionStage::PostDLSS) {
-    std::snprintf(out, out_size, "%s - blocked%s", stage_name, scale);
+    std::snprintf(out, out_size,
+                  LOC_TEXT("pass.status.blocked", "%s - blocked%s"), stage_name,
+                  scale);
     return;
   }
   if (pass.failed) {
-    std::snprintf(out, out_size, "%s - FAILED: %s%s",
+    std::snprintf(out, out_size,
+                  LOC_TEXT("pass.status.failed", "%s - FAILED: %s%s"),
                   stage_name,
-                  pass.reason[0] != '\0' ? pass.reason : "unknown error",
+                  pass.reason[0] != '\0'
+                      ? pass.reason
+                      : LOC_TEXT("pass.status.unknown_error", "unknown error")
+                            .c_str(),
                   scale);
     return;
   }
   if (!pass.has_feature) {
-    std::snprintf(out, out_size, "%s - initializing%s", stage_name, scale);
-    return;
-  }
-  if (model_passthrough) {
-    std::snprintf(out, out_size, "%s - running (model passthrough)%s",
+    std::snprintf(out, out_size,
+                  LOC_TEXT("pass.status.initializing", "%s - initializing%s"),
                   stage_name, scale);
     return;
   }
-  std::snprintf(out, out_size, "%s - running%s", stage_name, scale);
+  if (model_passthrough) {
+    std::snprintf(out, out_size,
+                  LOC_TEXT("pass.status.passthrough",
+                           "%s - running (model passthrough)%s"),
+                  stage_name, scale);
+    return;
+  }
+  std::snprintf(out, out_size,
+                LOC_TEXT("pass.status.running", "%s - running%s"), stage_name,
+                scale);
 }
 
 }  // namespace
@@ -90,8 +109,10 @@ void FormatPassStatus(const PassStatus& pass,
 void DrawStatusSection(Settings& settings, bool& changed) {
   DLSSNR_PROFILE_UI_L2("DrawStatusSection");
   DrawCollapsible(
-      "Status", feature::ui_state::kStatusOpen, changed,
-      "Live addon, NGX, guide, HDR, and per-pass health. Pass rows use the same target-stage grouping as execution.",
+      LOC_TEXT("status", "Status"), feature::ui_state::kStatusOpen, changed,
+      LOC_TEXT("status.tip",
+               "Live addon, NGX, guide, HDR, and per-pass health. Pass rows use "
+               "the same target-stage grouping as execution."),
       [&] {
     const StatusSnapshot snap = AddonController::Get().GetStatus();
 
@@ -115,27 +136,37 @@ void DrawStatusSection(Settings& settings, bool& changed) {
     ImGui::AlignTextToFramePadding();
     ImGui::Text("%s: %s", label, value);
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-      Tip("%s", tooltip);
+      Tip(tooltip);
     }
   };
 
   char dlssnr_buf[16];
   std::snprintf(dlssnr_buf, sizeof(dlssnr_buf), "%s",
-                snap.enabled ? "Enabled" : "Off");
+                snap.enabled
+                    ? ui_text::kStateEnabled.c_str()
+                    : ui_text::kStateOff.c_str());
 
   char runtime_buf[kStatusTextLength + 32];
   if (snap.runtime_initialized) {
-    std::snprintf(runtime_buf, sizeof(runtime_buf), "Initialized");
+    std::snprintf(runtime_buf, sizeof(runtime_buf), "%s",
+                  LOC_TEXT("status.runtime.initialized", "Initialized").c_str());
   } else if (snap.runtime_reason[0] != '\0') {
-    std::snprintf(runtime_buf, sizeof(runtime_buf), "Not initialized - %s",
+    std::snprintf(runtime_buf, sizeof(runtime_buf),
+                  LOC_TEXT("status.runtime.not_initialized_reason",
+                           "Not initialized - %s"),
                   snap.runtime_reason);
   } else {
-    std::snprintf(runtime_buf, sizeof(runtime_buf), "Not initialized");
+    std::snprintf(runtime_buf, sizeof(runtime_buf), "%s",
+                  LOC_TEXT("status.runtime.not_initialized", "Not initialized")
+                      .c_str());
   }
 
   char guides_buf[48];
   std::snprintf(guides_buf, sizeof(guides_buf), "%s",
-                snap.guides_valid ? "Valid (depth + motion)" : "Not seen");
+                snap.guides_valid
+                    ? LOC_TEXT("status.guides.valid", "Valid (depth + motion)")
+                          .c_str()
+                    : LOC_TEXT("status.guides.missing", "Not seen").c_str());
 
   // HDR settings are pass-keyed. Status follows the selected pass, matching
   // the exposure snapshot shown by the HDR diagnostics section.
@@ -150,45 +181,73 @@ void DrawStatusSection(Settings& settings, bool& changed) {
   const bool hdr_good = !hdr_enabled || !hdr_in_use || snap.hdr_ready;
   char hdr_buf[96];
   if (!hdr_enabled) {
-    std::snprintf(hdr_buf, sizeof(hdr_buf), "Off");
+    std::snprintf(hdr_buf, sizeof(hdr_buf), "%s",
+                  ui_text::kStateOff.c_str());
   } else if (!hdr_in_use) {
-    std::snprintf(hdr_buf, sizeof(hdr_buf), "Inactive (no Pre/Post-DLSS pass)");
+    std::snprintf(hdr_buf, sizeof(hdr_buf), "%s",
+                  LOC_TEXT("status.hdr.inactive",
+                           "Inactive (no Pre/Post-DLSS pass)")
+                      .c_str());
   } else if (snap.hdr_ready) {
-    std::snprintf(hdr_buf, sizeof(hdr_buf), "Active - exp %.3f - white %.3f",
+    std::snprintf(hdr_buf, sizeof(hdr_buf),
+                  LOC_TEXT("status.hdr.active",
+                           "Active - exp %.3f - white %.3f"),
                   snap.hdr_exposure, snap.hdr_scene_white);
   } else {
-    std::snprintf(hdr_buf, sizeof(hdr_buf), "Warming up");
+    std::snprintf(hdr_buf, sizeof(hdr_buf), "%s",
+                  LOC_TEXT("status.hdr.warming", "Warming up").c_str());
   }
 
   if (ImGui::BeginTable("status_shared", 2,
                         ImGuiTableFlags_SizingStretchSame)) {
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
-    cell(snap.enabled, "DLSSNR", dlssnr_buf,
-         "Master enable state. When disabled, no pass should submit DLSSNR work.");
+    cell(snap.enabled, LOC_TEXT("status.cell.dlssnr", "DLSSNR"),
+         dlssnr_buf,
+         LOC_TEXT("status.cell.dlssnr.tip",
+                  "Master enable state. When disabled, no pass should submit "
+                  "DLSSNR work.")
+             .c_str());
     ImGui::TableNextColumn();
-    cell(snap.runtime_initialized, "NGX runtime", runtime_buf,
-         "Whether the DLSSNR NGX runtime loaded and initialized. Any reason text follows the runtime state.");
+    cell(snap.runtime_initialized,
+         LOC_TEXT("status.cell.ngx_runtime", "NGX runtime"), runtime_buf,
+         LOC_TEXT("status.cell.ngx_runtime.tip",
+                  "Whether the DLSSNR NGX runtime loaded and initialized. Any "
+                  "reason text follows the runtime state.")
+             .c_str());
 
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
-    cell(snap.guides_valid, "DLSS guides", guides_buf,
-         "Depth and motion vectors captured from the current DLSS evaluation. Temporal processing needs current-frame guides.");
+    cell(snap.guides_valid, LOC_TEXT("status.cell.guides", "DLSS guides"),
+         guides_buf,
+         LOC_TEXT("status.cell.guides.tip",
+                  "Depth and motion vectors captured from the current DLSS "
+                  "evaluation. Temporal processing needs current-frame guides.")
+             .c_str());
     ImGui::TableNextColumn();
-    cell(hdr_good, "HDR", hdr_buf,
-         "HDR handling status. It is relevant only when an enabled pass targets Pre-DLSS or Post-DLSS.");
+    cell(hdr_good, LOC_TEXT("status.cell.hdr", "HDR"), hdr_buf,
+         LOC_TEXT("status.cell.hdr.tip",
+                  "HDR handling status. It is relevant only when an enabled pass "
+                  "targets Pre-DLSS or Post-DLSS.")
+             .c_str());
 
     ImGui::EndTable();
   }
 
   if (hdr_enabled && hdr_in_use && snap.gain_map_ready) {
     ImGui::Spacing();
-    ImGui::Text("Gain map: %.3f .. %.3f log2 - SDR excursions: %u - gain-range: %u",
-                snap.gain_map_min_log2, snap.gain_map_max_log2,
-                snap.gain_map_sdr_excursion_pixels,
-                snap.gain_map_out_of_range_pixels);
+    ImGui::Text(
+        LOC_TEXT("status.gain_map",
+                 "Gain map: %.3f .. %.3f log2 - SDR excursions: %u - "
+                 "gain-range: %u"),
+        snap.gain_map_min_log2, snap.gain_map_max_log2,
+        snap.gain_map_sdr_excursion_pixels,
+        snap.gain_map_out_of_range_pixels);
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-      Tip("Observed gain-map range and diagnostic counts for SDR-carrier excursions and gains outside the configured range.");
+      Tip(LOC_TEXT("status.gain_map.tip",
+          "Observed gain-map range and diagnostic counts for "
+          "SDR-carrier excursions and gains outside the "
+          "configured range."));
     }
   }
 
@@ -198,16 +257,20 @@ void DrawStatusSection(Settings& settings, bool& changed) {
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(snap.post_dlss_block_reason);
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-      Tip("Why Post-DLSS work is currently blocked. Check this message before troubleshooting a Post-DLSS pass.");
+      Tip(LOC_TEXT("status.blocked.tip",
+          "Why Post-DLSS work is currently blocked. Check this "
+          "message before troubleshooting a Post-DLSS pass."));
     }
   }
 
   ImGui::Spacing();
-  if (ImGui::Button("Restart Addon")) {
+  if (ImGui::Button(LOC_TEXT("status.restart", "Restart Addon"))) {
     AddonController::Get().RestartAll();
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Safely restart NGX and addon resources after the current GPU queue work completes.");
+    Tip(LOC_TEXT("status.restart.tip",
+        "Safely restart NGX and addon resources after the current "
+        "GPU queue work completes."));
   }
 
   ImGui::Separator();
@@ -246,7 +309,7 @@ void DrawStatusSection(Settings& settings, bool& changed) {
                        sizeof(buf));
 
       char label[32];
-      std::snprintf(label, sizeof(label), "Pass %u",
+      std::snprintf(label, sizeof(label), ui_text::kPassLabel,
                     static_cast<unsigned>(position + 1));
 
       const bool stage_blocked =
@@ -259,14 +322,20 @@ void DrawStatusSection(Settings& settings, bool& changed) {
       ImGui::AlignTextToFramePadding();
       ImGui::TextUnformatted(label);
       if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        Tip("Original pass index %u. Display order is grouped Pre-DLSS, Post-DLSS, then Backbuffer while preserving pass order inside each group.",
-            static_cast<unsigned>(position + 1));
+        TipFormat(LOC_TEXT("pass.label.tip",
+                     "Original pass index %u. Display order is grouped Pre-DLSS, "
+                     "Post-DLSS, then Backbuffer while preserving pass order "
+                     "inside each group."), static_cast<unsigned>(position + 1));
       }
 
       ImGui::SameLine(kControlLabelWidth);
       ImGui::TextUnformatted(buf);
       if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        Tip("Current runtime status for this pass, including its target stage, working scale, initialization state, whether the model is being skipped, and any failure reason.");
+        Tip(LOC_TEXT("pass.status.tip",
+            "Current runtime status for this pass, including its "
+            "target stage, working scale, initialization state, "
+            "whether the model is being skipped, and any failure "
+            "reason."));
       }
     }
   }
@@ -276,32 +345,43 @@ void DrawStatusSection(Settings& settings, bool& changed) {
   // when tuning Working Scale / x2 or diagnosing VRAM pressure.
   ImGui::Separator();
   if (DrawSectionHeader(
-          "GPU Resources", feature::ui_state::kResourcesOpen, changed,
-          "Currently allocated per-pass GPU resources. Totals do not include "
-          "the shared compute engine's descriptor heap, its constant buffer, "
-          "or the release command context.")) {
+          LOC_TEXT("resources", "GPU Resources"), feature::ui_state::kResourcesOpen,
+          changed,
+          LOC_TEXT("resources.tip",
+                   "Currently allocated per-pass GPU resources. Totals do not "
+                   "include the shared compute engine's descriptor heap, its "
+                   "constant buffer, or the release command context."))) {
     IndentScope resources_indent;
 
     char total_buf[32];
     FormatBytes(snap.total_vram_bytes, total_buf, sizeof(total_buf));
     ImGui::AlignTextToFramePadding();
-    ImGui::Text("%s across %u pass%s", total_buf,
-                static_cast<unsigned>(snap.passes.size()),
-                snap.passes.size() == 1 ? "" : "es");
+    ImGui::Text(snap.passes.size() == 1
+                    ? LOC_TEXT("resources.total_one", "%s across %u pass")
+                          .c_str()
+                    : LOC_TEXT("resources.total_many", "%s across %u passes")
+                          .c_str(),
+                total_buf, static_cast<unsigned>(snap.passes.size()));
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-      Tip("Sum of every live pass's allocated GPU resources at the last "
-          "refresh. Reallocations are not counted twice; retired resources "
-          "waiting on the GPU fence are shown separately below.");
+      Tip(LOC_TEXT("resources.total.tip",
+          "Sum of every live pass's allocated GPU resources at the "
+          "last refresh. Reallocations are not counted twice; "
+          "retired resources waiting on the GPU fence are shown "
+          "separately below."));
     }
 
     // Retired resources sit directly under the total: they are memory the
     // addon still holds but which is not part of any pass's total_bytes, and
     // it is what makes the total appear to lag after a scale change.
     if (snap.retired_resources != 0) {
-      ImGui::TextDisabled("Pending release: %u", snap.retired_resources);
+      ImGui::TextDisabled(
+          LOC_TEXT("resources.pending", "Pending release: %u"),
+          snap.retired_resources);
       if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        Tip("Resources retired on a reallocation that are still alive until "
-            "the GPU queue fence for their last reader completes.");
+        Tip(LOC_TEXT("resources.pending.tip",
+            "Resources retired on a reallocation that are still "
+            "alive until the GPU queue fence for their last reader "
+            "completes."));
       }
     }
 
@@ -324,14 +404,16 @@ void DrawStatusSection(Settings& settings, bool& changed) {
       const feature::pass::PassSnapshot pass = feature::pass::Read(
           feature::SettingsStore(), feature::pass::PassKey(entry.id));
       const char* stage_name =
-          pass.target == 0 ? "Pre-DLSS" :
-          pass.target == 1 ? "Post-DLSS" : "Backbuffer";
+          pass.target == 0 ? ui_text::kStagePreDlss.c_str() :
+          pass.target == 1 ? ui_text::kStagePostDlss.c_str() :
+                             ui_text::kStageBackbuffer.c_str();
 
       char pass_label[96];
       char pass_bytes[32];
       FormatBytes(entry.status.resources.total_bytes, pass_bytes,
                   sizeof(pass_bytes));
-      std::snprintf(pass_label, sizeof(pass_label), "Pass %u (%s) - %s",
+      std::snprintf(pass_label, sizeof(pass_label),
+                    LOC_TEXT("resources.pass_label", "Pass %u (%s) - %s"),
                     position, stage_name, pass_bytes);
 
       // The tree node keeps its own per-pass ID; the table is drawn after the
@@ -346,13 +428,17 @@ void DrawStatusSection(Settings& settings, bool& changed) {
         ImGui::TreePop();
         ImGui::Indent();
         if (ImGui::BeginTable("pass_resource_table", 4, table_flags)) {
-          ImGui::TableSetupColumn("Resource",
+          ImGui::TableSetupColumn(
+              LOC_TEXT("resources.column.resource", "Resource"),
               ImGuiTableColumnFlags_WidthStretch);
-          ImGui::TableSetupColumn("Dims",
+          ImGui::TableSetupColumn(
+              LOC_TEXT("resources.column.dims", "Dims"),
               ImGuiTableColumnFlags_WidthFixed, 90.0f);
-          ImGui::TableSetupColumn("Format",
+          ImGui::TableSetupColumn(
+              LOC_TEXT("resources.column.format", "Format"),
               ImGuiTableColumnFlags_WidthFixed, 150.0f);
-          ImGui::TableSetupColumn("Size",
+          ImGui::TableSetupColumn(
+              LOC_TEXT("resources.column.size", "Size"),
               ImGuiTableColumnFlags_WidthFixed, 80.0f);
           ImGui::TableHeadersRow();
 
@@ -372,7 +458,9 @@ void DrawStatusSection(Settings& settings, bool& changed) {
 
             ImGui::TableSetColumnIndex(2);
             if (res.height == 0) {
-              ImGui::TextDisabled("buffer");
+              ImGui::TextDisabled(
+                  "%s",
+                  LOC_TEXT("resources.buffer", "buffer").c_str());
             } else {
               ImGui::TextUnformatted(
                   FormatName(static_cast<DXGI_FORMAT>(res.format)));
@@ -423,7 +511,7 @@ bool DrawTemporalStats(const void* /*context*/, ctl::ValueStore& store,
     ImGui::AlignTextToFramePadding();
     ImGui::Text("%s: %s", label, value);
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-      Tip("%s", tooltip);
+      Tip(tooltip);
     }
   };
 
@@ -432,90 +520,129 @@ bool DrawTemporalStats(const void* /*context*/, ctl::ValueStore& store,
   const ImVec4 kBad(0.9f, 0.4f, 0.4f, 1.0f);
   const ImVec4 kIdle(0.6f, 0.6f, 0.6f, 1.0f);
 
+  const localization::TextRef kThisFrame =
+      LOC_TEXT("temporal.frame", "This frame");
+  const localization::TextRef kReuseRatio =
+      LOC_TEXT("temporal.reuse_ratio", "Reuse ratio");
+  const localization::TextRef kInvalidPixels =
+      LOC_TEXT("temporal.invalid_pixels", "Invalid pixels");
+  const localization::TextRef kGpuSample =
+      LOC_TEXT("temporal.gpu_sample", "GPU sample");
+  const localization::TextRef kFrameTime =
+      LOC_TEXT("temporal.frame_time", "Frame time");
+  const localization::TextRef kCadence = LOC_TEXT("temporal.cadence", "Cadence");
+  const localization::TextRef kNoSample =
+      LOC_TEXT("temporal.no_sample", "no sample yet");
+
+  const localization::TextRef kFrameTip = LOC_TEXT(
+      "temporal.frame.tip",
+      "Whether the model was evaluated this frame. The age/cadence pair is "
+      "the frames since the last evaluation over the effective reuse window.");
+  const localization::TextRef kReuseTip = LOC_TEXT(
+      "temporal.reuse_ratio.tip",
+      "Share of frames that skipped the model since the addon loaded.");
+  const localization::TextRef kInvalidTip = LOC_TEXT(
+      "temporal.invalid_pixels.tip",
+      "Pixels whose reprojected edit fell below the reuse confidence "
+      "threshold. Delayed by the readback, so it lags the current frame.");
+  const localization::TextRef kGpuTip = LOC_TEXT(
+      "temporal.gpu_sample.tip",
+      "Mean candidate confidence and mean absolute log gain of the "
+      "reprojected edit over the last completed GPU sample.");
+  const localization::TextRef kFrameTimeTip = LOC_TEXT(
+      "temporal.frame_time.tip",
+      "Smoothed frame interval for each class. A large step is judder: the "
+      "eye sees it as discontinuity no matter how high the average fps is.");
+  const localization::TextRef kCadenceTip = LOC_TEXT(
+      "temporal.cadence.tip",
+      "The invalid fraction exceeded Max Invalid %, so the reuse window was "
+      "shortened. Latched with hysteresis so it cannot flip every frame.");
+
   char buf[128];
   if (!snap.active) {
-    row("This frame", kIdle, "idle",
-        "No pass has run a temporal step since the addon was last reloaded.");
+    row(kThisFrame, kIdle, LOC_TEXT("temporal.idle", "idle").c_str(),
+        LOC_TEXT("temporal.idle.tip",
+                 "No pass has run a temporal step since the addon was last "
+                 "reloaded.")
+            .c_str());
   } else {
-    std::snprintf(buf, sizeof(buf), "%s - age %llu/%llu",
-                  snap.reuse ? "reuse (NGX skipped)" : "refresh (NGX ran)",
-                  static_cast<unsigned long long>(snap.age),
-                  static_cast<unsigned long long>(snap.cadence));
-    row("This frame", snap.reuse ? kGood : kWarn, buf,
-        "Whether the model was evaluated this frame. The age/cadence pair is "
-        "the frames since the last evaluation over the effective reuse window.");
+    std::snprintf(
+        buf, sizeof(buf),
+        LOC_TEXT("temporal.frame_value", "%s - age %llu/%llu"),
+        snap.reuse
+            ? LOC_TEXT("temporal.reuse", "reuse (NGX skipped)").c_str()
+            : LOC_TEXT("temporal.refresh", "refresh (NGX ran)").c_str(),
+        static_cast<unsigned long long>(snap.age),
+        static_cast<unsigned long long>(snap.cadence));
+    row(kThisFrame, snap.reuse ? kGood : kWarn, buf, kFrameTip);
   }
 
   const uint64_t total = snap.reuse_frames + snap.refresh_frames;
   if (total == 0) {
-    row("Reuse ratio", kIdle, "no frames yet",
-        "Share of frames that skipped the model since the addon loaded.");
+    row(kReuseRatio, kIdle,
+        LOC_TEXT("temporal.no_frames", "no frames yet").c_str(), kReuseTip);
   } else {
     const float reuse_percent = 100.0f *
         static_cast<float>(snap.reuse_frames) / static_cast<float>(total);
-    std::snprintf(buf, sizeof(buf), "%.1f%% (%llu reuse / %llu refresh)",
+    std::snprintf(buf, sizeof(buf),
+                  LOC_TEXT("temporal.reuse_ratio_value",
+                           "%.1f%% (%llu reuse / %llu refresh)"),
                   static_cast<double>(reuse_percent),
                   static_cast<unsigned long long>(snap.reuse_frames),
                   static_cast<unsigned long long>(snap.refresh_frames));
-    row("Reuse ratio", kGood, buf,
-        "Share of frames that skipped the model since the addon loaded.");
+    row(kReuseRatio, kGood, buf, kReuseTip);
   }
 
   if (!snap.feedback_valid) {
-    row("Invalid pixels", kIdle, "no sample yet",
-        "Pixels whose reprojected edit fell below the reuse confidence "
-        "threshold. Delayed by the readback, so it lags the current frame.");
+    row(kInvalidPixels, kIdle, kNoSample.c_str(), kInvalidTip);
   } else {
     std::snprintf(buf, sizeof(buf), "%.2f%%",
                   static_cast<double>(snap.invalid_fraction * 100.0f));
-    row("Invalid pixels",
+    row(kInvalidPixels,
         snap.invalid_fraction > 0.15f ? kBad
                                       : (snap.invalid_fraction > 0.05f ? kWarn : kGood),
-        buf,
-        "Pixels whose reprojected edit fell below the reuse confidence "
-        "threshold. Delayed by the readback, so it lags the current frame.");
+        buf, kInvalidTip);
   }
 
   if (!snap.gpu_valid) {
-    row("GPU sample", kIdle, "no sample yet",
-        "Mean candidate confidence and mean absolute log gain of the "
-        "reprojected edit over the last completed GPU sample.");
+    row(kGpuSample, kIdle, kNoSample.c_str(), kGpuTip);
   } else {
     std::snprintf(buf, sizeof(buf), "conf %.3f - |edit| %.4f",
                   static_cast<double>(snap.mean_conf),
                   static_cast<double>(snap.mean_edit));
-    row("GPU sample", snap.mean_conf < 0.75f ? kWarn : kGood, buf,
-        "Mean candidate confidence and mean absolute log gain of the "
-        "reprojected edit over the last completed GPU sample.");
+    row(kGpuSample, snap.mean_conf < 0.75f ? kWarn : kGood, buf, kGpuTip);
   }
 
   if (snap.dt_reuse_ms <= 0.0f || snap.dt_refresh_ms <= 0.0f) {
-    row("Frame time", kIdle, "needs one frame of each class",
-        "Smoothed frame interval for each class. A large step is judder: the "
-        "eye sees it as discontinuity no matter how high the average fps is.");
+    row(kFrameTime, kIdle,
+        LOC_TEXT("temporal.needs_both",
+                 "needs one frame of each class")
+            .c_str(),
+        kFrameTimeTip);
   } else {
     const float step = snap.dt_refresh_ms - snap.dt_reuse_ms;
-    std::snprintf(buf, sizeof(buf), "reuse %.2f ms - refresh %.2f ms - step %+.2f ms",
-                  static_cast<double>(snap.dt_reuse_ms),
-                  static_cast<double>(snap.dt_refresh_ms),
-                  static_cast<double>(step));
-    row("Frame time", step > 4.0f ? kBad : (step > 2.0f ? kWarn : kGood), buf,
-        "Smoothed frame interval for each class. A large step is judder: the "
-        "eye sees it as discontinuity no matter how high the average fps is.");
+    std::snprintf(
+        buf, sizeof(buf),
+        LOC_TEXT("temporal.frame_time_value",
+                 "reuse %.2f ms - refresh %.2f ms - step %+.2f ms"),
+        static_cast<double>(snap.dt_reuse_ms),
+        static_cast<double>(snap.dt_refresh_ms),
+        static_cast<double>(step));
+    row(kFrameTime, step > 4.0f ? kBad : (step > 2.0f ? kWarn : kGood), buf,
+        kFrameTimeTip);
   }
 
   if (!snap.cadence_short) {
-    std::snprintf(buf, sizeof(buf), "configured window (%llu)",
+    std::snprintf(buf, sizeof(buf),
+                  LOC_TEXT("temporal.cadence_configured",
+                           "configured window (%llu)"),
                   static_cast<unsigned long long>(snap.cadence));
-    row("Cadence", kGood, buf,
-        "The invalid fraction exceeded Max Invalid %, so the reuse window was "
-        "shortened. Latched with hysteresis so it cannot flip every frame.");
+    row(kCadence, kGood, buf, kCadenceTip);
   } else {
-    std::snprintf(buf, sizeof(buf), "halved to %llu",
+    std::snprintf(buf, sizeof(buf),
+                  LOC_TEXT("temporal.cadence_halved", "halved to %llu"),
                   static_cast<unsigned long long>(snap.cadence));
-    row("Cadence", kWarn, buf,
-        "The invalid fraction exceeded Max Invalid %, so the reuse window was "
-        "shortened. Latched with hysteresis so it cannot flip every frame.");
+    row(kCadence, kWarn, buf, kCadenceTip);
   }
   return true;
 }
@@ -524,3 +651,5 @@ bool DrawTemporalStats(const void* /*context*/, ctl::ValueStore& store,
 }  // namespace feature
 
 }  // namespace reshade_dlssnr
+
+#undef LOC_NAMESPACE

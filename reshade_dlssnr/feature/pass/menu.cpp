@@ -8,6 +8,8 @@
 #include "feature/pass/ui.h"
 #include "state/settings.h"
 
+#define LOC_NAMESPACE "pass"
+
 namespace reshade_dlssnr {
 namespace feature {
 namespace pass {
@@ -55,13 +57,15 @@ bool CopyFromNeighbour(const void* context, ctl::ValueStore& store,
 void RegisterPassMenuCommands(ctl::MenuCommandRegistry& registry) {
   registry.Add({.name = "pass.copy_from_previous",
                 .group = "pass",
-                .label = "Copy from previous pass",
+                .label = LOC_TEXT("menu.copy_from_previous",
+                                   "Copy from previous pass"),
                 .visible = &HasNeighbour,
                 .execute = &CopyFromNeighbour,
                 .context = &kPrevious});
   registry.Add({.name = "pass.copy_from_next",
                 .group = "pass",
-                .label = "Copy from next pass",
+                .label = LOC_TEXT("menu.copy_from_next",
+                                   "Copy from next pass"),
                 .visible = &HasNeighbour,
                 .execute = &CopyFromNeighbour,
                 .context = &kNext});
@@ -70,3 +74,5 @@ void RegisterPassMenuCommands(ctl::MenuCommandRegistry& registry) {
 }  // namespace pass
 }  // namespace feature
 }  // namespace reshade_dlssnr
+
+#undef LOC_NAMESPACE

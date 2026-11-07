@@ -8,24 +8,38 @@
 #include "ctl/schema.h"
 #include "grade/settings.h"
 
+#define LOC_NAMESPACE "grade"
+
 namespace reshade_dlssnr {
 namespace grade_rows {
 
 namespace {
 
-const char* const kLumaModeNames[] = {"Exposure", "Gain", "Gamma", "Soft"};
-const char* const kLumaModeTips[] = {
-    "Multiply linear-light RGB by 2^amount (stops); gamut mapping protects colors "
-    "when the result exceeds the output range.",
-    "Scales OKLab lightness by a bounded multiplicative curve.",
-    "Apply a signed power curve to OKLab lightness. Neutral black and white "
-    "remain anchored, concentrating the effect in the midtones.",
-    "A smooth lightness adjustment that fades to zero near black and white."};
+const localization::TextRef kLumaModeNames[] = {
+    LOC_TEXT("luma_mode.exposure", "Exposure"),
+    LOC_TEXT("luma_mode.gain", "Gain"),
+    LOC_TEXT("luma_mode.gamma", "Gamma"),
+    LOC_TEXT("luma_mode.soft", "Soft")};
+const localization::TextRef kLumaModeTips[] = {
+    LOC_TEXT("luma_mode.exposure.tip",
+             "Multiply linear-light RGB by 2^amount (stops); gamut mapping protects colors "
+             "when the result exceeds the output range."),
+    LOC_TEXT("luma_mode.gain.tip",
+             "Scales OKLab lightness by a bounded multiplicative curve."),
+    LOC_TEXT("luma_mode.gamma.tip",
+             "Apply a signed power curve to OKLab lightness. Neutral black and white "
+             "remain anchored, concentrating the effect in the midtones."),
+    LOC_TEXT("luma_mode.soft.tip",
+             "A smooth lightness adjustment that fades to zero near black and white.")};
 
-const char* const kChromaModeNames[] = {"Vibrance", "Saturation"};
-const char* const kChromaModeTips[] = {
-    "Boost muted colors more strongly in OKLab, reducing the effect as chroma rises.",
-    "Scale OKLab chroma by the same factor while preserving perceptual hue."};
+const localization::TextRef kChromaModeNames[] = {
+    LOC_TEXT("chroma_mode.vibrance", "Vibrance"),
+    LOC_TEXT("chroma_mode.saturation", "Saturation")};
+const localization::TextRef kChromaModeTips[] = {
+    LOC_TEXT("chroma_mode.vibrance.tip",
+             "Boost muted colors more strongly in OKLab, reducing the effect as chroma rises."),
+    LOC_TEXT("chroma_mode.saturation.tip",
+             "Scale OKLab chroma by the same factor while preserving perceptual hue.")};
 
 // Setting names are built from the caller's prefix, so two instances on one
 // section cannot collide.
@@ -37,14 +51,15 @@ std::string Named(const std::string& prefix, const char* name) {
 }  // namespace
 
 void Declare(ctl::Section& section, const std::string& prefix,
-             const char* enabled_setting_name, const char* category) {
+             const char* enabled_setting_name,
+             const localization::TextRef& category) {
   Declare(section, prefix, &ctl::BoolFromSetting, enabled_setting_name,
           category);
 }
 
 void Declare(ctl::Section& section, const std::string& prefix,
              ctl::EnablePredicate enabled, const void* context,
-             const char* category) {
+             const localization::TextRef& category) {
   DLSSNR_PROFILE_CTL_L3("Declare");
   auto named = [&](const char* name) { return Named(prefix, name); };
   // Every row goes through `group`, so the caller's gate and category are
@@ -56,77 +71,97 @@ void Declare(ctl::Section& section, const std::string& prefix,
   };
 
   group(section.Add<ctl::FloatSetting>(named(names::kBlackLevel).c_str(),
-                                       "Black Level", 0.0f))
+                                       LOC_TEXT("black_level", "Black Level"),
+                                       0.0f))
       .ClampRange(kGradeBlackLevelMin, kGradeBlackLevelMax)
-      .Tooltip("The OKLab lightness value mapped to black. Positive values darken "
-               "only the deepest shadows; negative values lift the toe.");
+      .Tooltip(LOC_TEXT("black_level.tip",
+                        "The OKLab lightness value mapped to black. Positive values darken "
+                        "only the deepest shadows; negative values lift the toe."));
 
   group(section.Add<ctl::FloatSetting>(named(names::kWhiteLevel).c_str(),
-                                       "White Level", 1.0f))
+                                       LOC_TEXT("white_level", "White Level"),
+                                       1.0f))
       .ClampRange(kGradeWhiteLevelMin, kGradeWhiteLevelMax)
-      .Tooltip("The OKLab lightness value mapped to white. Raising the point lowers "
-               "the image; out-of-gamut colors are compressed instead of channel-clipped.");
+      .Tooltip(LOC_TEXT("white_level.tip",
+                        "The OKLab lightness value mapped to white. Raising the point lowers "
+                        "the image; out-of-gamut colors are compressed instead of channel-clipped."));
 
-  group(section.Add<ctl::FloatSetting>(named(names::kContrast).c_str(), "Contrast",
-                                       0.0f))
+  group(section.Add<ctl::FloatSetting>(named(names::kContrast).c_str(),
+                                       LOC_TEXT("contrast", "Contrast"), 0.0f))
       .ClampRange(-1.0f, 1.0f)
-      .Tooltip("A pivoted S-curve around middle lightness. Positive increases contrast "
-               "and negative reduces it while keeping black and white anchored.");
+      .Tooltip(LOC_TEXT("contrast.tip",
+                        "A pivoted S-curve around middle lightness. Positive increases contrast "
+                        "and negative reduces it while keeping black and white anchored."));
 
-  group(section.Add<ctl::FloatSetting>(named(names::kShadows).c_str(), "Shadows",
-                                       0.0f))
+  group(section.Add<ctl::FloatSetting>(named(names::kShadows).c_str(),
+                                       LOC_TEXT("shadows", "Shadows"), 0.0f))
       .ClampRange(-1.0f, 1.0f)
-      .Tooltip("Adjusts shadows with a smooth curve that fades out before white.");
+      .Tooltip(LOC_TEXT("shadows.tip",
+                        "Adjusts shadows with a smooth curve that fades out before white."));
 
   group(section.Add<ctl::FloatSetting>(named(names::kHighlights).c_str(),
-                                       "Highlights", 0.0f))
+                                       LOC_TEXT("highlights", "Highlights"), 0.0f))
       .ClampRange(-1.0f, 1.0f)
-      .Tooltip("Adjusts highlights with a smooth curve that fades out before black.");
+      .Tooltip(LOC_TEXT("highlights.tip",
+                        "Adjusts highlights with a smooth curve that fades out before black."));
 
-  group(section.Add<ctl::EnumSetting>(named(names::kLumaMode).c_str(), "Brightness Mode",
+  group(section.Add<ctl::EnumSetting>(named(names::kLumaMode).c_str(),
+                                      LOC_TEXT("brightness_mode", "Brightness Mode"),
                                       0))
       .Items(kLumaModeNames, kLumaModeTips, 4)
-      .Tooltip("Which algorithm brightness uses. These are alternatives, "
-               "not layers.");
+      .Tooltip(LOC_TEXT("brightness_mode.tip",
+                        "Which algorithm brightness uses. These are alternatives, "
+                        "not layers."));
 
-  group(section.Add<ctl::FloatSetting>(named(names::kLuma).c_str(), "Brightness",
-                                       0.0f))
+  group(section.Add<ctl::FloatSetting>(named(names::kLuma).c_str(),
+                                       LOC_TEXT("brightness", "Brightness"), 0.0f))
       .ClampRange(-2.0f, 2.0f)
-      .Tooltip("In Exposure mode, the value is in stops (-1 halves linear light; +1 doubles it). Other modes use their own brightness curve.");
+      .Tooltip(LOC_TEXT("brightness.tip",
+                        "In Exposure mode, the value is in stops (-1 halves linear light; +1 doubles it). Other modes use their own brightness curve."));
 
   group(section.Add<ctl::EnumSetting>(named(names::kChromaMode).c_str(),
-                                      "Chroma Mode", 0))
+                                      LOC_TEXT("chroma_mode", "Chroma Mode"), 0))
       .Items(kChromaModeNames, kChromaModeTips, 2)
-      .Tooltip("Which algorithm saturation uses. These are alternatives, "
-               "not layers.");
+      .Tooltip(LOC_TEXT("chroma_mode.tip",
+                        "Which algorithm saturation uses. These are alternatives, "
+                        "not layers."));
 
-  group(section.Add<ctl::FloatSetting>(named(names::kChroma).c_str(), "Saturation",
-                                       0.0f))
+  group(section.Add<ctl::FloatSetting>(named(names::kChroma).c_str(),
+                                       LOC_TEXT("saturation", "Saturation"), 0.0f))
       .ClampRange(-1.0f, 1.5f)
-      .Tooltip("Adjusts perceptual chroma in OKLab. Out-of-gamut colors are compressed "
-               "toward the neutral axis to avoid channel-clipping artifacts.");
+      .Tooltip(LOC_TEXT("saturation.tip",
+                        "Adjusts perceptual chroma in OKLab. Out-of-gamut colors are compressed "
+                        "toward the neutral axis to avoid channel-clipping artifacts."));
 
   group(section.Add<ctl::BoolSetting>(named(names::kEdgeSofteningEnabled).c_str(),
-                                      "Edge-Aware Softening", false))
-      .Tooltip("Blend a joint-bilateral 3x3 neighborhood into the grade input. "
-               "Luminance similarity reduces blur across strong edges.");
+                                      LOC_TEXT("edge_softening", "Edge-Aware Softening"),
+                                      false))
+      .Tooltip(LOC_TEXT("edge_softening.tip",
+                        "Blend a joint-bilateral 3x3 neighborhood into the grade input. "
+                        "Luminance similarity reduces blur across strong edges."));
 
   group(section.Add<ctl::FloatSetting>(named(names::kEdgeSoftening).c_str(),
-                                       "Softening Strength", 0.5f))
+                                       LOC_TEXT("softening_strength", "Softening Strength"),
+                                       0.5f))
       .ClampRange(0.0f, 1.0f)
-      .Tooltip("Amount of edge-aware 3x3 softening.");
+      .Tooltip(LOC_TEXT("softening_strength.tip",
+                        "Amount of edge-aware 3x3 softening."));
 
   group(section.Add<ctl::BoolSetting>(named(names::kCasEnabled).c_str(),
-                                      "CAS Sharpening", false))
-      .Tooltip("Enable AMD FidelityFX Contrast Adaptive Sharpening on the graded "
-               "result. Runs as a separate dispatch in linear SDR only; skipped for HDR formats.");
+                                      LOC_TEXT("cas", "CAS Sharpening"), false))
+      .Tooltip(LOC_TEXT("cas.tip",
+                        "Enable AMD FidelityFX Contrast Adaptive Sharpening on the graded "
+                        "result. Runs as a separate dispatch in linear SDR only; skipped for HDR formats."));
 
   group(section.Add<ctl::FloatSetting>(named(names::kCasSharpness).c_str(),
-                                       "CAS Strength", 0.5f))
+                                       LOC_TEXT("cas_strength", "CAS Strength"), 0.5f))
       .ClampRange(0.0f, 1.0f)
-      .Tooltip("Sharpening amount for AMD FidelityFX CAS. 0 applies no sharpening, "
-               "1 applies maximum sharpening.");
+      .Tooltip(LOC_TEXT("cas_strength.tip",
+                        "Sharpening amount for AMD FidelityFX CAS. 0 applies no sharpening, "
+                        "1 applies maximum sharpening."));
 }
 
 }  // namespace grade_rows
 }  // namespace reshade_dlssnr
+
+#undef LOC_NAMESPACE

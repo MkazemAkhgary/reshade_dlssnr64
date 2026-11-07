@@ -9,6 +9,8 @@
 #include "ctl/draw.h"
 #include "ctl/schema.h"
 
+#define LOC_NAMESPACE "ctl"
+
 namespace reshade_dlssnr {
 namespace ctl {
 
@@ -35,7 +37,8 @@ bool IsInCategory(const std::string& category, const std::string& scope) {
 // Copy takes and what Paste is willing to apply.
 bool InScope(const Setting& setting, const MenuTarget& target) {
   if (target.setting != nullptr) return &setting == target.setting;
-  return IsInCategory(setting.meta().category, target.category);
+  return IsInCategory(setting.meta().category.fallback_text(),
+                      target.category);
 }
 
 // The values `target` spans, read from the instance `from`.
@@ -114,11 +117,14 @@ bool Paste(ValueStore& store, const MenuTarget& target,
 void DrawBuiltins(ValueStore& store, const DrawOptions& options,
                   const MenuTarget& target, bool& changed) {
   Clipboard& clipboard = *options.clipboard;
-  if (ImGui::MenuItem("Copy")) Collect(store, target, target.key, clipboard);
+  if (ImGui::MenuItem(LOC_TEXT("menu.copy", "Copy"))) {
+    Collect(store, target, target.key, clipboard);
+  }
 
   const bool can_paste =
       !clipboard.empty() && !Accepted(store, target, clipboard).empty();
-  if (ImGui::MenuItem("Paste", nullptr, false, can_paste)) {
+  if (ImGui::MenuItem(LOC_TEXT("menu.paste", "Paste"), nullptr, false,
+                      can_paste)) {
     changed |= Paste(store, target, clipboard);
   }
 }
@@ -222,3 +228,5 @@ bool DrawSettingContextMenu(ValueStore& store, const DrawOptions& options,
 
 }  // namespace ctl
 }  // namespace reshade_dlssnr
+
+#undef LOC_NAMESPACE

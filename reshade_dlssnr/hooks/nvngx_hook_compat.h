@@ -23,6 +23,7 @@
 #include "d3d12_utils.h"
 #include "gpu/gpu_resources.h"
 #include "local_vtable.h"
+#include "localization/localization.h"
 #include "model/runtime.h"
 #include "proxy_unwrap.h"
 #include "state/settings.h"
@@ -695,10 +696,11 @@ static NVSDK_NGX_Result NVSDK_CONV EvaluateFeatureImpl(
             DLSSNR_LOG_ONCE(
                 reshade::log::level::warning,
                 "Pre-DLSS skipped: Ray Reconstruction reads Color through a subrect of a larger allocation, and compacting Color alone would desynchronise its other guide inputs. Set the pass target to Post-DLSS; RR's Color is the demodulated noisy image and is the wrong side to grade anyway");
-            AddonController::Get().SetPreDlssBlocked(
+            AddonController::Get().SetPreDlssBlocked(NSLOC_TEXT(
+                "status", "block.ray_reconstruction",
                 "Ray Reconstruction: the game feeds DLSS a subrect of a larger "
                 "allocation, so Pre-DLSS cannot rewrite its Color safely. Use "
-                "Post-DLSS.");
+                "Post-DLSS."));
             pre_input = nullptr;
           } else {
             OwnedTexture compact_color;
@@ -764,8 +766,9 @@ static NVSDK_NGX_Result NVSDK_CONV EvaluateFeatureImpl(
     if (!hooks_available) hooks_available = EnsureHooks(work_list);
     if (!hooks_available) {
       if (any_post_dlss) {
-        AddonController::Get().SetPostDlssBlocked(
-            "Post-DLSS disabled: D3D12 command list hooks are not installed");
+        AddonController::Get().SetPostDlssBlocked(NSLOC_TEXT(
+            "status", "block.hooks_missing",
+            "Post-DLSS disabled: D3D12 command list hooks are not installed"));
       }
     } else {
       // Rare hook-install fallback: if the pre-evaluation capture could not

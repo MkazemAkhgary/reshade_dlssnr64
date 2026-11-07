@@ -12,41 +12,26 @@
 #include <cstdio>
 #include <string>
 
+#define LOC_NAMESPACE "widgets"
+
 namespace reshade_dlssnr {
 
 bool g_show_tooltips = true;
 
-void Tip(const char* fmt, ...) {
-  DLSSNR_PROFILE_UI_L3("UI Tooltip");
-  if (!g_show_tooltips || fmt == nullptr) return;
-  va_list args;
-  va_start(args, fmt);
-  // A tooltip is drawn as one line, and the longest in the schema are wider
-  // than the display. Wrap at a fixed column, narrowed when the display is
-  // narrower than that. A newline in the text still starts a line.
-  const float wrap_width =
-      std::min(ImGui::GetFontSize() * 35.0f,
-               ImGui::GetIO().DisplaySize.x * 0.8f);
-  ImGui::BeginTooltip();
-  ImGui::PushTextWrapPos(wrap_width);
-  ImGui::TextV(fmt, args);
-  ImGui::PopTextWrapPos();
-  ImGui::EndTooltip();
-  va_end(args);
-}
-
-void SectionDivider() {
-  DLSSNR_PROFILE_UI_L3("UI Section Divider");
-  ImGui::Spacing();
-  ImGui::Spacing();
-  ImGui::Separator();
-  ImGui::Spacing();
-  ImGui::Spacing();
-}
-
 namespace {
 
-void DrawHeaderToggle(const char* label, bool& changed,
+// The longest tooltips in the schema are wider than the display, so they wrap
+// at a fixed column, narrowed when the display is narrower than that. A
+// newline in the text still starts a line.
+float TooltipWrapWidth() {
+  return std::min(ImGui::GetFontSize() * 35.0f,
+                  ImGui::GetIO().DisplaySize.x * 0.8f);
+}
+
+// Shared by every row type that falls back to the same hint.
+const localization::TextRef kResetTip = LOC_TEXT("reset.tip", "Reset to default");
+
+void DrawHeaderToggle(const localization::TextRef& label, bool& changed,
                       const HeaderControls& controls) {
   DLSSNR_PROFILE_UI_L3("UI Header Toggle");
   if (controls.enabled == nullptr && controls.enabled_float == nullptr) return;
@@ -64,19 +49,17 @@ void DrawHeaderToggle(const char* label, bool& changed,
     changed = true;
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    const std::string enabled_tooltip =
-        CStrToString(controls.enabled_tooltip);
-    if (!enabled_tooltip.empty()) {
-      Tip("%s", enabled_tooltip.c_str());
+    if (controls.enabled_tooltip != nullptr && controls.enabled_tooltip[0] != '\0') {
+      Tip(controls.enabled_tooltip);
     } else {
-      Tip("Enable or disable %s.", label);
+      TipFormat(LOC_TEXT("toggle.tip", "Enable or disable %s."), label.c_str());
     }
   }
   if (controls.enabled_disabled) ImGui::EndDisabled();
   ImGui::SameLine();
 }
 
-void DrawHeaderReset(const char* label, bool& changed,
+void DrawHeaderReset(const localization::TextRef& label, bool& changed,
                      const HeaderControls& controls) {
   DLSSNR_PROFILE_UI_L3("UI Header Reset");
   if (controls.reset == nullptr) return;
@@ -88,17 +71,17 @@ void DrawHeaderReset(const char* label, bool& changed,
     changed = true;
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Reset all %s settings to their defaults.", label);
+    TipFormat(LOC_TEXT("reset_all.tip",
+                       "Reset all %s settings to their defaults."),
+              label.c_str());
   }
 }
 
-bool DrawCollapsingHeader(const char* label, bool& open_setting,
-                          bool& changed, const char* tooltip,
+bool DrawCollapsingHeader(const localization::TextRef& label, bool& open_setting,
+                          bool& changed, const localization::TextRef& tooltip,
                           HeaderControls controls, bool tinted) {
   DLSSNR_PROFILE_UI_L3("UI Collapsing Header");
-  const std::string label_storage = CStrToString(label);
-  const std::string tooltip_storage = CStrToString(tooltip);
-  label = label_storage.c_str();
+  const char* text = label.c_str();
 
   if (tinted) {
     const ImVec4 base = ImGui::GetStyleColorVec4(ImGuiCol_Text);
@@ -115,21 +98,23 @@ bool DrawCollapsingHeader(const char* label, bool& open_setting,
         ImVec4(hdr_active.x, hdr_active.y, hdr_active.z, hdr_active.w * 0.50f));
   }
 
-  ImGui::PushID(label);
+  ImGui::PushID(text);
   DrawHeaderToggle(label, changed, controls);
   ImGui::SetNextItemOpen(open_setting, ImGuiCond_Always);
   const bool open =
-      ImGui::TreeNodeEx(label, ImGuiTreeNodeFlags_CollapsingHeader |
-                                      ImGuiTreeNodeFlags_AllowOverlap);
+      ImGui::TreeNodeEx(text, ImGuiTreeNodeFlags_CollapsingHeader |
+                                  ImGuiTreeNodeFlags_AllowOverlap);
   const bool header_hovered =
       ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
   if (tinted) ImGui::PopStyleColor(4);
   if (header_hovered) {
-    if (!tooltip_storage.empty()) {
-      Tip("%s", tooltip_storage.c_str());
+    if (!tooltip.empty()) {
+      Tip(tooltip);
     } else {
-      Tip("Expand or collapse the %s %s.", label,
-          tinted ? "subsection" : "section");
+      TipFormat(LOC_TEXT("collapse.tip", "Expand or collapse the %s %s."),
+                text,
+                tinted ? LOC_TEXT("collapse.subsection", "subsection").c_str()
+                       : LOC_TEXT("collapse.section", "section").c_str());
     }
   }
   DrawHeaderReset(label, changed, controls);
@@ -141,111 +126,65 @@ bool DrawCollapsingHeader(const char* label, bool& open_setting,
   return open;
 }
 
-bool DrawHeader(const char* label, bool& open_setting, bool& changed,
-                const char* tooltip, HeaderControls controls) {
-  return DrawCollapsingHeader(label, open_setting, changed, tooltip, controls,
-                              /*tinted=*/false);
-}
-
 }  // namespace
 
-bool DrawSectionHeader(const char* label, const char* setting_key,
-                       bool& changed, const char* tooltip,
+void Tip(const localization::TextRef& text) {
+  DLSSNR_PROFILE_UI_L3("UI Tooltip");
+  if (!g_show_tooltips || text.empty()) return;
+  ImGui::BeginTooltip();
+  ImGui::PushTextWrapPos(TooltipWrapWidth());
+  ImGui::TextUnformatted(text.c_str());
+  ImGui::PopTextWrapPos();
+  ImGui::EndTooltip();
+}
+
+void TipFormat(const char* fmt, ...) {
+  DLSSNR_PROFILE_UI_L3("UI Tooltip");
+  if (!g_show_tooltips || fmt == nullptr) return;
+  va_list args;
+  va_start(args, fmt);
+  ImGui::BeginTooltip();
+  ImGui::PushTextWrapPos(TooltipWrapWidth());
+  ImGui::TextV(fmt, args);
+  ImGui::PopTextWrapPos();
+  ImGui::EndTooltip();
+  va_end(args);
+}
+
+void SectionDivider() {
+  DLSSNR_PROFILE_UI_L3("UI Section Divider");
+  ImGui::Spacing();
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Spacing();
+  ImGui::Spacing();
+}
+
+bool DrawSectionHeader(const localization::TextRef& label,
+                       const char* setting_key, bool& changed,
+                       const localization::TextRef& tooltip,
                        HeaderControls controls) {
   DLSSNR_PROFILE_UI_L3("UI Draw Section Header");
   bool open = feature::ui_state::Read(setting_key);
   const bool previous = open;
-  const bool expanded = DrawHeader(label, open, changed, tooltip, controls);
+  const bool expanded =
+      DrawCollapsingHeader(label, open, changed, tooltip, controls,
+                           /*tinted=*/false);
   if (open != previous) feature::ui_state::Write(setting_key, open);
   return expanded;
 }
 
-bool DrawSubSectionHeader(const char* label, bool& open_setting,
-                          bool& changed, const char* tooltip,
+bool DrawSubSectionHeader(const localization::TextRef& label,
+                          bool& open_setting, bool& changed,
+                          const localization::TextRef& tooltip,
                           HeaderControls controls) {
   return DrawCollapsingHeader(label, open_setting, changed, tooltip, controls,
                               /*tinted=*/true);
 }
 
-
-bool DrawComboRow(const char* id,
-                  const char* label,
-                  const char* tooltip,
-                  int* value,
-                  const char* const* items,
-                  const char* const* item_tooltips,
-                  int item_count) {
-  DLSSNR_PROFILE_UI_L3("UI Combo Row");
-  const std::string id_storage = CStrToString(id);
-  const std::string label_storage = CStrToString(label);
-  std::string tooltip_storage = CStrToString(tooltip);
-  id = id_storage.c_str();
-  label = label_storage.c_str();
-  if (items == nullptr || item_count <= 0) return false;
-  char fallback_tooltip[192];
-  if (tooltip_storage.empty()) {
-    std::snprintf(fallback_tooltip, sizeof(fallback_tooltip),
-                  "Choose the %s option.", label);
-    tooltip_storage = fallback_tooltip;
-  }
-  ImGui::AlignTextToFramePadding();
-  ImGui::TextUnformatted(label);
-  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("%s", tooltip_storage.c_str());
-  }
-
-  ImGui::SameLine(kControlLabelWidth);
-  ImGui::SetNextItemWidth(-1.0f);
-
-  const int clamped = (*value >= 0 && *value < item_count) ? *value : 0;
-  const std::string preview = CStrToString(items[clamped]);
-  const std::string combo_id = std::string("##") + id;
-
-  bool changed = false;
-  if (ImGui::BeginCombo(combo_id.c_str(), preview.c_str())) {
-    for (int i = 0; i < item_count; ++i) {
-      const bool selected = (i == clamped);
-      const std::string item_label = CStrToString(items[i]);
-      const bool has_item_tooltip =
-          item_tooltips != nullptr && item_tooltips[i] != nullptr;
-      const std::string item_tooltip =
-          CStrToString(has_item_tooltip ? item_tooltips[i] : nullptr);
-      if (ImGui::Selectable(item_label.c_str(), selected)) {
-        if (*value != i) {
-          *value = i;
-          changed = true;
-        }
-      }
-      if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        if (has_item_tooltip) {
-          Tip("%s", item_tooltip.c_str());
-        } else {
-          Tip("Select %s.", item_label.c_str());
-        }
-      }
-      if (selected) ImGui::SetItemDefaultFocus();
-    }
-    ImGui::EndCombo();
-  }
-
-  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    const bool has_preview_tooltip =
-        item_tooltips != nullptr && item_tooltips[clamped] != nullptr;
-    const std::string preview_tooltip =
-        CStrToString(has_preview_tooltip ? item_tooltips[clamped] : nullptr);
-    if (has_preview_tooltip) {
-      Tip("%s", preview_tooltip.c_str());
-    } else {
-      Tip("Current %s: %s.", label, preview.c_str());
-    }
-  }
-
-  return changed;
-}
-
 int DrawGroupButtons(const char* id,
-                     const char* const* labels,
-                     const char* const* tooltips,
+                     const localization::TextRef* labels,
+                     const localization::TextRef* tooltips,
                      int count,
                      int selected,
                      const bool* disabled,
@@ -255,8 +194,6 @@ int DrawGroupButtons(const char* id,
   DLSSNR_PROFILE_UI_L3("UI Group Buttons");
   if (count <= 0 || labels == nullptr) return -1;
 
-  const std::string id_storage = CStrToString(id);
-  id = id_storage.c_str();
   ImGui::PushID(id);
 
   const float spacing = ImGui::GetStyle().ItemSpacing.x;
@@ -295,8 +232,7 @@ int DrawGroupButtons(const char* id,
       ImGui::PushStyleColor(ImGuiCol_ButtonActive, accent);
     }
 
-    const std::string item_label = CStrToString(labels[i]);
-    if (ImGui::Button(item_label.c_str(), ImVec2(button_width, 0.0f)) &&
+    if (ImGui::Button(labels[i].c_str(), ImVec2(button_width, 0.0f)) &&
         !is_selected && !is_disabled) {
       clicked = i;
     }
@@ -310,15 +246,12 @@ int DrawGroupButtons(const char* id,
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
       const bool has_reason = is_unavailable && unavailable_reasons != nullptr &&
                               unavailable_reasons[i] != nullptr;
-      const bool has_item_tooltip = tooltips != nullptr && tooltips[i] != nullptr;
-      const std::string item_tooltip =
-          CStrToString(has_item_tooltip ? tooltips[i] : nullptr);
       if (has_reason) {
-        Tip("%s", unavailable_reasons[i]);
-      } else if (has_item_tooltip) {
-        Tip("%s", item_tooltip.c_str());
+        Tip(unavailable_reasons[i]);
+      } else if (tooltips != nullptr) {
+        Tip(tooltips[i]);
       } else {
-        Tip("Select %s.", item_label.c_str());
+        TipFormat(LOC_TEXT("select.tip", "Select %s."), labels[i].c_str());
       }
     }
 
@@ -329,5 +262,6 @@ int DrawGroupButtons(const char* id,
   return clicked;
 }
 
-
 }  // namespace reshade_dlssnr
+
+#undef LOC_NAMESPACE

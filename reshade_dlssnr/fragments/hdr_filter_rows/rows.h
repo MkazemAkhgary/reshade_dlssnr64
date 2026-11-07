@@ -9,6 +9,8 @@
 
 #pragma once
 
+#include "localization/localization.h"
+
 namespace reshade_dlssnr {
 namespace ctl {
 class Section;
@@ -33,7 +35,7 @@ inline constexpr const char* kPercentileHigh = "percentile_high";
 // input, so gating it would make it impossible to turn back on. The parameter
 // rows below each checkbox carry that checkbox's value as their gate, declared
 // here so the caller never names a row.
-void Declare(ctl::Section& section, const char* category = nullptr);
+void Declare(ctl::Section& section, const localization::TextRef& category = {});
 
 }  // namespace hdr_filter_rows
 }  // namespace reshade_dlssnr

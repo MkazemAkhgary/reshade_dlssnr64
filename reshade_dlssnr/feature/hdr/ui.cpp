@@ -24,6 +24,8 @@
 #include "state/settings.h"
 #include "ui/ui_widgets.h"
 
+#define LOC_NAMESPACE "hdr"
+
 namespace reshade_dlssnr {
 namespace feature {
 namespace hdr {
@@ -59,21 +61,23 @@ bool DrawHdrLayers(const void* context, ctl::ValueStore& store,
   bool local_changed = false;
 
   struct Layer {
-    const char* label;
-    const char* tooltip;
+    localization::TextRef label;
+    localization::TextRef tooltip;
     const char* section;
     const char* open_key;
     const char* enabled_key;
   };
   const Layer layers[] = {
-      {"Game Exposure",
-       "Configure the game's exposure as the base layer.",
+      {LOC_TEXT("layer.game", "Game Exposure"),
+       LOC_TEXT("layer.game.tip",
+                "Configure the game's exposure as the base layer."),
        hdr::kGameSection,
        feature::ui_state::kHdrGameOpen,
        hdr::kGameEnabled},
-      {"Adaptive Exposure",
-       "Histogram-based global exposure or a bounded correction over Game "
-       "Exposure.",
+      {LOC_TEXT("layer.adaptive", "Adaptive Exposure"),
+       LOC_TEXT("layer.adaptive.tip",
+                "Histogram-based global exposure or a bounded correction over Game "
+                "Exposure."),
        hdr::kAdaptiveSection,
        feature::ui_state::kHdrAdaptiveOpen,
        hdr::kAdaptiveEnabled},
@@ -124,8 +128,10 @@ bool DrawHdrLayers(const void* context, ctl::ValueStore& store,
   }
 
   ImGui::TextDisabled(
-      "Stack order: Game Exposure base, then Adaptive correction. Local "
-      "Exposure is its own section and applies after both.");
+      "%s", LOC_TEXT("layers.stack_order",
+                     "Stack order: Game Exposure base, then Adaptive correction. "
+                     "Local Exposure is its own section and applies after both.")
+                .c_str());
 
   changed |= local_changed;
   return local_changed;
@@ -151,21 +157,25 @@ bool DrawBt2446Derived(const void* context, ctl::ValueStore& store,
 
   IndentScope indent;
   ImGui::AlignTextToFramePadding();
-  ImGui::TextUnformatted("BT.2446C k2 (derived)");
+  ImGui::TextUnformatted(
+      LOC_TEXT("bt2446_k2", "BT.2446C k2 (derived)"));
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Log-region slope of the BT.2446C curve. Derived from k1, k3, and "
-        "the inflection point so the log branch matches the linear "
-        "branch's slope at the knee.");
+    Tip(LOC_TEXT("bt2446_k2.tip",
+        "Log-region slope of the BT.2446C curve. Derived from k1, "
+        "k3, and the inflection point so the log branch matches the "
+        "linear branch's slope at the knee."));
   }
   ImGui::SameLine(kControlLabelWidth);
   ImGui::TextDisabled("%.5f", static_cast<double>(k2));
 
   ImGui::AlignTextToFramePadding();
-  ImGui::TextUnformatted("BT.2446C k4 (derived)");
+  ImGui::TextUnformatted(
+      LOC_TEXT("bt2446_k4", "BT.2446C k4 (derived)"));
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Log-region intercept of the BT.2446C curve. Derived from k1, k3, "
-        "and the inflection point so the log branch matches the linear "
-        "branch's value at the knee.");
+    Tip(LOC_TEXT("bt2446_k4.tip",
+        "Log-region intercept of the BT.2446C curve. Derived from "
+        "k1, k3, and the inflection point so the log branch matches "
+        "the linear branch's value at the knee."));
   }
   ImGui::SameLine(kControlLabelWidth);
   ImGui::TextDisabled("%.5f", static_cast<double>(k4));
@@ -198,62 +208,91 @@ bool DrawHdrDiagnostics(const void* context, ctl::ValueStore& store,
   const StatusSnapshot snap = AddonController::Get().GetStatus();
   const HdrSnapshot hdr = AddonController::Get().GetHdrSnapshot();
 
+  // Format names are DXGI-level identifiers, so they read the same in every
+  // language.
   const char* format_name =
       hdr.resolved_format == HdrFormat::ScRgb ? "scRGB" :
       hdr.resolved_format == HdrFormat::Hdr10 ? "HDR10" : "SDR";
   const char* source_name =
-      hdr.metering_source == 0 ? "Full frame" :
-      hdr.metering_source == 1 ? "Filtered population" :
-      hdr.metering_source == 2 ? "Game exposure (NGX)" : "Unknown";
+      hdr.metering_source == 0
+          ? LOC_TEXT("source.full_frame", "Full frame").c_str()
+      : hdr.metering_source == 1
+          ? LOC_TEXT("source.filtered", "Filtered population").c_str()
+      : hdr.metering_source == 2
+          ? LOC_TEXT("source.game_exposure", "Game exposure (NGX)").c_str()
+          : LOC_TEXT("source.unknown", "Unknown").c_str();
 
-  ImGui::Text("Format: %s - resolved=%s", format_name,
-              hdr.ready ? "yes" : "no");
+  ImGui::Text(LOC_TEXT("diag.format", "Format: %s - resolved=%s"), format_name,
+              hdr.ready ? LOC_TEXT("common.yes", "yes").c_str()
+                        : LOC_TEXT("common.no", "no").c_str());
   if (hdr.enabled && !hdr.ready) {
-    ImGui::TextDisabled("  Warming up - no exposure measurement yet.");
+    ImGui::TextDisabled(
+        "%s", LOC_TEXT("diag.warming",
+                       "  Warming up - no exposure measurement yet.")
+                  .c_str());
   }
-  ImGui::Text("Exposure: %.4f", hdr.exposure);
-  ImGui::Text("Scene white: %.4f", hdr.scene_white);
+  ImGui::Text(LOC_TEXT("diag.exposure", "Exposure: %.4f"), hdr.exposure);
+  ImGui::Text(LOC_TEXT("diag.scene_white", "Scene white: %.4f"),
+              hdr.scene_white);
   if (hdr.exposure_reference_luma > 0.0f) {
-    ImGui::Text("  reference luma: %.4f",
+    ImGui::Text(LOC_TEXT("diag.reference_luma", "  reference luma: %.4f"),
                 hdr.exposure_reference_luma);
   }
   {
     const float diff = hdr.adaptive_scene_white - hdr.scene_white;
     if (hdr.adaptive_scene_white > 0.0f &&
         (diff > 1e-4f || diff < -1e-4f)) {
-      ImGui::Text("  adaptive scene white: %.4f",
-                  hdr.adaptive_scene_white);
+      ImGui::Text(
+          LOC_TEXT("diag.adaptive_scene_white",
+                   "  adaptive scene white: %.4f"),
+          hdr.adaptive_scene_white);
     }
   }
-  ImGui::Text("Samples: %u - frames since measure: %u",
+  ImGui::Text(LOC_TEXT("diag.samples",
+                       "Samples: %u - frames since measure: %u"),
               hdr.samples, hdr.frames_since_measure);
-  ImGui::Text("Metering source: %s", source_name);
-  ImGui::Text("DLSS guides: %s",
-              snap.guides_valid ? "valid" : "not seen");
+  ImGui::Text(LOC_TEXT("diag.metering_source", "Metering source: %s"),
+              source_name);
+  ImGui::Text(LOC_TEXT("diag.guides", "DLSS guides: %s"),
+              snap.guides_valid
+                  ? LOC_TEXT("common.valid", "valid").c_str()
+                  : LOC_TEXT("common.not_seen", "not seen").c_str());
   if (snap.post_dlss_blocked) {
-    ImGui::Text("Post-DLSS blocked: %s", snap.post_dlss_block_reason);
+    ImGui::Text(LOC_TEXT("diag.post_blocked", "Post-DLSS blocked: %s"),
+                snap.post_dlss_block_reason);
   }
 
   ImGui::Separator();
-  ImGui::Text("Game exposure: %s",
-              hdr.game_exposure_available ? "available" : "unavailable");
-  ImGui::Text("  value: %.4f", hdr.game_exposure);
-  ImGui::Text("  texture: %ux%u fmt=%d",
+  ImGui::Text(LOC_TEXT("diag.game_exposure", "Game exposure: %s"),
+              hdr.game_exposure_available
+                  ? LOC_TEXT("common.available", "available").c_str()
+                  : LOC_TEXT("common.unavailable", "unavailable").c_str());
+  ImGui::Text(LOC_TEXT("diag.game_value", "  value: %.4f"),
+              hdr.game_exposure);
+  ImGui::Text(LOC_TEXT("diag.game_texture",
+                       "  texture: %ux%u fmt=%d"),
               hdr.game_exposure_width, hdr.game_exposure_height,
               hdr.game_exposure_format);
 
   ImGui::Separator();
-  ImGui::Text("Gain map: %s", hdr.gain_map_ready ? "ready" : "pending");
-  ImGui::Text("  range (log2): %.3f .. %.3f",
+  ImGui::Text(LOC_TEXT("diag.gain_map", "Gain map: %s"),
+              hdr.gain_map_ready
+                  ? LOC_TEXT("common.ready", "ready").c_str()
+                  : LOC_TEXT("common.pending", "pending").c_str());
+  ImGui::Text(LOC_TEXT("diag.gain_range", "  range (log2): %.3f .. %.3f"),
               hdr.gain_min_log2, hdr.gain_max_log2);
-  ImGui::Text("  SDR excursions: %u", hdr.gain_sdr_excursion_pixels);
-  ImGui::Text("  out of range: %u", hdr.gain_out_of_range_pixels);
+  ImGui::Text(LOC_TEXT("diag.gain_excursions", "  SDR excursions: %u"),
+              hdr.gain_sdr_excursion_pixels);
+  ImGui::Text(LOC_TEXT("diag.gain_out_of_range", "  out of range: %u"),
+              hdr.gain_out_of_range_pixels);
 
   ImGui::Separator();
   if (!hdr.has_histogram) {
-    ImGui::TextDisabled("Histogram: not ready");
+    ImGui::TextDisabled(
+        "%s", LOC_TEXT("diag.histogram_missing", "Histogram: not ready").c_str());
   } else {
-    ImGui::TextUnformatted("Histogram (log2 luminance)");
+    ImGui::TextUnformatted(
+        LOC_TEXT("diag.histogram", "Histogram (log2 luminance)"));
     float bins_float[256];
     float peak = 1.0f;
     for (int i = 0; i < 256; ++i) {
@@ -263,15 +302,18 @@ bool DrawHdrDiagnostics(const void* context, ctl::ValueStore& store,
     ImGui::PlotHistogram("##hdr_histogram", bins_float, 256, 0, nullptr,
                          0.0f, peak, ImVec2(-1.0f, 80.0f));
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-      Tip("Histogram of measured log2 luminance. The population depends on "
-          "the active exposure filters.");
+      Tip(LOC_TEXT("diag.histogram.tip",
+          "Histogram of measured log2 luminance. The population "
+          "depends on the active exposure filters."));
     }
   }
 
   ImGui::Separator();
   ImGui::TextDisabled(
-      "Values update asynchronously. Exposure and histogram reflect the "
-      "most recent measurement the GPU has finished writing back.");
+      "%s", LOC_TEXT("diag.async_note",
+                     "Values update asynchronously. Exposure and histogram reflect "
+                     "the most recent measurement the GPU has finished writing back.")
+                .c_str());
 
   return false;
 }
@@ -279,3 +321,5 @@ bool DrawHdrDiagnostics(const void* context, ctl::ValueStore& store,
 }  // namespace hdr
 }  // namespace feature
 }  // namespace reshade_dlssnr
+
+#undef LOC_NAMESPACE

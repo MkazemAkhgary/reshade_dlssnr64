@@ -32,6 +32,7 @@
 #include "feature/pass/ui.h"
 #include "feature/preferences/settings.h"
 #include "grade/settings.h"
+#include "localization/localization.h"
 #include "state/migrations.h"
 #include "state/trace.h"
 
@@ -498,6 +499,13 @@ void LoadSettings() {
   JsonStore::Get().EnsureLoaded();
   LoadSettingsValues(g_settings, "");
   LoadStore(g_settings, "", ctl::PersistenceTarget::Global, true);
+  // A code the build no longer carries selects English, so a settings file
+  // written by another build cannot leave the overlay blank.
+  localization::SetLanguage(feature::SettingsStore()
+                                .Read(feature::preferences::kSection,
+                                      ctl::InstanceKey::Shared(),
+                                      feature::preferences::kLanguage)
+                                .as_string.c_str());
   // Persist the migration and any state created by the load so the on-disk
   // form matches what the addon now saves.
   SaveSettings();

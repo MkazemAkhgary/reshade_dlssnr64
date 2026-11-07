@@ -25,6 +25,8 @@
 #include "state/settings.h"
 #include "ui/ui_widgets.h"
 
+#define LOC_NAMESPACE "pass"
+
 namespace reshade_dlssnr {
 namespace feature {
 namespace pass {
@@ -40,10 +42,12 @@ bool NeverVisible(const void*, const ctl::ValueStore&,
 // Category tags. A tag is a label; consecutive rows sharing one are drawn
 // under a collapsible sub-header, so it also carries the sub-header's identity
 // -- which is why the two grades cannot share one.
-constexpr const char* kCatModel = "Model";
-constexpr const char* kCatStrength = "Strength";
-constexpr const char* kCatResidualEdits = "Residual Edits";
-constexpr const char* kCatTemporal = "Temporal Reprojection";
+const localization::TextRef kCatModel = LOC_TEXT("cat.model", "Model");
+const localization::TextRef kCatStrength = LOC_TEXT("cat.strength", "Strength");
+const localization::TextRef kCatResidualEdits =
+    LOC_TEXT("cat.residual_edits", "Residual Edits");
+const localization::TextRef kCatTemporal =
+    LOC_TEXT("cat.temporal", "Temporal Reprojection");
 
 // Availability of each target stage in this game, shown dimmed in the button
 // row when the stage cannot run right now. The choice stays selectable: the
@@ -75,48 +79,73 @@ void TargetAvailability(const void*, int index,
   out->reason = reason;
 }
 
-const char* const kTargetNames[] = {"Pre-DLSS", "Post-DLSS", "Backbuffer"};
-const char* const kTargetTips[] = {
-    "Run before the game's DLSS evaluation on its input Color resource. The "
-    "game then upscales the modified image. Requires a full-resource Color "
-    "input.",
-    "Run after the game's DLSS evaluation on its upscaled output, before later "
-    "post-processing and UI.",
-    "Run on the final swapchain backbuffer at ReShade Present. Works even "
-    "when the game does not use DLSS; it is not ordered with Pre/Post-DLSS "
-    "passes unless those stages are available."};
+const localization::TextRef kTargetNames[] = {
+    LOC_TEXT("target.pre_dlss", "Pre-DLSS"),
+    LOC_TEXT("target.post_dlss", "Post-DLSS"),
+    LOC_TEXT("target.backbuffer", "Backbuffer")};
+const localization::TextRef kTargetTips[] = {
+    LOC_TEXT("target.pre_dlss.tip",
+             "Run before the game's DLSS evaluation on its input Color resource. The "
+             "game then upscales the modified image. Requires a full-resource Color "
+             "input."),
+    LOC_TEXT("target.post_dlss.tip",
+             "Run after the game's DLSS evaluation on its upscaled output, before later "
+             "post-processing and UI."),
+    LOC_TEXT("target.backbuffer.tip",
+             "Run on the final swapchain backbuffer at ReShade Present. Works even "
+             "when the game does not use DLSS; it is not ordered with Pre/Post-DLSS "
+             "passes unless those stages are available.")};
 
-const char* const kRenderPresetNames[] = {"Quality", "Performance"};
-const char* const kRenderPresetTips[] = {
-    "Hint 1: the quality-oriented preset.",
-    "Hint 2: the performance-oriented preset."};
+const localization::TextRef kRenderPresetNames[] = {
+    LOC_TEXT("render_preset.quality", "Quality"),
+    LOC_TEXT("render_preset.performance", "Performance")};
+const localization::TextRef kRenderPresetTips[] = {
+    LOC_TEXT("render_preset.quality.tip",
+             "Hint 1: the quality-oriented preset."),
+    LOC_TEXT("render_preset.performance.tip",
+             "Hint 2: the performance-oriented preset.")};
 
-const char* const kCheapRenderPresetNames[] = {"Auto", "Quality", "Performance"};
-const char* const kCheapRenderPresetTips[] = {
-    "Use this pass's own Render Preset. One NGX feature serves both models.",
-    "Create the cheap model's feature with hint 1.",
-    "Create the cheap model's feature with hint 2."};
+const localization::TextRef kCheapRenderPresetNames[] = {
+    LOC_TEXT("cheap_preset.auto", "Auto"),
+    LOC_TEXT("cheap_preset.quality", "Quality"),
+    LOC_TEXT("cheap_preset.performance", "Performance")};
+const localization::TextRef kCheapRenderPresetTips[] = {
+    LOC_TEXT("cheap_preset.auto.tip",
+             "Use this pass's own Render Preset. One NGX feature serves both models."),
+    LOC_TEXT("cheap_preset.quality.tip",
+             "Create the cheap model's feature with hint 1."),
+    LOC_TEXT("cheap_preset.performance.tip",
+             "Create the cheap model's feature with hint 2.")};
 
-const char* const kTemporalNames[] = {"Off", "Adaptive", "Fixed"};
-const char* const kTemporalTips[] = {
-    "Evaluate the neural model on every frame.",
-    "Reuse the reprojected edit as far as per-pixel confidence allows, "
-    "forcing a refresh at least every N frames where N is the Cadence "
-    "slider. The effective cadence halves when the invalid pixel fraction "
-    "is high.",
-    "Reuse the reprojected edit for a fixed number of frames between model "
-    "evaluations, regardless of confidence. The Cadence slider is the "
-    "exact cadence."};
+const localization::TextRef kTemporalNames[] = {
+    LOC_TEXT("temporal.off", "Off"), LOC_TEXT("temporal.adaptive", "Adaptive"),
+    LOC_TEXT("temporal.fixed", "Fixed")};
+const localization::TextRef kTemporalTips[] = {
+    LOC_TEXT("temporal.off.tip", "Evaluate the neural model on every frame."),
+    LOC_TEXT("temporal.adaptive.tip",
+             "Reuse the reprojected edit as far as per-pixel confidence allows, "
+             "forcing a refresh at least every N frames where N is the Cadence "
+             "slider. The effective cadence halves when the invalid pixel fraction "
+             "is high."),
+    LOC_TEXT("temporal.fixed.tip",
+             "Reuse the reprojected edit for a fixed number of frames between model "
+             "evaluations, regardless of confidence. The Cadence slider is the "
+             "exact cadence.")};
 
-const char* const kPresetNames[] = {"A", "B", "C"};
+const localization::TextRef kPresetNames[] = {
+    LOC_TEXT("preset.a", "A"), LOC_TEXT("preset.b", "B"),
+    LOC_TEXT("preset.c", "C")};
 // Presets are a name, not an enum: the C++ type is an int the model reads.
-const char* const kPresetTips[] = {
-    "Use model preset A. Changes are applied per evaluation and reset the "
-    "model's internal history without rebuilding the feature.",
-    "Use model preset B. Changes are applied per evaluation and reset the "
-    "model's internal history without rebuilding the feature.",
-    "Use model preset C. Changes are applied per evaluation and reset the "
-    "model's internal history without rebuilding the feature."};
+const localization::TextRef kPresetTips[] = {
+    LOC_TEXT("preset.a.tip",
+             "Use model preset A. Changes are applied per evaluation and reset the "
+             "model's internal history without rebuilding the feature."),
+    LOC_TEXT("preset.b.tip",
+             "Use model preset B. Changes are applied per evaluation and reset the "
+             "model's internal history without rebuilding the feature."),
+    LOC_TEXT("preset.c.tip",
+             "Use model preset C. Changes are applied per evaluation and reset the "
+             "model's internal history without rebuilding the feature.")};
 
 bool DrawGradeSections(const void*, ctl::ValueStore& store,
                        const ctl::DrawOptions& options,
@@ -149,11 +178,12 @@ bool DrawWorkingScaleRow(const void*, ctl::ValueStore& store,
   const float row_right = row_start.x + ImGui::GetContentRegionAvail().x;
 
   ImGui::AlignTextToFramePadding();
-  ImGui::TextUnformatted("Working Scale");
+  ImGui::TextUnformatted(LOC_TEXT("working_scale", "Working Scale"));
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("The resolution the model runs at, as a fraction of the frame. "
+    Tip(LOC_TEXT("working_scale.tip",
+        "The resolution the model runs at, as a fraction of the frame. "
         "Tick x2 to double it for supersampling. Compose and the "
-        "backbuffer stay at frame resolution.");
+        "backbuffer stay at frame resolution."));
   }
 
   ImGui::SameLine(kSliderLabelWidth);
@@ -171,11 +201,12 @@ bool DrawWorkingScaleRow(const void*, ctl::ValueStore& store,
   const bool scale_changed =
       ImGui::SliderFloat("##working_scale", &new_scale, 0.10f, 1.0f, "%.3f");
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("The model's working resolution as a fraction of the frame.\n\n"
+    Tip(LOC_TEXT("working_scale.slider_tip",
+        "The model's working resolution as a fraction of the frame.\n\n"
         "Very low values are raised to a minimum of 180p vertical "
         "resolution, so temporal reprojection always has usable history. "
         "Changing this value resets the model's internal history on its next "
-        "evaluation.");
+        "evaluation."));
   }
 
   ImGui::SameLine();
@@ -183,7 +214,8 @@ bool DrawWorkingScaleRow(const void*, ctl::ValueStore& store,
   const bool x2_changed = ImGui::Checkbox("x2##working_scale_x2", &new_x2);
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     if (!new_x2) {
-      Tip("Double the model's working resolution for supersampling. This "
+      Tip(LOC_TEXT("working_scale.x2_on_tip",
+          "Double the model's working resolution for supersampling. This "
           "resets the model's internal history on its next evaluation.\n\n"
           "WARNING: enabling this can freeze the game for a brief moment on "
           "the first frame after toggling, while the larger working-scale "
@@ -196,15 +228,16 @@ bool DrawWorkingScaleRow(const void*, ctl::ValueStore& store,
           "  - The cheap model reused on reuse frames grows with the working "
           "scale, so reuse frames are more expensive too.\n"
           "  - A freeze longer than a second or two usually means the device "
-          "has run out of VRAM; toggle this off to recover.");
+          "has run out of VRAM; toggle this off to recover."));
     } else {
-      Tip("Currently doubling the model's working resolution for "
+      Tip(LOC_TEXT("working_scale.x2_off_tip",
+          "Currently doubling the model's working resolution for "
           "supersampling. Uncheck to return to the slider's value. Changing "
           "this setting resets the model's internal history on its next "
           "evaluation.\n\n"
           "The first frame after unchecking can also freeze briefly while "
           "smaller resources are allocated and the previous ones retire on "
-          "the GPU.");
+          "the GPU."));
     }
   }
 
@@ -213,7 +246,8 @@ bool DrawWorkingScaleRow(const void*, ctl::ValueStore& store,
   const bool reset_clicked =
       ImGui::Button("R", ImVec2(kResetButtonWidth, 0.0f));
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Reset Working Scale and x2 to their defaults.");
+    Tip(LOC_TEXT("working_scale.reset_tip",
+        "Reset Working Scale and x2 to their defaults."));
   }
   ImGui::PopID();
 
@@ -273,7 +307,8 @@ void RegisterPassSchema(ctl::Schema& schema) {
   using namespace pass;
 
   ctl::Section& order = schema.AddSection(kOrderSection, ctl::SectionKind::Single);
-  order.Add<ctl::IntListSetting>(kOrderSetting, "Pass Order",
+  order.Add<ctl::IntListSetting>(kOrderSetting,
+                                 LOC_TEXT("order", "Pass Order"),
                                  std::vector<int64_t>{1})
       .MinItems(1)
       .MaxItems(kMaxPasses)
@@ -286,279 +321,363 @@ void RegisterPassSchema(ctl::Schema& schema) {
 
   // The pass toggle remains an ordinary setting so it stays editable while
   // the pass is disabled. Target is a group-button enum setting.
-  pass.Add<ctl::BoolSetting>(kPassEnabled, "Enable", true)
-      .Tooltip("Enable or disable this pass profile. Disabled passes do not "
-               "evaluate the model.")
+  pass.Add<ctl::BoolSetting>(kPassEnabled, LOC_TEXT("enabled", "Enable"), true)
+      .Tooltip(LOC_TEXT("enabled.tip",
+                        "Enable or disable this pass profile. Disabled passes do not "
+                        "evaluate the model."))
       .VisibleWhen(&NeverVisible);
-  pass.Add<ctl::EnumSetting>(kTarget, "Target", 2)
+  pass.Add<ctl::EnumSetting>(kTarget, LOC_TEXT("target", "Target"), 2)
       .Items(kTargetNames, kTargetTips, 3)
       .AsGroup()
       .Availability(&TargetAvailability)
-      .Tooltip("Each pass can independently target Pre-DLSS, Post-DLSS, or "
-               "Backbuffer. Execution order is grouped by stage; passes "
-               "within each stage follow their pass-tab order. Changing the "
-               "target resets the model's internal history on its next "
-               "evaluation.");
+      .Tooltip(LOC_TEXT("target.tip",
+                        "Each pass can independently target Pre-DLSS, Post-DLSS, or "
+                        "Backbuffer. Execution order is grouped by stage; passes "
+                        "within each stage follow their pass-tab order. Changing the "
+                        "target resets the model's internal history on its next "
+                        "evaluation."));
 
   // The tab label. A pass shows its own name; the cap matches the buffer the
   // tab bar formats into.
-  pass.Add<ctl::StringSetting>(kCustomName, "Name", std::string())
+  pass.Add<ctl::StringSetting>(kCustomName, LOC_TEXT("name", "Name"),
+                               std::string())
       .MaxLength(63)
-      .Tooltip("Label shown on this pass's tab. Empty shows the positional "
-               "default, \"Pass N\".");
+      .Tooltip(LOC_TEXT("name.tip",
+                        "Label shown on this pass's tab. Empty shows the positional "
+                        "default, \"Pass N\"."));
 
   // The working-scale row is drawn by DrawWorkingScaleRow so the x2 toggle
   // can sit between the slider and its reset button. Both declarations are
   // hidden from the default drawer; the hook renders the entire row.
-  pass.Add<ctl::FloatSetting>(kWorkingScale, "Working Scale", 1.0f)
+  // Both rows are drawn by DrawWorkingScaleRow, so their text lives there and
+  // these declarations carry none.
+  pass.Add<ctl::FloatSetting>(kWorkingScale, localization::TextRef(), 1.0f)
       .ClampRange(0.10f, 1.0f)
-      .VisibleWhen(&NeverVisible)
-      .Tooltip("The resolution the model runs at, as a fraction of the frame.");
+      .VisibleWhen(&NeverVisible);
 
-  pass.Add<ctl::BoolSetting>(kWorkingScaleX2, "Working Scale x2", false)
-      .VisibleWhen(&NeverVisible)
-      .Tooltip("Double the model's working resolution.");
+  pass.Add<ctl::BoolSetting>(kWorkingScaleX2, localization::TextRef(), false)
+      .VisibleWhen(&NeverVisible);
 
   pass.AddHookAfter(kWorkingScale, "WorkingScaleRow",
                     &DrawWorkingScaleRow).Category(nullptr);
 
   // --- Model -------------------------------------------------------------
-  pass.Add<ctl::EnumSetting>(kPreset, "Preset", 0)
+  pass.Add<ctl::EnumSetting>(kPreset, LOC_TEXT("preset", "Preset"), 0)
       .Items(kPresetNames, kPresetTips, 3)
       .AsGroup()
       .Category(kCatModel)
-      .Tooltip("Select the model quality/behavior preset for this pass.");
-  pass.Add<ctl::EnumSetting>(kRenderPreset, "Render Preset", 0)
+      .Tooltip(LOC_TEXT("preset.tip",
+                        "Select the model quality/behavior preset for this pass."));
+  pass.Add<ctl::EnumSetting>(kRenderPreset,
+                             LOC_TEXT("render_preset", "Render Preset"), 0)
       .Items(kRenderPresetNames, kRenderPresetTips, 2)
       .AsGroup()
       .Category(kCatModel)
-      .Tooltip("DLSSNR.Hint.Render.Preset hint for this pass. NGX latches it "
-               "at feature creation, so changing it rebuilds this pass's "
-               "feature.");
-  pass.Add<ctl::FloatSetting>(kIntensity, "Intensity", 1.0f)
+      .Tooltip(LOC_TEXT("render_preset.tip",
+                        "DLSSNR.Hint.Render.Preset hint for this pass. NGX latches it "
+                        "at feature creation, so changing it rebuilds this pass's "
+                        "feature."));
+  pass.Add<ctl::FloatSetting>(kIntensity, LOC_TEXT("intensity", "Intensity"), 1.0f)
       .ClampRange(0.0f, 2.0f)
       .Category(kCatModel)
-      .Tooltip("How strongly the model is instructed to edit the image.\n"
-               "0 skips the model evaluation entirely");
-  pass.Add<ctl::FloatSetting>(kLocalTone, "Local Tone", 1.0f)
+      .Tooltip(LOC_TEXT("intensity.tip",
+                        "How strongly the model is instructed to edit the image.\n"
+                        "0 skips the model evaluation entirely"));
+  pass.Add<ctl::FloatSetting>(kLocalTone, LOC_TEXT("local_tone", "Local Tone"),
+                              1.0f)
       .ClampRange(0.0f, 2.0f)
       .Category(kCatModel)
-      .Tooltip("How much of the model's local tone adjustments to apply.");
-  pass.Add<ctl::FloatSetting>(kLocalStructure, "Local Structure", 1.0f)
+      .Tooltip(LOC_TEXT("local_tone.tip",
+                        "How much of the model's local tone adjustments to apply."));
+  pass.Add<ctl::FloatSetting>(kLocalStructure,
+                              LOC_TEXT("local_structure", "Local Structure"), 1.0f)
       .ClampRange(0.0f, 2.0f)
       .Category(kCatModel)
-      .Tooltip("How much of the model's local structure detail to apply.");
-  pass.Add<ctl::BoolSetting>(kAutoMask, "Auto Mask", true)
+      .Tooltip(LOC_TEXT("local_structure.tip",
+                        "How much of the model's local structure detail to apply."));
+  pass.Add<ctl::BoolSetting>(kAutoMask, LOC_TEXT("auto_mask", "Auto Mask"), true)
       .Category(kCatModel)
-      .Tooltip("Lets the model detect character skin and apply its edits to it "
-               "separately.");
-  pass.Add<ctl::FloatSetting>(kSkinStructure, "Skin Structure", 1.0f)
+      .Tooltip(LOC_TEXT("auto_mask.tip",
+                        "Lets the model detect character skin and apply its edits to it "
+                        "separately."));
+  pass.Add<ctl::FloatSetting>(kSkinStructure,
+                              LOC_TEXT("skin_structure", "Skin Structure"), 1.0f)
       .ClampRange(0.0f, 1.0f)
       .EnableWhen(kAutoMask)
       .InlineToggle(kAutoMask)
       .Category(kCatModel)
-      .Tooltip("Controls how strongly the model applies its skin-specific "
-               "edits. Disabled when the model's automatic masking option is off.");
-  pass.Add<ctl::BoolSetting>(kUiCorrection, "UI Correction", true)
+      .Tooltip(LOC_TEXT("skin_structure.tip",
+                        "Controls how strongly the model applies its skin-specific "
+                        "edits. Disabled when the model's automatic masking option is off."));
+  pass.Add<ctl::BoolSetting>(kUiCorrection,
+                             LOC_TEXT("ui_correction", "UI Correction"), true)
       .Category(kCatModel)
-      .Tooltip("Reduce the model's edits where it detects UI elements.");
+      .Tooltip(LOC_TEXT("ui_correction.tip",
+                        "Reduce the model's edits where it detects UI elements."));
 
   // --- Strength ----------------------------------------------------------
-  pass.Add<ctl::FloatSetting>(kLumaStrength, "Luma Strength", 1.0f)
+  pass.Add<ctl::FloatSetting>(kLumaStrength,
+                              LOC_TEXT("luma_strength", "Luma Strength"), 1.0f)
       .ClampRange(0.0f, 1.0f)
       .Category(kCatStrength)
-      .Tooltip("Blend between original and edited luminance.");
-  pass.Add<ctl::FloatSetting>(kChromaStrength, "Chroma Strength", 1.0f)
+      .Tooltip(LOC_TEXT("luma_strength.tip",
+                        "Blend between original and edited luminance."));
+  pass.Add<ctl::FloatSetting>(kChromaStrength,
+                              LOC_TEXT("chroma_strength", "Chroma Strength"), 1.0f)
       .ClampRange(0.0f, 1.0f)
       .Category(kCatStrength)
-      .Tooltip("Blend between original and edited chroma.");
+      .Tooltip(LOC_TEXT("chroma_strength.tip",
+                        "Blend between original and edited chroma."));
 
   // --- Motion vectors ----------------------------------------------------
   // A top-level row: the field it produces is what the model evaluates with, so
   // it applies whether or not temporal reuse is enabled.
   pass.Add<ctl::BoolSetting>(kSyntheticMotionGuides,
-                             "Correct Motion Vectors", false)
+                             LOC_TEXT("correct_motion",
+                                      "Correct Motion Vectors"),
+                             false)
       .Category(nullptr)
-      .Tooltip("Produce a motion field this pass can trust. The first "
-               "Pre/Post-DLSS pass of a frame keeps the game's vectors as-is, "
-               "because it processes the image they were authored for. Every "
-               "pass after it, and every Backbuffer pass, gets a corrected "
-               "field: the search is bounded to a few pixels around the game's "
-               "vector and biased toward the previous field. With no game "
-               "vectors the pass synthesizes them from colour and depth "
-               "instead. Feeds the model and temporal reprojection alike; "
-               "costs one GPU dispatch per pass and needs a usable depth "
-               "guide.");
+      .Tooltip(LOC_TEXT("correct_motion.tip",
+                        "Produce a motion field this pass can trust. The first "
+                        "Pre/Post-DLSS pass of a frame keeps the game's vectors as-is, "
+                        "because it processes the image they were authored for. Every "
+                        "pass after it, and every Backbuffer pass, gets a corrected "
+                        "field: the search is bounded to a few pixels around the game's "
+                        "vector and biased toward the previous field. With no game "
+                        "vectors the pass synthesizes them from colour and depth "
+                        "instead. Feeds the model and temporal reprojection alike; "
+                        "costs one GPU dispatch per pass and needs a usable depth "
+                        "guide."));
 
   // --- Temporal Reprojection --------------------------------------------
-  pass.Add<ctl::EnumSetting>(kTemporalMode, "Mode", 0)
+  pass.Add<ctl::EnumSetting>(kTemporalMode, LOC_TEXT("temporal.mode", "Mode"), 0)
       .Items(kTemporalNames, kTemporalTips, 3)
       .AsGroup()
       .Category(kCatTemporal)
-      .Tooltip("Reuse a motion-reprojected multiplicative model edit instead "
-               "of evaluating the model every frame. Requires current-frame "
-               "depth and a motion field - the game's, or one produced by "
-               "Correct Motion Vectors; uncertain history forces a fresh "
-               "evaluation.");
-  pass.Add<ctl::IntSetting>(kTemporalCadence, "Cadence", 2)
+      .Tooltip(LOC_TEXT("temporal.mode.tip",
+                        "Reuse a motion-reprojected multiplicative model edit instead "
+                        "of evaluating the model every frame. Requires current-frame "
+                        "depth and a motion field - the game's, or one produced by "
+                        "Correct Motion Vectors; uncertain history forces a fresh "
+                        "evaluation."));
+  pass.Add<ctl::IntSetting>(kTemporalCadence,
+                            LOC_TEXT("temporal.cadence", "Cadence"), 2)
       .ClampRange(2, 8)
       .EnableWhen(kTemporalMode)
       .Category(kCatTemporal)
-      .Tooltip("Number of frames between model evaluations. In Adaptive mode, "
-               "this is the maximum; the effective cadence halves when the "
-               "invalid pixel fraction is high. In Fixed mode, this is the "
-               "exact cadence.");
-  pass.Add<ctl::BoolSetting>(kTemporalCheapEnabled, "Cheap Model", true)
+      .Tooltip(LOC_TEXT("temporal.cadence.tip",
+                        "Number of frames between model evaluations. In Adaptive mode, "
+                        "this is the maximum; the effective cadence halves when the "
+                        "invalid pixel fraction is high. In Fixed mode, this is the "
+                        "exact cadence."));
+  pass.Add<ctl::BoolSetting>(kTemporalCheapEnabled,
+                             LOC_TEXT("temporal.cheap", "Cheap Model"), true)
       .Category(kCatTemporal)
-      .Tooltip("Run a second, cheaper model on the frames between full "
-               "evaluations and take its edit where reprojection confidence is "
-               "low. Off, those frames are reconstructed from history alone, "
-               "which costs nothing extra but leaves disocclusions and fast "
-               "motion unresolved until the next full evaluation.");
-  pass.Add<ctl::FloatSetting>(kTemporalCheapScale, "Cheap Model Scale", 0.5f)
+      .Tooltip(LOC_TEXT("temporal.cheap.tip",
+                        "Run a second, cheaper model on the frames between full "
+                        "evaluations and take its edit where reprojection confidence is "
+                        "low. Off, those frames are reconstructed from history alone, "
+                        "which costs nothing extra but leaves disocclusions and fast "
+                        "motion unresolved until the next full evaluation."));
+  pass.Add<ctl::FloatSetting>(kTemporalCheapScale,
+                              LOC_TEXT("temporal.cheap_scale",
+                                       "Cheap Model Scale"),
+                              0.5f)
       .ClampRange(0.1f, 1.0f)
       .InlineToggle(kTemporalCheapEnabled)
       .EnableWhen(&CheapScaleEnabled, &kCheapScaleGate)
       .Category(kCatTemporal)
-      .Tooltip("Resolution of the cheaper model, as a fraction of the working "
-               "scale. 0.5 means 50% of the working scale resolution. Lower "
-               "values are faster but fill low-confidence reprojection areas "
-               "with less detail.");
+      .Tooltip(LOC_TEXT("temporal.cheap_scale.tip",
+                        "Resolution of the cheaper model, as a fraction of the working "
+                        "scale. 0.5 means 50% of the working scale resolution. Lower "
+                        "values are faster but fill low-confidence reprojection areas "
+                        "with less detail."));
   pass.Add<ctl::EnumSetting>(kTemporalCheapRenderPreset,
-                             "Cheap Model Preset", 0)
+                             LOC_TEXT("temporal.cheap_preset",
+                                      "Cheap Model Preset"),
+                             0)
       .Items(kCheapRenderPresetNames, kCheapRenderPresetTips, 3)
       .AsGroup()
       .EnableWhen(&CheapScaleEnabled, &kCheapScaleGate)
       .Category(kCatTemporal)
-      .Tooltip("Render preset for the cheap model's own feature. Auto follows "
-               "this pass's, which needs no second feature; the others create "
-               "one, because NGX latches the hint at creation.");
+      .Tooltip(LOC_TEXT("temporal.cheap_preset.tip",
+                        "Render preset for the cheap model's own feature. Auto follows "
+                        "this pass's, which needs no second feature; the others create "
+                        "one, because NGX latches the hint at creation."));
   pass.Add<ctl::FloatSetting>(kTemporalPhotometricAbsThreshold,
-                              "Photo Abs.", 0.06f)
+                              LOC_TEXT("temporal.photo_abs", "Photo Abs."), 0.06f)
       .ClampRange(0.001f, 0.25f)
       .EnableWhen(kTemporalMode)
       .Category(kCatTemporal)
-      .Tooltip("Absolute model-input luma difference allowed between the "
-               "current pixel and its motion-reprojected previous-frame match.");
+      .Tooltip(LOC_TEXT("temporal.photo_abs.tip",
+                        "Absolute model-input luma difference allowed between the "
+                        "current pixel and its motion-reprojected previous-frame match."));
   pass.Add<ctl::FloatSetting>(kTemporalPhotometricRelThreshold,
-                              "Photo Rel.", 0.10f)
+                              LOC_TEXT("temporal.photo_rel", "Photo Rel."), 0.10f)
       .ClampRange(0.0f, 0.50f)
       .EnableWhen(kTemporalMode)
       .Category(kCatTemporal)
-      .Tooltip("Relative luma-difference allowance, scaled by the larger "
-               "absolute current or previous luma. Added to Photo Abs.");
+      .Tooltip(LOC_TEXT("temporal.photo_rel.tip",
+                        "Relative luma-difference allowance, scaled by the larger "
+                        "absolute current or previous luma. Added to Photo Abs."));
   pass.Add<ctl::FloatSetting>(kTemporalDepthAbsThreshold,
-                              "Depth Abs.", 0.005f)
+                              LOC_TEXT("temporal.depth_abs", "Depth Abs."), 0.005f)
       .ClampRange(0.0001f, 0.05f)
       .EnableWhen(kTemporalMode)
       .Category(kCatTemporal)
-      .Tooltip("Absolute depth difference allowed after motion reprojection.");
+      .Tooltip(LOC_TEXT("temporal.depth_abs.tip",
+                        "Absolute depth difference allowed after motion reprojection."));
   pass.Add<ctl::FloatSetting>(kTemporalDepthRelThreshold,
-                              "Depth Rel.", 0.03f)
+                              LOC_TEXT("temporal.depth_rel", "Depth Rel."), 0.03f)
       .ClampRange(0.0f, 0.20f)
       .EnableWhen(kTemporalMode)
       .Category(kCatTemporal)
-      .Tooltip("Relative depth-difference allowance. Threshold is the larger "
-               "of this allowance and Depth Abs.");
+      .Tooltip(LOC_TEXT("temporal.depth_rel.tip",
+                        "Relative depth-difference allowance. Threshold is the larger "
+                        "of this allowance and Depth Abs."));
   pass.Add<ctl::FloatSetting>(kTemporalMaxDisplacement,
-                              "Max Motion", 40.0f)
+                              LOC_TEXT("temporal.max_motion", "Max Motion"), 40.0f)
       .ClampRange(1.0f, 128.0f)
       .EnableWhen(kTemporalMode)
       .Category(kCatTemporal)
-      .Tooltip("Reject reprojection when motion exceeds this many working-" 
-               "resolution pixels.");
+      .Tooltip(LOC_TEXT("temporal.max_motion.tip",
+                        "Reject reprojection when motion exceeds this many working-"
+                        "resolution pixels."));
   pass.Add<ctl::FloatSetting>(kTemporalMaxInvalidPercent,
-                              "Max Invalid %", 15.0f)
+                              LOC_TEXT("temporal.max_invalid", "Max Invalid %"),
+                              15.0f)
       .ClampRange(1.0f, 50.0f)
       .EnableWhen(kTemporalMode)
       .Category(kCatTemporal)
-      .Tooltip("Maximum invalid or photometrically mismatched pixel fraction "
-               "allowed before refreshing the model.");
-  pass.Add<ctl::BoolSetting>(kTemporalFp16History, "FP16 Edit History", false)
+      .Tooltip(LOC_TEXT("temporal.max_invalid.tip",
+                        "Maximum invalid or photometrically mismatched pixel fraction "
+                        "allowed before refreshing the model."));
+  pass.Add<ctl::BoolSetting>(kTemporalFp16History,
+                             LOC_TEXT("temporal.fp16_history",
+                                      "FP16 Edit History"),
+                             false)
       .EnableWhen(kTemporalMode)
       .Category(kCatTemporal)
-      .Tooltip("Store temporal edit/candidate textures in FP16. Reduces history "
-               "bandwidth and memory with small quantization differences on reused edits.");
+      .Tooltip(LOC_TEXT("temporal.fp16_history.tip",
+                        "Store temporal edit/candidate textures in FP16. Reduces history "
+                        "bandwidth and memory with small quantization differences on reused edits."));
   // Live readout, last row of the category. The category header is the
   // collapsible; the hook only draws the body.
   pass.AddHookAfter(kTemporalFp16History, "TemporalStats", &DrawTemporalStats)
       .Category(kCatTemporal);
 
   // --- Advanced ----------------------------------------------------------
-  pass.Add<ctl::FloatSetting>(kEditStrength, "Edit Strength", 1.0f)
+  pass.Add<ctl::FloatSetting>(kEditStrength,
+                              LOC_TEXT("edit_strength", "Edit Strength"), 1.0f)
       .ClampRange(0.0f, 2.0f)
       .Category(kCatResidualEdits)
-      .Tooltip("Scales the model's edit before it is carried onto the source.");
-  pass.Add<ctl::FloatSetting>(kResidualChroma, "Chroma Strength", 1.0f)
+      .Tooltip(LOC_TEXT("edit_strength.tip",
+                        "Scales the model's edit before it is carried onto the source."));
+  pass.Add<ctl::FloatSetting>(kResidualChroma,
+                              LOC_TEXT("residual_chroma", "Chroma Strength"),
+                              1.0f)
       .ClampRange(0.0f, 2.0f)
       .Category(kCatResidualEdits)
-      .Tooltip("How much of the edit's chroma lands relative to its "
-               "brightness.");
-  pass.Add<ctl::FloatSetting>(kResidualGamma, "Edit Gamma", 1.0f)
+      .Tooltip(LOC_TEXT("residual_chroma.tip",
+                        "How much of the edit's chroma lands relative to its "
+                        "brightness."));
+  pass.Add<ctl::FloatSetting>(kResidualGamma,
+                              LOC_TEXT("residual_gamma", "Edit Gamma"), 1.0f)
       .ClampRange(0.25f, 4.0f)
       .Category(kCatResidualEdits)
-      .Tooltip("Shapes the edit's response curve.");
-  pass.Add<ctl::FloatSetting>(kResidualHighlight, "Highlight Protect", 0.0f)
+      .Tooltip(LOC_TEXT("residual_gamma.tip",
+                        "Shapes the edit's response curve."));
+  pass.Add<ctl::FloatSetting>(kResidualHighlight,
+                              LOC_TEXT("residual_highlight", "Highlight Protect"),
+                              0.0f)
       .ClampRange(0.0f, 1.0f)
       .Category(kCatResidualEdits)
-      .Tooltip("Fades the edit out above mid-to-high brightness.");
-  pass.Add<ctl::FloatSetting>(kResidualShadow, "Shadow Protect", 0.0f)
+      .Tooltip(LOC_TEXT("residual_highlight.tip",
+                        "Fades the edit out above mid-to-high brightness."));
+  pass.Add<ctl::FloatSetting>(kResidualShadow,
+                              LOC_TEXT("residual_shadow", "Shadow Protect"), 0.0f)
       .ClampRange(0.0f, 1.0f)
       .Category(kCatResidualEdits)
-      .Tooltip("Fades the edit out below mid-to-low brightness.");
+      .Tooltip(LOC_TEXT("residual_shadow.tip",
+                        "Fades the edit out below mid-to-low brightness."));
 
-  pass.Add<ctl::FloatSetting>(kUpsampleSharpness, "Upsample Sharpness", 8.0f)
+  pass.Add<ctl::FloatSetting>(kUpsampleSharpness,
+                              LOC_TEXT("upsample_sharpness",
+                                       "Upsample Sharpness"),
+                              8.0f)
       .ClampRange(0.5f, 32.0f)
       .Category(kCatResidualEdits)
-      .Tooltip("Edge-preservation exponent for the fixed joint-bilateral 3x3 "
-               "reconstruction of the model input and output. Higher values "
-               "track full-resolution guide edges more sharply; lower values "
-               "blend more smoothly across the low-resolution neighborhood. "
-               "This does not scale the model edit.");
+      .Tooltip(LOC_TEXT("upsample_sharpness.tip",
+                        "Edge-preservation exponent for the fixed joint-bilateral 3x3 "
+                        "reconstruction of the model input and output. Higher values "
+                        "track full-resolution guide edges more sharply; lower values "
+                        "blend more smoothly across the low-resolution neighborhood. "
+                        "This does not scale the model edit."));
 
-  pass.Add<ctl::BoolSetting>(kRatioClampsEnabled, "Ratio Clamps", true)
+  pass.Add<ctl::BoolSetting>(kRatioClampsEnabled,
+                             LOC_TEXT("ratio_clamps", "Ratio Clamps"), true)
       .Category(kCatResidualEdits)
-      .Tooltip("Bound the per-channel model residual log ratio to the "
-               "[Ratio Darken, Ratio Brighten] range before shaping. "
-               "Applies to both SDR and HDR composition.");
-  pass.Add<ctl::FloatSetting>(kRatioEps, "Ratio Eps", 1e-3f)
+      .Tooltip(LOC_TEXT("ratio_clamps.tip",
+                        "Bound the per-channel model residual log ratio to the "
+                        "[Ratio Darken, Ratio Brighten] range before shaping. "
+                        "Applies to both SDR and HDR composition."));
+  pass.Add<ctl::FloatSetting>(kRatioEps, LOC_TEXT("ratio_eps", "Ratio Eps"), 1e-3f)
       .ClampRange(1e-6f, 0.5f)
       .Category(kCatResidualEdits)
-      .Tooltip("Denominator floor for the per-channel residual log ratio. "
-               "Keeps the residual finite when a channel is near zero. "
-               "Applies to both SDR and HDR composition.");
-  pass.Add<ctl::FloatSetting>(kRatioBrighten, "Ratio Brighten", 4.0f)
+      .Tooltip(LOC_TEXT("ratio_eps.tip",
+                        "Denominator floor for the per-channel residual log ratio. "
+                        "Keeps the residual finite when a channel is near zero. "
+                        "Applies to both SDR and HDR composition."));
+  pass.Add<ctl::FloatSetting>(kRatioBrighten,
+                              LOC_TEXT("ratio_brighten", "Ratio Brighten"), 4.0f)
       .ClampRange(1.0f, 16.0f)
       .EnableWhen(kRatioClampsEnabled)
       .Category(kCatResidualEdits)
-      .Tooltip("Upper bound on the per-channel residual ratio when Ratio "
-               "Clamps is enabled. Applies to both SDR and HDR composition.");
-  pass.Add<ctl::FloatSetting>(kRatioDarken, "Ratio Darken", 1.0f / 16.0f)
+      .Tooltip(LOC_TEXT("ratio_brighten.tip",
+                        "Upper bound on the per-channel residual ratio when Ratio "
+                        "Clamps is enabled. Applies to both SDR and HDR composition."));
+  pass.Add<ctl::FloatSetting>(kRatioDarken,
+                              LOC_TEXT("ratio_darken", "Ratio Darken"),
+                              1.0f / 16.0f)
       .ClampRange(1.0f / 256.0f, 1.0f)
       .EnableWhen(kRatioClampsEnabled)
       .Category(kCatResidualEdits)
-      .Tooltip("Lower bound on the per-channel residual ratio when Ratio "
-               "Clamps is enabled. Applies to both SDR and HDR composition.");
+      .Tooltip(LOC_TEXT("ratio_darken.tip",
+                        "Lower bound on the per-channel residual ratio when Ratio "
+                        "Clamps is enabled. Applies to both SDR and HDR composition."));
 
   // --- The two model grades ----------------------------------------------
   ctl::Section& grade_input =
       schema.AddSection(kGradeInputSection, ctl::SectionKind::Instanced);
+  grade_input.Title(LOC_TEXT("grade_input.title", "Grade Model Input"));
   grade_input.HeaderToggle(kGradeEnabled);
-  grade_input.Add<ctl::BoolSetting>(kGradeEnabled, "Grade Model Input", false)
-      .Tooltip("Grade the image the model reads, before model evaluation.");
+  grade_input.Add<ctl::BoolSetting>(kGradeEnabled,
+                                    LOC_TEXT("grade_input.enabled",
+                                             "Grade Model Input"),
+                                    false)
+      .Tooltip(LOC_TEXT("grade_input.enabled.tip",
+                        "Grade the image the model reads, before model evaluation."));
   grade_input.Add<ctl::BoolSetting>(kGradeInputApplyToPreGrade,
-                                    "Apply Edit to Pre-Grade Image", false)
-      .Tooltip("Apply the model's edit to the image before the grade, so the "
-               "grade does not reach the output. Off, the graded model output "
-               "is used as it is.")
+                                    LOC_TEXT("grade_input.apply_to_pre_grade",
+                                             "Apply Edit to Pre-Grade Image"),
+                                    false)
+      .Tooltip(LOC_TEXT("grade_input.apply_to_pre_grade.tip",
+                        "Apply the model's edit to the image before the grade, so the "
+                        "grade does not reach the output. Off, the graded model output "
+                        "is used as it is."))
       .EnableWhen(kGradeEnabled);
   grade_rows::Declare(grade_input, kGradeInputPrefix, kGradeEnabled);
 
   ctl::Section& grade_output =
       schema.AddSection(kGradeOutputSection, ctl::SectionKind::Instanced);
+  grade_output.Title(LOC_TEXT("grade_output.title", "Grade Model Output"));
   grade_output.HeaderToggle(kGradeEnabled);
-  grade_output.Add<ctl::BoolSetting>(kGradeEnabled, "Grade Model Output", false)
-      .Tooltip("Grade the model produced, before it is published.");
+  grade_output.Add<ctl::BoolSetting>(kGradeEnabled,
+                                     LOC_TEXT("grade_output.enabled",
+                                              "Grade Model Output"),
+                                     false)
+      .Tooltip(LOC_TEXT("grade_output.enabled.tip",
+                        "Grade the model produced, before it is published."));
   grade_rows::Declare(grade_output, kGradeOutputPrefix, kGradeEnabled);
 
   pass.AddHookAfter(kRatioDarken, "GradeBoundarySections",
@@ -567,3 +686,5 @@ void RegisterPassSchema(ctl::Schema& schema) {
 
 }  // namespace feature
 }  // namespace reshade_dlssnr
+
+#undef LOC_NAMESPACE

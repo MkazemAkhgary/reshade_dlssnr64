@@ -10,6 +10,8 @@
 #include "feature/grade/settings.h"
 #include "fragments/grade_rows/rows.h"
 
+#define LOC_NAMESPACE "grade_backbuffer"
+
 namespace reshade_dlssnr {
 namespace feature {
 namespace grade {
@@ -29,16 +31,20 @@ void RegisterGradeSchema(ctl::Schema& schema) {
   using namespace grade;
 
   ctl::Section& section = schema.AddSection(kSection, ctl::SectionKind::Single);
+  section.Title(LOC_TEXT("title", "Grade Backbuffer"));
   section.HeaderToggle(kEnabled);
 
   section
-      .Add<ctl::BoolSetting>(kEnabled, "Enabled", false)
-      .Tooltip("Grade the final swapchain image after every pass, "
-               "immediately before presentation. This is independent of each "
-               "pass's model-input and model-output grades.");
+      .Add<ctl::BoolSetting>(kEnabled, LOC_TEXT("enabled", "Enabled"), false)
+      .Tooltip(LOC_TEXT("enabled.tip",
+                        "Grade the final swapchain image after every pass, "
+                        "immediately before presentation. This is independent of each "
+                        "pass's model-input and model-output grades."));
 
   grade_rows::Declare(section, kPrefix, kEnabled);
 }
 
 }  // namespace feature
 }  // namespace reshade_dlssnr
+
+#undef LOC_NAMESPACE

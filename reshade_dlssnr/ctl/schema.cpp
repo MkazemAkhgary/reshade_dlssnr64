@@ -2,6 +2,7 @@
 #include "profiling/profile.h"
 
 #include <cstdio>
+#include <cstring>
 #include <memory>
 #include <vector>
 
@@ -77,8 +78,13 @@ bool Schema::Build(std::string* error) {
       }
       for (uint32_t sj = 0; sj < si; ++sj) {
         const SettingMeta& previous = section.settings_[sj]->meta();
-        if (previous.category_toggle && previous.category == meta.category) {
-          return fail("multiple category toggles for '" + meta.category +
+        // The English text is the category's identity, so this compares the
+        // text itself rather than the pointer each declaration holds.
+        if (previous.category_toggle &&
+            std::strcmp(previous.category.fallback_text(),
+                        meta.category.fallback_text()) == 0) {
+          return fail("multiple category toggles for '" +
+                      std::string(meta.category.fallback_text()) +
                       "' in section '" + section.name() + "'");
         }
       }

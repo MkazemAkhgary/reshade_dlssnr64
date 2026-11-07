@@ -9,6 +9,8 @@
 #include "ctl/menu.h"
 #include "ui/ui_widgets.h"
 
+#define LOC_NAMESPACE "ctl"
+
 namespace reshade_dlssnr {
 namespace ctl {
 
@@ -84,7 +86,10 @@ bool RowVisible(const Section& section, const Setting& setting,
          visible(setting.visible_context(), store, key, section.name());
 }
 
-std::vector<std::string> SplitCategoryPath(const std::string& path) {
+// The English text is the category's identity, so it is what the path is
+// split and compared on. The translation only ever reaches the screen.
+std::vector<std::string> SplitCategoryPath(const localization::TextRef& category) {
+  const std::string path = category.fallback_text();
   std::vector<std::string> result;
   size_t begin = 0;
   while (begin < path.size()) {
@@ -119,7 +124,8 @@ const Setting* FindCategoryToggle(const Section& section,
                                   const std::string& category_path) {
   for (const auto& setting : section.settings()) {
     const SettingMeta& meta = setting->meta();
-    if (meta.category_toggle && meta.category == category_path) {
+    if (meta.category_toggle &&
+        category_path == meta.category.fallback_text()) {
       return setting.get();
     }
   }
@@ -154,7 +160,7 @@ bool DrawInlineToggle(const Section& section, ValueStore& store,
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) &&
       !toggle_setting->meta().tooltip.empty()) {
-    Tip("%s", toggle_setting->meta().tooltip.c_str());
+    Tip(toggle_setting->meta().tooltip);
   }
   ImGui::PopID();
   ImGui::SameLine();
@@ -200,7 +206,7 @@ bool DrawCategoryHeader(const DrawOptions& options, ValueStore& store,
       }
       if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) &&
           !toggle_setting->meta().tooltip.empty()) {
-        Tip("%s", toggle_setting->meta().tooltip.c_str());
+        Tip(toggle_setting->meta().tooltip);
       }
       ImGui::SameLine();
     }
@@ -209,7 +215,9 @@ bool DrawCategoryHeader(const DrawOptions& options, ValueStore& store,
         ImGuiTreeNodeFlags_CollapsingHeader |
         ImGuiTreeNodeFlags_AllowOverlap);
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-      Tip("Expand or collapse the %s subsection.", label.c_str());
+      TipFormat(LOC_TEXT("category.toggle",
+                         "Expand or collapse the %s subsection."),
+                label.c_str());
     }
     ImGui::PopID();
   }
@@ -237,9 +245,10 @@ void DrawSectionToggle(const Section& section, ValueStore& store,
     changed = true;
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    const std::string& tooltip = setting.meta().tooltip;
-    if (!tooltip.empty()) Tip("%s", tooltip.c_str());
-    else Tip("Enable or disable %s.", section.name().c_str());
+    const localization::TextRef& tooltip = setting.meta().tooltip;
+    if (!tooltip.empty()) Tip(tooltip);
+    else TipFormat(LOC_TEXT("section.toggle", "Enable or disable %s."),
+                   section.name().c_str());
   }
   ImGui::PopID();
   ImGui::SameLine();
@@ -277,7 +286,10 @@ bool DrawSection(ValueStore& store, const std::string& section_name,
       });
     }
 
-    const char* label = section->name().c_str();
+    // The section's name is its persistence key; the title is what the user
+    // reads, and it falls back to the name when a section declares none.
+    const localization::TextRef& title = section->title();
+    const char* label = title.empty() ? section->name().c_str() : title.c_str();
     const bool was_open = SectionIsOpen(options, section->name());
     ImGui::SetNextItemOpen(was_open, ImGuiCond_Always);
     const bool open = ImGui::TreeNodeEx(
@@ -368,7 +380,7 @@ bool DrawSection(ValueStore& store, const std::string& section_name,
     const Setting& setting = *section->settings()[row.setting_index];
     DLSSNR_PROFILE_CTL_L3("ctl setting row");
     DLSSNR_PROFILE_CTL_TAG_L3("Setting", setting.meta().name.c_str());
-    const std::string& category = setting.meta().category;
+    const localization::TextRef& category = setting.meta().category;
     if (!RowVisible(*section, setting, store, key)) continue;
     switch_path(SplitCategoryPath(category));
     const bool path_open = active_open.empty() || active_open.back();
@@ -424,3 +436,5 @@ bool DrawSection(ValueStore& store, const std::string& section_name,
 
 }  // namespace ctl
 }  // namespace reshade_dlssnr
+
+#undef LOC_NAMESPACE

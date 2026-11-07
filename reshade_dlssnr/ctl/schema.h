@@ -73,13 +73,13 @@ struct Hook {
   enum class Placement : uint8_t { Before, After, Append };
   Placement placement = Placement::Append;
   std::string anchor;
-  std::string category;
+  localization::TextRef category;
   bool has_category = false;
 
   // Override the category path inherited from preceding rows. An empty path
   // places the hook at the section's top level.
-  Hook& Category(const char* text) {
-    category = CStrToString(text);
+  Hook& Category(const localization::TextRef& text) {
+    category = text;
     has_category = true;
     return *this;
   }
@@ -120,6 +120,15 @@ class Section {
   const std::string& name() const { return name_; }
   SectionKind kind() const { return kind_; }
   bool instanced() const { return kind_ == SectionKind::Instanced; }
+
+  // The header text. A section's name is also its persistence key, so it can
+  // never change with the language; the title is what the user reads. An
+  // unset title falls back to the name.
+  Section& Title(const localization::TextRef& text) {
+    title_ = text;
+    return *this;
+  }
+  const localization::TextRef& title() const { return title_; }
 
   Section& DefaultPersistenceBackend(PersistenceBackend backend) {
     default_backend_ = backend;
@@ -213,6 +222,7 @@ class Section {
 
   std::string name_;
   SectionKind kind_;
+  localization::TextRef title_;
   PersistenceBackend default_backend_ = PersistenceBackend::Json;
   uint32_t index_ = 0;
   std::vector<std::unique_ptr<Setting>> settings_;

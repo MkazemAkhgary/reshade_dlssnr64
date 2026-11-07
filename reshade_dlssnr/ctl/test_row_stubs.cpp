@@ -17,17 +17,20 @@ namespace reshade_dlssnr {
 
 bool g_show_tooltips = false;
 
-void Tip(const char*, ...) {}
+void Tip(const localization::TextRef&) {}
+
+void TipFormat(const char*, ...) {}
 
 void SectionDivider() {}
 
-bool DrawSubSectionHeader(const char*, bool&, bool&, const char*,
-                          HeaderControls) {
+bool DrawSubSectionHeader(const localization::TextRef&, bool&, bool&,
+                          const localization::TextRef&, HeaderControls) {
   return false;
 }
 
-int DrawGroupButtons(const char*, const char* const*, const char* const*, int,
-                     int, const bool*, const bool*, const char* const*, float) {
+int DrawGroupButtons(const char*, const localization::TextRef*,
+                     const localization::TextRef*, int, int, const bool*,
+                     const bool*, const char* const*, float) {
   return -1;
 }
 

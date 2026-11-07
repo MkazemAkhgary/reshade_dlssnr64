@@ -11,13 +11,35 @@
 #include "state/settings.h"
 #include "ui/ui_widgets.h"
 
+#define LOC_NAMESPACE "ui"
+
 namespace reshade_dlssnr {
+
+namespace {
+
+// The action column is sized from the widest button set, so both rows share
+// one width and the table does not jitter when a row switches to renaming.
+const localization::TextRef kRename = LOC_TEXT("profiles.rename", "Rename");
+const localization::TextRef kLoad = LOC_TEXT("profiles.load", "Load");
+const localization::TextRef kSave = LOC_TEXT("profiles.save", "Save");
+const localization::TextRef kRemove = LOC_TEXT("profiles.remove", "x");
+const localization::TextRef kSaveName =
+    LOC_TEXT("profiles.save_name", "Save Name");
+const localization::TextRef kCancel = LOC_TEXT("profiles.cancel", "Cancel");
+const localization::TextRef kSaveAsNew =
+    LOC_TEXT("profiles.save_as_new", "Save as New Preset");
+const localization::TextRef kNameError = LOC_TEXT(
+    "profiles.name_error", "Preset name is blank, too long, or already in use.");
+
+}  // namespace
 
 void DrawSavedProfilesSection(Settings& settings, bool& changed) {
   DLSSNR_PROFILE_UI_L2("DrawSavedProfilesSection");
   DrawCollapsible(
-      "Presets", feature::ui_state::kPresetsOpen, changed,
-      "Save and restore named profiles of the current DLSSNR settings in ReShade.ini.",
+      LOC_TEXT("profiles", "Presets"), feature::ui_state::kPresetsOpen, changed,
+      LOC_TEXT("profiles.tip",
+               "Save and restore named profiles of the current DLSSNR settings "
+               "in ReShade.ini."),
       [&] {
     SavedProfileInfo profiles[kMaxSavedProfiles] = {};
   const uint32_t profile_count = GetSavedProfiles(profiles, kMaxSavedProfiles);
@@ -39,7 +61,8 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
   };
 
   if (profile_count == 0) {
-    ImGui::TextDisabled("No saved presets.");
+    ImGui::TextDisabled("%s",
+                        LOC_TEXT("profiles.none", "No saved presets.").c_str());
   } else {
     // Fixed-width action column so a rename row (Save Name / Cancel) and a
     // normal row (Rename / Load / Save / x) share the same column width and
@@ -48,11 +71,14 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
     const float frame_pad = ImGui::GetStyle().FramePadding.x * 2.0f;
     const float spacing = ImGui::GetStyle().ItemSpacing.x;
     const float row_normal =
-        ImGui::CalcTextSize("Rename").x + ImGui::CalcTextSize("Load").x +
-        ImGui::CalcTextSize("Save").x + ImGui::CalcTextSize("x").x +
+        ImGui::CalcTextSize(kRename.c_str()).x +
+        ImGui::CalcTextSize(kLoad.c_str()).x +
+        ImGui::CalcTextSize(kSave.c_str()).x +
+        ImGui::CalcTextSize(kRemove.c_str()).x +
         4.0f * frame_pad + 3.0f * spacing;
     const float row_rename =
-        ImGui::CalcTextSize("Save Name").x + ImGui::CalcTextSize("Cancel").x +
+        ImGui::CalcTextSize(kSaveName.c_str()).x +
+        ImGui::CalcTextSize(kCancel.c_str()).x +
         2.0f * frame_pad + spacing;
     const float action_width =
         row_normal > row_rename ? row_normal : row_rename;
@@ -60,9 +86,10 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
     const ImGuiTableFlags table_flags =
         ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings;
     if (ImGui::BeginTable("##saved_profiles", 2, table_flags)) {
-      ImGui::TableSetupColumn("Preset", ImGuiTableColumnFlags_WidthStretch);
-      ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed,
-                              action_width);
+      ImGui::TableSetupColumn(LOC_TEXT("profiles.column.preset", "Preset"),
+                              ImGuiTableColumnFlags_WidthStretch);
+      ImGui::TableSetupColumn(LOC_TEXT("profiles.column.actions", "Actions"),
+                              ImGuiTableColumnFlags_WidthFixed, action_width);
 
       for (uint32_t i = 0; i < profile_count && i < kMaxSavedProfiles; ++i) {
         bool deleted_this_frame = false;
@@ -87,7 +114,8 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
               ImGuiInputTextFlags_EnterReturnsTrue |
                   ImGuiInputTextFlags_AutoSelectAll);
           if (ImGui::IsItemHovered()) {
-            Tip("Enter saves the name; Escape cancels editing.");
+            Tip(LOC_TEXT("profiles.rename.tip",
+                "Enter saves the name; Escape cancels editing."));
           }
           if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
             rename_cancel = true;
@@ -98,7 +126,9 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
           ImGui::AlignTextToFramePadding();
           ImGui::TextUnformatted(profiles[i].name[0] != '\0'
                                      ? profiles[i].name
-                                     : "(unnamed preset)");
+                                     : LOC_TEXT("profiles.unnamed",
+                                                "(unnamed preset)")
+                                           .c_str());
         }
 
         // Actions column. While renaming, only Save Name and Cancel are
@@ -106,11 +136,11 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
         // being edited, and hiding them gives the row a single meaning.
         ImGui::TableSetColumnIndex(1);
         if (is_renaming) {
-          if (ImGui::Button("Save Name")) rename_commit = true;
+          if (ImGui::Button(kSaveName.c_str())) rename_commit = true;
           ImGui::SameLine();
-          if (ImGui::Button("Cancel")) rename_cancel = true;
+          if (ImGui::Button(kCancel.c_str())) rename_cancel = true;
         } else {
-          if (ImGui::Button("Rename")) {
+          if (ImGui::Button(kRename.c_str())) {
             renaming_profile_id = profiles[i].id;
             std::snprintf(rename_profile_name, sizeof(rename_profile_name),
                           "%s", profiles[i].name);
@@ -118,26 +148,32 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
             rename_focus_pending = true;
           }
           if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-            Tip("Edit this preset's name. Enter saves; Escape cancels.");
+            Tip(LOC_TEXT("profiles.rename.button_tip",
+                "Edit this preset's name. Enter saves; Escape "
+                "cancels."));
           }
           ImGui::SameLine();
-          if (ImGui::Button("Load")) {
+          if (ImGui::Button(kLoad.c_str())) {
             pending_action = PendingProfileAction::Load;
             pending_profile_id = profiles[i].id;
           }
           if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-            Tip("Load this preset into the active settings and save it as the current ReShade.ini configuration.");
+            Tip(LOC_TEXT("profiles.load.tip",
+                "Load this preset into the active settings and save "
+                "it as the current ReShade.ini configuration."));
           }
           ImGui::SameLine();
-          if (ImGui::Button("Save")) {
+          if (ImGui::Button(kSave.c_str())) {
             pending_action = PendingProfileAction::Save;
             pending_profile_id = profiles[i].id;
           }
           if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-            Tip("Overwrite this saved preset with the current settings.");
+            Tip(LOC_TEXT("profiles.save.tip",
+                "Overwrite this saved preset with the current "
+                "settings."));
           }
           ImGui::SameLine();
-          if (ImGui::Button("x")) {
+          if (ImGui::Button(kRemove.c_str())) {
             if (pending_action == PendingProfileAction::Delete &&
                 pending_profile_id == profiles[i].id) {
               clear_pending();
@@ -147,7 +183,8 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
             }
           }
           if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-            Tip("Remove this preset after confirming.");
+            Tip(LOC_TEXT("profiles.remove.tip",
+                "Remove this preset after confirming."));
           }
         }
 
@@ -159,7 +196,9 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
             rename_profile_error = false;
             profile_feedback_index = static_cast<int>(i);
             std::snprintf(profile_feedback, sizeof(profile_feedback),
-                          "Renamed preset to: %s", rename_profile_name);
+                          LOC_TEXT("profiles.feedback.renamed",
+                                   "Renamed preset to: %s"),
+                          rename_profile_name);
             changed = true;
           } else {
             rename_profile_error = true;
@@ -175,18 +214,21 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
         if (renaming_profile_id == profiles[i].id && rename_profile_error) {
           ImGui::TableNextRow();
           ImGui::TableSetColumnIndex(0);
-          ImGui::TextDisabled(
-              "Preset name is blank, too long, or already in use.");
+          ImGui::TextDisabled("%s", kNameError.c_str());
         }
 
         if (pending_profile_id == profiles[i].id &&
             pending_action != PendingProfileAction::None) {
           const char* prompt =
               pending_action == PendingProfileAction::Delete
-                  ? "Remove this preset?"
+                  ? LOC_TEXT("profiles.confirm.remove", "Remove this preset?")
+                        .c_str()
               : pending_action == PendingProfileAction::Save
-                  ? "Overwrite this preset?"
-                  : "Load this preset?";
+                  ? LOC_TEXT("profiles.confirm.overwrite",
+                             "Overwrite this preset?")
+                        .c_str()
+                  : LOC_TEXT("profiles.confirm.load", "Load this preset?")
+                        .c_str();
           ImGui::TableNextRow();
           ImGui::TableSetColumnIndex(0);
           ImGui::AlignTextToFramePadding();
@@ -198,7 +240,7 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
                                 ImVec4(0.78f, 0.16f, 0.16f, 1.0f));
           ImGui::PushStyleColor(ImGuiCol_ButtonActive,
                                 ImVec4(0.52f, 0.08f, 0.08f, 1.0f));
-          if (ImGui::Button("Yes")) {
+          if (ImGui::Button(LOC_TEXT("profiles.confirm.yes", "Yes"))) {
             if (pending_action == PendingProfileAction::Delete) {
               DeleteSavedProfile(profiles[i].id);
               deleted_this_frame = true;
@@ -206,7 +248,8 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
               if (SaveCurrentToProfile(profiles[i].id)) {
                 profile_feedback_index = static_cast<int>(i);
                 std::snprintf(profile_feedback, sizeof(profile_feedback),
-                              "Saved current settings to: %s",
+                              LOC_TEXT("profiles.feedback.saved",
+                                       "Saved current settings to: %s"),
                               profiles[i].name);
               }
             } else {
@@ -219,7 +262,9 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
                 changed = true;
                 profile_feedback_index = static_cast<int>(i);
                 std::snprintf(profile_feedback, sizeof(profile_feedback),
-                              "Loaded preset: %s", profiles[i].name);
+                              LOC_TEXT("profiles.feedback.loaded",
+                                       "Loaded preset: %s"),
+                              profiles[i].name);
               }
             }
             clear_pending();
@@ -227,7 +272,9 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
           ImGui::PopStyleColor(3);
           if (!deleted_this_frame) {
             ImGui::SameLine();
-            if (ImGui::Button("No")) clear_pending();
+            if (ImGui::Button(LOC_TEXT("profiles.confirm.no", "No"))) {
+              clear_pending();
+            }
           }
         }
 
@@ -249,8 +296,9 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
   }
 
   if (profile_count >= kMaxSavedProfiles) ImGui::BeginDisabled();
-  const float save_button_width = ImGui::CalcTextSize("Save as New Preset").x +
-                                  ImGui::GetStyle().FramePadding.x * 2.0f;
+  const float save_button_width =
+      ImGui::CalcTextSize(kSaveAsNew.c_str()).x +
+      ImGui::GetStyle().FramePadding.x * 2.0f;
   ImGui::SetNextItemWidth(std::max(
       80.0f, ImGui::GetContentRegionAvail().x - save_button_width -
                  ImGui::GetStyle().ItemSpacing.x));
@@ -261,10 +309,12 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
     profile_feedback[0] = '\0';
   }
   ImGui::SameLine();
-  if (ImGui::Button("Save as New Preset") && new_profile_name[0] != '\0') {
+  if (ImGui::Button(kSaveAsNew.c_str()) && new_profile_name[0] != '\0') {
     if (SaveCurrentAsProfile(new_profile_name)) {
       std::snprintf(profile_feedback, sizeof(profile_feedback),
-                    "Saved new preset: %s", new_profile_name);
+                    LOC_TEXT("profiles.feedback.created",
+                             "Saved new preset: %s"),
+                    new_profile_name);
       profile_feedback_index = -2;
       new_profile_name[0] = '\0';
       clear_pending();
@@ -276,14 +326,18 @@ void DrawSavedProfilesSection(Settings& settings, bool& changed) {
     }
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Save all current DLSSNR settings under a new name. Up to %u presets can be stored in ReShade.ini.", kMaxSavedProfiles);
+    TipFormat(LOC_TEXT("profiles.save_as_new.tip",
+                 "Save all current DLSSNR settings under a new name. Up to %u "
+                 "presets can be stored in ReShade.ini."), kMaxSavedProfiles);
   }
   if (profile_feedback_index == -2) ImGui::TextDisabled("%s", profile_feedback);
   if (profile_name_error) {
-    ImGui::TextDisabled("Preset name is blank, too long, or already in use.");
+    ImGui::TextDisabled("%s", kNameError.c_str());
   }
   if (profile_count >= kMaxSavedProfiles) ImGui::EndDisabled();
   });
 }
 
 }  // namespace reshade_dlssnr
+
+#undef LOC_NAMESPACE

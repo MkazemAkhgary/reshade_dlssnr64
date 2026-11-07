@@ -21,6 +21,7 @@
 #include "ctl/trace.h"
 
 using namespace reshade_dlssnr::ctl;
+using reshade_dlssnr::localization::TextRef;
 
 namespace {
 
@@ -123,7 +124,7 @@ class ColorSetting : public Setting {
  public:
   ColorSetting(const char* name, const char* label) {
     meta_.name = reshade_dlssnr::CStrToString(name);
-    meta_.label = reshade_dlssnr::CStrToString(label);
+    meta_.label = label;
   }
   Value DefaultValue() const override { return Value::Int(0); }
   void Clamp(Value& v) const override { v.as_int &= 0xFFFFFF; }
@@ -188,10 +189,10 @@ struct Fixture {
     store.Init(schema);
   }
 
-  static const char* kPresetNames[3];
+  static const TextRef kPresetNames[3];
 };
 
-const char* Fixture::kPresetNames[3] = {"A", "B", "C"};
+const TextRef Fixture::kPresetNames[3] = {"A", "B", "C"};
 
 // Helpers ------------------------------------------------------------------
 
@@ -767,8 +768,9 @@ int main() {
               choices.meta().tooltip.empty() && choices.meta().category.empty(),
           "all built-in setting types normalize null metadata and setters");
 
-    const char* names[] = {nullptr, "Valid"};
-    const char* tips[] = {nullptr, nullptr};
+    const TextRef names[] = {TextRef(), "Valid"};
+    const TextRef tips[] = {TextRef(),
+                                          TextRef()};
     EnumSetting enum_choices(nullptr, nullptr);
     enum_choices.Items(names, tips, 2);
     Check(enum_choices.ToString(Value::Enum(0)).empty(),

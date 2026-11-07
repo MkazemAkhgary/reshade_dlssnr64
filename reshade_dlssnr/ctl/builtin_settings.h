@@ -21,12 +21,13 @@ namespace ctl {
 
 class FloatSetting : public Setting {
  public:
-  FloatSetting(const char* name, const char* label);
-  FloatSetting(const char* name, const char* label, float default_value);
+  FloatSetting(const char* name, const localization::TextRef& label);
+  FloatSetting(const char* name, const localization::TextRef& label,
+               float default_value);
 
-  FloatSetting& Tooltip(const char* text) { meta_.tooltip = CStrToString(text); return *this; }
+  FloatSetting& Tooltip(const localization::TextRef& text) { meta_.tooltip = text; return *this; }
   FloatSetting& InlineToggle(const char* bool_setting) { SetInlineToggle(bool_setting); return *this; }
-  FloatSetting& Category(const char* text) { meta_.category = CStrToString(text); return *this; }
+  FloatSetting& Category(const localization::TextRef& text) { meta_.category = text; return *this; }
   FloatSetting& EnableWhen(EnablePredicate enabled, const void* context = nullptr) {
     SetEnabled(enabled, context);
     return *this;
@@ -89,12 +90,13 @@ class FloatSetting : public Setting {
 
 class IntSetting : public Setting {
  public:
-  IntSetting(const char* name, const char* label);
-  IntSetting(const char* name, const char* label, int default_value);
+  IntSetting(const char* name, const localization::TextRef& label);
+  IntSetting(const char* name, const localization::TextRef& label,
+             int default_value);
 
-  IntSetting& Tooltip(const char* text) { meta_.tooltip = CStrToString(text); return *this; }
+  IntSetting& Tooltip(const localization::TextRef& text) { meta_.tooltip = text; return *this; }
   IntSetting& InlineToggle(const char* bool_setting) { SetInlineToggle(bool_setting); return *this; }
-  IntSetting& Category(const char* text) { meta_.category = CStrToString(text); return *this; }
+  IntSetting& Category(const localization::TextRef& text) { meta_.category = text; return *this; }
   IntSetting& EnableWhen(EnablePredicate enabled, const void* context = nullptr) {
     SetEnabled(enabled, context);
     return *this;
@@ -155,12 +157,13 @@ class IntSetting : public Setting {
 
 class BoolSetting : public Setting {
  public:
-  BoolSetting(const char* name, const char* label);
-  BoolSetting(const char* name, const char* label, bool default_value);
+  BoolSetting(const char* name, const localization::TextRef& label);
+  BoolSetting(const char* name, const localization::TextRef& label,
+              bool default_value);
 
-  BoolSetting& Tooltip(const char* text) { meta_.tooltip = CStrToString(text); return *this; }
+  BoolSetting& Tooltip(const localization::TextRef& text) { meta_.tooltip = text; return *this; }
   BoolSetting& InlineToggle(const char* bool_setting) { SetInlineToggle(bool_setting); return *this; }
-  BoolSetting& Category(const char* text) { meta_.category = CStrToString(text); return *this; }
+  BoolSetting& Category(const localization::TextRef& text) { meta_.category = text; return *this; }
   BoolSetting& EnableWhen(EnablePredicate enabled, const void* context = nullptr) {
     SetEnabled(enabled, context);
     return *this;
@@ -202,12 +205,13 @@ class BoolSetting : public Setting {
 // install a longer value than the UI would have accepted.
 class StringSetting : public Setting {
  public:
-  StringSetting(const char* name, const char* label);
-  StringSetting(const char* name, const char* label, std::string default_value);
+  StringSetting(const char* name, const localization::TextRef& label);
+  StringSetting(const char* name, const localization::TextRef& label,
+                std::string default_value);
 
-  StringSetting& Tooltip(const char* text) { meta_.tooltip = CStrToString(text); return *this; }
+  StringSetting& Tooltip(const localization::TextRef& text) { meta_.tooltip = text; return *this; }
   StringSetting& InlineToggle(const char* bool_setting) { SetInlineToggle(bool_setting); return *this; }
-  StringSetting& Category(const char* text) { meta_.category = CStrToString(text); return *this; }
+  StringSetting& Category(const localization::TextRef& text) { meta_.category = text; return *this; }
   StringSetting& EnableWhen(EnablePredicate enabled, const void* context = nullptr) {
     SetEnabled(enabled, context);
     return *this;
@@ -243,10 +247,10 @@ class StringSetting : public Setting {
 
 class IntListSetting : public Setting {
  public:
-  IntListSetting(const char* name, const char* label,
+  IntListSetting(const char* name, const localization::TextRef& label,
                  std::vector<int64_t> default_value = {});
 
-  IntListSetting& Tooltip(const char* text) { meta_.tooltip = CStrToString(text); return *this; }
+  IntListSetting& Tooltip(const localization::TextRef& text) { meta_.tooltip = text; return *this; }
   IntListSetting& InlineToggle(const char* bool_setting) { SetInlineToggle(bool_setting); return *this; }
   IntListSetting& MaxItems(size_t count) { max_items_ = count; return *this; }
   IntListSetting& MinItems(size_t count) { min_items_ = count; return *this; }
@@ -284,8 +288,8 @@ class EnumSetting : public Setting {
  public:
   // An item: the text shown, and an optional tooltip.
   struct Item {
-    const char* name = nullptr;
-    const char* tip = nullptr;
+    localization::TextRef name;
+    localization::TextRef tip;
   };
 
   // Where a setting's items come from. Called at most once, on first use, so
@@ -293,13 +297,14 @@ class EnumSetting : public Setting {
   // supplied at declaration time just as easily as a literal array.
   using ItemProvider = std::vector<Item> (*)();
 
-  EnumSetting(const char* name, const char* label);
-  EnumSetting(const char* name, const char* label, int default_value);
+  EnumSetting(const char* name, const localization::TextRef& label);
+  EnumSetting(const char* name, const localization::TextRef& label,
+              int default_value);
 
   // Items are displayed in the order given; the value is the item index.
   // Either form may be used, whichever reads better at the declaration site.
-  EnumSetting& Items(const char* const* names, const char* const* tips,
-                     int count);
+  EnumSetting& Items(const localization::TextRef* names,
+                     const localization::TextRef* tips, int count);
   EnumSetting& Items(ItemProvider provider);
 
   // Per-item availability, re-evaluated on every draw. An unavailable item is
@@ -324,9 +329,9 @@ class EnumSetting : public Setting {
                                  : EnumPresentation::Combo;
     return *this;
   }
-  EnumSetting& Tooltip(const char* text) { meta_.tooltip = CStrToString(text); return *this; }
+  EnumSetting& Tooltip(const localization::TextRef& text) { meta_.tooltip = text; return *this; }
   EnumSetting& InlineToggle(const char* bool_setting) { SetInlineToggle(bool_setting); return *this; }
-  EnumSetting& Category(const char* text) { meta_.category = CStrToString(text); return *this; }
+  EnumSetting& Category(const localization::TextRef& text) { meta_.category = text; return *this; }
   EnumSetting& EnableWhen(EnablePredicate enabled, const void* context = nullptr) {
     SetEnabled(enabled, context);
     return *this;
@@ -361,8 +366,8 @@ class EnumSetting : public Setting {
   ItemAvailabilityProvider availability_provider_ = nullptr;
   const void* availability_context_ = nullptr;
   mutable bool resolved_ = false;
-  mutable std::vector<std::string> names_;
-  mutable std::vector<std::string> tips_;
+  mutable std::vector<localization::TextRef> names_;
+  mutable std::vector<localization::TextRef> tips_;
 };
 
 }  // namespace ctl

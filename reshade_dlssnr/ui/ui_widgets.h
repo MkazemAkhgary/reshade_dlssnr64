@@ -5,6 +5,8 @@
 
 #include <imgui.h>
 
+#include "localization/localization.h"
+
 namespace reshade_dlssnr {
 
 constexpr float kControlLabelWidth = 330.0f;
@@ -14,7 +16,14 @@ constexpr float kResetButtonWidth = 22.0f;
 // Set from settings at the top of each frame. Read by Tip().
 extern bool g_show_tooltips;
 
-void Tip(const char* fmt, ...);
+// A tooltip showing `text` as it is. The text is not a format string, so a
+// translation may contain '%' without breaking.
+void Tip(const localization::TextRef& text);
+
+// A tooltip whose text carries format specifiers. The declaration says the
+// string is a format, so a plain string is never mistaken for one.
+void TipFormat(const char* fmt, ...);
+
 void SectionDivider();
 
 template <typename Fn>
@@ -51,34 +60,74 @@ struct HeaderControls {
 };
 
 // Collapsible section header whose open/closed state is a ui_state setting.
-bool DrawSectionHeader(const char* label, const char* setting_key,
-                       bool& changed, const char* tooltip = nullptr,
+bool DrawSectionHeader(const localization::TextRef& label,
+                       const char* setting_key, bool& changed,
+                       const localization::TextRef& tooltip = {},
                        HeaderControls controls = {});
 
 // Tinted sub-section header; caller owns the open/closed state.
-bool DrawSubSectionHeader(const char* label, bool& open_setting, bool& changed,
-                          const char* tooltip = nullptr,
+bool DrawSubSectionHeader(const localization::TextRef& label,
+                          bool& open_setting, bool& changed,
+                          const localization::TextRef& tooltip = {},
                           HeaderControls controls = {});
 
 // DrawSectionHeader plus an indented body when open.
 template <typename Body>
-void DrawCollapsible(const char* label, const char* setting_key,
-                     bool& changed, const char* tooltip, Body&& body) {
+void DrawCollapsible(const localization::TextRef& label,
+                     const char* setting_key, bool& changed,
+                     const localization::TextRef& tooltip, Body&& body) {
   if (!DrawSectionHeader(label, setting_key, changed, tooltip)) return;
   IndentScope indent;
   body();
 }
 
+bool DrawFloatRow(const char* id,
+                  const char* label,
+                  const char* tooltip,
+                  float* raw_value,
+                  float lo,
+                  float hi,
+                  float default_value);
+
+bool DrawIntRow(const char* id,
+                const char* label,
+                const char* tooltip,
+                int* raw_value,
+                int lo,
+                int hi,
+                int default_value);
+
+bool DrawCheckboxAtLabel(const char* id, bool* value,
+                          const char* tooltip = nullptr);
+
+bool DrawComboRow(const char* id,
+                  const char* label,
+                  const char* tooltip,
+                  int* value,
+                  const char* const* items,
+                  const char* const* item_tooltips,
+                  int item_count);
+
 // `unavailable` marks items that can still be chosen but cannot run right now;
-// they are drawn dimmed and their tooltip prefers `unavailable_reasons[i]`.
+// they are drawn dimmed and their tooltip prefers `unavailable_reasons[i]`,
+// which is runtime status text rather than a translatable label.
 int DrawGroupButtons(const char* id,
-                     const char* const* labels,
-                     const char* const* tooltips,
+                     const localization::TextRef* labels,
+                     const localization::TextRef* tooltips,
                      int count,
                      int selected,
                      const bool* disabled,
                      const bool* unavailable = nullptr,
                      const char* const* unavailable_reasons = nullptr,
                      float fixed_button_width = 0.0f);
+
+bool DrawGroupRow(const char* id,
+                  const char* label,
+                  const char* tooltip,
+                  const char* const* labels,
+                  const char* const* item_tooltips,
+                  int count,
+                  int* value,
+                  const bool* disabled);
 
 }  // namespace reshade_dlssnr

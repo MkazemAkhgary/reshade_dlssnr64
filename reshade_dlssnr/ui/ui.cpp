@@ -31,8 +31,11 @@
 #include "pipeline/addon_controller.h"
 #include "state/settings.h"
 #include "ui/ui_sections.h"
+#include "ui/ui_text.h"
 #include "ui/ui_widgets.h"
 #include "version.h"
+
+#define LOC_NAMESPACE "ui"
 
 namespace reshade_dlssnr {
 
@@ -260,12 +263,21 @@ void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
                                                     /*indent=*/true);
   // The section header keeps the legacy label.
   DrawCollapsible(
-      "Passes", feature::ui_state::kPassesOpen, changed,
-      "Configure each pass profile. Execution order is grouped by target stage, then follows this tab order within each stage.",
+      LOC_TEXT("passes", "Passes"), feature::ui_state::kPassesOpen, changed,
+      LOC_TEXT("passes.tip",
+               "Configure each pass profile. Execution order is grouped by target "
+               "stage, then follows this tab order within each stage."),
       [&] {
-    ImGui::TextDisabled("Execution: Pre-DLSS -> Post-DLSS -> Backbuffer; pass order is preserved within each stage.");
+    ImGui::TextDisabled(
+        "%s", LOC_TEXT("passes.execution",
+                       "Execution: Pre-DLSS -> Post-DLSS -> Backbuffer; pass order "
+                       "is preserved within each stage.")
+                  .c_str());
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Changing a pass target changes its execution group, not its position in the pass list. Status uses the same execution grouping.");
+    Tip(LOC_TEXT("passes.execution.tip",
+        "Changing a pass target changes its execution group, not its "
+        "position in the pass list. Status uses the same execution "
+        "grouping."));
   }
 
   const StatusSnapshot tab_status = AddonController::Get().GetStatus();
@@ -291,30 +303,40 @@ void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
     const feature::pass::PassId id = settings.pass_order[position];
     const feature::pass::PassSnapshot pass =
         feature::pass::Read(store, feature::pass::PassKey(id));
-    const char* stage_name = pass.target == 0 ? "Pre-DLSS" :
-                             pass.target == 1 ? "Post-DLSS" : "Backbuffer";
-    const char* stage_short = pass.target == 0 ? "Pre" :
-                              pass.target == 1 ? "Post" : "BB";
+    const char* stage_name =
+        pass.target == 0 ? ui_text::kStagePreDlss.c_str()
+        : pass.target == 1 ? ui_text::kStagePostDlss.c_str()
+                           : ui_text::kStageBackbuffer.c_str();
+    const char* stage_short = pass.target == 0
+                                  ? LOC_TEXT("stage.pre", "Pre").c_str()
+                              : pass.target == 1
+                                  ? LOC_TEXT("stage.post", "Post").c_str()
+                                  : LOC_TEXT("stage.bb", "BB").c_str();
     const auto status_it = status_by_id.find(id);
     const bool pass_failed = status_it != status_by_id.end() &&
                              status_it->second->failed;
-    const char* state_tag = pass_failed ? " [FAIL]" : "";
-    const char* state_description = pass_failed ? "failed" :
-                                    pass.enabled ? "enabled" : "disabled";
-    char label[128];
+    const char* state_tag =
+        pass_failed ? LOC_TEXT("tab.failed_tag", " [FAIL]").c_str() : "";
+    const char* state_description =
+        pass_failed ? ui_text::kStateFailed.c_str()
+        : pass.enabled ? ui_text::kStateEnabled.c_str()
+                       : ui_text::kStateDisabled.c_str();
+    // The visible name is localized; the "##PassTab<id>" suffix is the widget
+    // identity and must not be, so the two are formatted separately.
+    char name[96];
     if (!pass.custom_name.empty()) {
-      std::snprintf(label, sizeof(label), "%s%s %s##PassTab%u",
-                    pass.custom_name.c_str(), state_tag, stage_short, id);
+      std::snprintf(name, sizeof(name), "%s", pass.custom_name.c_str());
     } else {
-      std::snprintf(label, sizeof(label), "Pass %u%s %s##PassTab%u",
-                    position + 1, state_tag, stage_short, id);
+      std::snprintf(name, sizeof(name), ui_text::kPassLabel, position + 1);
     }
-    char default_name[24];
-    std::snprintf(default_name, sizeof(default_name), "Pass %u", position + 1);
+    char label[160];
+    std::snprintf(label, sizeof(label), "%s%s %s##PassTab%u", name, state_tag,
+                  stage_short, id);
     char tip[256];
     std::snprintf(tip, sizeof(tip),
-        "Select %s - target: %s - %s. Runtime groups passes by target stage.",
-        default_name, stage_name, state_description);
+        LOC_TEXT("tab.tip",
+                 "Select %s - target: %s - %s. Runtime groups passes by target stage."),
+        name, stage_name, state_description);
 
     PassTabItem item;
     item.id = id;
@@ -362,7 +384,10 @@ void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
       changed = true;
     }
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-      Tip("Toggle this pass. Current state: %s.", pass_enabled ? "enabled" : "disabled");
+      TipFormat(LOC_TEXT("tab.toggle.tip",
+                         "Toggle this pass. Current state: %s."),
+                pass_enabled ? ui_text::kStateEnabled.c_str()
+                             : ui_text::kStateDisabled.c_str());
     }
     ImGui::SameLine();
     ImGui::PushStyleVar(ImGuiStyleVar_Alpha,
@@ -375,7 +400,7 @@ void DrawTabsRowAndBody(ctl::ValueStore& store, Settings& settings,
       settings.active_pass_id = tab.id;
     }
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-      Tip("%s", tab.tooltip.c_str());
+      Tip(tab.tooltip.c_str());
     }
     // The tab is the handle for the whole pass: its menu acts on every
     // section instance the pass owns, not on the Pass section alone.
@@ -444,7 +469,8 @@ void DrawSectionHeaderAction(void*, const std::string& section,
     changed = true;
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Reset all Grade Backbuffer settings to their defaults.");
+    Tip(LOC_TEXT("grade_backbuffer.reset.tip",
+        "Reset all Grade Backbuffer settings to their defaults."));
   }
 }
 
@@ -509,18 +535,24 @@ void DrawOverlay(reshade::api::effect_runtime*) {
   }
 
 
-  ImGui::Text("Version %s", reshade_dlssnr::kAddonVersion);
+  ImGui::Text(LOC_TEXT("version", "Version %s"),
+              reshade_dlssnr::kAddonVersion);
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("ReShade DLSSNR addon version. The panel settings are saved to the ReShade configuration.");
+    Tip(LOC_TEXT("version.tip",
+        "ReShade DLSSNR addon version. The panel settings are saved to "
+        "the ReShade configuration."));
   }
   ImGui::Separator();
 
   // Master enable is a hand-drawn row: it is not part of any section.
-  if (ImGui::Checkbox("Enable DLSSNR", &settings.enabled)) {
+  if (ImGui::Checkbox(LOC_TEXT("enable", "Enable DLSSNR"),
+                      &settings.enabled)) {
     changed = true;
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    Tip("Master switch. When off, no passes run and no DLSSNR GPU work is recorded.");
+    Tip(LOC_TEXT("enable.tip",
+        "Master switch. When off, no passes run and no DLSSNR GPU work "
+        "is recorded."));
   }
 
   SectionDivider();
@@ -571,3 +603,5 @@ void DrawOverlay(reshade::api::effect_runtime*) {
 }
 
 }  // namespace reshade_dlssnr
+
+#undef LOC_NAMESPACE

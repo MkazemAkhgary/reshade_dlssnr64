@@ -14,6 +14,8 @@
 #include <variant>
 #include <vector>
 
+#include "localization/localization.h"
+
 namespace reshade_dlssnr {
 
 inline std::string CStrToString(const char* text) {
@@ -73,11 +75,12 @@ enum class PersistenceBackend : uint8_t { Json, Ini };
 
 struct SettingMeta {
   std::string name;      // stable identifier, unique within its section
-  std::string label;     // user-facing row label
-  std::string tooltip;
+  localization::TextRef label;     // user-facing row label
+  localization::TextRef tooltip;
   // Category paths use '/' to describe nested subsections. The framework
-  // treats each path component as a collapsible group.
-  std::string category;
+  // treats each path component as a collapsible group. The English text is
+  // also the group's identity, so it survives a language change.
+  localization::TextRef category;
   bool persist = true;   // false = never written to config
   bool persist_in_profiles = true;
   PersistenceBackend backend = PersistenceBackend::Json;

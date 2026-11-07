@@ -7,6 +7,8 @@
 
 #include "pipeline/pipeline_graph.h"
 
+#define LOC_NAMESPACE "debug"
+
 namespace reshade_dlssnr {
 
 namespace {
@@ -116,97 +118,116 @@ ID3D12Resource* SelectTemporalValidatedCandidate(const DebugSnapshot& s,
 }  // namespace
 
 const DebugViewDef kDebugViews[] = {
-    {"Model Input (source)",
-     "The frame as captured, before any processing. This is the DLSS "
-     "output the model will work from, at its native resolution.",
+    {LOC_TEXT("view.model_input_source", "Model Input (source)"),
+     LOC_TEXT("view.model_input_source.tip",
+              "The frame as captured, before any processing. This is the DLSS "
+              "output the model will work from, at its native resolution."),
      DebugDisplayMode::Color, SelectSource},
-    {"Model Input (pre-grade)",
-     "The model input color exactly as it was before the Input Grade ran. "
-     "The grade is applied in place, so the pipeline snapshots this texture "
-     "for you when the view is selected; with the Input Grade enabled, "
-     "compare it against Model Input (prepared).",
+    {LOC_TEXT("view.model_input_pre_grade", "Model Input (pre-grade)"),
+     LOC_TEXT("view.model_input_pre_grade.tip",
+              "The model input color exactly as it was before the Input Grade ran. "
+              "The grade is applied in place, so the pipeline snapshots this texture "
+              "for you when the view is selected; with the Input Grade enabled, "
+              "compare it against Model Input (prepared)."),
      DebugDisplayMode::Color, SelectPreGradeInput, true, false},
-    {"Model Input (prepared)",
-     "The image actually fed to the model, after resizing to the Working "
-     "Scale, HDR preparation, and input grading when enabled.",
+    {LOC_TEXT("view.model_input_prepared", "Model Input (prepared)"),
+     LOC_TEXT("view.model_input_prepared.tip",
+              "The image actually fed to the model, after resizing to the Working "
+              "Scale, HDR preparation, and input grading when enabled."),
      DebugDisplayMode::Color, SelectPreparedInput},
-    {"Model Output (raw)",
-     "The model's output exactly as NGX produced it, before the Output Grade "
-     "is applied. Snapshot taken by the pipeline because the grade runs in "
-     "place; with the Output Grade enabled, compare it against Model Output "
-     "(post-grade).",
+    {LOC_TEXT("view.model_output_raw", "Model Output (raw)"),
+     LOC_TEXT("view.model_output_raw.tip",
+              "The model's output exactly as NGX produced it, before the Output Grade "
+              "is applied. Snapshot taken by the pipeline because the grade runs in "
+              "place; with the Output Grade enabled, compare it against Model Output "
+              "(post-grade)."),
      DebugDisplayMode::Color, SelectPreGradeOutput, false, true},
-    {"Model Output (post-grade)",
-     "The model output after the Output Grade ran, in the model's own "
-     "sRGB-encoded SDR domain - symmetric to the Input Grade on the model "
-     "input. Everything downstream (compose, exposure mask, writeback) "
-     "consumes this as if the model had produced it.",
+    {LOC_TEXT("view.model_output_post_grade", "Model Output (post-grade)"),
+     LOC_TEXT("view.model_output_post_grade.tip",
+              "The model output after the Output Grade ran, in the model's own "
+              "sRGB-encoded SDR domain - symmetric to the Input Grade on the model "
+              "input. Everything downstream (compose, exposure mask, writeback) "
+              "consumes this as if the model had produced it."),
      DebugDisplayMode::Color, SelectPostGradeOutput, false, false},
-    {"Model Output (composed)",
-     "The final result of this pass, after the model's edit has been "
-     "composed with the source. This is what gets written to the target.",
+    {LOC_TEXT("view.model_output_composed", "Model Output (composed)"),
+     LOC_TEXT("view.model_output_composed.tip",
+              "The final result of this pass, after the model's edit has been "
+              "composed with the source. This is what gets written to the target."),
      DebugDisplayMode::Color, SelectComposedOutput},
-    {"Motion Vectors",
-     "The motion field this pass evaluates with: the game's vectors, or the "
-     "field Correct Motion Vectors produced for it. Shown as R = x direction, "
-     "G = y direction.",
+    {LOC_TEXT("view.motion_vectors", "Motion Vectors"),
+     LOC_TEXT("view.motion_vectors.tip",
+              "The motion field this pass evaluates with: the game's vectors, or the "
+              "field Correct Motion Vectors produced for it. Shown as R = x direction, "
+              "G = y direction."),
      DebugDisplayMode::Motion, SelectMotion},
-    {"Depth",
-     "The depth buffer the game supplied to DLSS. Shown as grayscale.",
+    {LOC_TEXT("view.depth", "Depth"),
+     LOC_TEXT("view.depth.tip",
+              "The depth buffer the game supplied to DLSS. Shown as grayscale."),
      DebugDisplayMode::Depth, SelectDepth},
-    {"Exposure Mask",
-     "The current frame's mask from the actual model input (including input grading and Local Exposure) versus the raw model output. It is published for exposure use on the next frame.",
+    {LOC_TEXT("view.exposure_mask", "Exposure Mask"),
+     LOC_TEXT("view.exposure_mask.tip",
+              "The current frame's mask from the actual model input (including input grading and Local Exposure) versus the raw model output. It is published for exposure use on the next frame."),
      DebugDisplayMode::Mask, SelectExposureMask},
-    {"SDR Base (pre-model)",
-     "Full-resolution linear SDR carrier produced by the BT.2446C split. "
-     "This is the RGB payload the model is downsampled from.",
+    {LOC_TEXT("view.sdr_base_pre_model", "SDR Base (pre-model)"),
+     LOC_TEXT("view.sdr_base_pre_model.tip",
+              "Full-resolution linear SDR carrier produced by the BT.2446C split. "
+              "This is the RGB payload the model is downsampled from."),
      DebugDisplayMode::PackedSdr, SelectPackedSdr},
-    {"Gain Map",
-     "Raw f32 carrier-to-HDR reconstruction multiplier, displayed in log2 stops from -4 (black) to +6 (white).",
+    {LOC_TEXT("view.gain_map", "Gain Map"),
+     LOC_TEXT("view.gain_map.tip",
+              "Raw f32 carrier-to-HDR reconstruction multiplier, displayed in log2 stops from -4 (black) to +6 (white)."),
      DebugDisplayMode::GainMap, SelectGainMap},
-    {"HDR Roundtrip Diagnostic",
-     "2x2 comparison: actual prepared Model Input | Model Output / composed HDR "
-     "mapped back to the ungraded model domain | composition difference against "
-     "the ungraded Model Output. Nonzero edges can be expected because full-resolution "
-     "source detail is preserved; working scale affects this comparison. "
-     "Use HDR Roundtrip Error for the isolated carrier reconstruction check.",
+    {LOC_TEXT("view.hdr_roundtrip_diagnostic", "HDR Roundtrip Diagnostic"),
+     LOC_TEXT("view.hdr_roundtrip_diagnostic.tip",
+              "2x2 comparison: actual prepared Model Input | Model Output / composed HDR "
+              "mapped back to the ungraded model domain | composition difference against "
+              "the ungraded Model Output. Nonzero edges can be expected because full-resolution "
+              "source detail is preserved; working scale affects this comparison. "
+              "Use HDR Roundtrip Error for the isolated carrier reconstruction check."),
      DebugDisplayMode::HdrRoundtripDiagnostic, SelectComposedOutput},
-    {"HDR Roundtrip Error",
-     "False-color relative error between the original decoded HDR source and the "
-     "direct float32 reconstruction from the RGBA32F carrier and carrier-to-HDR multiplier. "
-     "This validates the carrier transfer only, not the model edit or final composition; "
-     "independent of Working Scale and input grade.",
+    {LOC_TEXT("view.hdr_roundtrip_error", "HDR Roundtrip Error"),
+     LOC_TEXT("view.hdr_roundtrip_error.tip",
+              "False-color relative error between the original decoded HDR source and the "
+              "direct float32 reconstruction from the RGBA32F carrier and carrier-to-HDR multiplier. "
+              "This validates the carrier transfer only, not the model edit or final composition; "
+              "independent of Working Scale and input grade."),
      DebugDisplayMode::HdrRoundtripError, SelectPackedSdr},
-    {"HDR Local Exposure",
-     "Local exposure factor in stops, mapped so 0 stops is mid-gray, -2 stops "
-     "is black, and +2 stops is white.",
+    {LOC_TEXT("view.hdr_local_exposure", "HDR Local Exposure"),
+     LOC_TEXT("view.hdr_local_exposure.tip",
+              "Local exposure factor in stops, mapped so 0 stops is mid-gray, -2 stops "
+              "is black, and +2 stops is white."),
      DebugDisplayMode::HdrLocalExposure, SelectSource},
-    {"Game Exposure",
-     "Game NGX exposure in stops: 1.0x (0 stops) is mid-gray; brighter/darker "
-     "values move toward white/black. Magenta means no valid value was read.",
+    {LOC_TEXT("view.game_exposure", "Game Exposure"),
+     LOC_TEXT("view.game_exposure.tip",
+              "Game NGX exposure in stops: 1.0x (0 stops) is mid-gray; brighter/darker "
+              "values move toward white/black. Magenta means no valid value was read."),
      DebugDisplayMode::GameExposure, SelectSource},
-    {"Temporal Candidate Status",
-     "Reprojection confidence before depth validation, shown as grayscale "
-     "(white = fully trusted, black = rejected). Confidence combines local "
-     "edit-clamp agreement, photometric agreement, and previous confidence. "
-     "Unavailable until a previous edit can be reprojected.",
+    {LOC_TEXT("view.temporal_candidate_status", "Temporal Candidate Status"),
+     LOC_TEXT("view.temporal_candidate_status.tip",
+              "Reprojection confidence before depth validation, shown as grayscale "
+              "(white = fully trusted, black = rejected). Confidence combines local "
+              "edit-clamp agreement, photometric agreement, and previous confidence. "
+              "Unavailable until a previous edit can be reprojected."),
      DebugDisplayMode::TemporalCandidateStatus, SelectTemporalCandidate},
-    {"Temporal Validation Status",
-     "Confidence after depth validation, shown as grayscale. Confidence "
-     "scales the applied edit weight; low values fade the edit toward the "
-     "input.",
+    {LOC_TEXT("view.temporal_validation_status", "Temporal Validation Status"),
+     LOC_TEXT("view.temporal_validation_status.tip",
+              "Confidence after depth validation, shown as grayscale. Confidence "
+              "scales the applied edit weight; low values fade the edit toward the "
+              "input."),
      DebugDisplayMode::TemporalValidationStatus, SelectTemporalValidatedCandidate},
-    {"Temporal Reprojected Edit",
-     "Validated per-channel log-gain from the previous frame, mapped so "
-     "neutral gain is gray and stronger positive/negative edits move toward "
-     "white/black. Rejected pixels are dark.",
+    {LOC_TEXT("view.temporal_reprojected_edit", "Temporal Reprojected Edit"),
+     LOC_TEXT("view.temporal_reprojected_edit.tip",
+              "Validated per-channel log-gain from the previous frame, mapped so "
+              "neutral gain is gray and stronger positive/negative edits move toward "
+              "white/black. Rejected pixels are dark."),
      DebugDisplayMode::TemporalEdit, SelectTemporalValidatedCandidate},
-    {nullptr, nullptr, DebugDisplayMode::Color, nullptr},
+    {localization::TextRef(), localization::TextRef(),
+     DebugDisplayMode::Color, nullptr},
 };
 
 const uint32_t CountDebugViews() {
   uint32_t count = 0;
-  while (kDebugViews[count].name != nullptr) ++count;
+  while (!kDebugViews[count].name.empty()) ++count;
   return count;
 }
 
@@ -388,3 +409,5 @@ bool RenderDebugView(
 const PipelineStepDef* DebugStepFor(PipelineNodeId) { return nullptr; }
 
 }  // namespace reshade_dlssnr
+
+#undef LOC_NAMESPACE

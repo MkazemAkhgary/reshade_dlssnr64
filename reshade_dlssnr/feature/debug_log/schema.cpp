@@ -13,6 +13,8 @@
 #include "debug/debug_view.h"
 #include "feature/debug_log/settings.h"
 
+#define LOC_NAMESPACE "debug"
+
 namespace reshade_dlssnr {
 namespace feature {
 
@@ -25,10 +27,11 @@ namespace {
 std::vector<ctl::EnumSetting::Item> DebugViewItems() {
   DLSSNR_PROFILE_CTL_L3("DebugViewItems");
   std::vector<ctl::EnumSetting::Item> items;
-  items.push_back({"Off",
-                   "Disable the debug view and show the normal composed "
-                   "output."});
-  for (const DebugViewDef* view = kDebugViews; view->name != nullptr; ++view) {
+  items.push_back({LOC_TEXT("view.off", "Off"),
+                   LOC_TEXT("view.off.tip",
+                            "Disable the debug view and show the normal composed "
+                            "output.")});
+  for (const DebugViewDef* view = kDebugViews; !view->name.empty(); ++view) {
     items.push_back({view->name, view->tooltip});
   }
   return items;
@@ -39,12 +42,15 @@ std::vector<ctl::EnumSetting::Item> DebugViewItems() {
 void RegisterDebugLogSchema(ctl::Schema& schema) {
   DLSSNR_PROFILE_CTL_L3("RegisterDebugLogSchema");
   ctl::Section& debug = schema.AddSection(debug_log::kSection, ctl::SectionKind::Single);
+  debug.Title(LOC_TEXT("title", "Debug"));
   debug.DefaultPersistenceBackend(ctl::PersistenceBackend::Ini);
 
   debug
-      .Add<ctl::EnumSetting>(debug_log::kDebugView, "Debug View", 0)
-      .Tooltip("Replace the final image with an internal buffer, for "
-               "inspecting the pipeline.")
+      .Add<ctl::EnumSetting>(debug_log::kDebugView,
+                             LOC_TEXT("view", "Debug View"), 0)
+      .Tooltip(LOC_TEXT("view.tip",
+                        "Replace the final image with an internal buffer, for "
+                        "inspecting the pipeline."))
       .Items(&DebugViewItems);
 
   // The hint that the view belongs to the selected pass is not a setting.
@@ -52,12 +58,18 @@ void RegisterDebugLogSchema(ctl::Schema& schema) {
                      [](const void*, ctl::ValueStore&, const ctl::DrawOptions&,
                         const std::string&, const ctl::InstanceKey&, bool&) {
                        ImGui::TextDisabled(
-                           "The view is rendered by whichever pass is "
-                           "currently selected in the tabs below, and only "
-                           "takes effect while that pass is enabled.");
+                           "%s",
+                           LOC_TEXT("view.hint",
+                                    "The view is rendered by whichever pass is "
+                                    "currently selected in the tabs below, and "
+                                    "only takes effect while that pass is "
+                                    "enabled.")
+                               .c_str());
                        return false;
                      });
 }
 
 }  // namespace feature
 }  // namespace reshade_dlssnr
+
+#undef LOC_NAMESPACE

@@ -13,6 +13,7 @@
 #include <string>
 
 #include "ctl/types.h"
+#include "localization/localization.h"
 
 namespace reshade_dlssnr {
 namespace ctl {
@@ -57,14 +58,15 @@ inline constexpr const char* kCasSharpness = "cas_sharpness";
 // "adding a row touches this file and nobody else" true.
 void Declare(ctl::Section& section, const std::string& name_prefix,
              ctl::EnablePredicate enabled = nullptr,
-             const void* context = nullptr, const char* category = nullptr);
+             const void* context = nullptr,
+             const localization::TextRef& category = {});
 
 // Convenience overload: the rows are enabled while the named bool setting in
 // the same section is true. Equivalent to passing &ctl::BoolFromSetting with
 // that name as the predicate's context.
 void Declare(ctl::Section& section, const std::string& name_prefix,
              const char* enabled_setting_name,
-             const char* category = nullptr);
+             const localization::TextRef& category = {});
 
 }  // namespace grade_rows
 }  // namespace reshade_dlssnr

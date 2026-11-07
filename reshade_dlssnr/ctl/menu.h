@@ -66,7 +66,7 @@ using MenuExecute = bool (*)(const void* context, ValueStore& store,
 struct MenuCommand {
   std::string name;   // stable identity; no two commands may share one
   std::string group;  // entries of one group are drawn together
-  std::string label;
+  localization::TextRef label;
   MenuPredicate visible = nullptr;  // null means always visible
   MenuPredicate enabled = nullptr;  // null means always enabled
   MenuExecute execute = nullptr;
