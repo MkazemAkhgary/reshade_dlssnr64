@@ -196,6 +196,7 @@ reshade_dlssnr/
     localization.h                  NSLOC_TEXT, LOC_TEXT, TextRef, language selection
     localization.cpp                Resolution against the active language
     embedded.h                      Shape of the generated translation tables
+    overlay_font.h/.cpp             Merges a system CJK font into ReShade's atlas
     translations/                   Per-language .lang files (created when a language is added)
 
   ui/
@@ -785,6 +786,27 @@ fails the build, because two declarations of one key are two sources of truth
 for the same translation. A missing translation is a warning: a partially
 translated language still builds and falls back per string.
 
+### Fonts
+
+The add-on draws with ReShade's font. ReShade builds one ImGui atlas and calls
+add-on overlays in the same frame, so there is no second font to configure.
+ReShade picks that font from its own `Language` setting, so an English ReShade
+has no CJK glyphs.
+
+`localization/overlay_font.cpp` adds one anyway. It memory-maps the first
+matching font in `%WINDIR%\Fonts` (the files ReShade uses for Chinese, Japanese
+and Korean) and appends it as a merged source to ReShade's atlas. ImGui loads
+glyphs on demand from the mapped bytes, so no font data goes into the binary or
+the heap. An atlas rebuild drops the source, and the add-on adds it again. A
+language with another script needs its font added to the candidate list.
+
+`SyncFontCoverage` checks whether the current font can draw the active
+language. If it cannot, the overlay falls back to English and logs why. The
+result is cached until the language or the font's source count changes.
+
+An empty `language` setting means `Auto`: the add-on follows the same ReShade
+setting. An explicit choice in Preferences overrides it.
+
 `DlssnrLocalizationEnabled` compiles the language selection out entirely;
 `DlssnrLocLanguages` is the comma-separated list embedded in the binary.
 English is always embedded and listing it explicitly is a no-op.
@@ -796,9 +818,9 @@ English is always embedded and listing it explicitly is a no-op.
 2. Translate the values. `verify` reports what is still missing.
 3. Add `de` to `DlssnrLocLanguages` and rebuild.
 
-The language is selected in `Preferences`, which stores the code rather than an
-index so that adding a language cannot silently change which one a saved
-settings file selects. A code the build does not carry selects English.
+The language is selected in `Preferences`, which stores a code rather than an
+index. `Auto` follows ReShade's language; a code the build does not carry
+selects English.
 
 ## HDR model path
 

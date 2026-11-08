@@ -5,6 +5,9 @@
 
 #include "feature/preferences/settings.h"
 #include "feature/settings_store.h"
+#if DLSSNR_LOCALIZATION_ENABLED
+#include "localization/overlay_font.h"
+#endif
 #include "feature/ui_state/view.h"
 #include "ctl/types.h"
 #include "profiling/profile.h"
@@ -201,6 +204,9 @@ void TipFormat(const char* fmt, ...) {
 
 void SyncLanguageFont(reshade::api::effect_runtime* runtime) {
   DLSSNR_PROFILE_UI_L3("UI Sync Language Font");
+#if DLSSNR_LOCALIZATION_ENABLED
+  localization::EnsureOverlayFont();
+#endif
   // Resolve Auto each frame so a host change takes effect without a restart.
   const std::string stored =
       feature::SettingsStore()
