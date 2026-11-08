@@ -7,6 +7,12 @@
 
 #include "localization/localization.h"
 
+namespace reshade {
+namespace api {
+struct effect_runtime;
+}
+}  // namespace reshade
+
 namespace reshade_dlssnr {
 
 constexpr float kControlLabelWidth = 330.0f;
@@ -25,6 +31,9 @@ void Tip(const localization::TextRef& text);
 void TipFormat(const char* fmt, ...);
 
 void SectionDivider();
+
+// Resolves the host language and checks font coverage once per frame.
+void SyncLanguageFont(reshade::api::effect_runtime* runtime = nullptr);
 
 template <typename Fn>
 void WithDisabled(bool disabled, Fn&& fn) {

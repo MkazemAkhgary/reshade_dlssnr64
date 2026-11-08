@@ -489,8 +489,11 @@ void DrawOne(ctl::ValueStore& store, const char* name, bool& changed,
 
 }  // namespace
 
-void DrawOverlay(reshade::api::effect_runtime*) {
+void DrawOverlay(reshade::api::effect_runtime* runtime) {
   DLSSNR_PROFILE_UI_L1("DrawOverlay");
+  // Settle language and font before any text is drawn.
+  SyncLanguageFont(runtime);
+
   Settings& settings = GetSettings();
   bool changed = false;
 

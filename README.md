@@ -43,6 +43,7 @@ verifies the declared strings and writes the embedded translation tables.
 - Temporal reprojection (experimental).
 - Debug views for inputs, outputs, guides, masks, HDR round-trip, and temporal states.
 - Overlay text in any language the build embeds, selected in Preferences.
+  `Auto` follows ReShade's language setting.
 
 ## Limitations
 

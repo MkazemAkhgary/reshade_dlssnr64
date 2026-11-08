@@ -20,6 +20,9 @@ namespace feature {
 
 namespace {
 
+const localization::TextRef kAutoLanguage =
+    LOC_TEXT("language.auto", "Auto (ReShade)");
+
 bool NeverVisible(const void*, const ctl::ValueStore&,
                   const ctl::InstanceKey&, const std::string&) {
   return false;
@@ -42,12 +45,12 @@ bool DrawLanguageRow(const void* context, ctl::ValueStore& store,
   const std::vector<localization::Language>& languages =
       localization::Languages();
 
-  // A language's own name is the same in every language, which is the point:
-  // someone who cannot read the current language still finds their own.
-  const char* preview = current.c_str();
-  for (const localization::Language& language : languages) {
-    if (current == language.code) {
-      preview = language.name;
+  // LanguageDisplayName falls back to the code when the font cannot draw the name.
+  const char* preview =
+      current.empty() ? kAutoLanguage.c_str() : current.c_str();
+  for (size_t i = 0; i < languages.size(); ++i) {
+    if (current == languages[i].code) {
+      preview = localization::LanguageDisplayName(i);
       break;
     }
   }
@@ -61,12 +64,26 @@ bool DrawLanguageRow(const void* context, ctl::ValueStore& store,
   ImGui::SameLine(kControlLabelWidth);
   ImGui::SetNextItemWidth(-1.0f);
   if (ImGui::BeginCombo("##language", preview)) {
-    for (const localization::Language& language : languages) {
-      const bool selected = current == language.code;
-      if (ImGui::Selectable(language.name, selected) && !selected) {
+    const bool auto_selected = current.empty();
+    if (ImGui::Selectable(kAutoLanguage.c_str(), auto_selected) &&
+        !auto_selected) {
+      store.Write(section, key, preferences::kLanguage,
+                  ctl::Value::String(preferences::kDefaultLanguage),
+                  /*from_user=*/true);
+      SyncLanguageFont();
+      changed = true;
+    }
+    if (auto_selected) ImGui::SetItemDefaultFocus();
+
+    for (size_t i = 0; i < languages.size(); ++i) {
+      const bool selected = current == languages[i].code;
+      if (ImGui::Selectable(localization::LanguageDisplayName(i), selected) &&
+          !selected) {
         store.Write(section, key, preferences::kLanguage,
-                    ctl::Value::String(language.code), /*from_user=*/true);
-        localization::SetLanguage(language.code);
+                    ctl::Value::String(languages[i].code), /*from_user=*/true);
+        localization::SetLanguage(languages[i].code);
+        // Re-test coverage so the rest of this frame uses the new language.
+        SyncLanguageFont();
         changed = true;
       }
       if (selected) ImGui::SetItemDefaultFocus();
@@ -102,8 +119,8 @@ void RegisterPreferencesSchema(ctl::Schema& schema) {
                                    LOC_TEXT("language", "Language"),
                                    preferences::kDefaultLanguage)
           .Tooltip(LOC_TEXT("language.tip",
-                            "Language of the overlay. Saved settings, presets, "
-                            "and log messages are not affected."))
+                            "Language of the add-on interface. Auto follows "
+                            "ReShade's language setting."))
           .VisibleWhen(&NeverVisible);
   prefs.AddHookAfter(preferences::kLanguage, "LanguageRow", &DrawLanguageRow,
                      &language.meta());
