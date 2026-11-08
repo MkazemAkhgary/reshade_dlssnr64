@@ -32,7 +32,11 @@ void TipFormat(const char* fmt, ...);
 
 void SectionDivider();
 
-// Resolves the host language and checks font coverage once per frame.
+// Forces the next SyncLanguageFont call to refresh.
+void RequestLocalizationRefresh();
+
+// Per-frame guard: restores the merged font source and refreshes only when the
+// font or the language changed.
 void SyncLanguageFont(reshade::api::effect_runtime* runtime = nullptr);
 
 template <typename Fn>

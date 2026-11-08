@@ -733,7 +733,8 @@ into a stale namespace.
 namespace and key against the active language and falls back to the English
 text when that language has no entry, so English needs no table at all - it
 travels with every declaration. Resolution is a binary search over a table
-sorted by `(namespace, key)`.
+sorted by `(namespace, key)`, cached per declaration so a repeated draw is one
+lookup.
 
 **What is not translated.** Setting names, `ctl` section names, category
 identity, config keys, trace lines and log messages keep their English form.

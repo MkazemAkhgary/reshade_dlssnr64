@@ -70,7 +70,7 @@ bool DrawLanguageRow(const void* context, ctl::ValueStore& store,
       store.Write(section, key, preferences::kLanguage,
                   ctl::Value::String(preferences::kDefaultLanguage),
                   /*from_user=*/true);
-      SyncLanguageFont();
+      RequestLocalizationRefresh();
       changed = true;
     }
     if (auto_selected) ImGui::SetItemDefaultFocus();
@@ -82,8 +82,8 @@ bool DrawLanguageRow(const void* context, ctl::ValueStore& store,
         store.Write(section, key, preferences::kLanguage,
                     ctl::Value::String(languages[i].code), /*from_user=*/true);
         localization::SetLanguage(languages[i].code);
-        // Re-test coverage so the rest of this frame uses the new language.
-        SyncLanguageFont();
+        // Coverage is re-checked on the next frame.
+        RequestLocalizationRefresh();
         changed = true;
       }
       if (selected) ImGui::SetItemDefaultFocus();

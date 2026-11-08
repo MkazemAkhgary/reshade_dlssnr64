@@ -1,5 +1,6 @@
 #include "localization/localization.h"
 
+#include <cstdint>
 #include <cstring>
 #include <vector>
 
@@ -18,6 +19,18 @@ bool g_renderable = true;
 
 // Endonym, or the code when the font cannot draw it.
 std::vector<const char*> g_language_names;
+
+// Resolved text, keyed on the declaration's own pointers. A call site passes
+// the same literals every frame, so this replaces the search with one lookup.
+struct ResolvedText {
+  const char* ns;
+  const char* key;
+  const char* text;
+  unsigned epoch;
+};
+constexpr size_t kResolveCacheSize = 512;
+ResolvedText g_resolve_cache[kResolveCacheSize];
+unsigned g_resolve_epoch = 1;
 
 // Skip the per-frame scan when nothing relevant changed.
 bool g_coverage_tested = false;
@@ -116,20 +129,33 @@ const char* TextRef::Resolve(const TextRef& ref) {
     return ref.fallback_text();
   }
 
+  const uintptr_t mix = reinterpret_cast<uintptr_t>(ref.ns) * 31u +
+                        reinterpret_cast<uintptr_t>(ref.key);
+  ResolvedText& cached = g_resolve_cache[(mix >> 4) & (kResolveCacheSize - 1)];
+  if (cached.epoch == g_resolve_epoch && cached.ns == ref.ns &&
+      cached.key == ref.key) {
+    return cached.text;
+  }
+
+  const char* text = ref.fallback_text();
   const EmbeddedLanguage& language = kEmbeddedLanguages[g_language];
   size_t lo = 0;
   size_t hi = language.translation_count;
   while (lo < hi) {
     const size_t mid = lo + (hi - lo) / 2;
     const int order = Compare(language.translations[mid], ref);
-    if (order == 0) return language.translations[mid].text;
+    if (order == 0) {
+      text = language.translations[mid].text;
+      break;
+    }
     if (order < 0) {
       lo = mid + 1;
     } else {
       hi = mid;
     }
   }
-  return ref.fallback_text();
+  cached = {ref.ns, ref.key, text, g_resolve_epoch};
+  return text;
 }
 
 const std::vector<Language>& Languages() {
@@ -145,14 +171,18 @@ const std::vector<Language>& Languages() {
 }
 
 void SetLanguage(const char* code) {
-  g_language = 0;
-  if (code == nullptr) return;
-  for (size_t i = 0; i < kEmbeddedLanguageCount; ++i) {
-    if (std::strcmp(kEmbeddedLanguages[i].code, code) == 0) {
-      g_language = i;
-      return;
+  size_t next = 0;
+  if (code != nullptr) {
+    for (size_t i = 0; i < kEmbeddedLanguageCount; ++i) {
+      if (std::strcmp(kEmbeddedLanguages[i].code, code) == 0) {
+        next = i;
+        break;
+      }
     }
   }
+  if (next == g_language) return;
+  g_language = next;
+  ++g_resolve_epoch;
 }
 
 bool SyncFontCoverage(GlyphLookup has_glyph, const void* context,

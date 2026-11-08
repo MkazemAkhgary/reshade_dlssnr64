@@ -23,10 +23,14 @@ namespace reshade_dlssnr {
 
 bool g_show_tooltips = true;
 
-// The combo has no runtime, so it reuses the value resolved for this frame.
-std::string g_host_language;
-
 namespace {
+
+// Overlay language state. Only RefreshLocalization writes it.
+std::string g_host_language;
+std::string g_logged_host;
+ImFont* g_synced_font = nullptr;
+unsigned int g_synced_sources = 0;
+bool g_refresh_pending = true;
 
 // The longest tooltips in the schema are wider than the display, so they wrap
 // at a fixed column, narrowed when the display is narrower than that. A
@@ -38,6 +42,27 @@ float TooltipWrapWidth() {
 
 // Shared by every row type that falls back to the same hint.
 const localization::TextRef kResetTip = LOC_TEXT("reset.tip", "Reset to default");
+
+std::string PreferredLanguage(DWORD flags) {
+  ULONG count = 0;
+  ULONG size = 0;
+  if (!GetThreadPreferredUILanguages(flags, &count, nullptr, &size) ||
+      size == 0) {
+    return {};
+  }
+  std::vector<WCHAR> names(size);
+  if (!GetThreadPreferredUILanguages(flags, &count, names.data(), &size) ||
+      count == 0) {
+    return {};
+  }
+  const int bytes = WideCharToMultiByte(CP_UTF8, 0, names.data(), -1, nullptr,
+                                        0, nullptr, nullptr);
+  if (bytes <= 1) return {};
+  std::string tag(static_cast<size_t>(bytes - 1), '\0');
+  WideCharToMultiByte(CP_UTF8, 0, names.data(), -1, tag.data(), bytes, nullptr,
+                      nullptr);
+  return tag;
+}
 
 // ReShade writes Language to the per-game ini, so check that before the global one.
 std::string HostLanguage(reshade::api::effect_runtime* runtime) {
@@ -52,25 +77,12 @@ std::string HostLanguage(reshade::api::effect_runtime* runtime) {
   if (runtime != nullptr && read(runtime)) return selected;
   if (read(nullptr)) return selected;
 
-  ULONG count = 0;
-  ULONG size = 0;
-  if (!GetThreadPreferredUILanguages(MUI_LANGUAGE_NAME | MUI_UI_FALLBACK,
-                                     &count, nullptr, &size) ||
-      size == 0) {
-    return {};
+  // ReShade mirrors its own selection into the thread languages, so prefer
+  // those over the system fallback.
+  std::string tag = PreferredLanguage(MUI_LANGUAGE_NAME | MUI_THREAD_LANGUAGES);
+  if (tag.empty()) {
+    tag = PreferredLanguage(MUI_LANGUAGE_NAME | MUI_UI_FALLBACK);
   }
-  std::vector<WCHAR> names(size);
-  if (!GetThreadPreferredUILanguages(MUI_LANGUAGE_NAME | MUI_UI_FALLBACK,
-                                     &count, names.data(), &size) ||
-      count == 0) {
-    return {};
-  }
-  const int bytes = WideCharToMultiByte(CP_UTF8, 0, names.data(), -1, nullptr,
-                                        0, nullptr, nullptr);
-  if (bytes <= 1) return {};
-  std::string tag(static_cast<size_t>(bytes - 1), '\0');
-  WideCharToMultiByte(CP_UTF8, 0, names.data(), -1, tag.data(), bytes, nullptr,
-                      nullptr);
   return tag;
 }
 
@@ -202,34 +214,62 @@ void TipFormat(const char* fmt, ...) {
   va_end(args);
 }
 
-void SyncLanguageFont(reshade::api::effect_runtime* runtime) {
-  DLSSNR_PROFILE_UI_L3("UI Sync Language Font");
-#if DLSSNR_LOCALIZATION_ENABLED
-  localization::EnsureOverlayFont();
-#endif
-  // Resolve Auto each frame so a host change takes effect without a restart.
+namespace {
+
+void RefreshLocalization(reshade::api::effect_runtime* runtime) {
+  DLSSNR_PROFILE_UI_L3("UI Refresh Localization");
   const std::string stored =
       feature::SettingsStore()
           .Read(feature::preferences::kSection, ctl::InstanceKey::Shared(),
                 feature::preferences::kLanguage)
           .as_string;
-  if (stored.empty()) {
-    if (runtime != nullptr) g_host_language = HostLanguage(runtime);
-    const char* matched = localization::MatchLanguage(g_host_language.c_str());
-    localization::SetLanguage(matched != nullptr ? matched : "en");
+  const char* code = stored.empty() ? nullptr : stored.c_str();
+  if (code == nullptr) {
+    g_host_language = HostLanguage(runtime);
+    code = localization::MatchLanguage(g_host_language.c_str());
+    if (g_host_language != g_logged_host) {
+      g_logged_host = g_host_language;
+      std::string message = "DLSSNR: language auto -> ";
+      message += code != nullptr ? code : "en";
+      message += " (host ";
+      message += g_host_language.empty() ? "none" : g_host_language.c_str();
+      message += ")";
+      reshade::log::message(reshade::log::level::info, message.c_str());
+    }
   }
+  localization::SetLanguage(code != nullptr ? code : "en");
 
   ImFont* font = ImGui::GetFont();
+  g_synced_font = font;
   if (font == nullptr) return;
-  // A rebuilt atlas can reuse the font address with different sources.
-  const unsigned int revision = static_cast<unsigned int>(font->Sources.Size);
-  if (!localization::SyncFontCoverage(&OverlayHasGlyph, font, revision)) return;
+  g_synced_sources = static_cast<unsigned int>(font->Sources.Size);
+  if (!localization::SyncFontCoverage(&OverlayHasGlyph, font, g_synced_sources)) {
+    return;
+  }
   if (localization::ActiveLanguageRenderable()) return;
   reshade::log::message(
       reshade::log::level::warning,
       "DLSSNR: the overlay font cannot draw every character in the selected "
       "language, so the overlay text falls back to English. Install a font "
       "that covers the language in the Windows Fonts folder.");
+}
+
+}  // namespace
+
+void RequestLocalizationRefresh() { g_refresh_pending = true; }
+
+void SyncLanguageFont(reshade::api::effect_runtime* runtime) {
+#if DLSSNR_LOCALIZATION_ENABLED
+  // An atlas rebuild drops the merged source, so put it back first.
+  localization::EnsureOverlayFont();
+#endif
+  ImFont* font = ImGui::GetFont();
+  if (!g_refresh_pending && font != nullptr && font == g_synced_font &&
+      static_cast<unsigned int>(font->Sources.Size) == g_synced_sources) {
+    return;
+  }
+  g_refresh_pending = false;
+  RefreshLocalization(runtime);
 }
 
 void SectionDivider() {

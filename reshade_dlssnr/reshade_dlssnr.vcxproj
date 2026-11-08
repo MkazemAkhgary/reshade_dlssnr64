@@ -495,6 +495,8 @@
     <None Include="tools\generate_shaders.py" />
     <None Include="tools\precompile_shaders.ps1" />
     <None Include="tools\verify_shaders.ps1" />
+    <None Include="localization\localization_test.cpp" />
+    <None Include="localization\build_test.sh" />
     <None Include="ctl\ctl_acceptance.cpp" />
     <None Include="ctl\test_imgui_stubs.cpp" />
     <None Include="ctl\test_row_stubs.cpp" />
