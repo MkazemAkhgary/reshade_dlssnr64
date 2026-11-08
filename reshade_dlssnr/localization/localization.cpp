@@ -59,6 +59,45 @@ unsigned int NextCodepoint(const char*& text) {
   return value;
 }
 
+char Lower(char c) {
+  return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
+}
+
+bool EqualsIgnoreCase(const char* a, const char* b) {
+  while (*a != '\0' && *b != '\0') {
+    if (Lower(*a) != Lower(*b)) return false;
+    ++a;
+    ++b;
+  }
+  return *a == '\0' && *b == '\0';
+}
+
+// Language tags start with a two-letter language code.
+bool SamePrimarySubtag(const char* tag, const char* code) {
+  return tag[0] != '\0' && code[0] != '\0' && tag[1] != '\0' &&
+         code[1] != '\0' && Lower(tag[0]) == Lower(code[0]) &&
+         Lower(tag[1]) == Lower(code[1]);
+}
+
+bool ContainsIgnoreCase(const char* text, const char* part) {
+  for (; *text != '\0'; ++text) {
+    const char* cursor = text;
+    const char* wanted = part;
+    while (*cursor != '\0' && *wanted != '\0' && Lower(*cursor) == Lower(*wanted)) {
+      ++cursor;
+      ++wanted;
+    }
+    if (*wanted == '\0') return true;
+  }
+  return false;
+}
+
+// Never show simplified text to a reader of traditional Chinese.
+bool IsTraditional(const char* tag) {
+  return ContainsIgnoreCase(tag, "hant") || ContainsIgnoreCase(tag, "-tw") ||
+         ContainsIgnoreCase(tag, "-hk") || ContainsIgnoreCase(tag, "-mo");
+}
+
 bool TextRenderable(const char* text, GlyphLookup has_glyph,
                     const void* context) {
   if (text == nullptr) return true;
@@ -153,6 +192,24 @@ bool SyncFontCoverage(GlyphLookup has_glyph, const void* context,
 }
 
 bool ActiveLanguageRenderable() { return g_renderable; }
+
+const char* MatchLanguage(const char* tag) {
+  if (tag == nullptr || tag[0] == '\0') return nullptr;
+
+  for (size_t i = 0; i < kEmbeddedLanguageCount; ++i) {
+    if (EqualsIgnoreCase(kEmbeddedLanguages[i].code, tag)) {
+      return kEmbeddedLanguages[i].code;
+    }
+  }
+
+  for (size_t i = 0; i < kEmbeddedLanguageCount; ++i) {
+    const char* code = kEmbeddedLanguages[i].code;
+    if (!SamePrimarySubtag(tag, code)) continue;
+    if (IsTraditional(tag) != IsTraditional(code)) continue;
+    return code;
+  }
+  return nullptr;
+}
 
 const char* LanguageDisplayName(size_t index) {
   if (index < g_language_names.size()) return g_language_names[index];

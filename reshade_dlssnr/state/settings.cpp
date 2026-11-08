@@ -499,8 +499,7 @@ void LoadSettings() {
   JsonStore::Get().EnsureLoaded();
   LoadSettingsValues(g_settings, "");
   LoadStore(g_settings, "", ctl::PersistenceTarget::Global, true);
-  // A code the build no longer carries selects English, so a settings file
-  // written by another build cannot leave the overlay blank.
+  // The overlay resolves Auto once it has a runtime.
   localization::SetLanguage(feature::SettingsStore()
                                 .Read(feature::preferences::kSection,
                                       ctl::InstanceKey::Shared(),

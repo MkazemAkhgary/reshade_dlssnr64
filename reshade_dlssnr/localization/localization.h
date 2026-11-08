@@ -91,6 +91,9 @@ bool ActiveLanguageRenderable();
 // Endonym, or its code when the font cannot draw it.
 const char* LanguageDisplayName(size_t index);
 
+// Maps a host language tag onto an embedded code, or nullptr.
+const char* MatchLanguage(const char* tag);
+
 }  // namespace localization
 }  // namespace reshade_dlssnr
 

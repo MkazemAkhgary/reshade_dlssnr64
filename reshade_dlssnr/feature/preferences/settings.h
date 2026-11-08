@@ -27,7 +27,8 @@ inline constexpr const char* kFp16Storage = "fp16_storage";
 // update that adds one.
 inline constexpr const char* kLanguage = "language";
 
-inline constexpr const char* kDefaultLanguage = "en";
+// Empty means Auto; the overlay resolves it each frame.
+inline constexpr const char* kDefaultLanguage = "";
 
 inline constexpr int64_t kKey = 0;  // single instance
 
