@@ -77,6 +77,20 @@ const std::vector<Language>& Languages();
 // so a settings file written by another build cannot leave the overlay blank.
 void SetLanguage(const char* code);
 
+// Supplied by the overlay so this module stays free of font-library types.
+using GlyphLookup = bool (*)(unsigned int codepoint, const void* context);
+
+// Re-test coverage when the language or font changes; returns true when it did.
+// font_revision must change with the font's sources; a rebuilt atlas can reuse the address.
+bool SyncFontCoverage(GlyphLookup has_glyph, const void* context,
+                      unsigned int font_revision);
+
+// False makes every string resolve to English.
+bool ActiveLanguageRenderable();
+
+// Endonym, or its code when the font cannot draw it.
+const char* LanguageDisplayName(size_t index);
+
 }  // namespace localization
 }  // namespace reshade_dlssnr
 
