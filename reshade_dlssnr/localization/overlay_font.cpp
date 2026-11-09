@@ -9,6 +9,7 @@
 #include <climits>
 #include <cstring>
 #include <string>
+#include <vector>
 
 // ReShade does not export this constructor, so provide ImGui's trivial one.
 ImFontConfig::ImFontConfig() {
@@ -23,20 +24,38 @@ namespace reshade_dlssnr {
 namespace localization {
 namespace {
 
-// The fonts ReShade loads for its CJK languages, simplified Chinese first.
-const wchar_t* const kFontNames[] = {
+struct MappedFont {
+  const void* data;
+  int size;
+};
+
+// One group per script the add-on can display. EnsureOverlayFont maps the first
+// existing file in every group, so the overlay covers every script its
+// translations use at once. The font is only consulted for glyph presence
+// (IsGlyphInFont); glyphs are baked lazily as text is drawn, so merging several
+// large system fonts costs nothing until their characters actually appear.
+const wchar_t* const kCjkFonts[] = {
     L"msyh.ttc", L"simsun.ttc", L"msjh.ttc", L"mingliu.ttc",
     L"Deng.ttf", L"simhei.ttf", L"BIZ-UDGothicR.ttc", L"msgothic.ttc",
-    L"YuGothM.ttc", L"meiryo.ttc", L"malgun.ttf",
+    L"YuGothM.ttc", L"meiryo.ttc",
 };
-constexpr size_t kFontCount = sizeof(kFontNames) / sizeof(kFontNames[0]);
+const wchar_t* const kKoreanFonts[] = {
+    L"malgun.ttf", L"gulim.ttc", L"batang.ttc", L"malgungh.ttf",
+};
+// Tahoma carries Arabic, Cyrillic and Thai in one file; Segoe UI and Arial are
+// system fallbacks with the same coverage.
+const wchar_t* const kBroadFonts[] = {
+    L"tahoma.ttf", L"segoeui.ttf", L"arial.ttf",
+};
+constexpr size_t kCjkCount = sizeof(kCjkFonts) / sizeof(kCjkFonts[0]);
+constexpr size_t kKoreanCount = sizeof(kKoreanFonts) / sizeof(kKoreanFonts[0]);
+constexpr size_t kBroadCount = sizeof(kBroadFonts) / sizeof(kBroadFonts[0]);
 
-// Keep the view alive: ImGui reads FontData whenever it needs a new glyph.
-const void* g_font_data = nullptr;
-int g_font_size = 0;
-size_t g_next_font = 0;
+// Keep the views alive: ImGui reads FontData whenever it needs a new glyph, and
+// an atlas rebuild drops the source but not the mapped view.
+std::vector<MappedFont> g_fonts;
 
-bool MapFont(const wchar_t* directory, const wchar_t* name) {
+bool MapFont(const wchar_t* directory, const wchar_t* name, MappedFont& out) {
   std::wstring path(directory);
   path += L"\\Fonts\\";
   path += name;
@@ -61,18 +80,21 @@ bool MapFont(const wchar_t* directory, const wchar_t* name) {
     return false;
   }
 
-  g_font_data = view;
-  g_font_size = static_cast<int>(bytes.QuadPart);
+  out.data = view;
+  out.size = static_cast<int>(bytes.QuadPart);
   return true;
 }
 
-bool FindFont() {
-  wchar_t directory[MAX_PATH] = {};
-  const UINT length = GetWindowsDirectoryW(directory, MAX_PATH);
-  if (length == 0 || length >= MAX_PATH) return false;
-  while (g_next_font < kFontCount)
-    if (MapFont(directory, kFontNames[g_next_font++])) return true;
-  return false;
+// Maps the first existing file in `names`; appended to g_fonts if found.
+void MapFirstExisting(const wchar_t* directory, const wchar_t* const* names,
+                      size_t count) {
+  for (size_t i = 0; i < count; ++i) {
+    MappedFont mf = {};
+    if (MapFont(directory, names[i], mf)) {
+      g_fonts.push_back(mf);
+      return;
+    }
+  }
 }
 
 bool AlreadyAdded(const ImFontAtlas& atlas, const void* data) {
@@ -100,34 +122,43 @@ void EnsureOverlayFont() {
       atlas.FontLoader->FontSrcInit == nullptr ||
       atlas.FontLoader->FontBakedSrcLoaderDataSize != 0) return;
 
-  // An atlas rebuild drops the source but not the view.
-  if (g_font_data != nullptr) {
-    if (AlreadyAdded(atlas, g_font_data)) return;
-  } else {
-    if (g_next_font >= kFontCount || !FindFont()) return;
+  // Map each script's font once; reuse the views after an atlas rebuild.
+  if (g_fonts.empty()) {
+    wchar_t directory[MAX_PATH] = {};
+    const UINT length = GetWindowsDirectoryW(directory, MAX_PATH);
+    if (length == 0 || length >= MAX_PATH) return;
+    MapFirstExisting(directory, kCjkFonts, kCjkCount);
+    MapFirstExisting(directory, kKoreanFonts, kKoreanCount);
+    MapFirstExisting(directory, kBroadFonts, kBroadCount);
   }
 
-  ImFontConfig config;
-  config.FontData = const_cast<void*>(g_font_data);
-  config.FontDataSize = g_font_size;
-  config.FontDataOwnedByAtlas = false;
-  config.SizePixels = 0.0f;
-  config.MergeMode = true;
-  config.PixelSnapH = true;
-  config.DstFont = active;
+  bool added_any = false;
+  for (MappedFont& mf : g_fonts) {
+    if (mf.data == nullptr) continue;
+    if (AlreadyAdded(atlas, mf.data)) continue;
+    ImFontConfig config;
+    config.FontData = const_cast<void*>(mf.data);
+    config.FontDataSize = mf.size;
+    config.FontDataOwnedByAtlas = false;
+    config.SizePixels = 0.0f;
+    config.MergeMode = true;
+    config.PixelSnapH = true;
+    config.DstFont = active;
 
-  atlas.Sources.push_back(config);
-  RebuildSourcePointers(atlas);
-
-  ImFontConfig* added = &atlas.Sources.back();
-  if (!atlas.FontLoader->FontSrcInit(&atlas, added)) {
-    atlas.Sources.pop_back();
+    atlas.Sources.push_back(config);
     RebuildSourcePointers(atlas);
-    UnmapViewOfFile(g_font_data);
-    g_font_data = nullptr;
-    return;
+
+    ImFontConfig* added = &atlas.Sources.back();
+    if (!atlas.FontLoader->FontSrcInit(&atlas, added)) {
+      atlas.Sources.pop_back();
+      RebuildSourcePointers(atlas);
+      UnmapViewOfFile(mf.data);
+      mf.data = nullptr;
+      continue;
+    }
+    added_any = true;
   }
-  atlas.TexIsBuilt = false;
+  if (added_any) atlas.TexIsBuilt = false;
 }
 
 }  // namespace localization

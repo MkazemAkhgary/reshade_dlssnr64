@@ -103,16 +103,9 @@ void RegisterPreferencesSchema(ctl::Schema& schema) {
   prefs.Title(LOC_TEXT("title", "Preferences"));
   prefs.DefaultPersistenceBackend(ctl::PersistenceBackend::Ini);
 
-  prefs
-      .Add<ctl::BoolSetting>(preferences::kShowTooltips,
-                             LOC_TEXT("show_tooltips", "Show Tooltips"), true)
-      .Tooltip(LOC_TEXT("show_tooltips.tip",
-                        "Show contextual descriptions when hovering controls and "
-                        "section headers."));
-
 #if DLSSNR_LOCALIZATION_ENABLED
   // Hidden from the generic drawer: the hook renders the label and the combo
-  // as one row.
+  // as one row. Registered first so it is the top row of the section.
   ctl::StringSetting& language =
       prefs
           .Add<ctl::StringSetting>(preferences::kLanguage,
@@ -125,6 +118,13 @@ void RegisterPreferencesSchema(ctl::Schema& schema) {
   prefs.AddHookAfter(preferences::kLanguage, "LanguageRow", &DrawLanguageRow,
                      &language.meta());
 #endif
+
+  prefs
+      .Add<ctl::BoolSetting>(preferences::kShowTooltips,
+                             LOC_TEXT("show_tooltips", "Show Tooltips"), true)
+      .Tooltip(LOC_TEXT("show_tooltips.tip",
+                        "Show contextual descriptions when hovering controls and "
+                        "section headers."));
 
   prefs
       .Add<ctl::BoolSetting>(preferences::kCloneResources,
