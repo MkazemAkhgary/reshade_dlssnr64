@@ -51,7 +51,7 @@
     <DlssnrLocalizationEnabled Condition="'$(DlssnrLocalizationEnabled)' == ''">true</DlssnrLocalizationEnabled>
     <DlssnrLocDefine Condition="'$(DlssnrLocalizationEnabled)' == 'true'">DLSSNR_LOCALIZATION_ENABLED=1;</DlssnrLocDefine>
     <DlssnrLocDefine Condition="'$(DlssnrLocalizationEnabled)' != 'true'">DLSSNR_LOCALIZATION_ENABLED=0;</DlssnrLocDefine>
-    <DlssnrLocLanguages Condition="'$(DlssnrLocLanguages)' == ''">en,zh-Hans</DlssnrLocLanguages>
+    <DlssnrLocLanguages Condition="'$(DlssnrLocLanguages)' == ''">en,ar-SA,bg-BG,de-DE,es-ES,fr-FR,ja-JP,ko-KR,pl-PL,pt-BR,ru-RU,sl-SI,th-TH,tr-TR,zh-CN,zh-HK</DlssnrLocLanguages>
     <DlssnrLocEmbed Condition="'$(DlssnrLocalizationEnabled)' == 'true'">$(DlssnrLocLanguages)</DlssnrLocEmbed>
     <DlssnrLocEmbed Condition="'$(DlssnrLocalizationEnabled)' != 'true'">en</DlssnrLocEmbed>
     <DlssnrPython Condition="'$(DlssnrPython)' == ''">python</DlssnrPython>

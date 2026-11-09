@@ -436,7 +436,7 @@ echo.
 echo Languages to embed, comma separated. English is always embedded.
 set "LOC_LANGUAGES="
 set /p "LOC_LANGUAGES=Languages [%LOC_LANGUAGES%]: "
-if not defined LOC_LANGUAGES set "LOC_LANGUAGES=en,zh-Hans"
+if not defined LOC_LANGUAGES set "LOC_LANGUAGES=en,ar-SA,bg-BG,de-DE,es-ES,fr-FR,ja-JP,ko-KR,pl-PL,pt-BR,ru-RU,sl-SI,th-TH,tr-TR,zh-CN,zh-HK"
 
 :ASK_TARGET
 echo.
@@ -586,7 +586,7 @@ set "MUTEX_COMPAT=true"
 set "VERIFY_SHADERS=true"
 set "PRECOMPILE_SHADERS=false"
 set "LOC_ENABLED=true"
-set "LOC_LANGUAGES=en,zh-Hans"
+set "LOC_LANGUAGES=en,ar-SA,bg-BG,de-DE,es-ES,fr-FR,ja-JP,ko-KR,pl-PL,pt-BR,ru-RU,sl-SI,th-TH,tr-TR,zh-CN,zh-HK"
 set "TARGET_EXE="
 exit /b 0
 

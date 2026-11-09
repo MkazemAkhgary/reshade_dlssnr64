@@ -18,10 +18,10 @@ void Check(bool ok, const char* what) {
 }  // namespace
 
 int main() {
-  Check(std::strcmp(MatchLanguage("zh-CN"), "zh-Hans") == 0,
-        "zh-CN maps to zh-Hans");
-  Check(std::strcmp(MatchLanguage("zh-SG"), "zh-Hans") == 0,
-        "zh-SG maps to zh-Hans");
+  Check(std::strcmp(MatchLanguage("zh-CN"), "zh-CN") == 0,
+        "zh-CN maps to zh-CN");
+  Check(std::strcmp(MatchLanguage("zh-SG"), "zh-CN") == 0,
+        "zh-SG maps to zh-CN");
   Check(MatchLanguage("zh-TW") == nullptr, "zh-TW is not simplified");
   Check(std::strcmp(MatchLanguage("en-US"), "en") == 0, "en-US maps to en");
   Check(MatchLanguage("") == nullptr, "an empty tag has no match");
@@ -33,10 +33,10 @@ int main() {
   Check(std::strcmp(ref.c_str(), "Language") == 0,
         "English uses the fallback text");
 
-  SetLanguage("zh-Hans");
+  SetLanguage("zh-CN");
   const char* resolved = ref.c_str();
   Check(std::strcmp(resolved, "语言") == 0,
-        "zh-Hans resolves the translation");
+        "zh-CN resolves the translation");
   Check(ref.c_str() == resolved, "a repeated resolve hits the cache");
   Check(std::strcmp(missing.c_str(), "Fallback") == 0,
         "a missing key uses the fallback");
@@ -45,7 +45,7 @@ int main() {
   Check(std::strcmp(ref.c_str(), "Language") == 0,
         "switching back invalidates the cache");
 
-  SetLanguage("zh-Hans");
+  SetLanguage("zh-CN");
   Check(std::strcmp(ref.c_str(), "语言") == 0,
         "switching again resolves again");
 
